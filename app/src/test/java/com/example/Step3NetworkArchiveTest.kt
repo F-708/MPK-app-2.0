@@ -50,8 +50,9 @@ class Step3NetworkArchiveTest {
         assertEquals("41О", lesson!!.groupName)
         assertEquals(1, lesson.dayOfWeek)
         assertEquals(1, lesson.lessonNumber)
+        // Номера в документах сайта — УРОКИ: урок 1 длится 08:15-09:00
         assertEquals("08:15", lesson.timeStart)
-        assertEquals("09:55", lesson.timeEnd)
+        assertEquals("09:00", lesson.timeEnd)
         assertEquals("203", lesson.roomFirst)
         assertEquals("Иванов И.И.", lesson.teacherFirst)
         assertFalse(lesson.isSplit)
@@ -75,8 +76,9 @@ class Step3NetworkArchiveTest {
         assertEquals("Петров А.В.", lesson.teacherFirst)
         assertEquals("102", lesson.roomSecond)
         assertEquals("Сидоров К.С.", lesson.teacherSecond)
-        assertEquals("12:25", lesson.timeStart)
-        assertEquals("14:05", lesson.timeEnd)
+        // Урок 3 (вторник, стандартный график): 10:20-11:05
+        assertEquals("10:20", lesson.timeStart)
+        assertEquals("11:05", lesson.timeEnd)
     }
 
     @Test

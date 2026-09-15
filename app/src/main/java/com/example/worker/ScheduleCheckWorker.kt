@@ -5,6 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.data.local.MpkDatabase
 import com.example.data.network.MpkNetworkClient
+import com.example.data.repository.ScheduleRepository
 import com.example.util.GroupParser
 import com.example.util.NotificationHelper
 import com.example.widget.WidgetUpdateHelper
@@ -90,15 +91,16 @@ class ScheduleCheckWorker(
             return@withContext Result.success()
         }
 
-        // Загружаем актуальное расписание с портала колледжа
+        // Загружаем актуальное расписание с портала колледжа на ЦЕЛЕВОЙ (следующий учебный) день,
+        // а не на текущий — иначе целевые уроки не находятся и уведомление не отправляется
         val networkClient = MpkNetworkClient()
-        val result = networkClient.fetchScheduleForGroup(groupName)
+        val result = networkClient.fetchScheduleForGroup(groupName, targetCalendar)
 
         result.fold(
             onSuccess = { allLessons ->
                 if (allLessons.isNotEmpty()) {
                     val db = MpkDatabase.getInstance(applicationContext)
-                    db.lessonDao().insertLessons(allLessons)
+                    ScheduleRepository(db.lessonDao()).replaceSyncedLessons(groupName, allLessons)
 
                     // Обновляем виджеты рабочего стола
                     WidgetUpdateHelper.updateAllWidgets(applicationContext)

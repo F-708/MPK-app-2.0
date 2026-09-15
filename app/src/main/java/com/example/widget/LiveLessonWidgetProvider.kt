@@ -123,11 +123,11 @@ class LiveLessonWidgetProvider : AppWidgetProvider() {
                             views.setTextViewText(R.id.tv_live_acronym, acronym)
                             views.setTextViewText(R.id.tv_live_subject_name, shortSubject)
 
-                            // Время и номер пары
-                            val (startTime, endTime) = CollegeBellSchedule.getTimeForNumber(lesson.lessonNumber, dayOfWeek)
+                            // Время и номер урока
+                            val (startTime, endTime) = CollegeBellSchedule.getTimeForLessonNumber(lesson.lessonNumber, dayOfWeek)
                             views.setTextViewText(
                                 R.id.tv_live_time_slot,
-                                "${lesson.lessonNumber} пара • $startTime – $endTime"
+                                "${lesson.lessonNumber} урок • $startTime – $endTime"
                             )
 
                             // Аудитория (с учетом подгрупп)
@@ -164,7 +164,7 @@ class LiveLessonWidgetProvider : AppWidgetProvider() {
             val sorted = lessons.sortedBy { it.lessonNumber }
 
             for (lesson in sorted) {
-                val (startStr, endStr) = CollegeBellSchedule.getTimeForNumber(lesson.lessonNumber, dayOfWeek)
+                val (startStr, endStr) = CollegeBellSchedule.getTimeForLessonNumber(lesson.lessonNumber, dayOfWeek)
                 val startMins = parseMinutes(startStr)
                 val endMins = parseMinutes(endStr)
 

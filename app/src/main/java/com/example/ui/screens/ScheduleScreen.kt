@@ -222,7 +222,12 @@ fun ScheduleScreen(
     // 5. Фильтрация по архивной дате или по дню недели
     val lessons: List<com.example.data.local.entity.LessonEntity> = remember(lessonsFromDb, selectedDateString) {
         if (selectedDateString.isBlank()) {
-            lessonsFromDb
+            // Обычный просмотр дня недели: общие уроки (без даты) + только ПОСЛЕДНИЙ
+            // датированный снапшот этого дня, чтобы архивные даты не дублировали карточки
+            val latestDated = lessonsFromDb
+                .filter { it.dateString.isNotBlank() }
+                .maxOfOrNull { it.dateString.replace("-", ".") }
+            lessonsFromDb.filter { it.dateString.isBlank() || it.dateString.replace("-", ".") == latestDated }
         } else {
             val bySpecificDate = lessonsFromDb.filter {
                 it.dateString == selectedDateString ||

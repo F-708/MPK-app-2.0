@@ -3,16 +3,11 @@ package com.example.data.network
 import com.example.data.local.entity.LessonEntity
 import com.example.data.model.SyncDiagnosticInfo
 import java.io.IOException
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,24 +25,10 @@ class MpkNetworkClient {
         const val BROWSER_USER_AGENT = USER_AGENT
         const val BROWSER_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*;q=0.8"
 
+        // Обычный клиент с системным доверием к сертификатам: у guo-mpk.by валидный
+        // сертификат, trust-all здесь был лишним и небезопасным (MITM).
         private val client: OkHttpClient by lazy {
-            createSafeOkHttpClient()
-        }
-
-        private fun createSafeOkHttpClient(): OkHttpClient {
-            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            })
-
-            val sslContext = SSLContext.getInstance("SSL").apply {
-                init(null, trustAllCerts, SecureRandom())
-            }
-
-            return OkHttpClient.Builder()
-                .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
-                .hostnameVerifier { _, _ -> true }
+            OkHttpClient.Builder()
                 .connectTimeout(8000, TimeUnit.MILLISECONDS)
                 .readTimeout(8000, TimeUnit.MILLISECONDS)
                 .writeTimeout(8000, TimeUnit.MILLISECONDS)
@@ -114,6 +95,30 @@ class MpkNetworkClient {
 
         val allLessons = mutableListOf<LessonEntity>()
         val downloadedUrls = mutableSetOf<String>()
+        var lastResponsePreview = ""
+        var lastParseFormat = ""
+        var lastParseStrategy = ""
+        var lastParseRuns = 0
+        var groupWasFound = false
+        var lastParseError = ""
+        var lastTextPreview = ""
+
+        fun rememberResponsePreview(bytes: ByteArray) {
+            // Превью ответа: первые символы — видно, документ это или HTML-страница
+            lastResponsePreview = String(bytes.copyOfRange(0, minOf(100, bytes.size)), Charsets.UTF_8)
+                .replace(Regex("\\s+"), " ")
+                .take(100)
+        }
+
+        /** Снимает статистику парсинга ПОСЛЕ завершения parseFile (не во время!). */
+        fun rememberParseStats() {
+            lastParseFormat = MpkScheduleParser.lastParseStats.format
+            lastParseStrategy = MpkScheduleParser.lastParseStats.strategy
+            lastParseRuns = MpkScheduleParser.lastParseStats.runsExtracted
+            groupWasFound = groupWasFound || MpkScheduleParser.lastParseStats.groupFound
+            lastParseError = MpkScheduleParser.lastParseStats.parseError
+            lastTextPreview = MpkScheduleParser.lastParseStats.textPreview
+        }
 
         for (attempt in 1..maxRetries) {
             try {
@@ -126,7 +131,9 @@ class MpkNetworkClient {
                         if (directBytes != null && directBytes.isNotEmpty()) {
                             totalBytesReceived += directBytes.size
                             lastHttpCode = 200
+                            rememberResponsePreview(directBytes)
                             val parsed = MpkScheduleParser.parseFile(directBytes, targetGroup, dateDotStr)
+                            rememberParseStats()
                             if (parsed.isNotEmpty()) {
                                 allLessons.addAll(parsed)
                                 break
@@ -145,14 +152,18 @@ class MpkNetworkClient {
                         val portalHtml = portalResponse.body?.string() ?: ""
                         totalBytesReceived += portalHtml.toByteArray().size
 
-                        val candidateDocLinks = extractScheduleDocLinksFromHtml(portalHtml, SCHEDULE_PORTAL_URL)
+                        // Извлекаем ссылки на документы (.doc/.docx) со страницы портала,
+                        // включая iframe view.officeapps.live.com с прямой ссылкой на файл
+                        val candidateDocLinks = MpkScheduleParser.extractDocumentUrls(portalHtml, SCHEDULE_PORTAL_URL)
                         for (docLink in candidateDocLinks) {
                             if (downloadedUrls.add(docLink)) {
                                 lastCheckedUrl = docLink
                                 val docBytes = downloadFileBytes(docLink)
                                 if (docBytes != null && docBytes.isNotEmpty()) {
                                     totalBytesReceived += docBytes.size
+                                    rememberResponsePreview(docBytes)
                                     val parsed = MpkScheduleParser.parseFile(docBytes, targetGroup, dateDotStr)
+                                    rememberParseStats()
                                     if (parsed.isNotEmpty()) {
                                         allLessons.addAll(parsed)
                                     }
@@ -171,10 +182,25 @@ class MpkNetworkClient {
                     httpStatusCode = if (lastHttpCode == 0 && isSuccess) 200 else lastHttpCode,
                     receivedBytes = totalBytesReceived,
                     lessonsFound = distinctLessons.size,
-                    statusMessage = if (distinctLessons.isNotEmpty()) "Успешно: загружено ${distinctLessons.size} пар"
-                    else "Расписание группы $targetGroup пока не опубликовано",
+                    statusMessage = when {
+                        distinctLessons.isNotEmpty() -> "Успешно: загружено ${distinctLessons.size} уроков" +
+                            (if (lastParseError.isNotBlank()) " (с ошибкой разбора: $lastParseError)" else "")
+                        // Документ скачан, но группа в нём не найдена — показываем причину,
+                        // включая ошибки разбора, если стратегии падали
+                        totalBytesReceived > 0L && lastParseError.isNotBlank() ->
+                            "Документ получен (${totalBytesReceived / 1024} КБ), ошибка разбора: $lastParseError"
+                        totalBytesReceived > 0L -> "Документ получен (${totalBytesReceived / 1024} КБ), но группа $targetGroup в нём не найдена"
+                        else -> "Расписание группы $targetGroup пока не опубликовано"
+                    },
                     isSuccess = isSuccess,
-                    isSyncing = false
+                    isSyncing = false,
+                    responsePreview = lastResponsePreview,
+                    parseFormat = lastParseFormat,
+                    parseStrategy = lastParseStrategy,
+                    parseRuns = lastParseRuns,
+                    groupFound = groupWasFound,
+                    parseError = lastParseError,
+                    textPreview = lastTextPreview
                 )
 
                 return@withContext Result.success(distinctLessons)
@@ -191,9 +217,16 @@ class MpkNetworkClient {
             httpStatusCode = lastHttpCode,
             receivedBytes = totalBytesReceived,
             lessonsFound = 0,
-            statusMessage = "Ошибка: $errMsg",
+            statusMessage = "Ошибка: ${lastException?.javaClass?.simpleName ?: ""} $errMsg".trim(),
             isSuccess = false,
-            isSyncing = false
+            isSyncing = false,
+            responsePreview = lastResponsePreview,
+            parseFormat = lastParseFormat,
+            parseStrategy = lastParseStrategy,
+            parseRuns = lastParseRuns,
+            groupFound = groupWasFound,
+            parseError = lastParseError,
+            textPreview = lastTextPreview
         )
 
         Result.failure(lastException ?: IOException(errMsg))
@@ -220,26 +253,6 @@ class MpkNetworkClient {
             }
         } catch (_: Exception) {}
         null
-    }
-
-    fun extractScheduleDocLinksFromHtml(html: String, baseUrl: String): List<String> {
-        val links = mutableSetOf<String>()
-        val regex = Regex("(?i)<a\\s+[^>]*href=[\"']([^\"']*(?:raspisanie|uchashh)[^\"']*\\.(?:docx|doc)(?:\\?[^\"']*)?)[\"']", RegexOption.IGNORE_CASE)
-        regex.findAll(html).forEach { match ->
-            links.add(resolveAbsoluteUrl(baseUrl, match.groupValues[1]))
-        }
-        return links.toList()
-    }
-
-    private fun resolveAbsoluteUrl(baseUrl: String, relativeUrl: String): String {
-        return when {
-            relativeUrl.startsWith("http://") || relativeUrl.startsWith("https://") -> relativeUrl
-            relativeUrl.startsWith("/") -> "https://guo-mpk.by$relativeUrl"
-            else -> {
-                val base = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
-                base + relativeUrl
-            }
-        }
     }
 
     private fun executeRequest(url: String): okhttp3.Response {

@@ -100,7 +100,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 onSuccess = { count ->
                     _uiState.update { it.copy(isSyncing = false, hasSyncError = false) }
                     if (count > 0) {
-                        _toastEvent.emit("Расписание группы $targetGroup обновлено ($count пар)")
+                        _toastEvent.emit("Расписание группы $targetGroup обновлено ($count уроков)")
                     } else {
                         if (!isAutoSync) {
                             _toastEvent.emit("Расписание группы $targetGroup: новых данных на сайте пока нет")

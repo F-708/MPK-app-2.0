@@ -14,7 +14,7 @@ data class LessonEntity(
     val id: Long = 0,
     val groupName: String,
     val dayOfWeek: Int, // 1 = Понедельник .. 6 = Суббота
-    val lessonNumber: Int, // 1..6
+    val lessonNumber: Int, // 1..12 (номер урока; документы guo-mpk.by нумеруют уроками, не парами)
     val timeStart: String, // Например "08:30"
     val timeEnd: String, // Например "10:05"
     val subjectRaw: String, // Сырое наименование из расписания

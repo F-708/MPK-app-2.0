@@ -166,4 +166,17 @@ object CollegeBellSchedule {
     fun getBellForNumber(number: Int): BellItem? {
         return STANDARD_BELLS.firstOrNull { it.lessonNumber == number || it.pairNumber == number }
     }
+
+    /**
+     * Возвращает время начала и конца УРОКА (1..12) для указанного дня недели.
+     * Документы сайта guo-mpk.by нумеруют занятия по урокам (не по парам),
+     * поэтому парсер и виджеты используют именно этот метод.
+     */
+    fun getTimeForLessonNumber(number: Int, dayOfWeek: Int = 1): Pair<String, String> {
+        val lesson = getBellsForDay(dayOfWeek).find { it.lessonNumber == number }
+        if (lesson != null) {
+            return Pair(lesson.start, lesson.end)
+        }
+        return Pair("08:15", "09:00")
+    }
 }

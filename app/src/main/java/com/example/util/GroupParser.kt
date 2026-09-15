@@ -10,8 +10,6 @@ import com.example.data.model.GroupInfo
  */
 object GroupParser {
 
-    private val GROUP_REGEX = Regex("^[\\s]*([1-4])\\s*([1-9])\\s*[-_\\s]*([а-яА-Яa-zA-ZёЁ])[\\s]*$")
-
     // Маппинг латинских букв в соответствующие кириллические буквы специальностей колледжа
     private val LATIN_TO_CYRILLIC: Map<Char, Char> = mapOf(
         'O' to 'О', 'o' to 'О',
@@ -52,7 +50,10 @@ object GroupParser {
             else -> "[$letter]"
         }
 
-        return Regex("(?i)(?:\\b|[^0-9а-яa-z])$course\\s*$number\\s*[-_\\s]*$latinVariants(?:\\b|[^0-9а-яa-z])")
+        // Границы группы: начало/конец строки либо не цифра и не буква. Кириллица задана явным
+        // Unicode-диапазоном (\\u0400-\\u04FF) — символьные классы вида [а-я] и \\b по-разному
+        // работают на JVM (OpenJDK) и Android (ICU), поэтому здесь только явные диапазоны.
+        return Regex("(?i)(?:^|[^0-9\\u0400-\\u04FFa-z])$course\\s*$number\\s*[-_\\s]*$latinVariants(?:$|[^0-9\\u0400-\\u04FFa-z])")
     }
 
     /**
@@ -69,14 +70,38 @@ object GroupParser {
     /**
      * Парсит строку названия группы в объект GroupInfo.
      * Возвращает null, если формат или специальность не соответствуют правилам колледжа.
+     *
+     * ВАЖНО: ручной разбор вместо регекса. Кириллические символьные классы
+     * (вида [а-яА-ЯёЁ]) в регексах по-разному работают на JVM (OpenJDK) и на
+     * Android (ICU) — на некоторых устройствах GROUP_REGEX не сопоставлял
+     * даже «41О», из-за чего все стратегии парсера не находили группу.
+     * Character.isLetter() работает одинаково везде.
      */
     fun parse(rawGroupName: String): GroupInfo? {
-        val trimmed = rawGroupName.trim()
-        val match = GROUP_REGEX.find(trimmed) ?: return null
+        val s = rawGroupName.trim()
+        if (s.length < 3) return null
 
-        val course = match.groupValues[1].toIntOrNull() ?: return null
-        val groupNumber = match.groupValues[2].toIntOrNull() ?: return null
-        val rawChar = match.groupValues[3].first()
+        // Курс: 1..4
+        val course = s[0] - '0'
+        if (course !in 1..4) return null
+
+        // Возможные пробелы между цифрами
+        var i = 1
+        while (i < s.length && s[i].isWhitespace()) i++
+
+        // Номер группы: 1..9
+        if (i >= s.length) return null
+        val groupNumber = s[i] - '0'
+        if (groupNumber !in 1..9) return null
+
+        // Возможные разделители -_ и пробелы перед буквой специальности
+        i++
+        while (i < s.length && (s[i] == '-' || s[i] == '_' || s[i].isWhitespace())) i++
+
+        // Ровно одна буква специальности в конце
+        if (i != s.length - 1) return null
+        val rawChar = s[i]
+        if (!Character.isLetter(rawChar)) return null
 
         val normalizedChar = normalizeSpecialtyChar(rawChar)
 
@@ -87,7 +112,7 @@ object GroupParser {
         val specialty = MpkCurriculum.getSpecialty(normalizedChar)
 
         return GroupInfo(
-            rawName = trimmed,
+            rawName = s,
             course = course,
             groupNumber = groupNumber,
             specialtyCode = normalizedChar,

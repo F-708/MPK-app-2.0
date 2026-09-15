@@ -158,7 +158,7 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
                                 views.setViewVisibility(rowIds[i], View.VISIBLE)
 
                                 views.setTextViewText(numIds[i], "${lesson.lessonNumber}")
-                                val (start, _) = CollegeBellSchedule.getTimeForNumber(lesson.lessonNumber, targetDay)
+                                val (start, _) = CollegeBellSchedule.getTimeForLessonNumber(lesson.lessonNumber, targetDay)
                                 views.setTextViewText(timeIds[i], start)
 
                                 val shortSubj = SubjectFormatter.getShortName(lesson.subjectRaw)

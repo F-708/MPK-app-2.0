@@ -379,9 +379,39 @@ fun SettingsScreen(
                             } else "0 Б"
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(label = "Найдено пар (${groupInfo.canonicalName})", value = "${diagnosticInfo.lessonsFound} пар")
+                        DiagnosticRow(label = "Найдено уроков (${groupInfo.canonicalName})", value = "${diagnosticInfo.lessonsFound} уроков")
                         Spacer(modifier = Modifier.height(4.dp))
                         DiagnosticRow(label = "Состояние", value = diagnosticInfo.statusMessage)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        DiagnosticRow(
+                            label = "Начало ответа сервера",
+                            value = diagnosticInfo.responsePreview.ifBlank { "—" },
+                            isMonospace = true
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        DiagnosticRow(
+                            label = "Начало извлечённого текста",
+                            value = diagnosticInfo.textPreview.ifBlank { "—" },
+                            isMonospace = true
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        DiagnosticRow(
+                            label = "Разбор документа",
+                            value = "формат: ${diagnosticInfo.parseFormat.ifBlank { "—" }}, " +
+                                "стратегия: ${diagnosticInfo.parseStrategy.ifBlank { "—" }}, " +
+                                "фрагментов: ${diagnosticInfo.parseRuns}, " +
+                                "группа найдена: ${if (diagnosticInfo.groupFound) "да" else "нет"}"
+                        )
+                        if (diagnosticInfo.parseError.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            DiagnosticRow(
+                                label = "Ошибки разбора",
+                                value = diagnosticInfo.parseError,
+                                isMonospace = true
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        DiagnosticRow(label = "Версия приложения", value = "2.4 (движко-независимый разбор группы)")
 
                         Spacer(modifier = Modifier.height(12.dp))
 
