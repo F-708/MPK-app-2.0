@@ -53,9 +53,9 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             if (ids.isNotEmpty()) updateWidgets(context, manager, ids)
         }
 
-        /** Данные обратного отсчёта: (минуты до события, подпись, номер текущего/следующего урока). */
-        fun countdownInfo(): Triple<Long, String, Int>? {
-            val cal = Calendar.getInstance()
+        /** Данные обратного отсчёта с учётом дебаг-времени и факта уроков группы. */
+        fun countdownInfo(context: Context): Triple<Long, String, Int>? {
+            val cal = com.example.util.DebugClock.now(context)
             val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
                 Calendar.MONDAY -> 1
                 Calendar.TUESDAY -> 2
@@ -92,7 +92,33 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             if (minutes < first.startMinutes) {
                 return Triple((first.startMinutes - minutes).toLong(), "до 1 урока", 0)
             }
-            // Уроки закончились
+            // Уроки закончились: по звонкам ИЛИ по факту уроков группы
+            val group = WidgetUpdateHelper.getSelectedGroup(context)
+            val lastGroupLesson = try {
+                kotlinx.coroutines.runBlocking {
+                    val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
+                        Calendar.MONDAY -> 1; Calendar.TUESDAY -> 2; Calendar.WEDNESDAY -> 3
+                        Calendar.THURSDAY -> 4; Calendar.FRIDAY -> 5; Calendar.SATURDAY -> 6
+                        else -> 7
+                    }
+                    val lessons = com.example.data.local.MpkDatabase.getInstance(context)
+                        .lessonDao().getLessonsForDaySync(group, dow)
+                    val latestDate = lessons.filter { it.dateString.isNotBlank() }
+                        .maxOfOrNull { it.dateString.replace("-", ".") }
+                    val today = if (latestDate != null) {
+                        lessons.filter { it.dateString.isBlank() || it.dateString.replace("-", ".") == latestDate }
+                    } else lessons
+                    today.maxOfOrNull { it.lessonNumber }
+                }
+            } catch (_: Exception) {
+                null
+            }
+            if (lastGroupLesson != null) {
+                val lastBell = bells.lastOrNull { !it.isInfoHour && it.lessonNumber <= lastGroupLesson }
+                if (lastBell != null && minutes > lastBell.endMinutes) {
+                    return Triple(-1L, "уроки закончились", 0)
+                }
+            }
             return null
         }
 
@@ -108,30 +134,27 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.tv_countdown_clock, subColor)
             views.setTextColor(R.id.tv_countdown_lesson, subColor)
 
-            // Текущее время
-            val cal = Calendar.getInstance()
-            val clock = String.format("%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
-            views.setTextViewText(R.id.tv_countdown_clock, clock)
-
-            val info = countdownInfo()
+            val info = countdownInfo(context)
             if (info != null) {
                 val (minutesLeft, label, lessonNum) = info
-                val h = minutesLeft / 60
-                val m = minutesLeft % 60
-                views.setTextViewText(
-                    R.id.tv_countdown,
-                    if (h > 0) String.format("%d:%02d", h, m) else String.format("%d", m)
-                )
-                views.setTextViewText(R.id.tv_countdown_label, if (h > 0) "$label" else "$label, мин")
-                views.setTextViewText(
-                    R.id.tv_countdown_lesson,
-                    if (lessonNum > 0) "идёт $lessonNum урок" else "перемена"
-                )
+                if (minutesLeft < 0) {
+                    // Уроки группы закончились
+                    views.setTextViewText(R.id.tv_countdown, "Уроки")
+                    views.setTextViewText(R.id.tv_countdown_label, "закончились")
+                } else {
+                    val h = minutesLeft / 60
+                    val m = minutesLeft % 60
+                    views.setTextViewText(
+                        R.id.tv_countdown,
+                        if (h > 0) String.format("%d:%02d", h, m) else String.format("%d", m)
+                    )
+                    views.setTextViewText(R.id.tv_countdown_label, if (h > 0) label else "$label, мин")
+                }
             } else {
                 views.setTextViewText(R.id.tv_countdown, "—")
                 views.setTextViewText(R.id.tv_countdown_label, "уроки закончились")
-                views.setTextViewText(R.id.tv_countdown_lesson, "")
             }
+            views.setTextViewText(R.id.tv_countdown_lesson, "")
 
             // Клик — открыть приложение
             val openIntent = PendingIntent.getActivity(

@@ -73,7 +73,6 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
-    val diagnosticInfo by viewModel.diagnosticInfo.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Безопасный показ Toast/Snackbar СТРОГО на UI потоке через LaunchedEffect
@@ -102,7 +101,9 @@ fun MainScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            MainTopBar()
+            MainTopBar(
+                onSettingsClicked = { viewModel.selectTab(AppTab.SETTINGS) }
+            )
         },
         bottomBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -122,7 +123,6 @@ fun MainScreen(
                         Triple(AppTab.TASKS, Icons.Filled.Checklist, Icons.Outlined.Checklist),
                         Triple(AppTab.BELLS, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
                         Triple(AppTab.COLLEGE, Icons.Filled.School, Icons.Outlined.School),
-                        Triple(AppTab.SETTINGS, Icons.Filled.Settings, Icons.Outlined.Settings)
                     )
 
                     tabs.forEach { (tab, filledIcon, outlinedIcon) ->
@@ -202,7 +202,6 @@ fun MainScreen(
                     AppTab.SETTINGS -> {
                         SettingsScreen(
                             groupInfo = currentGroupInfo,
-                            diagnosticInfo = diagnosticInfo,
                             onGroupChanged = { newGroup ->
                                 viewModel.setGroup(newGroup)
                             },

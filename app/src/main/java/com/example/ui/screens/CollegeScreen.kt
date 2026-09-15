@@ -21,8 +21,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -105,8 +108,9 @@ private fun CollegeMenu(
     onOpenSpecialty: () -> Unit,
     onOpenTeachers: () -> Unit
 ) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     Column(modifier = Modifier.fillMaxSize()) {
-        Header(title = "Колледж", subtitle = "Справочник специальностей и преподавателей")
+        Header(title = "Колледж", subtitle = "Специальности, преподаватели и полезные ссылки")
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -125,8 +129,23 @@ private fun CollegeMenu(
                 MenuCard(
                     icon = { Icon(Icons.Default.Person, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
                     title = "Преподаватели",
-                    subtitle = "Поиск по базе преподавателей колледжа",
+                    subtitle = "Поиск по базе, избранное и фотографии",
                     onClick = onOpenTeachers
+                )
+            }
+            item {
+                MenuCard(
+                    icon = { Icon(Icons.Default.Language, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
+                    title = "Сайт колледжа",
+                    subtitle = "guo-mpk.by — официальная информация",
+                    onClick = {
+                        try {
+                            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://guo-mpk.by/")).let {
+                                ctx.startActivity(it)
+                            }
+                        } catch (_: Exception) {
+                        }
+                    }
                 )
             }
         }
@@ -435,7 +454,20 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
 
 @Composable
 private fun TeachersPage(onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val repository = remember { com.example.data.repository.TeachersRepository(context) }
+    val teachers = remember { repository.loadTeachers() }
     var searchQuery by rememberSaveable { mutableStateOf("") }
+    var favoritesVersion by remember { mutableStateOf(0) } // перерисовка при клике по звезде
+    val favorites = remember(favoritesVersion) { repository.favorites() }
+
+    val filtered = remember(teachers, searchQuery, favorites) {
+        val q = searchQuery.trim().lowercase()
+        val base = if (q.isBlank()) teachers else teachers.filter {
+            it.name.lowercase().contains(q) || it.subject.lowercase().contains(q)
+        }
+        base.sortedWith(compareByDescending<com.example.data.repository.Teacher> { favorites.contains(it.name) }.thenBy { it.name })
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -476,67 +508,162 @@ private fun TeachersPage(onBack: () -> Unit) {
                 .background(ColorDividerLight)
         )
 
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            placeholder = { Text("Поиск преподавателя...") },
-            leadingIcon = {
-                Icon(Icons.Default.Search, contentDescription = null, tint = ColorBrandBlue, modifier = Modifier.size(18.dp))
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(2.dp),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = ColorSurfaceVariantLight,
-                unfocusedContainerColor = ColorSurfaceVariantLight,
-                focusedIndicatorColor = ColorBrandBlue,
-                unfocusedIndicatorColor = ColorBorderLight
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .testTag("teachers_search_input")
-        )
-
-        // База преподавателей подключается после загрузки CSV
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorSurfaceHighlight,
-                    modifier = Modifier.size(56.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = null,
-                            tint = ColorBrandBlue,
-                            modifier = Modifier.size(28.dp)
-                        )
+        if (teachers.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorSurfaceHighlight,
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = ColorBrandBlue,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
                     }
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = "База преподавателей подключается",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = ColorTextTitle
+                        ),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Список всех преподавателей колледжа с поиском появится после загрузки CSV.",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontSize = 13.sp,
+                            color = ColorTextMuted
+                        ),
+                        textAlign = TextAlign.Center
+                    )
                 }
-                Spacer(modifier = Modifier.height(14.dp))
+            }
+        } else {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Поиск преподавателя...") },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = ColorBrandBlue, modifier = Modifier.size(18.dp))
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(2.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = ColorSurfaceVariantLight,
+                    unfocusedContainerColor = ColorSurfaceVariantLight,
+                    focusedIndicatorColor = ColorBrandBlue,
+                    unfocusedIndicatorColor = ColorBorderLight
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .testTag("teachers_search_input")
+            )
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filtered) { teacher ->
+                    TeacherCard(
+                        teacher = teacher,
+                        isFavorite = favorites.contains(teacher.name),
+                        onToggleFavorite = {
+                            repository.toggleFavorite(teacher.name)
+                            favoritesVersion++
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TeacherCard(
+    teacher: com.example.data.repository.Teacher,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorBgMain,
+        border = BorderStroke(1.dp, ColorBorderLight),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (teacher.photo.isNotBlank()) {
+                coil.compose.AsyncImage(
+                    model = "file:///android_asset/teachers_photos/" + teacher.photo,
+                    contentDescription = teacher.name,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(ColorBrandFill, RoundedCornerShape(2.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = teacher.name.split(" ").firstOrNull()?.take(1) ?: "?",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "База преподавателей подключается",
+                    text = teacher.name,
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
+                        fontSize = 14.sp,
                         color = ColorTextTitle
-                    ),
-                    textAlign = TextAlign.Center
+                    )
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Список всех преподавателей колледжа с поиском появится после загрузки данных.",
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontSize = 13.sp,
-                        color = ColorTextMuted
-                    ),
-                    textAlign = TextAlign.Center
+                if (teacher.subject.isNotBlank()) {
+                    Text(
+                        text = teacher.subject,
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontSize = 12.sp,
+                            color = ColorTextMuted
+                        ),
+                        maxLines = 2
+                    )
+                }
+            }
+
+            androidx.compose.material3.IconButton(onClick = onToggleFavorite) {
+                Icon(
+                    imageVector = if (isFavorite) androidx.compose.material.icons.Icons.Filled.Star
+                    else androidx.compose.material.icons.Icons.Outlined.StarBorder,
+                    contentDescription = if (isFavorite) "Убрать из избранного" else "В избранное",
+                    tint = if (isFavorite) androidx.compose.ui.graphics.Color(0xFFF59E0B) else ColorTextMuted,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }

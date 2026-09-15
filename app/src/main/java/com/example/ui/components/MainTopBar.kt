@@ -4,11 +4,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
 /**
- * Шапка приложения «Мой Политех» (баннер колледжа на всю ширину).
+ * Шапка приложения «Мой Политех»: баннер колледжа + шестерёнка настроек.
  */
 @Composable
 fun MainTopBar(
+    onSettingsClicked: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    MainHeaderBanner(modifier = modifier)
+    MainHeaderBanner(onSettingsClicked = onSettingsClicked, modifier = modifier)
 }

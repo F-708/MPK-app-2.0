@@ -1,6 +1,8 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,7 +13,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -20,8 +29,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material3.Text
 import coil.compose.SubcomposeAsyncImage
+import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
 import com.example.ui.theme.ColorBrandBlue
 import com.example.ui.theme.ColorDividerLight
@@ -30,12 +39,14 @@ import com.example.ui.theme.TextStyleCollegeBranding
 private const val MPK_HEADER_BANNER_URL = "https://guo-mpk.by/wp-content/uploads/2024/11/cropped-cropped-cropped-logo-na-sajt.png"
 
 /**
- * Шапка приложения «Мой Политех»: баннер колледжа на всю ширину.
+ * Шапка приложения «Мой Политех»: баннер колледжа на всю ширину
+ * + шестерёнка настроек в правом верхнем углу.
  * Плашка даты и бейдж группы убраны — дата видна на экране расписания,
  * группа выбирается при первом входе и меняется в настройках.
  */
 @Composable
 fun MainHeaderBanner(
+    onSettingsClicked: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -43,49 +54,50 @@ fun MainHeaderBanner(
             .fillMaxWidth()
             .background(Color.White)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color.White)
                 .statusBarsPadding()
                 .height(56.dp)
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
         ) {
+            // Баннер колледжа (на всю ширину, мгновенный фолбэк-портик до загрузки)
             SubcomposeAsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(MPK_HEADER_BANNER_URL)
-                    .crossfade(true)
+                    .crossfade(false)
                     .build(),
                 contentDescription = "Баннер Минского политехнического колледжа",
                 modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 52.dp)
                     .height(44.dp)
                     .fillMaxWidth(),
                 contentScale = ContentScale.Fit,
-                error = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CollegePorticoIcon(
-                            color = ColorBrandBlue,
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "ГОСУДАРСТВЕННОЕ УЧРЕЖДЕНИЕ ОБРАЗОВАНИЯ",
-                                style = TextStyleCollegeBranding,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "«МИНСКИЙ ПОЛИТЕХНИЧЕСКИЙ КОЛЛЕДЖ»",
-                                style = TextStyleCollegeBranding.copy(fontSize = 12.sp),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
+                loading = { HeaderFallback() },
+                error = { HeaderFallback() }
             )
+
+            // Шестерёнка настроек (правый верхний угол)
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = Color.White,
+                border = BorderStroke(1.dp, ColorDividerLight),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 6.dp, end = 8.dp)
+                    .size(30.dp)
+                    .clickable(onClick = onSettingsClicked)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Настройки",
+                        tint = ColorBrandBlue,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
 
         Box(
@@ -94,6 +106,32 @@ fun MainHeaderBanner(
                 .height(1.dp)
                 .background(ColorDividerLight)
         )
+    }
+}
+
+/** Фолбэк шапки: портик + название (показывается мгновенно, пока грузится баннер). */
+@Composable
+private fun HeaderFallback() {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        CollegePorticoIcon(
+            color = ColorBrandBlue,
+            modifier = Modifier.size(32.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Column {
+            Text(
+                text = "ГОСУДАРСТВЕННОЕ УЧРЕЖДЕНИЕ ОБРАЗОВАНИЯ",
+                style = TextStyleCollegeBranding,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "«МИНСКИЙ ПОЛИТЕХНИЧЕСКИЙ КОЛЛЕДЖ»",
+                style = TextStyleCollegeBranding.copy(fontSize = 12.sp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

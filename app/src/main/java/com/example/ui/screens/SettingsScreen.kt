@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -54,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -151,7 +153,8 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Карточка текущей учебной группы и специальности
+            // Компактный блок группы: только группа и кнопка «Сменить»
+            // (подробности специальности — во вкладке «Колледж»)
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -159,149 +162,77 @@ fun SettingsScreen(
                     border = BorderStroke(1.dp, ColorBorderLight),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.School,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Группа ${groupInfo.canonicalName}",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp,
-                                            color = ColorTextTitle
-                                        ),
-                                        softWrap = false,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = "${groupInfo.course} курс, группа №${groupInfo.groupNumber}",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontSize = 12.sp,
-                                            color = ColorTextMuted
-                                        )
-                                    )
-                                }
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(2.dp),
-                                border = BorderStroke(1.dp, ColorBrandBlue),
-                                color = ColorBrandFill,
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
                                 modifier = Modifier
-                                    .bouncyClickable { showGroupDialog = true }
-                                    .testTag("change_group_btn")
+                                    .size(36.dp)
+                                    .background(ColorBrandFill, RoundedCornerShape(2.dp)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "СМЕНИТЬ",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                            color = Color.White
-                                        )
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.School,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
-                        }
-
-                        if (specialty != null) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            HorizontalDivider(color = ColorBorderLight)
-                            Spacer(modifier = Modifier.height(8.dp))
-
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "СПЕЦИАЛЬНОСТЬ:",
+                                text = "Группа ${groupInfo.canonicalName}",
                                 style = androidx.compose.ui.text.TextStyle(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    color = ColorBrandBlue
-                                )
+                                    fontSize = 16.sp,
+                                    color = ColorTextTitle
+                                ),
+                                softWrap = false,
+                                maxLines = 1
                             )
-                            Text(
-                                text = "${specialty.cipher} — ${specialty.fullName}",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 13.sp,
-                                    color = ColorTextBody,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            )
-                            Text(
-                                text = "Код группы: «${specialty.code}» (${specialty.shortName})",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 11.sp,
-                                    color = ColorTextMuted
-                                )
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            border = BorderStroke(1.dp, ColorBrandBlue),
+                            color = ColorBrandFill,
+                            modifier = Modifier
+                                .bouncyClickable { showGroupDialog = true }
+                                .testTag("change_group_btn")
+                        ) {
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
-                                Surface(
-                                    shape = RoundedCornerShape(2.dp),
-                                    border = BorderStroke(1.dp, ColorBorderLight),
-                                    color = ColorSurfaceVariantLight
-                                ) {
-                                    Text(
-                                        text = if (groupInfo.hasSaturdayClasses) "6-дневка (учеба в сб)" else "5-дневка (пн-пт)",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                            color = ColorBrandBlue
-                                        ),
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "СМЕНИТЬ",
+                                    softWrap = false,
+                                    maxLines = 1,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = Color.White
                                     )
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(2.dp),
-                                    border = BorderStroke(1.dp, ColorBorderLight),
-                                    color = ColorSurfaceVariantLight
-                                ) {
-                                    val count = specialty.subjectsByCourse[groupInfo.course]?.size ?: 0
-                                    Text(
-                                        text = "Предметов на ${groupInfo.course} курсе: $count",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontSize = 11.sp,
-                                            color = ColorTextMuted
-                                        ),
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
+                                )
                             }
                         }
                     }
                 }
             }
 
-            // Блок «Диагностика сети»
-            item {
+            // Блок «Диагностика сети» — только при включённом дебаге
+            if (isDebugEnabled) item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
@@ -380,7 +311,7 @@ fun SettingsScreen(
                             } else "0 Б"
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(label = "Версия приложения", value = "2.7")
+                        DiagnosticRow(label = "Версия приложения", value = "2.8")
 
                         if (isDebugEnabled) {
                             Spacer(modifier = Modifier.height(4.dp))
@@ -496,6 +427,11 @@ fun SettingsScreen(
                                 onCheckedChange = { isDebugEnabled = it },
                                 modifier = Modifier.testTag("debug_toggle")
                             )
+                        }
+
+                        if (isDebugEnabled) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            DebugTimeSection()
                         }
                     }
                 }
@@ -730,5 +666,119 @@ private fun LinkItem(
             tint = ColorTextMuted,
             modifier = Modifier.size(18.dp)
         )
+    }
+}
+
+/**
+ * Секция дебаг-времени: фиксированные дата и время, которые приложение
+ * (звонки, подсветка урока, виджет «До звонка») считает «сейчас».
+ */
+@Composable
+private fun DebugTimeSection() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val overridden = com.example.util.DebugClock.isOverridden(context)
+    val current = com.example.util.DebugClock.now(context)
+
+    var dateText by androidx.compose.runtime.saveable.rememberSaveable {
+        mutableStateOf(String.format(java.util.Locale.ROOT, "%02d.%02d.%04d",
+            current.get(java.util.Calendar.DAY_OF_MONTH),
+            current.get(java.util.Calendar.MONTH) + 1,
+            current.get(java.util.Calendar.YEAR)))
+    }
+    var timeText by androidx.compose.runtime.saveable.rememberSaveable {
+        mutableStateOf(String.format(java.util.Locale.ROOT, "%02d:%02d",
+            current.get(java.util.Calendar.HOUR_OF_DAY),
+            current.get(java.util.Calendar.MINUTE)))
+    }
+
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorSurfaceVariantLight,
+        border = BorderStroke(1.dp, ColorBorderLight),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = "ДЕБАГ-ВРЕМЯ" + if (overridden) " (включено)" else "",
+                style = androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = ColorBrandBlue
+                )
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = dateText,
+                    onValueChange = { dateText = it },
+                    label = { Text("Дата") },
+                    placeholder = { Text("ДД.ММ.ГГГГ") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(2.dp),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = timeText,
+                    onValueChange = { timeText = it },
+                    label = { Text("Время") },
+                    placeholder = { Text("ЧЧ:ММ") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(2.dp),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBrandFill,
+                    modifier = Modifier
+                        .weight(1f)
+                        .bouncyClickable {
+                            val sdf = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.ROOT)
+                            val parsed = try {
+                                sdf.parse("$dateText $timeText")
+                            } catch (_: Exception) {
+                                null
+                            }
+                            if (parsed != null) {
+                                com.example.util.DebugClock.setOverride(context, parsed.time)
+                                com.example.widget.BellCountdownWidgetProvider.updateAll(context)
+                                com.example.widget.WidgetAlarm.scheduleNext(context)
+                            }
+                        }
+                ) {
+                    Text(
+                        text = "ПРИМЕНИТЬ",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    color = ColorBgMain,
+                    modifier = Modifier
+                        .weight(1f)
+                        .bouncyClickable {
+                            com.example.util.DebugClock.setOverride(context, null)
+                            com.example.widget.BellCountdownWidgetProvider.updateAll(context)
+                            com.example.widget.WidgetAlarm.scheduleNext(context)
+                        }
+                ) {
+                    Text(
+                        text = "СБРОСИТЬ",
+                        color = ColorTextBody,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+            }
+        }
     }
 }

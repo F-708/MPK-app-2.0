@@ -189,7 +189,7 @@ fun ScheduleScreen(
     // Текущий урок по времени (показывается на ячейке «Сегодня»)
     val currentLessonNumber = remember(activeDayOfWeek, selectedSlot) {
         if (selectedSlot == 0 && leftIsToday) {
-            val cal = Calendar.getInstance()
+            val cal = com.example.util.DebugClock.now(context)
             val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
             val bells = CollegeBellSchedule.getBellsForDay(activeDayOfWeek)
             bells.firstOrNull { minutes in it.startMinutes..it.endMinutes }?.lessonNumber
@@ -197,10 +197,13 @@ fun ScheduleScreen(
         } else null
     }
 
-    // 2. Поток расписания из Room Database для выбранного дня
-    val lessonsFromDb by scheduleRepository
+    // 2. Поток расписания из Room: null = идёт первая загрузка из базы
+    //    (чтобы не мигало «не опубликовано» до прихода данных)
+    val lessonsFromDbState: List<com.example.data.local.entity.LessonEntity>? by scheduleRepository
         .getLessonsForDay(groupInfo.canonicalName, activeDayOfWeek)
-        .collectAsState(initial = emptyList<com.example.data.local.entity.LessonEntity>())
+        .collectAsState(initial = null)
+    val lessonsFromDb = lessonsFromDbState ?: emptyList()
+    val isInitialLoad = lessonsFromDbState == null
 
     // 3. Фильтрация по архивной дате или последнему снапшоту дня
     val lessons: List<com.example.data.local.entity.LessonEntity> = remember(lessonsFromDb, selectedDateString) {
@@ -372,7 +375,21 @@ fun ScheduleScreen(
             transitionSpec = { fadeIn() togetherWith fadeOut() },
             label = "ScheduleListAnimation"
         ) { currentLessons ->
-            if (currentLessons.isEmpty()) {
+            if (isInitialLoad) {
+                // Первый кадр: база ещё не отдала кэш — тихий skeleton
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        color = ColorBrandBlue,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            } else if (currentLessons.isEmpty()) {
                 // Empty State строго без фейковых уроков
                 Box(
                     modifier = Modifier
