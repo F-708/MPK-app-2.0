@@ -8,7 +8,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,6 +65,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -75,6 +78,17 @@ import com.example.data.model.GroupInfo
 import com.example.data.network.MpkScheduleParser
 import com.example.data.repository.ScheduleRepository
 import com.example.ui.components.CalendarArchiveDialog
+import com.example.ui.theme.ColorActiveBlue
+import com.example.ui.theme.ColorBgMain
+import com.example.ui.theme.ColorBorderLight
+import com.example.ui.theme.ColorBrandBlue
+import com.example.ui.theme.ColorDividerLight
+import com.example.ui.theme.ColorMenuSubtext
+import com.example.ui.theme.ColorTextBody
+import com.example.ui.theme.ColorTextMuted
+import com.example.ui.theme.ColorTextTitle
+import com.example.ui.theme.ColorTopBar
+import com.example.ui.theme.TextStylePageTitle
 import com.example.ui.util.bouncyClickable
 import java.util.Calendar
 import java.util.Locale
@@ -99,15 +113,16 @@ data class WeekDayItem(
 /**
  * Главный экран расписания занятий колледжа ГУО «МГПК».
  *
- * БИЗНЕС-ПРАВИЛА И ТРЕБОВАНИЯ:
- * 1. Строгий расчет дат недели от Понедельника (Calendar.MONDAY, daysFromMonday).
- * 2. 1 курс: шестидневка (ПН-СБ). В пятницу кнопка перехода называется «Завтра (Сб)».
- * 3. 2-4 курсы: пятидневка (ПН-ПТ). В пятницу кнопка перехода называется «Понедельник».
- * 4. В субботу и воскресенье кнопка перехода называется «Понедельник».
- * 5. С понедельника по четверг: видна кнопка «Завтра».
+ * СООТВЕТСТВИЕ ДИЗАЙН-СИСТЕМЕ И БИЗНЕС-ПРАВИЛАМ:
+ * 1. Крупный заголовок страницы «Расписание» (32–34px Bold, Sentence case, #111827).
+ * 2. Строгий расчет дат недели от Понедельника (Calendar.MONDAY).
+ * 3. 1 курс: шестидневка (ПН-СБ). В пятницу кнопка перехода называется «Завтра (Сб)».
+ * 4. 2-4 курсы: пятидневка (ПН-ПТ). В пятницу кнопка перехода называется «Понедельник».
+ * 5. В субботу и воскресенье кнопка перехода называется «Понедельник».
  * 6. Запрет фейковых предметов: при отсутствии пар — аккуратный Empty State.
  * 7. Разделение по подгруппам: ровно 50/50 с микро-бейджами «1» и «2».
- * 8. Ручной выбор файла .doc/.docx с устройства через ActivityResultContracts.GetContent().
+ * 8. Ручной выбор файла .doc/.docx с устройства и быстрая вставка текста расписания.
+ * 9. Геометрия 0-2px, отсутствие теней (elevation 0dp), 1px рамки #E2E8F0.
  */
 @Composable
 fun ScheduleScreen(
@@ -199,58 +214,68 @@ fun ScheduleScreen(
         }
     }
 
-    // 4. Лаунчер для ручного открытия файла .doc/.docx
+    // 4. Поток расписания из Room Database
+    val lessonsFromDb by scheduleRepository
+        .getLessonsForDay(groupInfo.canonicalName, selectedDay)
+        .collectAsState(initial = emptyList<com.example.data.local.entity.LessonEntity>())
+
+    // 5. Фильтрация по архивной дате или по дню недели
+    val lessons: List<com.example.data.local.entity.LessonEntity> = remember(lessonsFromDb, selectedDateString) {
+        if (selectedDateString.isBlank()) {
+            lessonsFromDb
+        } else {
+            val bySpecificDate = lessonsFromDb.filter {
+                it.dateString == selectedDateString ||
+                it.dateString.replace("-", ".") == selectedDateString.replace("-", ".")
+            }
+            if (bySpecificDate.isNotEmpty()) bySpecificDate else lessonsFromDb
+        }
+    }
+
+    // Лаунчер для выбора локального .doc/.docx файла расписания
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             coroutineScope.launch {
                 try {
-                    val bytes = withContext(Dispatchers.IO) {
-                        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    }
-                    if (bytes != null && bytes.isNotEmpty()) {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    if (inputStream != null) {
+                        val bytes = inputStream.readBytes()
                         val parsedLessons = withContext(Dispatchers.IO) {
-                            MpkScheduleParser.parseFile(
+                            com.example.data.network.MpkScheduleParser.parseFile(
                                 bytes = bytes,
-                                targetGroup = groupInfo.canonicalName
+                                targetGroup = groupInfo.canonicalName,
+                                targetDate = currentWeekDay?.fullDateString ?: ""
                             )
                         }
                         if (parsedLessons.isNotEmpty()) {
                             scheduleRepository.saveLessons(parsedLessons)
                             Toast.makeText(
                                 context,
-                                "Импортировано ${parsedLessons.size} пар для группы ${groupInfo.canonicalName}",
+                                "Импортировано ${parsedLessons.size} пар для группы ${groupInfo.canonicalName}!",
                                 Toast.LENGTH_SHORT
                             ).show()
                         } else {
                             Toast.makeText(
                                 context,
-                                "В файле не найдено расписания для группы ${groupInfo.canonicalName}",
+                                "Пар для группы ${groupInfo.canonicalName} в файле не обнаружено",
                                 Toast.LENGTH_LONG
                             ).show()
                         }
-                    } else {
-                        Toast.makeText(context, "Не удалось прочитать выбранный файл", Toast.LENGTH_SHORT).show()
                     }
                 } catch (e: Exception) {
-                    Toast.makeText(context, "Ошибка импорта файла: ${e.localizedMessage ?: "неизвестно"}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        "Ошибка чтения файла: ${e.localizedMessage ?: "неизвестно"}",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }
     }
 
-    val lessonsFlow = remember(groupInfo.canonicalName, selectedDay, selectedDateString, currentWeekDay?.fullDateString) {
-        if (selectedDateString.isNotBlank()) {
-            scheduleRepository.getLessonsForDate(groupInfo.canonicalName, selectedDateString)
-        } else {
-            val targetDate = currentWeekDay?.fullDateString ?: ""
-            scheduleRepository.getLessonsForDateOrDay(groupInfo.canonicalName, targetDate, selectedDay)
-        }
-    }
-    val lessons: List<LessonEntity> by lessonsFlow.collectAsState(initial = emptyList())
-
-    // Архивный диалог календаря
+    // Диалог архива
     if (showArchiveDialog) {
         CalendarArchiveDialog(
             groupName = groupInfo.canonicalName,
@@ -268,22 +293,29 @@ fun ScheduleScreen(
     if (showPasteDialog) {
         AlertDialog(
             onDismissRequest = { showPasteDialog = false },
+            shape = RoundedCornerShape(2.dp),
+            containerColor = ColorBgMain,
             title = {
                 Text(
                     text = "Вставить текст расписания",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = ColorTextTitle
+                    )
                 )
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "Вставьте скопированный текст таблицы расписания (или из Telegram) для группы ${groupInfo.canonicalName}:",
-                        style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextMuted)
                     )
                     OutlinedTextField(
                         value = pasteInputText,
                         onValueChange = { pasteInputText = it },
-                        placeholder = { Text("Вставьте текст или сетку расписания...") },
+                        placeholder = { Text("Вставьте текст расписания...") },
+                        shape = RoundedCornerShape(2.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(180.dp),
@@ -292,8 +324,10 @@ fun ScheduleScreen(
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBrandBlue,
+                    modifier = Modifier.bouncyClickable {
                         if (pasteInputText.isNotBlank()) {
                             coroutineScope.launch {
                                 val parsed = withContext(Dispatchers.IO) {
@@ -314,21 +348,41 @@ fun ScheduleScreen(
                                 } else {
                                     Toast.makeText(
                                         context,
-                                        "Не удалось найти пары для группы ${groupInfo.canonicalName} в этом тексте",
+                                        "Не удалось найти пары для группы ${groupInfo.canonicalName} в тексте",
                                         Toast.LENGTH_LONG
                                     ).show()
                                 }
                             }
                         }
-                    },
-                    enabled = pasteInputText.isNotBlank()
+                    }
                 ) {
-                    Text("Импортировать")
+                    Text(
+                        text = "ИМПОРТИРОВАТЬ",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color.White
+                        ),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showPasteDialog = false }) {
-                    Text("Отмена")
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    color = Color.Transparent,
+                    modifier = Modifier.bouncyClickable { showPasteDialog = false }
+                ) {
+                    Text(
+                        text = "ОТМЕНА",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = ColorTextBody
+                        ),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
                 }
             }
         )
@@ -337,204 +391,212 @@ fun ScheduleScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(ColorBgMain)
     ) {
-        // Панель выбора дней недели и заголовка
-        Surface(
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 1.dp,
-            modifier = Modifier.fillMaxWidth()
+        // =========================================================================
+        // Заголовок страницы «Расписание» (32-34px Bold, Sentence case, #111827)
+        // =========================================================================
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                // Заголовок текущего дня и кнопки быстрых действий
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            Column {
+                Text(
+                    text = "Расписание",
+                    style = TextStylePageTitle,
+                    maxLines = 1
+                )
+                Text(
+                    text = if (selectedDateString.isNotBlank()) {
+                        "${currentWeekDay?.fullName ?: "День"} • $selectedDateString"
+                    } else {
+                        "${currentWeekDay?.fullName ?: "День"}, ${currentWeekDay?.dateFormatted ?: ""}"
+                    },
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        color = ColorBrandBlue
+                    )
+                )
+            }
+
+            // Быстрые кнопки управления: [Вставить] [Файл] [Архив] [Завтра]
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Кнопка вставки текста
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    color = ColorBgMain,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .bouncyClickable {
+                            pasteInputText = ""
+                            showPasteDialog = true
+                        }
+                        .testTag("paste_text_button")
                 ) {
-                    Column {
-                        Text(
-                            text = if (selectedDateString.isNotBlank()) {
-                                "${currentWeekDay?.fullName ?: "День"} ($selectedDateString)"
-                            } else {
-                                "${currentWeekDay?.fullName ?: "День"}, ${currentWeekDay?.dateFormatted ?: ""}"
-                            },
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = "Вставить текст",
+                            tint = ColorBrandBlue,
+                            modifier = Modifier.size(16.dp)
                         )
-                        if (currentWeekDay?.isToday == true && selectedDateString.isBlank()) {
-                            Text(
-                                text = "Сегодня",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            )
-                        }
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // Кнопка вставки текста расписания
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .size(34.dp)
-                                .bouncyClickable {
-                                    pasteInputText = ""
-                                    showPasteDialog = true
-                                }
-                                .testTag("paste_text_button")
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.ContentPaste,
-                                    contentDescription = "Вставить текст расписания",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-
-                        // Кнопка ручного открытия файла расписания .doc/.docx
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .size(34.dp)
-                                .bouncyClickable {
-                                    filePickerLauncher.launch("*/*")
-                                }
-                                .testTag("open_file_button")
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.FileOpen,
-                                    contentDescription = "Открыть файл .doc/.docx с устройства",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-
-                        // Кнопка открытия архивного календаря
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .size(34.dp)
-                                .bouncyClickable { showArchiveDialog = true }
-                                .testTag("calendar_archive_button")
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.DateRange,
-                                    contentDescription = "Архив расписания",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-
-                        // Кнопка быстрого перехода («Завтра» / «Завтра (Сб)» / «Понедельник»)
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            modifier = Modifier
-                                .bouncyClickable {
-                                    selectedDateString = ""
-                                    selectedDay = when {
-                                        selectedDay == 5 && groupInfo.hasSaturdayClasses -> 6
-                                        selectedDay >= daysCount -> 1
-                                        else -> selectedDay + 1
-                                    }
-                                }
-                                .testTag("next_day_button")
-                        ) {
-                            Text(
-                                text = nextDayButtonText,
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                                ),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
-                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Горизонтальная панель дней недели (Пн, Вт, Ср, Чт, Пт, [Сб]) с датами
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // Кнопка открытия файла
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    color = ColorBgMain,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .bouncyClickable { filePickerLauncher.launch("*/*") }
+                        .testTag("open_file_button")
                 ) {
-                    for (dayItem in weekDays) {
-                        val isSelected = (selectedDay == dayItem.dayOfWeek && selectedDateString.isBlank())
-                        val isToday = dayItem.isToday
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.FileOpen,
+                            contentDescription = "Открыть .doc",
+                            tint = ColorBrandBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
 
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = when {
-                                isSelected -> MaterialTheme.colorScheme.primary
-                                isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
-                                else -> MaterialTheme.colorScheme.surfaceVariant
-                            },
-                            contentColor = when {
-                                isSelected -> MaterialTheme.colorScheme.onPrimary
-                                isToday -> MaterialTheme.colorScheme.primary
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp)
-                                .bouncyClickable {
-                                    selectedDateString = ""
-                                    selectedDay = dayItem.dayOfWeek
-                                }
-                                .testTag("weekday_tab_${dayItem.dayOfWeek}")
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center,
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                Text(
-                                    text = dayItem.shortName,
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 12.sp
-                                    )
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = dayItem.dateFormatted,
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                        fontSize = 10.sp
-                                    )
-                                )
+                // Кнопка архивного календаря
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    color = ColorBgMain,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .bouncyClickable { showArchiveDialog = true }
+                        .testTag("calendar_archive_button")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = "Архив",
+                            tint = ColorBrandBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                // Кнопка перехода («Завтра» / «Понедельник»)
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, ColorBrandBlue),
+                    color = ColorBrandBlue,
+                    modifier = Modifier
+                        .bouncyClickable {
+                            selectedDateString = ""
+                            selectedDay = when {
+                                selectedDay == 5 && groupInfo.hasSaturdayClasses -> 6
+                                selectedDay >= daysCount -> 1
+                                else -> selectedDay + 1
                             }
                         }
+                        .testTag("next_day_button")
+                ) {
+                    Text(
+                        text = nextDayButtonText.uppercase(Locale.ROOT),
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = Color.White
+                        ),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
+
+        // =========================================================================
+        // Панель дней недели (ПН, ВТ, СР, ЧТ, ПТ, СБ)
+        // =========================================================================
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            for (dayItem in weekDays) {
+                val isSelected = (selectedDay == dayItem.dayOfWeek && selectedDateString.isBlank())
+                val isToday = dayItem.isToday
+
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isSelected) ColorTopBar else if (isToday) ColorBrandBlue else ColorBorderLight
+                    ),
+                    color = when {
+                        isSelected -> ColorTopBar
+                        isToday -> Color(0xFFEDF2F7)
+                        else -> ColorBgMain
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                        .bouncyClickable {
+                            selectedDateString = ""
+                            selectedDay = dayItem.dayOfWeek
+                        }
+                        .testTag("weekday_tab_${dayItem.dayOfWeek}")
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Text(
+                            text = dayItem.shortName,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 12.sp,
+                                color = if (isSelected) Color.White else ColorTextBody
+                            )
+                        )
+                        Text(
+                            text = dayItem.dateFormatted,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                fontSize = 10.sp,
+                                color = if (isSelected) ColorMenuSubtext else ColorTextMuted
+                            )
+                        )
                     }
                 }
             }
         }
 
-        // Список пар или Empty State
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+                .height(1.dp)
+                .background(ColorDividerLight)
+        )
+
+        // =========================================================================
+        // Список пар или чистый Empty State
+        // =========================================================================
         AnimatedContent(
             targetState = lessons,
             transitionSpec = { fadeIn() togetherWith fadeOut() },
             label = "ScheduleListAnimation"
         ) { currentLessons ->
             if (currentLessons.isEmpty()) {
-                // Строгий Empty State без фейковых предметов
+                // Empty State строго без фейковых уроков
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -547,16 +609,16 @@ fun ScheduleScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(64.dp)
+                                .size(56.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                .background(Color(0xFFF1F5F9)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.EventBusy,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(32.dp)
+                                tint = ColorBrandBlue,
+                                modifier = Modifier.size(28.dp)
                             )
                         }
 
@@ -564,9 +626,10 @@ fun ScheduleScreen(
 
                         Text(
                             text = "Расписание ещё не опубликовано",
-                            style = MaterialTheme.typography.titleMedium.copy(
+                            style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                fontSize = 18.sp,
+                                color = ColorTextTitle
                             ),
                             textAlign = TextAlign.Center
                         )
@@ -575,8 +638,9 @@ fun ScheduleScreen(
 
                         Text(
                             text = "Для группы ${groupInfo.canonicalName} на этот день пар пока нет в базе колледжа.",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 13.sp,
+                                color = ColorTextMuted
                             ),
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 16.dp)
@@ -591,39 +655,46 @@ fun ScheduleScreen(
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
                         ) {
-                            Button(
-                                onClick = onSyncRequest,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary
-                                ),
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                border = BorderStroke(1.dp, ColorBrandBlue),
+                                color = ColorBrandBlue,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .bouncyClickable(onClick = onSyncRequest)
                                     .testTag("empty_state_sync_btn")
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Синхронизировать с сайтом",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center,
+                                    modifier = Modifier.padding(vertical = 10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "СИНХРОНИЗИРОВАТЬ С САЙТОМ",
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = Color.White
+                                        )
+                                    )
+                                }
                             }
 
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                OutlinedButton(
-                                    onClick = {
-                                        pasteInputText = ""
-                                        showPasteDialog = true
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
+                                Surface(
+                                    shape = RoundedCornerShape(2.dp),
+                                    border = BorderStroke(1.dp, ColorBorderLight),
+                                    color = ColorBgMain,
                                     modifier = Modifier
                                         .weight(1f)
                                         .bouncyClickable {
@@ -632,38 +703,61 @@ fun ScheduleScreen(
                                         }
                                         .testTag("empty_state_paste_btn")
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentPaste,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Вставить текст",
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        maxLines = 1
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContentPaste,
+                                            contentDescription = null,
+                                            tint = ColorBrandBlue,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "ВСТАВИТЬ ТЕКСТ",
+                                            style = androidx.compose.ui.text.TextStyle(
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = ColorBrandBlue
+                                            ),
+                                            maxLines = 1
+                                        )
+                                    }
                                 }
 
-                                OutlinedButton(
-                                    onClick = { filePickerLauncher.launch("*/*") },
-                                    shape = RoundedCornerShape(12.dp),
+                                Surface(
+                                    shape = RoundedCornerShape(2.dp),
+                                    border = BorderStroke(1.dp, ColorBorderLight),
+                                    color = ColorBgMain,
                                     modifier = Modifier
                                         .weight(1f)
                                         .bouncyClickable { filePickerLauncher.launch("*/*") }
                                         .testTag("empty_state_file_btn")
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.UploadFile,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Файл .doc",
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        maxLines = 1
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.UploadFile,
+                                            contentDescription = null,
+                                            tint = ColorBrandBlue,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "ФАЙЛ .DOC",
+                                            style = androidx.compose.ui.text.TextStyle(
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = ColorBrandBlue
+                                            ),
+                                            maxLines = 1
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -673,7 +767,7 @@ fun ScheduleScreen(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(currentLessons, key = { it.id }) { lesson ->
                         LessonCard(lesson = lesson)
@@ -685,23 +779,27 @@ fun ScheduleScreen(
 }
 
 /**
- * Карточка пары (обычная или с делением 50/50 по подгруппам).
+ * Карточка пары (обычная или с делением 50/50 по подгруппам) по Design System МПК:
+ * - Скругление: 2px (строгая геометрия).
+ * - Рамка: 1px solid #E2E8F0.
+ * - Отсутствие теней (elevation 0dp).
  */
 @Composable
 fun LessonCard(
     lesson: LessonEntity,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorBgMain,
+        border = BorderStroke(1.dp, ColorBorderLight),
+        shadowElevation = 0.dp,
         modifier = modifier
             .fillMaxWidth()
             .testTag("lesson_card_${lesson.lessonNumber}")
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            // Заголовок пары: номер, время и акроним-бейдж
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Заголовок пары: номер пары (плашка 2px), время, акроним
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -709,48 +807,52 @@ fun LessonCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(28.dp)
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorBrandBlue,
+                        modifier = Modifier.size(24.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = "${lesson.lessonNumber}",
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Black,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = Color.White
                                 )
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "${lesson.timeStart} – ${lesson.timeEnd}",
-                        style = MaterialTheme.typography.labelMedium.copy(
+                        style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontSize = 13.sp,
+                            color = ColorTextBody
                         )
                     )
                 }
 
                 // Акроним предмета
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    color = Color(0xFFF8FAFC),
                     modifier = Modifier.wrapContentWidth()
                 ) {
                     Text(
                         text = lesson.subjectAcronym,
-                        style = MaterialTheme.typography.labelSmall.copy(
+                        style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontSize = 11.sp,
+                            color = ColorBrandBlue
                         ),
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             if (lesson.isSplit) {
                 // Разделение ровно 50/50 с микро-бейджами «1» и «2»
@@ -770,7 +872,7 @@ fun LessonCard(
                     )
 
                     VerticalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant,
+                        color = ColorBorderLight,
                         thickness = 1.dp,
                         modifier = Modifier.fillMaxHeight()
                     )
@@ -788,15 +890,16 @@ fun LessonCard(
                 // Одиночная пара для всей группы
                 Text(
                     text = lesson.shortSubjectName,
-                    style = MaterialTheme.typography.titleMedium.copy(
+                    style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        fontSize = 15.sp,
+                        color = ColorTextTitle
                     ),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -808,14 +911,15 @@ fun LessonCard(
                             Icon(
                                 imageVector = Icons.Default.Person,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
+                                tint = ColorTextMuted,
+                                modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = lesson.teacherFirst,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 12.sp,
+                                    color = ColorTextBody
                                 ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -825,8 +929,9 @@ fun LessonCard(
 
                     if (lesson.roomFirst.isNotBlank()) {
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(2.dp),
+                            border = BorderStroke(1.dp, ColorBorderLight),
+                            color = Color(0xFFF1F5F9),
                             modifier = Modifier.wrapContentWidth()
                         ) {
                             Row(
@@ -836,15 +941,16 @@ fun LessonCard(
                                 Icon(
                                     imageVector = Icons.Default.LocationOn,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    tint = ColorBrandBlue,
                                     modifier = Modifier.size(12.dp)
                                 )
                                 Spacer(modifier = Modifier.width(2.dp))
                                 Text(
                                     text = "каб. ${lesson.roomFirst}",
-                                    style = MaterialTheme.typography.labelSmall.copy(
+                                    style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        fontSize = 11.sp,
+                                        color = ColorBrandBlue
                                     )
                                 )
                             }
@@ -879,16 +985,16 @@ private fun SubgroupPane(
             // Микро-бейдж подгруппы «1» или «2»
             Surface(
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
+                color = ColorBrandBlue,
+                modifier = Modifier.size(18.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
                         text = "$subgroupNumber",
-                        style = MaterialTheme.typography.labelSmall.copy(
+                        style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontSize = 11.sp
+                            color = Color.White,
+                            fontSize = 10.sp
                         )
                     )
                 }
@@ -897,9 +1003,10 @@ private fun SubgroupPane(
             if (room.isNotBlank()) {
                 Text(
                     text = "каб. $room",
-                    style = MaterialTheme.typography.labelSmall.copy(
+                    style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = ColorBrandBlue,
+                        fontSize = 11.sp
                     )
                 )
             }
@@ -909,22 +1016,22 @@ private fun SubgroupPane(
 
         Text(
             text = subject,
-            style = MaterialTheme.typography.bodyMedium.copy(
+            style = androidx.compose.ui.text.TextStyle(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurface
+                color = ColorTextTitle
             ),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
 
         if (teacher.isNotBlank()) {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = teacher,
-                style = MaterialTheme.typography.bodySmall.copy(
+                style = androidx.compose.ui.text.TextStyle(
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = ColorTextMuted
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

@@ -149,10 +149,12 @@ object MpkScheduleParser {
             }
         }
 
-        // 2. Прямые ссылки на .doc / .docx файлы в тексте / HTML
+        // 2. Прямые ссылки на .doc / .docx файлы в тексте / HTML (исключая ссылки просмотрщиков)
         Regex("(?i)(?:href|src|data-src|data-href)=[\"']([^\"']+\\.(?:docx|doc)(?:\\?[^\"']*)?)[\"']").findAll(html).forEach { match ->
             val link = match.groupValues[1]
-            urls.add(resolveAbsoluteUrl(baseUrl, link))
+            if (!link.contains("officeapps.live.com") && !link.contains("docs.google.com")) {
+                urls.add(resolveAbsoluteUrl(baseUrl, link))
+            }
         }
 
         // 3. Ссылки в JSON (source_url, guid) WordPress

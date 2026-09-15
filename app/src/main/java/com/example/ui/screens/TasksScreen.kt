@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,22 +28,15 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -53,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -64,24 +59,34 @@ import com.example.data.local.entity.StudentTaskEntity
 import com.example.data.model.GroupInfo
 import com.example.data.model.TaskType
 import com.example.data.repository.TaskRepository
+import com.example.ui.theme.ColorActiveBlue
 import com.example.ui.theme.ColorBadgeCourse
 import com.example.ui.theme.ColorBadgeDiploma
 import com.example.ui.theme.ColorBadgeExam
 import com.example.ui.theme.ColorBadgeHW
 import com.example.ui.theme.ColorBadgeLab
 import com.example.ui.theme.ColorBadgePract
+import com.example.ui.theme.ColorBgMain
+import com.example.ui.theme.ColorBorderLight
+import com.example.ui.theme.ColorBrandBlue
+import com.example.ui.theme.ColorDividerLight
+import com.example.ui.theme.ColorTextBody
+import com.example.ui.theme.ColorTextMuted
+import com.example.ui.theme.ColorTextTitle
+import com.example.ui.theme.ColorTopBar
+import com.example.ui.theme.TextStylePageTitle
 import com.example.ui.util.bouncyClickable
 import com.example.util.MpkCurriculum
 import kotlinx.coroutines.launch
 
 /**
- * Экран учебных заданий студента (ДЗ, лабы, практики, контрольные, курсовые, диплом).
- *
- * БИЗНЕС-ПРАВИЛА:
- * 1. Бейдж задания: строго «ДЗ» (не «ДЗ на следующий раз»).
- * 2. «Курсовые» доступны только для 2-4 курсов.
- * 3. «Диплом» доступен только для 4 курса.
- * 4. Список дисциплин берется строго из официального справочника MpkCurriculum.
+ * Экран учебных заданий студента по официальному Style Guide МПК:
+ * - Заголовок страницы «Учебные задания» (32-34px Bold, Sentence case)
+ * - 0-2dp геометрия карточек и чипов
+ * - 0dp elevation
+ * - 1px рамки #E2E8F0
+ * - Бейдж строго «ДЗ» (не «ДЗ на следующий раз»)
+ * - Курсовые только для 2-4 курсов, диплом — только для 4 курса
  */
 @Composable
 fun TasksScreen(
@@ -113,70 +118,132 @@ fun TasksScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(ColorBgMain)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
+            // Заголовок страницы
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Учебные задания",
+                        style = TextStylePageTitle,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = "Группа ${groupInfo.canonicalName} • ${allTasks.count { !it.isCompleted }} активных",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            color = ColorBrandBlue
+                        )
+                    )
+                }
+
+                // Кнопка добавления
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, ColorBrandBlue),
+                    color = ColorBrandBlue,
+                    modifier = Modifier
+                        .bouncyClickable { showAddDialog = true }
+                        .testTag("add_task_top_btn")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Добавить",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "ДОБАВИТЬ",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = Color.White
+                            )
+                        )
+                    }
+                }
+            }
+
             // Горизонтальный ряд фильтров (Все + типы заданий)
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 1.dp,
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    item {
-                        val isSelected = selectedFilter == null
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .height(36.dp)
-                                .bouncyClickable { selectedFilter = null }
+                item {
+                    val isSelected = selectedFilter == null
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
+                        color = if (isSelected) ColorTopBar else ColorBgMain,
+                        modifier = Modifier
+                            .height(34.dp)
+                            .bouncyClickable { selectedFilter = null }
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(horizontal = 12.dp)
                         ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 14.dp)
-                            ) {
-                                Text(
-                                    text = "Все (${allTasks.size})",
-                                    style = MaterialTheme.typography.labelLarge.copy(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                    )
+                            Text(
+                                text = "ВСЕ (${allTasks.size})",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 11.sp,
+                                    color = if (isSelected) Color.White else ColorTextBody
                                 )
-                            }
+                            )
                         }
                     }
+                }
 
-                    items(availableTypes) { type ->
-                        val isSelected = selectedFilter == type
-                        val count = allTasks.count { it.taskTypeEnum == type }
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .height(36.dp)
-                                .bouncyClickable { selectedFilter = type }
+                items(availableTypes) { type ->
+                    val isSelected = selectedFilter == type
+                    val count = allTasks.count { it.taskTypeEnum == type }
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
+                        color = if (isSelected) ColorTopBar else ColorBgMain,
+                        modifier = Modifier
+                            .height(34.dp)
+                            .bouncyClickable { selectedFilter = type }
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(horizontal = 10.dp)
                         ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 12.dp)
-                            ) {
-                                Text(
-                                    text = "${type.displayName} ($count)",
-                                    style = MaterialTheme.typography.labelLarge.copy(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                    )
+                            Text(
+                                text = "${type.displayName.uppercase()} ($count)",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 11.sp,
+                                    color = if (isSelected) Color.White else ColorTextBody
                                 )
-                            }
+                            )
                         }
                     }
                 }
             }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .height(1.dp)
+                    .background(ColorDividerLight)
+            )
 
             if (filteredTasks.isEmpty()) {
                 // Пустой список заданий
@@ -192,31 +259,33 @@ fun TasksScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(64.dp)
+                                .size(56.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                .background(Color(0xFFF1F5F9)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Checklist,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(32.dp)
+                                tint = ColorBrandBlue,
+                                modifier = Modifier.size(28.dp)
                             )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Нет активных заданий",
-                            style = MaterialTheme.typography.titleMedium.copy(
+                            style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                fontSize = 18.sp,
+                                color = ColorTextTitle
                             )
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Нажмите «+», чтобы добавить домашнее задание, практическую или курсовую работу.",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "Нажмите «Добавить», чтобы зафиксировать домашнее задание, лабораторную или курсовую работу.",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 13.sp,
+                                color = ColorTextMuted
                             ),
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 24.dp)
@@ -227,7 +296,7 @@ fun TasksScreen(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(filteredTasks, key = { it.id }) { task ->
                         TaskItemCard(
@@ -246,25 +315,6 @@ fun TasksScreen(
                     }
                 }
             }
-        }
-
-        // Floating Action Button добавления задания
-        FloatingActionButton(
-            onClick = { showAddDialog = true },
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp)
-                .bouncyClickable(onClick = { showAddDialog = true })
-                .testTag("add_task_fab")
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Добавить задание",
-                modifier = Modifier.size(24.dp)
-            )
         }
     }
 
@@ -294,7 +344,7 @@ fun TasksScreen(
 }
 
 /**
- * Карточка задания с микро-бейджем типа задания и чекбоксом.
+ * Карточка задания по Design System МПК.
  */
 @Composable
 fun TaskItemCard(
@@ -312,19 +362,11 @@ fun TaskItemCard(
         TaskType.DIPLOMA -> ColorBadgeDiploma
     }
 
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (task.isCompleted) {
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        ),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (task.isCompleted) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant
-        ),
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = if (task.isCompleted) Color(0xFFF9FAFB) else ColorBgMain,
+        border = BorderStroke(1.dp, ColorBorderLight),
+        shadowElevation = 0.dp,
         modifier = modifier
             .fillMaxWidth()
             .bouncyClickable(onClick = onToggleCompleted)
@@ -333,41 +375,42 @@ fun TaskItemCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Чекбокс отметки о выполнении
             IconButton(
                 onClick = onToggleCompleted,
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(32.dp)
                     .bouncyClickable(onClick = onToggleCompleted)
             ) {
                 Icon(
                     imageVector = if (task.isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                     contentDescription = if (task.isCompleted) "Выполнено" else "Не выполнено",
-                    tint = if (task.isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = if (task.isCompleted) ColorBrandBlue else ColorTextMuted
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Бейдж типа задания (например: «ДЗ», «Лаб», «Курсовая»)
+                    // Бейдж типа задания (строго 2px radius)
                     Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = badgeColor.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(2.dp),
+                        border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.5f)),
+                        color = badgeColor.copy(alpha = 0.12f),
                         contentColor = badgeColor
                     ) {
                         Text(
                             text = task.taskTypeEnum.badge,
-                            style = MaterialTheme.typography.labelSmall.copy(
+                            style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
+                                fontSize = 10.sp
                             ),
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
@@ -376,9 +419,10 @@ fun TaskItemCard(
                     if (task.subjectName.isNotBlank()) {
                         Text(
                             text = task.shortSubjectName,
-                            style = MaterialTheme.typography.labelSmall.copy(
+                            style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                fontSize = 12.sp,
+                                color = ColorBrandBlue
                             ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -390,10 +434,11 @@ fun TaskItemCard(
 
                 Text(
                     text = task.title,
-                    style = MaterialTheme.typography.bodyLarge.copy(
+                    style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
                         textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
-                        color = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                        color = if (task.isCompleted) ColorTextMuted else ColorTextTitle
                     ),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -403,8 +448,9 @@ fun TaskItemCard(
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = task.description,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontSize = 12.sp,
+                            color = ColorTextMuted
                         ),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -412,19 +458,20 @@ fun TaskItemCard(
                 }
 
                 if (task.deadlineDate.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(3.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.CalendarToday,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(12.dp)
+                            tint = ColorTextMuted,
+                            modifier = Modifier.size(11.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
                         Text(
                             text = "Срок: ${task.deadlineDate}",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 11.sp,
+                                color = ColorTextMuted
                             )
                         )
                     }
@@ -434,14 +481,14 @@ fun TaskItemCard(
             IconButton(
                 onClick = onDelete,
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(28.dp)
                     .bouncyClickable(onClick = onDelete)
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "Удалить задание",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    modifier = Modifier.size(18.dp)
+                    contentDescription = "Удалить",
+                    tint = ColorTextMuted.copy(alpha = 0.7f),
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
@@ -474,7 +521,8 @@ fun AddTaskDialog(
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(2.dp),
+        containerColor = ColorBgMain,
         title = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -483,22 +531,25 @@ fun AddTaskDialog(
             ) {
                 Text(
                     text = "Новое задание",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = ColorTextTitle
+                    )
                 )
                 IconButton(onClick = onDismissRequest) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Закрыть")
+                    Icon(imageVector = Icons.Default.Close, contentDescription = "Закрыть", tint = ColorTextMuted)
                 }
             }
         },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Тип задания (чипы)
                 Text(
                     text = "Категория:",
-                    style = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted)
                 )
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -507,21 +558,23 @@ fun AddTaskDialog(
                     items(availableTypes) { type ->
                         val isSelected = selectedType == type
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            shape = RoundedCornerShape(2.dp),
+                            border = BorderStroke(1.dp, if (isSelected) ColorBrandBlue else ColorBorderLight),
+                            color = if (isSelected) ColorBrandBlue else ColorBgMain,
+                            contentColor = if (isSelected) Color.White else ColorTextBody,
                             modifier = Modifier
-                                .height(32.dp)
+                                .height(30.dp)
                                 .bouncyClickable { selectedType = type }
                         ) {
                             Box(
                                 contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 10.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp)
                             ) {
                                 Text(
                                     text = type.badge,
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 11.sp
                                     )
                                 )
                             }
@@ -538,9 +591,9 @@ fun AddTaskDialog(
                         value = selectedSubject,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Официальный предмет") },
+                        label = { Text("Официальный предмет", fontSize = 12.sp) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = subjectExpanded) },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(2.dp),
                         modifier = Modifier
                             .menuAnchor()
                             .fillMaxWidth()
@@ -551,7 +604,7 @@ fun AddTaskDialog(
                     ) {
                         officialSubjects.forEach { subject ->
                             DropdownMenuItem(
-                                text = { Text(subject) },
+                                text = { Text(subject, fontSize = 13.sp) },
                                 onClick = {
                                     selectedSubject = subject
                                     subjectExpanded = false
@@ -564,42 +617,61 @@ fun AddTaskDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Что нужно сделать") },
-                    placeholder = { Text("Например: Упр. 4, Отчет по лабе №2") },
+                    label = { Text("Что нужно сделать", fontSize = 12.sp) },
+                    placeholder = { Text("Например: Упр. 4, Отчет по лабе №2", fontSize = 12.sp) },
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(2.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 OutlinedTextField(
                     value = dueDate,
                     onValueChange = { dueDate = it },
-                    label = { Text("Срок сдачи (опционально)") },
-                    placeholder = { Text("Например: 24 сентября / Четверг") },
+                    label = { Text("Срок сдачи (опционально)", fontSize = 12.sp) },
+                    placeholder = { Text("Например: 24 сентября", fontSize = 12.sp) },
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(2.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBrandBlue,
+                modifier = Modifier.bouncyClickable {
                     if (title.isNotBlank()) {
                         onTaskAdded(title.trim(), description.trim(), selectedSubject, selectedType, dueDate.trim())
                     }
-                },
-                enabled = title.isNotBlank(),
-                shape = RoundedCornerShape(10.dp)
+                }
             ) {
-                Text("Добавить")
+                Text(
+                    text = "ДОБАВИТЬ",
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = Color.White
+                    ),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                )
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = onDismissRequest
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                border = BorderStroke(1.dp, ColorBorderLight),
+                color = Color.Transparent,
+                modifier = Modifier.bouncyClickable { onDismissRequest() }
             ) {
-                Text("Отмена")
+                Text(
+                    text = "ОТМЕНА",
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = ColorTextBody
+                    ),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                )
             }
         }
     )

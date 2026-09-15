@@ -3,7 +3,10 @@ package com.example.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +20,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -26,23 +28,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -63,28 +58,42 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.data.local.entity.LessonEntity
 import com.example.data.repository.ScheduleRepository
 import com.example.ui.screens.LessonCard
+import com.example.ui.theme.ColorBgMain
+import com.example.ui.theme.ColorBorderLight
+import com.example.ui.theme.ColorBrandBlue
+import com.example.ui.theme.ColorDividerLight
+import com.example.ui.theme.ColorTextBody
+import com.example.ui.theme.ColorTextDisabled
+import com.example.ui.theme.ColorTextMuted
+import com.example.ui.theme.ColorTextTitle
+import com.example.ui.theme.ColorTextWeekdays
+import com.example.ui.theme.ColorTopBar
+import com.example.ui.theme.TextStyleCalendarMonth
+import com.example.ui.theme.TextStyleCalendarWeekdays
 import com.example.ui.util.bouncyClickable
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-private val MONTH_NAMES_RU = listOf(
-    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+private val MONTH_NAMES_CAPS = listOf(
+    "ЯНВАРЬ", "ФЕВРАЛЬ", "МАРТ", "АПРЕЛЬ", "МАЙ", "ИЮНЬ",
+    "ИЮЛЬ", "АВГУСТ", "СЕНТЯБРЬ", "ОКТЯБРЬ", "НОЯБРЬ", "ДЕКАБРЬ"
 )
 
 private val WEEKDAY_HEADERS = listOf("ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС")
 
 /**
- * Диалог архивного календаря расписания ГУО «МГПК».
+ * Диалог архивного календаря расписания ГУО «МГПК» по строгому Style Guide.
  *
- * Функциональность:
- * 1. Месячный интерактивный календарь с подсветкой дней, имеющих сохраненные пары
- * 2. Поиск по всему архиву (предмет, преподаватель, аудитория)
- * 3. Детальный просмотр пар за выбранную архивную дату
+ * Спецификация:
+ * 1. Кнопки переключения месяцев: < ПРЕД. / СЛЕД. > в рамке 1px solid #E2E8F0, скругление 2px, цвет #0B3564 Bold.
+ * 2. По центру: Месяц в формате «СЕНТЯБРЬ 2026» (#111827, Bold 15px, ALL CAPS).
+ * 3. Заголовки дней: ПН ВТ СР ЧТ ПТ СБ ВС (#4B5563, Bold 13px, ALL CAPS).
+ * 4. Выбранный день: фоновый круг 32px цвета #001737, белый жирный текст.
+ * 5. Индикатор наличия пар: точка диаметром 3px цвета #0B3564 строго под цифрой (отступ 2px).
+ * 6. Никаких теней (elevation 0dp), строгая прямоугольная геометрия 2px.
  */
 @Composable
 fun CalendarArchiveDialog(
@@ -101,11 +110,11 @@ fun CalendarArchiveDialog(
     var selectedDateString by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
 
-    // Получаем сохраненные даты из БД
+    // Сохраненные даты и пары
     val savedDates by scheduleRepository.getDistinctDates(groupName).collectAsState(initial = emptyList())
     val allGroupLessons by scheduleRepository.getAllLessonsForGroup(groupName).collectAsState(initial = emptyList())
 
-    // Уроки за выбранную дату (или по дню недели)
+    // Уроки за выбранную дату
     val selectedDateLessons = remember(selectedDateString, allGroupLessons) {
         if (selectedDateString.isBlank()) {
             emptyList()
@@ -134,7 +143,7 @@ fun CalendarArchiveDialog(
         }
     }
 
-    // Результаты глобального поиска
+    // Результаты поиска
     val searchResults = remember(searchQuery, allGroupLessons) {
         if (searchQuery.isBlank()) {
             emptyList()
@@ -151,17 +160,21 @@ fun CalendarArchiveDialog(
         }
     }
 
+    val prevMonthIndex = if (displayedMonth == 0) 11 else displayedMonth - 1
+    val nextMonthIndex = if (displayedMonth == 11) 0 else displayedMonth + 1
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
+            shape = RoundedCornerShape(2.dp),
+            color = ColorBgMain,
+            border = BorderStroke(1.dp, ColorBorderLight),
+            shadowElevation = 0.dp,
             modifier = modifier
-                .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.88f)
+                .fillMaxWidth(0.96f)
+                .fillMaxHeight(0.90f)
                 .testTag("calendar_archive_dialog")
         ) {
             Column(
@@ -169,49 +182,40 @@ fun CalendarArchiveDialog(
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                // Заголовок диалога и кнопка закрытия
+                // Шапка диалога
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.CalendarMonth,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
+                    Column {
+                        Text(
+                            text = "АРХИВ РАСПИСАНИЯ",
+                            style = TextStyleCalendarMonth.copy(fontSize = 16.sp, color = ColorBrandBlue)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = "Архив расписания",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            )
-                            Text(
-                                text = "Группа $groupName",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
-                        }
+                        Text(
+                            text = "ГРУППА $groupName",
+                            style = TextStyleCalendarWeekdays.copy(fontSize = 12.sp, color = ColorTextMuted)
+                        )
                     }
 
-                    IconButton(
-                        onClick = onDismiss,
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = Color.Transparent,
+                        border = BorderStroke(1.dp, ColorBorderLight),
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(32.dp)
                             .bouncyClickable(onClick = onDismiss)
                             .testTag("close_archive_dialog_button")
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Закрыть",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Закрыть",
+                                tint = ColorTextBody,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
 
@@ -223,16 +227,16 @@ fun CalendarArchiveDialog(
                     onValueChange = { searchQuery = it },
                     placeholder = {
                         Text(
-                            text = "Поиск: предмет, преподаватель, каб.",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                            text = "Поиск: предмет, преподаватель, аудитория...",
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextMuted)
                         )
                     },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
+                            tint = ColorBrandBlue,
+                            modifier = Modifier.size(18.dp)
                         )
                     },
                     trailingIcon = {
@@ -244,18 +248,18 @@ fun CalendarArchiveDialog(
                                 Icon(
                                     imageVector = Icons.Default.Clear,
                                     contentDescription = "Очистить",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = ColorTextMuted
                                 )
                             }
                         }
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(2.dp),
                     colors = TextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-                        unfocusedIndicatorColor = Color.Transparent
+                        focusedContainerColor = Color(0xFFF8FAFC),
+                        unfocusedContainerColor = Color(0xFFF8FAFC),
+                        focusedIndicatorColor = ColorBrandBlue,
+                        unfocusedIndicatorColor = ColorBorderLight
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -265,14 +269,11 @@ fun CalendarArchiveDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 if (searchQuery.isNotBlank()) {
-                    // Режим отображения результатов поиска
+                    // Режим поиска
                     Text(
-                        text = "Найдено занятий: ${searchResults.size}",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        ),
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+                        text = "НАЙДЕНО ЗАНЯТИЙ: ${searchResults.size}",
+                        style = TextStyleCalendarWeekdays.copy(color = ColorBrandBlue),
+                        modifier = Modifier.padding(horizontal = 2.dp, vertical = 4.dp)
                     )
 
                     Spacer(modifier = Modifier.height(6.dp))
@@ -286,9 +287,7 @@ fun CalendarArchiveDialog(
                         ) {
                             Text(
                                 text = "Ничего не найдено по запросу «$searchQuery»",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                ),
+                                style = androidx.compose.ui.text.TextStyle(color = ColorTextMuted, fontSize = 14.sp),
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -305,24 +304,22 @@ fun CalendarArchiveDialog(
                         }
                     }
                 } else {
-                    // Режим отображения календаря
-                    // Панель переключения месяцев
+                    // =========================================================================
+                    // Сетка календаря по официальной спецификации
+                    // =========================================================================
+
+                    // Кнопки переключения месяцев: [< ПРЕД.] [МЕСЯЦ ГОД] [СЛЕД. >]
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(
-                            onClick = {
-                                if (displayedMonth == 0) {
-                                    displayedMonth = 11
-                                    displayedYear -= 1
-                                } else {
-                                    displayedMonth -= 1
-                                }
-                            },
+                        // Кнопка предыдущего месяца
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            border = BorderStroke(1.dp, ColorBorderLight),
+                            color = ColorBgMain,
                             modifier = Modifier
-                                .size(36.dp)
                                 .bouncyClickable {
                                     if (displayedMonth == 0) {
                                         displayedMonth = 11
@@ -333,32 +330,30 @@ fun CalendarArchiveDialog(
                                 }
                                 .testTag("calendar_prev_month")
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Предыдущий месяц",
-                                tint = MaterialTheme.colorScheme.primary
+                            Text(
+                                text = "< ${MONTH_NAMES_CAPS[prevMonthIndex]}",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = ColorBrandBlue
+                                ),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                             )
                         }
 
+                        // Заголовок месяца
                         Text(
-                            text = "${MONTH_NAMES_RU[displayedMonth]} $displayedYear",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            text = "${MONTH_NAMES_CAPS[displayedMonth]} $displayedYear",
+                            style = TextStyleCalendarMonth,
+                            textAlign = TextAlign.Center
                         )
 
-                        IconButton(
-                            onClick = {
-                                if (displayedMonth == 11) {
-                                    displayedMonth = 0
-                                    displayedYear += 1
-                                } else {
-                                    displayedMonth += 1
-                                }
-                            },
+                        // Кнопка следующего месяца
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            border = BorderStroke(1.dp, ColorBorderLight),
+                            color = ColorBgMain,
                             modifier = Modifier
-                                .size(36.dp)
                                 .bouncyClickable {
                                     if (displayedMonth == 11) {
                                         displayedMonth = 0
@@ -369,37 +364,47 @@ fun CalendarArchiveDialog(
                                 }
                                 .testTag("calendar_next_month")
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = "Следующий месяц",
-                                tint = MaterialTheme.colorScheme.primary
+                            Text(
+                                text = "${MONTH_NAMES_CAPS[nextMonthIndex]} >",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = ColorBrandBlue
+                                ),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    // Заголовки дней недели
+                    // Заголовки дней недели (ПН ВТ СР ЧТ ПТ СБ ВС)
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         WEEKDAY_HEADERS.forEach { dayName ->
                             Text(
                                 text = dayName,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                ),
+                                style = TextStyleCalendarWeekdays,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.weight(1f)
                             )
                         }
                     }
 
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(ColorDividerLight)
+                    )
+
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Сетка дней месяца
+                    // Сетка чисел месяца
                     val daysInMonth = remember(displayedYear, displayedMonth) {
                         calculateMonthDays(displayedYear, displayedMonth)
                     }
@@ -408,12 +413,12 @@ fun CalendarArchiveDialog(
                         columns = GridCells.Fixed(7),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 210.dp),
+                            .heightIn(max = 220.dp),
                         userScrollEnabled = false
                     ) {
                         items(daysInMonth) { calendarDay ->
                             if (calendarDay == null) {
-                                Box(modifier = Modifier.aspectRatio(1.2f))
+                                Box(modifier = Modifier.aspectRatio(1.1f))
                             } else {
                                 val dateStr = String.format(
                                     Locale.ROOT,
@@ -425,47 +430,47 @@ fun CalendarArchiveDialog(
                                 val isSelected = selectedDateString == dateStr
                                 val hasData = savedDates.contains(dateStr) || allGroupLessons.isNotEmpty()
 
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (isSelected) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else if (hasData) {
-                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                                    } else {
-                                        Color.Transparent
-                                    },
-                                    contentColor = if (isSelected) {
-                                        MaterialTheme.colorScheme.onPrimary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    },
+                                Box(
                                     modifier = Modifier
-                                        .aspectRatio(1.2f)
-                                        .padding(2.dp)
-                                        .bouncyClickable {
-                                            selectedDateString = dateStr
-                                        }
-                                        .testTag("calendar_day_$calendarDay")
+                                        .aspectRatio(1.1f)
+                                        .clickable { selectedDateString = dateStr }
+                                        .testTag("calendar_day_$calendarDay"),
+                                    contentAlignment = Alignment.Center
                                 ) {
+                                    if (isSelected) {
+                                        // Выбранный день: фоновый круг 32px цвета #001737
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(CircleShape)
+                                                .background(ColorTopBar)
+                                        )
+                                    }
+
                                     Column(
                                         horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center,
-                                        modifier = Modifier.padding(2.dp)
+                                        verticalArrangement = Arrangement.Center
                                     ) {
                                         Text(
                                             text = "$calendarDay",
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontWeight = if (isSelected || hasData) FontWeight.Bold else FontWeight.Normal,
-                                                fontSize = 12.sp
+                                            style = androidx.compose.ui.text.TextStyle(
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                fontSize = 13.sp,
+                                                color = if (isSelected) Color.White else ColorTextBody
                                             )
                                         )
+
+                                        // Индикатор наличия расписания: точка диаметром 3px цвета #0B3564
                                         if (hasData && !isSelected) {
+                                            Spacer(modifier = Modifier.height(2.dp))
                                             Box(
                                                 modifier = Modifier
-                                                    .size(4.dp)
+                                                    .size(3.dp)
                                                     .clip(CircleShape)
-                                                    .background(MaterialTheme.colorScheme.primary)
+                                                    .background(ColorBrandBlue)
                                             )
+                                        } else {
+                                            Spacer(modifier = Modifier.height(5.dp))
                                         }
                                     }
                                 }
@@ -473,7 +478,14 @@ fun CalendarArchiveDialog(
                         }
                     }
 
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(ColorDividerLight)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     // Панель выбранного дня
                     if (selectedDateString.isNotBlank()) {
@@ -484,42 +496,48 @@ fun CalendarArchiveDialog(
                         ) {
                             Text(
                                 text = "Пары на $selectedDateString (${selectedDateLessons.size}):",
-                                style = MaterialTheme.typography.labelLarge.copy(
+                                style = androidx.compose.ui.text.TextStyle(
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    fontSize = 13.sp,
+                                    color = ColorTextTitle
                                 )
                             )
 
-                            TextButton(
-                                onClick = {
-                                    val cal = parseDateSafely(selectedDateString)
-                                    if (cal != null) {
-                                        val dayOfWeek = when (cal.get(Calendar.DAY_OF_WEEK)) {
-                                            Calendar.MONDAY -> 1
-                                            Calendar.TUESDAY -> 2
-                                            Calendar.WEDNESDAY -> 3
-                                            Calendar.THURSDAY -> 4
-                                            Calendar.FRIDAY -> 5
-                                            Calendar.SATURDAY -> 6
-                                            else -> 1
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                border = BorderStroke(1.dp, ColorBrandBlue),
+                                color = ColorBrandBlue,
+                                modifier = Modifier
+                                    .bouncyClickable {
+                                        val cal = parseDateSafely(selectedDateString)
+                                        if (cal != null) {
+                                            val dayOfWeek = when (cal.get(Calendar.DAY_OF_WEEK)) {
+                                                Calendar.MONDAY -> 1
+                                                Calendar.TUESDAY -> 2
+                                                Calendar.WEDNESDAY -> 3
+                                                Calendar.THURSDAY -> 4
+                                                Calendar.FRIDAY -> 5
+                                                Calendar.SATURDAY -> 6
+                                                else -> 1
+                                            }
+                                            onDateSelected(dayOfWeek, selectedDateString)
+                                            onDismiss()
                                         }
-                                        onDateSelected(dayOfWeek, selectedDateString)
-                                        onDismiss()
                                     }
-                                },
-                                modifier = Modifier.bouncyClickable { }
                             ) {
                                 Text(
-                                    text = "Открыть день",
-                                    style = MaterialTheme.typography.labelMedium.copy(
+                                    text = "ОТКРЫТЬ ДЕНЬ",
+                                    style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                        fontSize = 11.sp,
+                                        color = Color.White
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         if (selectedDateLessons.isEmpty()) {
                             Box(
@@ -532,14 +550,15 @@ fun CalendarArchiveDialog(
                                     Icon(
                                         imageVector = Icons.Default.EventBusy,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(28.dp)
+                                        tint = ColorTextMuted,
+                                        modifier = Modifier.size(24.dp)
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         text = "На этот день в архиве нет занятий",
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            color = ColorTextMuted,
+                                            fontSize = 13.sp
                                         )
                                     )
                                 }
@@ -565,8 +584,9 @@ fun CalendarArchiveDialog(
                         ) {
                             Text(
                                 text = "Выберите день в календаре для просмотра архива",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = androidx.compose.ui.text.TextStyle(
+                                    color = ColorTextMuted,
+                                    fontSize = 13.sp
                                 )
                             )
                         }
@@ -613,7 +633,7 @@ private fun calculateMonthDays(year: Int, month: Int): List<Int?> {
 }
 
 /**
- * Безопасный парсер строк дат различных форматов (yyyy-MM-dd, dd.MM.yyyy, dd-MM-yyyy).
+ * Безопасный парсер строк дат различных форматов.
  */
 private fun parseDateSafely(dateStr: String): Calendar? {
     val formats = listOf("yyyy-MM-dd", "dd.MM.yyyy", "dd-MM-yyyy")
@@ -628,4 +648,3 @@ private fun parseDateSafely(dateStr: String): Calendar? {
     }
     return null
 }
-

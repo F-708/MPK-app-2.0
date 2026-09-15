@@ -7,7 +7,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,30 +26,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Widgets
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -61,7 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -72,17 +62,23 @@ import androidx.core.content.ContextCompat
 import com.example.data.model.GroupInfo
 import com.example.data.model.SyncDiagnosticInfo
 import com.example.ui.components.GroupSelectionDialog
+import com.example.ui.theme.ColorActiveBlue
+import com.example.ui.theme.ColorBgMain
+import com.example.ui.theme.ColorBorderLight
+import com.example.ui.theme.ColorBrandBlue
+import com.example.ui.theme.ColorDividerLight
+import com.example.ui.theme.ColorTextBody
+import com.example.ui.theme.ColorTextMuted
+import com.example.ui.theme.ColorTextTitle
+import com.example.ui.theme.ColorTopBar
+import com.example.ui.theme.TextStylePageTitle
 import com.example.ui.util.bouncyClickable
 import com.example.util.MpkCurriculum
 import com.example.widget.WidgetUpdateHelper
 import com.example.worker.MpkWorkManagerHelper
 
 /**
- * Экран настроек приложения «МПК Расписание».
- *
- * Предоставляет смену группы, переключение темы (светлая/темная),
- * диагностику сетевого соединения с порталом колледжа,
- * информацию о специальности и учебном плане, а также ссылки на колледж.
+ * Экран настроек приложения «МПК Расписание» по официальному Style Guide.
  */
 @Composable
 fun SettingsScreen(
@@ -121,22 +117,46 @@ fun SettingsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(ColorBgMain)
     ) {
+        // Заголовок страницы
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                text = "Настройки",
+                style = TextStylePageTitle,
+                maxLines = 1
+            )
+            Text(
+                text = "Параметры и диагностика приложения",
+                style = androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    color = ColorBrandBlue
+                )
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(ColorDividerLight)
+        )
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Карточка текущей учебной группы и специальности
             item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -145,61 +165,64 @@ fun SettingsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                        .size(36.dp)
+                                        .background(ColorBrandBlue, RoundedCornerShape(2.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.School,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
                                         text = "Группа ${groupInfo.canonicalName}",
-                                        style = MaterialTheme.typography.titleLarge.copy(
+                                        style = androidx.compose.ui.text.TextStyle(
                                             fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
+                                            fontSize = 16.sp,
+                                            color = ColorTextTitle
                                         ),
                                         softWrap = false,
                                         maxLines = 1
                                     )
                                     Text(
                                         text = "${groupInfo.course} курс, группа №${groupInfo.groupNumber}",
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 12.sp,
+                                            color = ColorTextMuted
                                         )
                                     )
                                 }
                             }
 
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(2.dp),
+                                border = BorderStroke(1.dp, ColorBrandBlue),
+                                color = ColorBrandBlue,
                                 modifier = Modifier
                                     .bouncyClickable { showGroupDialog = true }
                                     .testTag("change_group_btn")
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Edit,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(14.dp)
+                                        tint = Color.White,
+                                        modifier = Modifier.size(12.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "Сменить",
-                                        style = MaterialTheme.typography.labelMedium.copy(
+                                        text = "СМЕНИТЬ",
+                                        style = androidx.compose.ui.text.TextStyle(
                                             fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
+                                            fontSize = 11.sp,
+                                            color = Color.White
                                         )
                                     )
                                 }
@@ -207,58 +230,65 @@ fun SettingsScreen(
                         }
 
                         if (specialty != null) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             Spacer(modifier = Modifier.height(10.dp))
+                            HorizontalDivider(color = ColorBorderLight)
+                            Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "Специальность:",
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "СПЕЦИАЛЬНОСТЬ:",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    color = ColorBrandBlue
                                 )
                             )
                             Text(
                                 text = "${specialty.cipher} — ${specialty.fullName}",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 13.sp,
+                                    color = ColorTextBody,
                                     fontWeight = FontWeight.Medium
                                 )
                             )
                             Text(
                                 text = "Код группы: «${specialty.code}» (${specialty.shortName})",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 11.sp,
+                                    color = ColorTextMuted
                                 )
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.secondaryContainer
+                                    shape = RoundedCornerShape(2.dp),
+                                    border = BorderStroke(1.dp, ColorBorderLight),
+                                    color = Color(0xFFF8FAFC)
                                 ) {
                                     Text(
                                         text = if (groupInfo.hasSaturdayClasses) "6-дневка (учеба в сб)" else "5-дневка (пн-пт)",
-                                        style = MaterialTheme.typography.labelSmall.copy(
+                                        style = androidx.compose.ui.text.TextStyle(
                                             fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                            fontSize = 11.sp,
+                                            color = ColorBrandBlue
                                         ),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
                                 Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                    shape = RoundedCornerShape(2.dp),
+                                    border = BorderStroke(1.dp, ColorBorderLight),
+                                    color = Color(0xFFF8FAFC)
                                 ) {
                                     val count = specialty.subjectsByCourse[groupInfo.course]?.size ?: 0
                                     Text(
                                         text = "Предметов на ${groupInfo.course} курсе: $count",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 11.sp,
+                                            color = ColorTextMuted
                                         ),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
                             }
@@ -269,15 +299,15 @@ fun SettingsScreen(
 
             // Блок «Диагностика сети»
             item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("network_diagnostics_card")
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -286,37 +316,36 @@ fun SettingsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                        .size(32.dp)
+                                        .background(ColorBrandBlue, RoundedCornerShape(2.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.NetworkCheck,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Text(
                                     text = "Диагностика сети",
-                                    style = MaterialTheme.typography.titleMedium.copy(
+                                    style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        fontSize = 15.sp,
+                                        color = ColorTextTitle
                                     )
                                 )
                             }
 
                             // Бейдж статуса
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = when {
-                                    diagnosticInfo.isSyncing -> MaterialTheme.colorScheme.primaryContainer
-                                    diagnosticInfo.isSuccess -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                    diagnosticInfo.httpStatusCode != 0 && !diagnosticInfo.isSuccess -> MaterialTheme.colorScheme.errorContainer
-                                    else -> MaterialTheme.colorScheme.surfaceVariant
-                                }
+                                shape = RoundedCornerShape(2.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (diagnosticInfo.isSuccess) Color(0xFF16A34A) else ColorBorderLight
+                                ),
+                                color = if (diagnosticInfo.isSuccess) Color(0xFFF0FDF4) else Color(0xFFF8FAFC)
                             ) {
                                 Text(
                                     text = when {
@@ -325,74 +354,42 @@ fun SettingsScreen(
                                         diagnosticInfo.httpStatusCode != 0 -> "Ошибка"
                                         else -> "Ожидание"
                                     },
-                                    style = MaterialTheme.typography.labelSmall.copy(
+                                    style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
-                                        color = when {
-                                            diagnosticInfo.isSyncing -> MaterialTheme.colorScheme.primary
-                                            diagnosticInfo.isSuccess -> MaterialTheme.colorScheme.primary
-                                            diagnosticInfo.httpStatusCode != 0 -> MaterialTheme.colorScheme.error
-                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                        }
+                                        fontSize = 11.sp,
+                                        color = if (diagnosticInfo.isSuccess) Color(0xFF166534) else ColorBrandBlue
                                     ),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        // Параметры диагностики
-                        DiagnosticRow(
-                            label = "Последняя синхронизация",
-                            value = diagnosticInfo.lastSyncTime
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        DiagnosticRow(
-                            label = "Проверенный адрес",
-                            value = diagnosticInfo.checkedUrl,
-                            isMonospace = true
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        DiagnosticRow(
-                            label = "HTTP статус",
-                            value = if (diagnosticInfo.httpStatusCode > 0) "${diagnosticInfo.httpStatusCode}" else "—"
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
+                        DiagnosticRow(label = "Последняя синхронизация", value = diagnosticInfo.lastSyncTime)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        DiagnosticRow(label = "Адрес на сайте", value = diagnosticInfo.checkedUrl, isMonospace = true)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        DiagnosticRow(label = "HTTP статус", value = if (diagnosticInfo.httpStatusCode > 0) "${diagnosticInfo.httpStatusCode}" else "—")
+                        Spacer(modifier = Modifier.height(4.dp))
                         DiagnosticRow(
                             label = "Получено данных",
                             value = if (diagnosticInfo.receivedBytes > 0) {
                                 String.format(java.util.Locale.ROOT, "%.1f КБ (%d Б)", diagnosticInfo.receivedBytes / 1024.0, diagnosticInfo.receivedBytes)
-                            } else {
-                                "0 Б"
-                            }
+                            } else "0 Б"
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        DiagnosticRow(label = "Найдено пар (${groupInfo.canonicalName})", value = "${diagnosticInfo.lessonsFound} пар")
+                        Spacer(modifier = Modifier.height(4.dp))
+                        DiagnosticRow(label = "Состояние", value = diagnosticInfo.statusMessage)
 
-                        DiagnosticRow(
-                            label = "Найдено пар (${groupInfo.canonicalName})",
-                            value = "${diagnosticInfo.lessonsFound} пар"
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        DiagnosticRow(
-                            label = "Состояние",
-                            value = diagnosticInfo.statusMessage
-                        )
-
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         // Кнопка «Запустить тест подключения»
-                        Button(
-                            onClick = onRunConnectionTest,
-                            enabled = !diagnosticInfo.isSyncing,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            ),
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            border = BorderStroke(1.dp, ColorBrandBlue),
+                            color = ColorBrandBlue,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .bouncyClickable(onClick = onRunConnectionTest)
@@ -400,32 +397,38 @@ fun SettingsScreen(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(vertical = 10.dp)
                             ) {
                                 if (diagnosticInfo.isSyncing) {
                                     CircularProgressIndicator(
-                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        color = Color.White,
                                         strokeWidth = 2.dp,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Выполняется проверка...",
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            fontWeight = FontWeight.Bold
+                                        text = "ПРОВЕРКА...",
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = Color.White
                                         )
                                     )
                                 } else {
                                     Icon(
                                         imageVector = Icons.Default.CloudSync,
                                         contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Запустить тест подключения",
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            fontWeight = FontWeight.Bold
+                                        text = "ТЕСТ ПОДКЛЮЧЕНИЯ К САЙТУ",
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = Color.White
                                         )
                                     )
                                 }
@@ -437,13 +440,13 @@ fun SettingsScreen(
 
             // Переключатель темы
             item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -452,31 +455,32 @@ fun SettingsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        .size(32.dp)
+                                        .background(Color(0xFFF1F5F9), RoundedCornerShape(2.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
+                                        tint = ColorBrandBlue,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
                                         text = "Темная тема",
-                                        style = MaterialTheme.typography.bodyLarge.copy(
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurface
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = ColorTextTitle
                                         )
                                     )
                                     Text(
                                         text = if (isDarkTheme) "Включена" else "Выключена (светлая по умолчанию)",
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 11.sp,
+                                            color = ColorTextMuted
                                         )
                                     )
                                 }
@@ -486,8 +490,8 @@ fun SettingsScreen(
                                 checked = isDarkTheme,
                                 onCheckedChange = onThemeChanged,
                                 colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = ColorBrandBlue
                                 ),
                                 modifier = Modifier.testTag("theme_switch")
                             )
@@ -496,15 +500,15 @@ fun SettingsScreen(
                 }
             }
 
-            // Уведомления о публикации расписания (Политика нулевого спама)
+            // Уведомления
             item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -516,31 +520,32 @@ fun SettingsScreen(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                        .size(32.dp)
+                                        .background(ColorBrandBlue, RoundedCornerShape(2.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = if (isNotificationEnabled) Icons.Default.NotificationsActive else Icons.Default.Notifications,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
                                         text = "Уведомления о расписании",
-                                        style = MaterialTheme.typography.bodyLarge.copy(
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurface
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = ColorTextTitle
                                         )
                                     )
                                     Text(
                                         text = if (isNotificationEnabled) "Включены (14:00 – 21:30)" else "Отключены",
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 11.sp,
+                                            color = ColorTextMuted
                                         )
                                     )
                                 }
@@ -566,18 +571,18 @@ fun SettingsScreen(
                                     }
                                 },
                                 colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = ColorBrandBlue
                                 ),
                                 modifier = Modifier.testTag("notifications_switch")
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Политика нулевого спама: Ровно один пуш в день, когда директор утверждает и публикует расписание на следующий день.",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = "Политика нулевого спама: Ровно один пуш в день, когда публикуется расписание на следующий день.",
+                            style = androidx.compose.ui.text.TextStyle(
+                                color = ColorTextMuted,
                                 fontSize = 11.sp
                             )
                         )
@@ -585,122 +590,24 @@ fun SettingsScreen(
                 }
             }
 
-            // Виджеты рабочего стола
-            item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Widgets,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = "Виджеты на рабочий стол",
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                )
-                                Text(
-                                    text = "Автономная работа без интернета (Room DB)",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Описание 2x2
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer
-                            ) {
-                                Text(
-                                    text = "2x2",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    ),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Текущий урок: таймер до конца, аудитория, акроним дисциплины.",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Описание 4x2
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer
-                            ) {
-                                Text(
-                                    text = "4x2",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    ),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Расписание дня: список пар, кабинеты, переключение «Сегодня / Завтра».",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-
             // Официальные ресурсы колледжа
             item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Text(
                             text = "Ресурсы колледжа",
-                            style = MaterialTheme.typography.titleMedium.copy(
+                            style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                fontSize = 15.sp,
+                                color = ColorTextTitle
                             )
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         // Сайт МГПК
                         LinkItem(
@@ -712,9 +619,9 @@ fun SettingsScreen(
                             }
                         )
 
-                        Spacer(modifier = Modifier.height(8.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        HorizontalDivider(color = ColorBorderLight)
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         // Портал расписания МГПК
                         LinkItem(
@@ -724,46 +631,6 @@ fun SettingsScreen(
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://guo-mpk.by/raspisanie/"))
                                 context.startActivity(intent)
                             }
-                        )
-                    }
-                }
-            }
-
-            // Инфо о приложении
-            item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "МПК Расписание v1.0",
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "ГУО «Минский государственный политехнический колледж» (МГПК)",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                fontSize = 11.sp
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Режим: Offline-First • Room Database",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
                         )
                     }
                 }
@@ -796,18 +663,19 @@ private fun DiagnosticRow(
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodySmall.copy(
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = androidx.compose.ui.text.TextStyle(
+                fontSize = 11.sp,
+                color = ColorTextMuted
             ),
             modifier = Modifier.weight(1f)
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodySmall.copy(
+            style = androidx.compose.ui.text.TextStyle(
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = ColorTextBody,
                 fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
-                fontSize = if (isMonospace) 11.sp else 12.sp
+                fontSize = if (isMonospace) 10.sp else 11.sp
             ),
             modifier = Modifier.weight(1.3f)
         )
@@ -832,22 +700,24 @@ private fun LinkItem(
             Icon(
                 imageVector = Icons.Default.Language,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
+                tint = ColorBrandBlue,
+                modifier = Modifier.size(18.dp)
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Column {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyMedium.copy(
+                    style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        fontSize = 13.sp,
+                        color = ColorTextTitle
                     )
                 )
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = MaterialTheme.colorScheme.primary
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontSize = 11.sp,
+                        color = ColorActiveBlue
                     )
                 )
             }
@@ -856,8 +726,8 @@ private fun LinkItem(
         Icon(
             imageVector = Icons.Default.ChevronRight,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
+            tint = ColorTextMuted,
+            modifier = Modifier.size(18.dp)
         )
     }
 }

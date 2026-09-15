@@ -5,8 +5,12 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -33,6 +37,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +45,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.GroupInfo
 import com.example.ui.components.MainTopBar
+import com.example.ui.theme.ColorActiveBlue
+import com.example.ui.theme.ColorBgMain
+import com.example.ui.theme.ColorBrandBlue
+import com.example.ui.theme.ColorDividerLight
+import com.example.ui.theme.ColorTextMuted
 import com.example.ui.util.bouncyClickable
 import com.example.ui.viewmodel.AppTab
 import com.example.ui.viewmodel.AppViewModel
@@ -48,8 +58,10 @@ import kotlinx.coroutines.flow.collectLatest
 /**
  * Главный контейнер приложения «МПК Расписание».
  *
- * Объединяет MainTopBar, плавную смену 4 экранов (Расписание, Задания, Звонки, Настройки)
- * и нижнюю панель навигации с тактильным откликом.
+ * Стилизован по официальному Style Guide МПК:
+ * - Фирменный 3-зонный Header с аккордеон-меню
+ * - Плавное переключение 4 разделов
+ * - Нижняя навигационная панель с 0dp elevation и 1px разделителем
  */
 @Composable
 fun MainScreen(
@@ -87,53 +99,65 @@ fun MainScreen(
                 },
                 onSyncClicked = {
                     viewModel.syncSchedule()
+                },
+                onSelectTab = { tab ->
+                    viewModel.selectTab(tab)
                 }
             )
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp,
-                modifier = Modifier.testTag("main_bottom_nav")
-            ) {
-                val tabs = listOf(
-                    Triple(AppTab.SCHEDULE, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
-                    Triple(AppTab.TASKS, Icons.Filled.Checklist, Icons.Outlined.Checklist),
-                    Triple(AppTab.BELLS, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
-                    Triple(AppTab.SETTINGS, Icons.Filled.Settings, Icons.Outlined.Settings)
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(ColorDividerLight)
                 )
-
-                tabs.forEach { (tab, filledIcon, outlinedIcon) ->
-                    val isSelected = uiState.currentTab == tab
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = { viewModel.selectTab(tab) },
-                        icon = {
-                            Icon(
-                                imageVector = if (isSelected) filledIcon else outlinedIcon,
-                                contentDescription = tab.title,
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .bouncyClickable { viewModel.selectTab(tab) }
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = tab.title,
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 12.sp
-                                )
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                NavigationBar(
+                    containerColor = ColorBgMain,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.testTag("main_bottom_nav")
+                ) {
+                    val tabs = listOf(
+                        Triple(AppTab.SCHEDULE, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
+                        Triple(AppTab.TASKS, Icons.Filled.Checklist, Icons.Outlined.Checklist),
+                        Triple(AppTab.BELLS, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
+                        Triple(AppTab.SETTINGS, Icons.Filled.Settings, Icons.Outlined.Settings)
                     )
+
+                    tabs.forEach { (tab, filledIcon, outlinedIcon) ->
+                        val isSelected = uiState.currentTab == tab
+                        NavigationBarItem(
+                            selected = isSelected,
+                            onClick = { viewModel.selectTab(tab) },
+                            icon = {
+                                Icon(
+                                    imageVector = if (isSelected) filledIcon else outlinedIcon,
+                                    contentDescription = tab.title,
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .bouncyClickable { viewModel.selectTab(tab) }
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = tab.title.uppercase(),
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 11.sp,
+                                        letterSpacing = 0.3.sp
+                                    )
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = ColorBrandBlue,
+                                selectedTextColor = ColorBrandBlue,
+                                indicatorColor = Color(0xFFEDF2F7),
+                                unselectedIconColor = ColorTextMuted,
+                                unselectedTextColor = ColorTextMuted
+                            )
+                        )
+                    }
                 }
             }
         },

@@ -1,7 +1,6 @@
 package com.example.ui.theme
 
 import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -12,49 +11,47 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = DarkPrimary,
-    onPrimary = Color(0xFF0B1120),
-    primaryContainer = DarkPrimaryContainer,
-    onPrimaryContainer = Color(0xFFDCEBFE),
-    secondary = Color(0xFF81D4FA),
-    onSecondary = Color(0xFF00363A),
-    secondaryContainer = Color(0xFF004D54),
-    onSecondaryContainer = Color(0xFFB2EBF2),
-    tertiary = Color(0xFF80DEEA),
-    onTertiary = Color(0xFF00363D),
-    background = DarkBackground,
-    onBackground = DarkTextPrimary,
-    surface = DarkSurface,
-    onSurface = DarkTextPrimary,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = DarkTextSecondary,
-    outline = DarkOutline,
-    outlineVariant = Color(0xFF334155),
+    primary = ColorActiveBlue,
+    onPrimary = Color.White,
+    primaryContainer = ColorBrandBlue,
+    onPrimaryContainer = Color.White,
+    secondary = ColorActiveBlue,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFF1E293B),
+    onSecondaryContainer = ColorMenuSubtext,
+    tertiary = Color(0xFF38BDF8),
+    onTertiary = Color(0xFF001737),
+    background = ColorMenuBg,
+    onBackground = ColorMenuText,
+    surface = ColorMenuBg,
+    onSurface = ColorMenuText,
+    surfaceVariant = ColorMenuSubBg,
+    onSurfaceVariant = ColorMenuSubtext,
+    outline = ColorMenuBorder,
+    outlineVariant = Color(0xFF35393D),
     error = Color(0xFFF87171),
     onError = Color(0xFF450A0A)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = MpkBlue,
+    primary = ColorBrandBlue,
     onPrimary = Color.White,
-    primaryContainer = MpkBlueContainer,
-    onPrimaryContainer = MpkOnBlueContainer,
-    secondary = MpkSecondary,
+    primaryContainer = Color(0xFFE2E8F0),
+    onPrimaryContainer = ColorBrandBlue,
+    secondary = ColorActiveBlue,
     onSecondary = Color.White,
-    secondaryContainer = MpkSecondaryContainer,
-    onSecondaryContainer = Color(0xFF01579B),
-    tertiary = MpkAccentTeal,
+    secondaryContainer = Color(0xFFEDF2F7),
+    onSecondaryContainer = ColorBrandBlue,
+    tertiary = ColorTopBar,
     onTertiary = Color.White,
-    tertiaryContainer = MpkTealContainer,
-    onTertiaryContainer = Color(0xFF004D40),
-    background = LightBackground,
-    onBackground = LightTextPrimary,
-    surface = LightSurface,
-    onSurface = LightTextPrimary,
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightTextSecondary,
-    outline = LightOutline,
-    outlineVariant = LightOutlineVariant,
+    background = ColorBgMain,
+    onBackground = ColorTextBody,
+    surface = ColorBgMain,
+    onSurface = ColorTextTitle,
+    surfaceVariant = ColorSurfaceVariantLight,
+    onSurfaceVariant = ColorTextMuted,
+    outline = ColorBorderLight,
+    outlineVariant = ColorDividerLight,
     error = ColorError,
     onError = Color.White
 )
@@ -62,7 +59,7 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun MyApplicationTheme(
     darkTheme: Boolean = false, // Светлая тема активна по умолчанию
-    dynamicColor: Boolean = false, // false для сохранения фирменных сине-стальных цветов МГПК
+    dynamicColor: Boolean = false, // false для строгого сохранения институциональной палитры МПК
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

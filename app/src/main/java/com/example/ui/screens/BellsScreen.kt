@@ -4,8 +4,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,13 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,7 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -53,19 +47,22 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.BellItem
 import com.example.data.model.BellScheduleType
 import com.example.data.model.CollegeBellSchedule
+import com.example.ui.theme.ColorActiveBlue
+import com.example.ui.theme.ColorBgMain
+import com.example.ui.theme.ColorBorderLight
+import com.example.ui.theme.ColorBrandBlue
+import com.example.ui.theme.ColorDividerLight
+import com.example.ui.theme.ColorTextBody
+import com.example.ui.theme.ColorTextMuted
+import com.example.ui.theme.ColorTextTitle
+import com.example.ui.theme.ColorTopBar
+import com.example.ui.theme.TextStylePageTitle
 import com.example.ui.util.bouncyClickable
 import java.util.Calendar
 import kotlinx.coroutines.delay
 
 /**
- * Экран расписания звонков колледжа МГПК на 2026 год.
- *
- * ОСОБЕННОСТИ:
- * 1. Автоматический выбор сетки по дню недели (Чт - с Инфочасом, Сб - субботняя, Пн..Ср, Пт - стандартная).
- * 2. Возможность ручного переключения графиков звонков.
- * 3. Выделение Информационного часа специальной карточкой в четверг (14:15 - 14:35).
- * 4. Подсветка текущего активного урока/инфочаса в реальном времени.
- * 5. Дисклеймер официального расписания звонков.
+ * Экран расписания звонков колледжа МГПК на 2026 год по официальному Style Guide.
  */
 @Composable
 fun BellsScreen(
@@ -107,49 +104,71 @@ fun BellsScreen(
         bells.firstOrNull { currentTimeMinutes in it.startMinutes..it.endMinutes }
     }
 
-    val currentBellsList = remember(selectedScheduleType) {
-        CollegeBellSchedule.getBellsForType(selectedScheduleType)
-    }
-
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(ColorBgMain)
     ) {
-        // Горизонтальный переключатель графиков звонков
+        // Заголовок страницы
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                text = "Расписание звонков",
+                style = TextStylePageTitle,
+                maxLines = 1
+            )
+            Text(
+                text = "Основное расписание пар колледжа",
+                style = androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    color = ColorBrandBlue
+                )
+            )
+        }
+
+        // Переключатель графиков звонков
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             BellScheduleType.entries.forEach { type ->
                 val isSelected = selectedScheduleType == type
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { selectedScheduleType = type },
-                    label = {
-                        Text(
-                            text = when (type) {
-                                BellScheduleType.STANDARD -> "Основное (Пн-Пт)"
-                                BellScheduleType.THURSDAY -> "Четверг"
-                                BellScheduleType.SATURDAY -> "Суббота"
-                            },
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                            )
-                        )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    modifier = Modifier.bouncyClickable { selectedScheduleType = type }
-                )
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
+                    color = if (isSelected) ColorTopBar else ColorBgMain,
+                    modifier = Modifier
+                        .weight(1f)
+                        .bouncyClickable { selectedScheduleType = type }
+                ) {
+                    Text(
+                        text = when (type) {
+                            BellScheduleType.STANDARD -> "ПН - ПТ"
+                            BellScheduleType.THURSDAY -> "ЧЕТВЕРГ"
+                            BellScheduleType.SATURDAY -> "СУББОТА"
+                        },
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 12.sp,
+                            color = if (isSelected) Color.White else ColorTextBody
+                        ),
+                        modifier = Modifier
+                            .padding(vertical = 8.dp)
+                            .wrapContentWidth(Alignment.CenterHorizontally)
+                    )
+                }
             }
         }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+                .height(1.dp)
+                .background(ColorDividerLight)
+        )
 
         AnimatedContent(
             targetState = selectedScheduleType,
@@ -160,46 +179,47 @@ fun BellsScreen(
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Баннер-дисклеймер
                 item {
-                    Card(
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                        ),
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = Color(0xFFF8FAFC),
+                        border = BorderStroke(1.dp, ColorBorderLight),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("bells_disclaimer_banner")
                     ) {
                         Row(
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier.padding(10.dp),
                             verticalAlignment = Alignment.Top
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Info,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.secondary,
+                                tint = ColorBrandBlue,
                                 modifier = Modifier
-                                    .size(20.dp)
+                                    .size(18.dp)
                                     .padding(top = 2.dp)
                             )
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = targetType.title,
-                                    style = MaterialTheme.typography.labelLarge.copy(
+                                    text = targetType.title.uppercase(),
+                                    style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        fontSize = 12.sp,
+                                        color = ColorBrandBlue
                                     )
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = CollegeBellSchedule.DISCLAIMER,
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f),
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 11.sp,
+                                        color = ColorTextMuted,
                                         lineHeight = 15.sp
                                     )
                                 )
@@ -211,53 +231,44 @@ fun BellsScreen(
                 // Индикатор текущего активного урока / инфочаса
                 item {
                     activeSlot?.let { currentSlot ->
-                        Card(
-                            shape = RoundedCornerShape(14.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (currentSlot.isInfoHour) {
-                                    MaterialTheme.colorScheme.tertiaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                }
-                            ),
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            color = Color(0xFFEDF2F7),
+                            border = BorderStroke(1.dp, ColorActiveBlue),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier.padding(14.dp),
+                                modifier = Modifier.padding(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (currentSlot.isInfoHour) MaterialTheme.colorScheme.tertiary
-                                            else MaterialTheme.colorScheme.primary
-                                        ),
+                                        .size(30.dp)
+                                        .background(ColorActiveBlue, RoundedCornerShape(2.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = if (currentSlot.isInfoHour) Icons.Default.Campaign else Icons.Default.NotificationsActive,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.surface,
-                                        modifier = Modifier.size(20.dp)
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = if (currentSlot.isInfoHour) "Сейчас идет: Информационный час" else "Сейчас идет: ${currentSlot.title}",
-                                        style = MaterialTheme.typography.titleSmall.copy(
+                                        text = if (currentSlot.isInfoHour) "СЕЙЧАС: ИНФОРМАЦИОННЫЙ ЧАС" else "СЕЙЧАС: ${currentSlot.title.uppercase()}",
+                                        style = androidx.compose.ui.text.TextStyle(
                                             fontWeight = FontWeight.Bold,
-                                            color = if (currentSlot.isInfoHour) MaterialTheme.colorScheme.onTertiaryContainer
-                                            else MaterialTheme.colorScheme.onPrimaryContainer
+                                            fontSize = 12.sp,
+                                            color = ColorBrandBlue
                                         )
                                     )
                                     Text(
                                         text = currentSlot.displayRange,
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            color = (if (currentSlot.isInfoHour) MaterialTheme.colorScheme.onTertiaryContainer
-                                            else MaterialTheme.colorScheme.onPrimaryContainer).copy(alpha = 0.8f)
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 11.sp,
+                                            color = ColorTextBody
                                         )
                                     )
                                 }
@@ -266,18 +277,16 @@ fun BellsScreen(
                     }
                 }
 
-                // Список уроков и специальных событий
+                // Список уроков
                 items(bells) { item ->
                     val isActive = activeSlot == item
 
                     if (item.isInfoHour) {
-                        // Особая карточка Информационного часа
                         InfoHourCard(
                             item = item,
                             isActive = isActive
                         )
                     } else {
-                        // Стандартная карточка урока
                         LessonBellCard(
                             item = item,
                             isActive = isActive
@@ -290,80 +299,76 @@ fun BellsScreen(
 }
 
 /**
- * Карточка урока с указанием времени, длительности и перемены.
+ * Карточка урока с указанием времени, длительности и перемены по Style Guide.
  */
 @Composable
 private fun LessonBellCard(
     item: BellItem,
     isActive: Boolean
 ) {
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-        ),
-        border = if (isActive) {
-            androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-        } else {
-            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        },
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorBgMain,
+        border = BorderStroke(1.dp, if (isActive) ColorActiveBlue else ColorBorderLight),
+        shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(36.dp)
+                    shape = RoundedCornerShape(2.dp),
+                    color = if (isActive) ColorActiveBlue else ColorBrandBlue,
+                    contentColor = Color.White,
+                    modifier = Modifier.size(28.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
                             text = "${item.lessonNumber}",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Black
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
                             )
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(
                         text = item.title,
-                        style = MaterialTheme.typography.titleSmall.copy(
+                        style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
-                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            fontSize = 14.sp,
+                            color = if (isActive) ColorActiveBlue else ColorTextTitle
                         )
                     )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
                             text = "45 мин",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 11.sp,
+                                color = ColorTextMuted
                             )
                         )
                         if (item.breakAfterMinutes > 0) {
                             Text(
                                 text = "•",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    color = MaterialTheme.colorScheme.outline
-                                )
+                                style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = ColorTextMuted)
                             )
                             Text(
                                 text = if (item.isBigBreak) "перемена ${item.breakAfterMinutes} мин (большая)"
                                 else "перемена ${item.breakAfterMinutes} мин",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    color = if (item.isBigBreak) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 11.sp,
+                                    color = if (item.isBigBreak) ColorBrandBlue else ColorTextMuted,
                                     fontWeight = if (item.isBigBreak) FontWeight.SemiBold else FontWeight.Normal
                                 )
                             )
@@ -373,17 +378,19 @@ private fun LessonBellCard(
             }
 
             Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(2.dp),
+                border = BorderStroke(1.dp, ColorBorderLight),
+                color = Color(0xFFF8FAFC),
                 modifier = Modifier.wrapContentWidth()
             ) {
                 Text(
                     text = item.displayRange,
-                    style = MaterialTheme.typography.titleSmall.copy(
+                    style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
-                        color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        fontSize = 13.sp,
+                        color = ColorBrandBlue
                     ),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
         }
@@ -398,70 +405,67 @@ private fun InfoHourCard(
     item: BellItem,
     isActive: Boolean
 ) {
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isActive) MaterialTheme.colorScheme.tertiaryContainer
-            else MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
-        ),
-        border = androidx.compose.foundation.BorderStroke(
-            width = if (isActive) 1.5.dp else 1.dp,
-            color = if (isActive) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f)
-        ),
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = Color(0xFFF0FDF4),
+        border = BorderStroke(1.dp, if (isActive) ColorActiveBlue else Color(0xFFBBF7D0)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.tertiary),
+                        .size(28.dp)
+                        .background(Color(0xFF16A34A), RoundedCornerShape(2.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Campaign,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.surface,
-                        modifier = Modifier.size(20.dp)
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(
-                        text = "Информационный час",
-                        style = MaterialTheme.typography.titleSmall.copy(
+                        text = "ИНФОРМАЦИОННЫЙ ЧАС",
+                        style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                            fontSize = 13.sp,
+                            color = Color(0xFF166534)
                         )
                     )
                     Text(
                         text = "20 мин • перемена 10 мин",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontSize = 11.sp,
+                            color = ColorTextMuted
                         )
                     )
                 }
             }
 
             Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f),
+                shape = RoundedCornerShape(2.dp),
+                border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                color = Color.White,
                 modifier = Modifier.wrapContentWidth()
             ) {
                 Text(
                     text = item.displayRange,
-                    style = MaterialTheme.typography.titleSmall.copy(
+                    style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                        fontSize = 13.sp,
+                        color = Color(0xFF166534)
                     ),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
         }
