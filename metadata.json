@@ -1,0 +1,7 @@
+{
+  "name": "МПК Расписание",
+  "description": "Студенческое приложение расписания занятий и заданий Минского государственного политехнического колледжа (МГПК)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

@@ -1,0 +1,82 @@
+package com.example.ui.theme
+
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+
+private val DarkColorScheme = darkColorScheme(
+    primary = DarkPrimary,
+    onPrimary = Color(0xFF0B1120),
+    primaryContainer = DarkPrimaryContainer,
+    onPrimaryContainer = Color(0xFFDCEBFE),
+    secondary = Color(0xFF81D4FA),
+    onSecondary = Color(0xFF00363A),
+    secondaryContainer = Color(0xFF004D54),
+    onSecondaryContainer = Color(0xFFB2EBF2),
+    tertiary = Color(0xFF80DEEA),
+    onTertiary = Color(0xFF00363D),
+    background = DarkBackground,
+    onBackground = DarkTextPrimary,
+    surface = DarkSurface,
+    onSurface = DarkTextPrimary,
+    surfaceVariant = DarkSurfaceVariant,
+    onSurfaceVariant = DarkTextSecondary,
+    outline = DarkOutline,
+    outlineVariant = Color(0xFF334155),
+    error = Color(0xFFF87171),
+    onError = Color(0xFF450A0A)
+)
+
+private val LightColorScheme = lightColorScheme(
+    primary = MpkBlue,
+    onPrimary = Color.White,
+    primaryContainer = MpkBlueContainer,
+    onPrimaryContainer = MpkOnBlueContainer,
+    secondary = MpkSecondary,
+    onSecondary = Color.White,
+    secondaryContainer = MpkSecondaryContainer,
+    onSecondaryContainer = Color(0xFF01579B),
+    tertiary = MpkAccentTeal,
+    onTertiary = Color.White,
+    tertiaryContainer = MpkTealContainer,
+    onTertiaryContainer = Color(0xFF004D40),
+    background = LightBackground,
+    onBackground = LightTextPrimary,
+    surface = LightSurface,
+    onSurface = LightTextPrimary,
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = LightTextSecondary,
+    outline = LightOutline,
+    outlineVariant = LightOutlineVariant,
+    error = ColorError,
+    onError = Color.White
+)
+
+@Composable
+fun MyApplicationTheme(
+    darkTheme: Boolean = false, // Светлая тема активна по умолчанию
+    dynamicColor: Boolean = false, // false для сохранения фирменных сине-стальных цветов МГПК
+    content: @Composable () -> Unit
+) {
+    val colorScheme = when {
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            val context = LocalContext.current
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+        darkTheme -> DarkColorScheme
+        else -> LightColorScheme
+    }
+
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = Typography,
+        content = content
+    )
+}
