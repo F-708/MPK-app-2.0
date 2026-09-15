@@ -311,7 +311,7 @@ fun SettingsScreen(
                             } else "0 Б"
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(label = "Версия приложения", value = "2.8")
+                        DiagnosticRow(label = "Версия приложения", value = "2.9")
 
                         if (isDebugEnabled) {
                             Spacer(modifier = Modifier.height(4.dp))
@@ -517,7 +517,7 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Политика нулевого спама: Ровно один пуш в день, когда публикуется расписание на следующий день.",
+                            text = "Уведомления о расписании: с 10:00 до 21:00.",
                             style = androidx.compose.ui.text.TextStyle(
                                 color = ColorTextMuted,
                                 fontSize = 11.sp

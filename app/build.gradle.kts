@@ -12,10 +12,23 @@ android {
 
   defaultConfig {
     applicationId = "com.aistudio.mpkschedule.vbyqzt"
+    // Flavors: standard — для всех; admin — версия с базой данных учащихся
+    flavorDimensions += "version"
+    productFlavors {
+        create("standard") {
+            dimension = "version"
+            isDefault = true
+        }
+        create("admin") {
+            dimension = "version"
+            applicationIdSuffix = ".admin"
+            versionNameSuffix = "-admin"
+        }
+    }
     minSdk = 24
     targetSdk = 36
-    versionCode = 10
-    versionName = "2.8"
+    versionCode = 11
+    versionName = "2.9"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

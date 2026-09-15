@@ -40,8 +40,8 @@ class ScheduleCheckWorker(
         val minute = calendar.get(Calendar.MINUTE)
         val currentMinutes = hour * 60 + minute
 
-        // Проверяем окно публикации расписания колледжа: 14:00 (840 мин) – 21:30 (1290 мин)
-        if (currentMinutes < 14 * 60 || currentMinutes > 21 * 60 + 30) {
+        // Окно уведомлений: 10:00 – 21:00
+        if (currentMinutes < 10 * 60 || currentMinutes > 21 * 60) {
             return@withContext Result.success()
         }
 

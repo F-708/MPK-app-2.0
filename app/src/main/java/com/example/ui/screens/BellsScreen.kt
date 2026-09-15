@@ -303,7 +303,7 @@ fun BellsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
+                .padding(start = 16.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             rows.forEach { row ->
@@ -374,7 +374,7 @@ private fun LessonBellCard(
         modifier = Modifier
             .fillMaxWidth()
             .drawBehind {
-                val cx = size.width + 8.dp.toPx() // линия справа за карточкой
+                val cx = size.width + 10.dp.toPx() // линия справа за карточкой
                 val tickLen = 5.dp.toPx()
 
                 // Вертикальный сегмент линии (градация верх→низ по зонам)
@@ -489,7 +489,7 @@ private fun BreakRow(row: BellRow.Break) {
         modifier = Modifier
             .fillMaxWidth()
             .drawBehind {
-                val cx = size.width + 8.dp.toPx()
+                val cx = size.width + 10.dp.toPx()
                 drawLine(
                     color = RAIL_GRAY_SOFT,
                     start = Offset(cx, 0f),

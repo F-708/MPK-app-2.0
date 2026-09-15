@@ -4,49 +4,56 @@ import android.content.Context
 import java.io.InputStream
 
 /**
- * Преподаватель колледжа из CSV-базы.
- * photo — имя файла фотографии (в assets/teachers_photos/) или URL.
+ * Преподаватель колледжа из официальной базы guo-mpk.by.
  */
 data class Teacher(
     val name: String,
-    val subject: String = "",
-    val extra: String = "",
-    val photo: String = ""
+    val position: String = "",
+    val subjects: String = "",
+    val room: String = "",
+    val phone: String = "",
+    val email: String = "",
+    val photo: String = "",
+    val department: String = "",
+    val experience: String = "",
+    val category: String = ""
 )
 
 /**
- * Репозиторий преподавателей: читает CSV из assets (teachers.csv).
+ * Репозиторий преподавателей: официальная база из assets (teachers.csv
+ * + teachers_photos/). 101 сотрудник с фотографиями.
  *
- * Формат строки: ФИО;Предмет(ы);Доп.инфо;Фото
- * (разделитель — точка с запятой или запятая; кодировка UTF-8).
- * Фото: файлы кладутся в assets/teachers_photos/ с именем из 4-й колонки.
- *
- * Избранное хранится в SharedPreferences (звёздочка у преподавателя).
+ * Формат CSV: ФИО;должность;дисциплины;кабинет;телефон;email;фото;отдел;стаж;категория
+ * Избранное хранится в SharedPreferences.
  */
 class TeachersRepository(private val context: Context) {
 
     fun loadTeachers(): List<Teacher> = try {
-        val stream = context.assets.open("teachers.csv")
-        parseCsv(stream)
+        parseCsv(context.assets.open("teachers.csv"))
     } catch (_: Exception) {
         emptyList()
     }
 
     private fun parseCsv(stream: InputStream): List<Teacher> {
-        val text = stream.bufferedReader(Charsets.UTF_8).readText()
-        return text.lines()
+        return stream.bufferedReader(Charsets.UTF_8).readLines()
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
-            .mapNotNull { line ->
-                val parts = line.split(';', ',').map { it.trim() }
-                if (parts.isEmpty() || parts[0].isBlank()) return@mapNotNull null
+            .map { line ->
+                val p = line.split(';')
                 Teacher(
-                    name = parts[0],
-                    subject = parts.getOrElse(1) { "" },
-                    extra = parts.getOrElse(2) { "" },
-                    photo = parts.getOrElse(3) { "" }
+                    name = p.getOrElse(0) { "" },
+                    position = p.getOrElse(1) { "" },
+                    subjects = p.getOrElse(2) { "" },
+                    room = p.getOrElse(3) { "" },
+                    phone = p.getOrElse(4) { "" },
+                    email = p.getOrElse(5) { "" },
+                    photo = p.getOrElse(6) { "" },
+                    department = p.getOrElse(7) { "" },
+                    experience = p.getOrElse(8) { "" },
+                    category = p.getOrElse(9) { "" }
                 )
             }
+            .filter { it.name.isNotBlank() }
             .sortedBy { it.name }
     }
 

@@ -68,10 +68,17 @@ class UiRenderSmokeTest {
     }
 
     @Test
-    fun `экран колледжа рендерится`() {
+    fun `экран другого рендерится`() {
+        val repo = ScheduleRepository(MpkDatabase.getInstance(context).lessonDao())
         composeRule.setContent {
             MyApplicationTheme {
-                CollegeScreen(groupInfo = group)
+                CollegeScreen(
+                    groupInfo = group,
+                    scheduleRepository = repo,
+                    diagnosticInfo = com.example.data.model.SyncDiagnosticInfo(),
+                    onGroupChanged = {},
+                    onRunConnectionTest = {}
+                )
             }
         }
         composeRule.waitForIdle()

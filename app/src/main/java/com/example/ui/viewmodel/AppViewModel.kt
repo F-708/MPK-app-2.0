@@ -22,8 +22,7 @@ enum class AppTab(val title: String) {
     SCHEDULE("Расписание"),
     TASKS("Задания"),
     BELLS("Звонки"),
-    COLLEGE("Колледж"),
-    SETTINGS("Настройки")
+    COLLEGE("Другое")
 }
 
 data class AppUiState(
