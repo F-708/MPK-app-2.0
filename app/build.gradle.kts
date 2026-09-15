@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.mpkschedule.vbyqzt"
     minSdk = 24
     targetSdk = 36
-    versionCode = 6
-    versionName = "2.5"
+    versionCode = 7
+    versionName = "2.5.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
