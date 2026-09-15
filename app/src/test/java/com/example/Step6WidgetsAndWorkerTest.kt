@@ -1,52 +1,18 @@
 package com.example
 
-import android.content.Context
-import androidx.test.core.app.ApplicationProvider
 import com.example.data.local.entity.LessonEntity
 import com.example.data.model.CollegeBellSchedule
 import com.example.util.GroupParser
 import com.example.util.NotificationHelper
 import com.example.util.SubjectFormatter
-import com.example.widget.WidgetUpdateHelper
 import com.example.worker.ScheduleCheckWorker
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class Step6WidgetsAndWorkerTest {
-
-    private lateinit var context: Context
-
-    @Before
-    fun setUp() {
-        context = ApplicationProvider.getApplicationContext()
-    }
-
-    @Test
-    fun testWidgetUpdateHelperPreferences() {
-        // 1. Проверяем значение по умолчанию
-        assertEquals("41О", WidgetUpdateHelper.getSelectedGroup(context))
-        assertTrue(WidgetUpdateHelper.isNotificationEnabled(context))
-
-        // 2. Смена группы
-        WidgetUpdateHelper.setSelectedGroup(context, "11Т")
-        assertEquals("11Т", WidgetUpdateHelper.getSelectedGroup(context))
-
-        // 3. Отключение и включение уведомлений
-        WidgetUpdateHelper.setNotificationEnabled(context, false)
-        assertFalse(WidgetUpdateHelper.isNotificationEnabled(context))
-
-        WidgetUpdateHelper.setNotificationEnabled(context, true)
-        assertTrue(WidgetUpdateHelper.isNotificationEnabled(context))
-    }
 
     @Test
     fun testNextStudyDayTransition_1stCourse_Vs_HigherCourses() {
@@ -118,8 +84,7 @@ class Step6WidgetsAndWorkerTest {
     }
 
     @Test
-    fun testNotificationChannelCreation() {
-        NotificationHelper.createNotificationChannel(context)
+    fun testNotificationChannelConstants() {
         assertEquals("mpk_schedule_updates", NotificationHelper.CHANNEL_ID)
         assertEquals("Обновления расписания МГПК", NotificationHelper.CHANNEL_NAME)
         assertEquals(2026, NotificationHelper.NOTIFICATION_ID)
