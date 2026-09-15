@@ -380,7 +380,7 @@ fun SettingsScreen(
                             } else "0 Б"
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(label = "Версия приложения", value = "2.6")
+                        DiagnosticRow(label = "Версия приложения", value = "2.7")
 
                         if (isDebugEnabled) {
                             Spacer(modifier = Modifier.height(4.dp))

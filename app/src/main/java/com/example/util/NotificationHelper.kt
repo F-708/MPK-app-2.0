@@ -79,7 +79,7 @@ object NotificationHelper {
         }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_widget_school)
+            .setSmallIcon(R.drawable.ic_mpk_emblem)
             .setContentTitle("Вышло расписание на $dayTitle")
             .setContentText("Назначено $lessonCount $lessonsWord. Нажмите, чтобы посмотреть кабинеты.")
             .setStyle(

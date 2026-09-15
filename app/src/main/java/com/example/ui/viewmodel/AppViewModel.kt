@@ -8,7 +8,7 @@ import com.example.data.model.GroupInfo
 import com.example.data.repository.ScheduleRepository
 import com.example.data.repository.TaskRepository
 import com.example.util.GroupParser
-import kotlinx.coroutines.delay
+import com.example.widget.WidgetUpdateHelper
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -27,20 +27,20 @@ enum class AppTab(val title: String) {
 }
 
 data class AppUiState(
-    val currentGroupName: String = "41О",
-    val groupInfo: GroupInfo? = GroupParser.parse("41О"),
+    val currentGroupName: String,
+    val groupInfo: GroupInfo?,
     val currentTab: AppTab = AppTab.SCHEDULE,
     val isSyncing: Boolean = false,
-    val hasSyncError: Boolean = false
+    val hasSyncError: Boolean = false,
+    /** Показывать обязательный диалог выбора группы (первый вход). */
+    val showGroupSelection: Boolean = false
 )
 
 /**
- * Главная ViewModel приложения «МПК Расписание».
+ * Главная ViewModel приложения «Мой Политех».
  *
- * ЖЕЛЕЗНЫЕ ПРАВИЛА:
- * 1. Toast и ошибки передаются СТРОГО через SharedFlow в UI (LaunchedEffect на Dispatchers.Main).
- * 2. Используется AndroidViewModel(application) с чистыми репозиториями.
- * 3. Политика синхронизации: фоновый опрос при старте (2 повтора, таймаут 3.5с), янтарный индикатор при сбое.
+ * Группа хранится в SharedPreferences: при первом входе приложение
+ * обязательно предлагает выбрать группу, смена — из настроек.
  */
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -50,7 +50,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val diagnosticInfo = scheduleRepository.diagnosticInfo
 
-    private val _uiState = MutableStateFlow(AppUiState())
+    private val _uiState = MutableStateFlow(
+        AppUiState(
+            currentGroupName = WidgetUpdateHelper.getSelectedGroup(application),
+            groupInfo = GroupParser.parse(WidgetUpdateHelper.getSelectedGroup(application)),
+            showGroupSelection = !WidgetUpdateHelper.hasSelectedGroup(application)
+        )
+    )
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
     private val _toastEvent = MutableSharedFlow<String>()
@@ -58,7 +64,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         // Фоновая автосинхронизация при запуске приложения
-        syncSchedule(isAutoSync = true)
+        if (!uiState.value.showGroupSelection) {
+            syncSchedule(isAutoSync = true)
+        }
     }
 
     fun selectTab(tab: AppTab) {
@@ -66,22 +74,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setGroup(newGroupName: String) {
-        val parsed = GroupParser.parse(newGroupName)
-        if (parsed != null) {
-            _uiState.update {
-                it.copy(
-                    currentGroupName = parsed.canonicalName,
-                    groupInfo = parsed,
-                    hasSyncError = false
-                )
-            }
-            viewModelScope.launch {
-                _toastEvent.emit("Выбрана группа: ${parsed.canonicalName}")
-                syncSchedule(isAutoSync = false)
-            }
+        val parsed = GroupParser.parse(newGroupName) ?: return
+        WidgetUpdateHelper.setSelectedGroup(getApplication(), parsed.canonicalName)
+        _uiState.update {
+            it.copy(
+                currentGroupName = parsed.canonicalName,
+                groupInfo = parsed,
+                hasSyncError = false,
+                showGroupSelection = false
+            )
+        }
+        viewModelScope.launch {
+            _toastEvent.emit("Выбрана группа: ${parsed.canonicalName}")
+            syncSchedule(isAutoSync = false)
         }
     }
-
 
     fun syncSchedule(isAutoSync: Boolean = false) {
         if (_uiState.value.isSyncing) return
@@ -104,7 +111,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 },
-                onFailure = { error ->
+                onFailure = {
                     _uiState.update { it.copy(isSyncing = false, hasSyncError = true) }
                     if (!isAutoSync) {
                         _toastEvent.emit("Сбой обновления: проверьте интернет (сайт guo-mpk.by недоступен)")

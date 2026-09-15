@@ -4,23 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
 /**
- * Шапка приложения «Мой Политех».
+ * Шапка приложения «Мой Политех» (баннер колледжа на всю ширину).
  */
 @Composable
 fun MainTopBar(
-    currentGroup: String,
-    isSyncing: Boolean,
-    hasSyncError: Boolean = false,
-    onGroupChanged: (String) -> Unit,
-    onSyncClicked: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    MainHeaderBanner(
-        currentGroup = currentGroup,
-        isSyncing = isSyncing,
-        hasSyncError = hasSyncError,
-        onGroupChanged = onGroupChanged,
-        onSyncClicked = onSyncClicked,
-        modifier = modifier
-    )
+    MainHeaderBanner(modifier = modifier)
 }

@@ -39,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -47,6 +48,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -274,11 +278,16 @@ fun BellsScreen(
         ) { targetType ->
             val bells = CollegeBellSchedule.getBellsForType(targetType)
 
+            // Координаты строк (в root-координатах) для выравнивания шкалы по карточкам
+            val lessonRowBounds = mutableStateMapOf<Int, androidx.compose.ui.geometry.Rect>() // key = lessonNumber
+            var containerTop by remember { mutableStateOf(0f) }
+
             Row(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 24.dp)
+                    .onGloballyPositioned { containerTop = it.boundsInRoot().top }
             ) {
                 // Список уроков и переменных
                 Column(
@@ -287,50 +296,6 @@ fun BellsScreen(
                         .fillMaxHeight(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Баннер-дисклеймер
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorSurfaceVariantLight,
-                        border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("bells_disclaimer_banner")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = ColorBrandBlue,
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .padding(top = 2.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = targetType.title.uppercase(),
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = ColorBrandBlue
-                                    )
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = CollegeBellSchedule.DISCLAIMER,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 11.sp,
-                                        color = ColorTextMuted,
-                                        lineHeight = 15.sp
-                                    )
-                                )
-                            }
-                        }
-                    }
-
                     // Индикатор текущего активного урока / инфочаса (только для сегодняшнего графика)
                     activeSlot?.let { currentSlot ->
                         Surface(
@@ -381,10 +346,18 @@ fun BellsScreen(
                     rows.forEach { row ->
                         when (row) {
                             is BellRow.Lesson ->
-                                if (row.item.isInfoHour) {
-                                    InfoHourCard(item = row.item, isActive = activeSlot == row.item)
-                                } else {
-                                    LessonBellCard(item = row.item, isActive = activeSlot == row.item)
+                                Box(
+                                    Modifier.onGloballyPositioned { coords ->
+                                        if (!row.item.isInfoHour) {
+                                            lessonRowBounds[row.item.lessonNumber] = coords.boundsInRoot()
+                                        }
+                                    }
+                                ) {
+                                    if (row.item.isInfoHour) {
+                                        InfoHourCard(item = row.item, isActive = activeSlot == row.item)
+                                    } else {
+                                        LessonBellCard(item = row.item, isActive = activeSlot == row.item)
+                                    }
                                 }
                             is BellRow.Break -> BreakRow(row)
                         }
@@ -393,8 +366,10 @@ fun BellsScreen(
 
                 Spacer(modifier = Modifier.width(10.dp))
 
-                // Вертикальная шкала времени с ползунком
-                BellsTimelineRail(
+                // Вертикальная шкала: риски СТРОГО на границах карточек уроков
+                RowAlignedTimelineRail(
+                    lessonRowBounds = lessonRowBounds,
+                    containerTop = containerTop,
                     bells = bells,
                     nowMinutes = currentTimeMinutes,
                     isActive = isTodaySelected,
@@ -407,6 +382,108 @@ fun BellsScreen(
         }
     }
 }
+
+/**
+ * Шкала, выровненная по строкам карточек: каждая риска — это верх/низ карточки
+ * урока. Синяя зона — до нижней границы последнего урока по факту расписания.
+ * Точка интерполируется по времени внутри текущей строки.
+ */
+@Composable
+private fun RowAlignedTimelineRail(
+    lessonRowBounds: Map<Int, androidx.compose.ui.geometry.Rect>,
+    containerTop: Float,
+    bells: List<BellItem>,
+    nowMinutes: Int,
+    isActive: Boolean,
+    lastLessonToday: Int?,
+    modifier: Modifier = Modifier
+) {
+    val grayColor = Color(0xFF94A3B8).copy(alpha = 0.55f)
+    val grayBand = Color(0xFF64748B).copy(alpha = 0.35f)
+    val blueColor = ColorActiveBlue
+
+    // Отсортированные уроки с координатами
+    val rows = lessonRowBounds.entries
+        .sortedBy { it.key }
+        .mapNotNull { (num, rect) ->
+            val bell = bells.firstOrNull { it.lessonNumber == num && !it.isInfoHour } ?: return@mapNotNull null
+            Triple(num, rect.top - containerTop, rect.bottom - containerTop)
+        }
+
+    // Конец синей зоны: последний урок по факту (или последний присутствующий)
+    val blueEndNum = lastLessonToday?.let { num -> rows.lastOrNull { it.first <= num }?.first }
+        ?: rows.lastOrNull()?.first
+
+    val isOnLessons = isActive && nowMinutes <= (bells.firstOrNull { it.lessonNumber == blueEndNum }?.endMinutes ?: 0)
+
+    // Пульсация точки на занятиях
+    val pulseRadius by if (isOnLessons) {
+        rememberInfiniteTransition(label = "DotPulse").animateFloat(
+            initialValue = 5f,
+            targetValue = 8f,
+            animationSpec = infiniteRepeatable(tween(durationMillis = 900), RepeatMode.Reverse),
+            label = "DotPulseRadius"
+        )
+    } else {
+        remember { mutableStateOf(5f) }
+    }
+
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        if (rows.isEmpty()) return@Canvas
+        val cx = size.width / 2
+        val tickLen = 6.dp.toPx()
+
+        val topY = rows.first().second
+        val bottomY = rows.last().third
+        val blueEndY = rows.lastOrNull { it.first == blueEndNum }?.third ?: bottomY
+
+        // Серая базовая линия
+        val baseColor = if (isActive) grayColor else grayColor.copy(alpha = 0.45f)
+        drawLine(baseColor, Offset(cx, topY), Offset(cx, bottomY), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+
+        // Синяя зона до конца последнего фактического урока
+        if (isActive && blueEndY > topY) {
+            drawLine(blueColor.copy(alpha = 0.75f), Offset(cx, topY), Offset(cx, blueEndY), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+            drawLine(blueColor, Offset(cx - tickLen, blueEndY), Offset(cx + tickLen, blueEndY), strokeWidth = 2.dp.toPx())
+        }
+
+        // Риски: верх и низ каждой карточки урока
+        rows.forEach { (num, top, bottom) ->
+            val inBlue = isActive && num <= (blueEndNum ?: 0)
+            val tickColor = if (inBlue) blueColor else grayBand
+            drawLine(tickColor, Offset(cx - tickLen, top), Offset(cx + tickLen, top), strokeWidth = 1.5.dp.toPx())
+            drawLine(tickColor, Offset(cx - tickLen, bottom), Offset(cx + tickLen, bottom), strokeWidth = 1.5.dp.toPx())
+        }
+
+        // Точка времени: интерполяция внутри строки текущего интервала
+        if (isActive) {
+            var dotY: Float? = null
+            for ((num, top, bottom) in rows) {
+                val bell = bells.first { it.lessonNumber == num && !it.isInfoHour }
+                if (nowMinutes in bell.startMinutes..bell.endMinutes) {
+                    val progress = (nowMinutes - bell.startMinutes).toFloat() /
+                        (bell.endMinutes - bell.startMinutes).coerceAtLeast(1)
+                    dotY = top + (bottom - top) * progress
+                    break
+                }
+                val breakEnd = bell.endMinutes + bell.breakAfterMinutes
+                if (bell.breakAfterMinutes > 0 && nowMinutes in bell.endMinutes..breakEnd) {
+                    val progress = (nowMinutes - bell.endMinutes).toFloat() / bell.breakAfterMinutes
+                    dotY = bottom + 6.dp.toPx() * progress
+                    break
+                }
+            }
+            val y = dotY ?: if (nowMinutes < (bells.minOf { it.startMinutes })) topY else bottomY
+            val dotColor = if (isOnLessons) blueColor else grayColor
+            if (isOnLessons) {
+                drawCircle(blueColor.copy(alpha = 0.25f), radius = pulseRadius.dp.toPx() + 5.dp.toPx(), center = Offset(cx, y))
+            }
+            drawCircle(dotColor, radius = pulseRadius.dp.toPx(), center = Offset(cx, y))
+        }
+    }
+}
+
+
 
 /**
  * Компактный подпункт «перемена» между уроками.
@@ -441,130 +518,6 @@ private fun BreakRow(row: BellRow.Break) {
 
 private fun minutesToTime(minutes: Int): String =
     String.format(java.util.Locale.ROOT, "%02d:%02d", minutes / 60, minutes % 60)
-
-/**
- * Вертикальная шкала времени справа от списка:
- * - базовая серая линия и риски на границах уроков;
- * - СИНЯЯ зона от начала 1-го урока до конца последнего урока ПО ФАКТУ
- *   расписания на сегодня (нет данных — до конца последнего звонка);
- * - СЕРАЯ зона — остальное время дня;
- * - бегущий кружок: на занятиях синий и ПУЛЬСИРУЕТ; после последнего урока
- *   серый, но продолжает двигаться по времени.
- * Для чужого дня шкала полностью серая и неактивная.
- */
-@Composable
-private fun BellsTimelineRail(
-    bells: List<BellItem>,
-    nowMinutes: Int,
-    isActive: Boolean,
-    lastLessonToday: Int?,
-    modifier: Modifier = Modifier
-) {
-    val grayColor = Color(0xFF94A3B8).copy(alpha = 0.55f)
-    val grayBand = Color(0xFF64748B).copy(alpha = 0.35f)
-    val blueColor = ColorActiveBlue
-
-    val first = bells.minOf { it.startMinutes }
-    val last = bells.maxOf { it.endMinutes }
-    val span = (last - first).coerceAtLeast(1)
-
-    // Конец синей зоны: последний урок по факту (или последний звонок, если данных нет)
-    val blueEnd = if (isActive) {
-        lastLessonToday?.let { num ->
-            bells.filter { !it.isInfoHour }.lastOrNull { it.lessonNumber <= num }?.endMinutes
-        } ?: last
-    } else -1
-
-    // Точка на занятиях — пульсирует
-    val isOnLessons = isActive && nowMinutes <= blueEnd
-    val pulseRadius by if (isOnLessons) {
-        rememberInfiniteTransition(label = "DotPulse").animateFloat(
-            initialValue = 5f,
-            targetValue = 8f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 900),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "DotPulseRadius"
-        )
-    } else {
-        remember { mutableStateOf(5f) }
-    }
-
-    androidx.compose.foundation.Canvas(modifier = modifier) {
-        val cx = size.width / 2
-        val h = size.height
-
-        fun y(minutes: Int): Float = (minutes - first).toFloat() / span * h
-        val blueEndY = y(blueEnd)
-
-        // Базовая линия: серая часть
-        drawLine(
-            color = if (isActive) grayColor else grayColor.copy(alpha = 0.45f),
-            start = Offset(cx, 0f),
-            end = Offset(cx, h),
-            strokeWidth = 2.dp.toPx(),
-            cap = StrokeCap.Round
-        )
-
-        // Синяя зона: от начала до последнего фактического урока
-        if (isActive && blueEnd > first) {
-            drawLine(
-                color = blueColor.copy(alpha = 0.75f),
-                start = Offset(cx, y(first)),
-                end = Offset(cx, blueEndY),
-                strokeWidth = 2.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-            // Отметка конца занятий
-            drawLine(
-                color = blueColor,
-                start = Offset(cx - 6.dp.toPx(), blueEndY),
-                end = Offset(cx + 6.dp.toPx(), blueEndY),
-                strokeWidth = 2.dp.toPx()
-            )
-        }
-
-        // Риски на границах уроков
-        bells.forEach { item ->
-            val top = y(item.startMinutes)
-            val bottom = y(item.endMinutes)
-            val inBlue = isActive && item.startMinutes < blueEnd
-            drawLine(
-                color = if (inBlue) blueColor else grayBand,
-                start = Offset(cx - 5.dp.toPx(), top),
-                end = Offset(cx + 5.dp.toPx(), top),
-                strokeWidth = 1.5.dp.toPx()
-            )
-            drawLine(
-                color = if (inBlue) blueColor else grayBand,
-                start = Offset(cx - 5.dp.toPx(), bottom),
-                end = Offset(cx + 5.dp.toPx(), bottom),
-                strokeWidth = 1.5.dp.toPx()
-            )
-        }
-
-        // Бегущая точка времени
-        if (isActive) {
-            val dotY = ((nowMinutes - first).toFloat() / span)
-                .coerceIn(0f, 1f) * h
-            val dotColor = if (isOnLessons) blueColor else grayColor
-            if (isOnLessons) {
-                // Пульсирующее кольцо
-                drawCircle(
-                    color = blueColor.copy(alpha = 0.25f),
-                    radius = pulseRadius.dp.toPx() + 5.dp.toPx(),
-                    center = Offset(cx, dotY)
-                )
-            }
-            drawCircle(
-                color = dotColor,
-                radius = pulseRadius.dp.toPx(),
-                center = Offset(cx, dotY)
-            )
-        }
-    }
-}
 
 /**
  * Карточка урока с указанием времени и длительности по Style Guide.

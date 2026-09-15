@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">Мой Политех</string>
-    <string name="timeline_widget_description">Шкала учебного дня: уроки, перемены и текущее время</string>
+    <string name="bell_countdown_widget_description">Сколько осталось до звонка: обратный отсчёт и текущее время</string>
 </resources>

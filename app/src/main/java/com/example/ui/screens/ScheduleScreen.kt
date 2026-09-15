@@ -1,6 +1,11 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.rotate
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -55,9 +60,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.entity.LessonEntity
+import com.example.data.model.CollegeBellSchedule
 import com.example.data.model.GroupInfo
 import com.example.data.repository.ScheduleRepository
 import com.example.ui.components.CalendarArchiveDialog
+import com.example.ui.theme.ColorActiveBlue
 import com.example.ui.theme.ColorBgMain
 import com.example.ui.theme.ColorBorderLight
 import com.example.ui.theme.ColorBrandBlue
@@ -92,6 +99,7 @@ fun ScheduleScreen(
     groupInfo: GroupInfo,
     scheduleRepository: ScheduleRepository,
     onSyncRequest: () -> Unit,
+    isSyncing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -178,6 +186,17 @@ fun ScheduleScreen(
         String.format(java.util.Locale.ROOT, "%s, %02d.%02d", prefix, d, m)
     }
 
+    // Текущий урок по времени (показывается на ячейке «Сегодня»)
+    val currentLessonNumber = remember(activeDayOfWeek, selectedSlot) {
+        if (selectedSlot == 0 && leftIsToday) {
+            val cal = Calendar.getInstance()
+            val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+            val bells = CollegeBellSchedule.getBellsForDay(activeDayOfWeek)
+            bells.firstOrNull { minutes in it.startMinutes..it.endMinutes }?.lessonNumber
+                ?.takeIf { it > 0 }
+        } else null
+    }
+
     // 2. Поток расписания из Room Database для выбранного дня
     val lessonsFromDb by scheduleRepository
         .getLessonsForDay(groupInfo.canonicalName, activeDayOfWeek)
@@ -222,27 +241,60 @@ fun ScheduleScreen(
     ) {
         // =========================================================================
         // =========================================================================
-        // Заголовок страницы «Расписание» + подпись выбранного дня
+        // Заголовок страницы «Расписание» + подпись выбранного дня + синхронизация
         // =========================================================================
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Расписание",
-                style = TextStylePageTitle,
-                maxLines = 1
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Расписание",
+                    style = TextStylePageTitle,
+                    maxLines = 1
+                )
+                Text(
+                    text = subtitleText,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        color = ColorBrandBlue
+                    ),
+                    maxLines = 1
+                )
+            }
+
+            // Кнопка синхронизации с сайтом (вращается во время обновления)
+            val infiniteTransition = rememberInfiniteTransition(label = "SyncRotation")
+            val rotation by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(durationMillis = 900)),
+                label = "SyncRotationAngle"
             )
-            Text(
-                text = subtitleText,
-                style = androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    color = ColorBrandBlue
-                ),
-                maxLines = 1
-            )
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBrandFill,
+                border = BorderStroke(1.dp, ColorBorderLight),
+                modifier = Modifier
+                    .size(34.dp)
+                    .bouncyClickable(onClick = onSyncRequest)
+                    .testTag("sync_button")
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Синхронизировать с сайтом",
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .then(if (isSyncing) Modifier.rotate(rotation) else Modifier)
+                    )
+                }
+            }
         }
 
         // =========================================================================
@@ -422,7 +474,7 @@ fun ScheduleScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(currentLessons, key = { it.id }) { lesson ->
-                        LessonCard(lesson = lesson)
+                        LessonCard(lesson = lesson, isCurrent = lesson.lessonNumber == currentLessonNumber)
                     }
                 }
             }
@@ -439,12 +491,13 @@ fun ScheduleScreen(
 @Composable
 fun LessonCard(
     lesson: LessonEntity,
+    isCurrent: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
-        border = BorderStroke(1.dp, ColorBorderLight),
+        border = BorderStroke(1.dp, if (isCurrent) ColorActiveBlue else ColorBorderLight),
         shadowElevation = 0.dp,
         modifier = modifier
             .fillMaxWidth()

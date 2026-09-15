@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
@@ -42,7 +45,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.GroupInfo
-import com.example.ui.theme.ColorBadgeCourse
 import com.example.ui.theme.ColorBgMain
 import com.example.ui.theme.ColorBorderLight
 import com.example.ui.theme.ColorBrandBlue
@@ -58,122 +60,139 @@ import com.example.ui.theme.TextStylePageTitle
 import com.example.ui.util.bouncyClickable
 import com.example.util.MpkCurriculum
 
+private enum class CollegePage { MENU, SPECIALTY, TEACHERS }
+
 /**
- * Справочная вкладка «Колледж»:
- * 1. «Моя специальность» — полная информация о специальности выбранной группы:
- *    код, квалификация, рабочие профессии и предметы по курсам.
- * 2. «Преподаватели» — поиск по базе преподавателей колледжа.
+ * Справочная вкладка «Колледж»: список разделов с под-экранами.
  */
 @Composable
 fun CollegeScreen(
     groupInfo: GroupInfo,
     modifier: Modifier = Modifier
 ) {
-    var section by rememberSaveable { mutableIntStateOf(0) }
+    var page by rememberSaveable { mutableStateOf(CollegePage.MENU) }
+    BackHandler(enabled = page != CollegePage.MENU) { page = CollegePage.MENU }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(ColorBgMain)
     ) {
-        // Заголовок страницы
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text(
-                text = "Колледж",
-                style = TextStylePageTitle,
-                maxLines = 1
+        when (page) {
+            CollegePage.MENU -> CollegeMenu(
+                groupInfo = groupInfo,
+                onOpenSpecialty = { page = CollegePage.SPECIALTY },
+                onOpenTeachers = { page = CollegePage.TEACHERS }
             )
-            Text(
-                text = "Специальности и преподаватели",
-                style = androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    color = ColorBrandBlue
-                ),
-                maxLines = 1
+            CollegePage.SPECIALTY -> MySpecialtyPage(
+                groupInfo = groupInfo,
+                onBack = { page = CollegePage.MENU }
+            )
+            CollegePage.TEACHERS -> TeachersPage(
+                onBack = { page = CollegePage.MENU }
             )
         }
+    }
+}
 
-        // Сегмент-переключатель разделов
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+// ---------------------------------------------------------------------------
+// Список разделов
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun CollegeMenu(
+    groupInfo: GroupInfo,
+    onOpenSpecialty: () -> Unit,
+    onOpenTeachers: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Header(title = "Колледж", subtitle = "Справочник специальностей и преподавателей")
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            SectionChip(
-                title = "МОЯ СПЕЦИАЛЬНОСТЬ",
-                icon = { Icon(Icons.Default.School, null, tint = if (section == 0) Color.White else ColorBrandBlue, modifier = Modifier.size(14.dp)) },
-                selected = section == 0,
-                onClick = { section = 0 },
-                modifier = Modifier.weight(1f)
-            )
-            SectionChip(
-                title = "ПРЕПОДАВАТЕЛИ",
-                icon = { Icon(Icons.Default.Person, null, tint = if (section == 1) Color.White else ColorBrandBlue, modifier = Modifier.size(14.dp)) },
-                selected = section == 1,
-                onClick = { section = 1 },
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
-                .height(1.dp)
-                .background(ColorDividerLight)
-        )
-
-        when (section) {
-            0 -> MySpecialtySection(groupInfo)
-            else -> TeachersSection()
+            item {
+                MenuCard(
+                    icon = { Icon(Icons.Default.School, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
+                    title = "Моя специальность",
+                    subtitle = "Группа ${groupInfo.canonicalName}: код, квалификация, предметы по курсам",
+                    onClick = onOpenSpecialty
+                )
+            }
+            item {
+                MenuCard(
+                    icon = { Icon(Icons.Default.Person, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
+                    title = "Преподаватели",
+                    subtitle = "Поиск по базе преподавателей колледжа",
+                    onClick = onOpenTeachers
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun SectionChip(
-    title: String,
+private fun MenuCard(
     icon: @Composable () -> Unit,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
-        color = if (selected) ColorTopBar else ColorBgMain,
-        modifier = modifier
-            .height(40.dp)
+        color = ColorBgMain,
+        border = BorderStroke(1.dp, ColorBorderLight),
+        modifier = Modifier
+            .fillMaxWidth()
             .bouncyClickable(onClick = onClick)
     ) {
         Row(
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 8.dp)
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            icon()
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = title,
-                softWrap = false,
-                maxLines = 1,
-                style = androidx.compose.ui.text.TextStyle(
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    fontSize = 11.sp,
-                    color = if (selected) Color.White else ColorTextBody
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(ColorBrandFill, RoundedCornerShape(2.dp)),
+                contentAlignment = Alignment.Center
+            ) { icon() }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = ColorTextTitle
+                    )
                 )
+                Text(
+                    text = subtitle,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontSize = 12.sp,
+                        color = ColorTextMuted
+                    ),
+                    maxLines = 2
+                )
+            }
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = ColorTextMuted,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
 }
 
-/**
- * Раздел «Моя специальность»: карточка специальности + предметы по курсам.
- */
+// ---------------------------------------------------------------------------
+// Под-экран «Моя специальность»
+// ---------------------------------------------------------------------------
+
 @Composable
-private fun MySpecialtySection(groupInfo: GroupInfo) {
+private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
     val specialty = remember(groupInfo.specialtyCode) {
         MpkCurriculum.getSpecialty(groupInfo.specialtyCode)
     }
@@ -182,104 +201,194 @@ private fun MySpecialtySection(groupInfo: GroupInfo) {
         mutableIntStateOf(groupInfo.course.coerceIn(courses.minOrNull() ?: 1, courses.maxOrNull() ?: 1))
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        if (specialty == null) {
-            item {
-                EmptyCard(text = "Специальность для группы ${groupInfo.canonicalName} не найдена в справочнике.")
-            }
-            return@LazyColumn
-        }
-
-        // Карточка специальности
-        item {
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Шапка под-экрана с кнопкой «Назад»
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 color = ColorBgMain,
                 border = BorderStroke(1.dp, ColorBorderLight),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("specialty_card")
+                    .size(36.dp)
+                    .bouncyClickable(onClick = onBack)
+                    .testTag("specialty_back_btn")
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.School,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Группа ${groupInfo.canonicalName}",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = ColorTextTitle
-                                )
-                            )
-                            Text(
-                                text = specialty.shortName,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 12.sp,
-                                    color = ColorTextMuted
-                                )
-                            )
-                        }
-                    }
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Назад",
+                        tint = ColorBrandBlue,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = "Моя специальность",
+                    style = TextStylePageTitle.copy(fontSize = 24.sp),
+                    maxLines = 1
+                )
+                Text(
+                    text = "Группа ${groupInfo.canonicalName}",
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        color = ColorBrandBlue
+                    ),
+                    maxLines = 1
+                )
+            }
+        }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(ColorDividerLight)
+        )
 
-                    InfoRow("Специальность", specialty.fullName)
-                    if (specialty.cipher.isNotBlank()) {
-                        InfoRow("Код специальности", specialty.cipher)
-                    }
-                    if (specialty.qualification.isNotBlank()) {
-                        InfoRow("Квалификация", specialty.qualification)
-                    }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (specialty == null) {
+                item {
+                    EmptyCard(text = "Специальность для группы ${groupInfo.canonicalName} не найдена в справочнике.")
+                }
+                return@LazyColumn
+            }
 
-                    // Рабочие профессии
-                    if (specialty.workerProfessions.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(10.dp))
+            // Отсек 1: специальность, код (крупно и хорошо видно), квалификация
+            item {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("specialty_card")
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            text = "РАБОЧИЕ ПРОФЕССИИ",
+                            text = "СПЕЦИАЛЬНОСТЬ",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                color = ColorBrandBlue
+                                fontSize = 10.sp,
+                                color = ColorTextMuted
                             )
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        specialty.workerProfessions.forEach { profession ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 2.dp),
-                                verticalAlignment = Alignment.Top
+                        Text(
+                            text = specialty.fullName,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = ColorTextTitle
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Код специальности — крупный заметный блок
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            color = ColorSurfaceHighlight,
+                            border = BorderStroke(1.dp, ColorBrandBlue),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(vertical = 8.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .padding(top = 6.dp)
-                                        .size(4.dp)
-                                        .background(ColorBrandBlue, RoundedCornerShape(1.dp))
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = profession,
+                                    text = "КОД СПЕЦИАЛЬНОСТИ",
                                     style = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 12.sp,
-                                        color = ColorTextBody
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp,
+                                        color = ColorTextMuted
+                                    )
+                                )
+                                Text(
+                                    text = specialty.cipher,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 20.sp,
+                                        color = ColorBrandBlue
+                                    )
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (specialty.qualification.isNotBlank()) {
+                            InfoRow("Квалификация", specialty.qualification)
+                        }
+                    }
+                }
+            }
+
+            // Отсек 2: рабочие профессии
+            if (specialty.workerProfessions.isNotEmpty()) {
+                item { SectionLabel("РАБОЧИЕ ПРОФЕССИИ") }
+                items(specialty.workerProfessions) { profession ->
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorSurfaceVariantLight,
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = profession,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 13.sp,
+                                color = ColorTextBody
+                            ),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+            }
+
+            // Отсек 3: предметы по курсам (вкладки по количеству курсов)
+            item { SectionLabel("ПРЕДМЕТЫ ПО КУРСАМ") }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    courses.forEach { course ->
+                        val isSelected = course == selectedCourse
+                        val isCurrent = course == groupInfo.course
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isSelected) ColorTopBar else if (isCurrent) ColorBrandBlue else ColorBorderLight
+                            ),
+                            color = if (isSelected) ColorTopBar else ColorBgMain,
+                            modifier = Modifier
+                                .weight(1f)
+                                .bouncyClickable { selectedCourse = course }
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = "$course КУРС",
+                                    softWrap = false,
+                                    maxLines = 1,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = if (isSelected || isCurrent) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 11.sp,
+                                        color = if (isSelected) Color.White else ColorTextBody
                                     )
                                 )
                             }
@@ -287,117 +396,90 @@ private fun MySpecialtySection(groupInfo: GroupInfo) {
                     }
                 }
             }
-        }
 
-        // Переключатель курсов
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                courses.forEach { course ->
-                    val isSelected = course == selectedCourse
-                    val isCurrent = course == groupInfo.course
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isSelected) ColorTopBar else if (isCurrent) ColorBrandBlue else ColorBorderLight
+            val subjects = specialty.subjectsByCourse[selectedCourse].orEmpty()
+            item {
+                Text(
+                    text = "ПРЕДМЕТЫ ${selectedCourse}-ГО КУРСА (${subjects.size})",
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = ColorBrandBlue
+                    )
+                )
+            }
+            items(subjects) { subject ->
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorSurfaceVariantLight,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = subject,
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontSize = 13.sp,
+                            color = ColorTextBody
                         ),
-                        color = if (isSelected) ColorTopBar else ColorBgMain,
-                        modifier = Modifier
-                            .weight(1f)
-                            .bouncyClickable { selectedCourse = course }
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = "$course КУРС",
-                                softWrap = false,
-                                maxLines = 1,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = if (isSelected || isCurrent) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = 11.sp,
-                                    color = if (isSelected) Color.White else ColorTextBody
-                                )
-                            )
-                        }
-                    }
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                    )
                 }
             }
         }
-
-        // Предметы выбранного курса
-        val subjects = specialty.subjectsByCourse[selectedCourse].orEmpty()
-        item {
-            Text(
-                text = "ПРЕДМЕТЫ ${selectedCourse}-ГО КУРСА (${subjects.size})",
-                style = androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = ColorBrandBlue
-                )
-            )
-        }
-        items(subjects) { subject ->
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorSurfaceVariantLight,
-                border = BorderStroke(1.dp, ColorBorderLight),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = subject,
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontSize = 13.sp,
-                        color = ColorTextBody
-                    ),
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                )
-            }
-        }
     }
 }
 
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Column(modifier = Modifier.padding(vertical = 3.dp)) {
-        Text(
-            text = label.uppercase(),
-            style = androidx.compose.ui.text.TextStyle(
-                fontWeight = FontWeight.Bold,
-                fontSize = 10.sp,
-                color = ColorTextMuted
-            )
-        )
-        Text(
-            text = value,
-            style = androidx.compose.ui.text.TextStyle(
-                fontSize = 13.sp,
-                color = ColorTextBody
-            )
-        )
-    }
-}
+// ---------------------------------------------------------------------------
+// Под-экран «Преподаватели»
+// ---------------------------------------------------------------------------
 
-/**
- * Раздел «Преподаватели»: поиск по базе.
- * База подключается из CSV; пока данных нет — аккуратная заглушка.
- */
 @Composable
-private fun TeachersSection() {
+private fun TeachersPage(onBack: () -> Unit) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBgMain,
+                border = BorderStroke(1.dp, ColorBorderLight),
+                modifier = Modifier
+                    .size(36.dp)
+                    .bouncyClickable(onClick = onBack)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Назад",
+                        tint = ColorBrandBlue,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Преподаватели",
+                style = TextStylePageTitle.copy(fontSize = 24.sp),
+                maxLines = 1
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(ColorDividerLight)
+        )
+
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = {
-                Text("Поиск преподавателя...")
-            },
+            placeholder = { Text("Поиск преподавателя...") },
             leadingIcon = {
                 Icon(Icons.Default.Search, contentDescription = null, tint = ColorBrandBlue, modifier = Modifier.size(18.dp))
             },
@@ -415,7 +497,7 @@ private fun TeachersSection() {
                 .testTag("teachers_search_input")
         )
 
-        // База преподавателей ещё не загружена
+        // База преподавателей подключается после загрузки CSV
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -458,6 +540,63 @@ private fun TeachersSection() {
                 )
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Общие элементы
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun Header(title: String, subtitle: String) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Text(
+            text = title,
+            style = TextStylePageTitle,
+            maxLines = 1
+        )
+        Text(
+            text = subtitle,
+            style = androidx.compose.ui.text.TextStyle(
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = ColorBrandBlue
+            ),
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = androidx.compose.ui.text.TextStyle(
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+            color = ColorBrandBlue
+        )
+    )
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Column(modifier = Modifier.padding(vertical = 3.dp)) {
+        Text(
+            text = label.uppercase(),
+            style = androidx.compose.ui.text.TextStyle(
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp,
+                color = ColorTextMuted
+            )
+        )
+        Text(
+            text = value,
+            style = androidx.compose.ui.text.TextStyle(
+                fontSize = 13.sp,
+                color = ColorTextBody
+            )
+        )
     }
 }
 

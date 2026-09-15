@@ -33,6 +33,11 @@ object WidgetUpdateHelper {
         return getPrefs(context).getString(KEY_SELECTED_GROUP, "41О") ?: "41О"
     }
 
+    /** Выбирал ли пользователь группу (для показа обязательного диалога первого входа). */
+    fun hasSelectedGroup(context: Context): Boolean {
+        return getPrefs(context).contains(KEY_SELECTED_GROUP)
+    }
+
     fun setSelectedGroup(context: Context, groupName: String) {
         getPrefs(context).edit().putString(KEY_SELECTED_GROUP, groupName).apply()
         updateAllWidgets(context)
@@ -50,22 +55,6 @@ object WidgetUpdateHelper {
      * Обновляет все экземпляры 2x2 и 4x2 виджетов.
      */
     fun updateAllWidgets(context: Context) {
-        widgetScope.launch {
-            val appWidgetManager = AppWidgetManager.getInstance(context) ?: return@launch
-
-            // 1. Обновляем LiveLessonWidget (2x2)
-            val liveLessonComponent = ComponentName(context, LiveLessonWidgetProvider::class.java)
-            val liveIds = appWidgetManager.getAppWidgetIds(liveLessonComponent)
-            if (liveIds != null && liveIds.isNotEmpty()) {
-                LiveLessonWidgetProvider.updateAppWidgets(context, appWidgetManager, liveIds)
-            }
-
-            // 2. Обновляем ScheduleWidget (4x2)
-            val scheduleComponent = ComponentName(context, ScheduleWidgetProvider::class.java)
-            val scheduleIds = appWidgetManager.getAppWidgetIds(scheduleComponent)
-            if (scheduleIds != null && scheduleIds.isNotEmpty()) {
-                ScheduleWidgetProvider.updateAppWidgets(context, appWidgetManager, scheduleIds)
-            }
-        }
+        BellCountdownWidgetProvider.updateAll(context)
     }
 }

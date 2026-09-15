@@ -29,63 +29,35 @@
             </intent-filter>
         </activity>
 
-        <!-- Компактный виджет 2x2 "Текущий урок" -->
+        <!-- Виджет «До звонка» (2x1, настраиваемый цвет фона) -->
         <receiver
-            android:name=".widget.LiveLessonWidgetProvider"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/live_lesson_widget_info" />
-        </receiver>
-
-        <!-- Информативный виджет 4x2 "Расписание на день" -->
-        <receiver
-            android:name=".widget.ScheduleWidgetProvider"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.example.widget.ACTION_TOGGLE_DAY" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/schedule_widget_info" />
-        </receiver>
-
-        <!-- Бегущая строка: вертикальная шкала учебного дня (1x3..1x6, растягивается) -->
-        <receiver
-            android:name=".widget.VerticalTimelineWidgetProvider"
+            android:name=".widget.BellCountdownWidgetProvider"
             android:exported="true"
-            android:label="Бегущая строка (вертикальная)">
+            android:label="До звонка">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/timeline_widget_vertical_info" />
+                android:resource="@xml/bell_countdown_widget_info" />
         </receiver>
 
-        <!-- Бегущая строка: горизонтальная шкала учебного дня (3x1..6x1, растягивается) -->
-        <receiver
-            android:name=".widget.HorizontalTimelineWidgetProvider"
+        <!-- Настройка виджета при добавлении -->
+        <activity
+            android:name=".widget.BellCountdownConfigActivity"
             android:exported="true"
-            android:label="Бегущая строка (горизонтальная)">
+            android:theme="@style/Theme.MyApplication">
             <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/timeline_widget_horizontal_info" />
-        </receiver>
+        </activity>
 
-        <!-- Минутный тик таймлайна + перезапуск будильника после перезагрузки -->
+        <!-- Минутный тик виджета + перезапуск будильника после перезагрузки -->
         <receiver
-            android:name=".widget.TimelineAlarmReceiver"
+            android:name=".widget.WidgetAlarmReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.example.widget.ACTION_TIMELINE_TICK" />
+                <action android:name="com.example.widget.ACTION_BELL_COUNTDOWN_TICK" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>

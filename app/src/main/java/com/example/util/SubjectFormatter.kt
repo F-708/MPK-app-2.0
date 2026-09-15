@@ -456,13 +456,9 @@ object SubjectFormatter {
             }
         }
 
-        // Если название уже короткое (до 15 символов)
-        if (normalized.length <= 15) {
-            return normalized
-        }
-
-        // Алгоритмическое сокращение до 15 символов
-        return shortenAlgorithmic(normalized, maxLength = 15)
+        // Сокращения берём ТОЛЬКО из таблицы (документы сайта / справочник);
+        // длинные названия показываем полностью — карточка сама ограничит строки
+        return normalized
     }
 
     /**

@@ -90,20 +90,19 @@ fun MainScreen(
         specialtyCode = 'О'
     )
 
+    // Обязательный выбор группы при первом входе (после установки/переустановки)
+    if (uiState.showGroupSelection) {
+        com.example.ui.components.GroupSelectionDialog(
+            currentGroupName = uiState.currentGroupName,
+            onDismissRequest = { /* Выбор обязателен при первом входе — не закрываем */ },
+            onGroupSelected = { newGroup -> viewModel.setGroup(newGroup) }
+        )
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            MainTopBar(
-                currentGroup = uiState.currentGroupName,
-                isSyncing = uiState.isSyncing,
-                hasSyncError = uiState.hasSyncError,
-                onGroupChanged = { newGroup ->
-                    viewModel.setGroup(newGroup)
-                },
-                onSyncClicked = {
-                    viewModel.syncSchedule()
-                }
-            )
+            MainTopBar()
         },
         bottomBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -147,8 +146,8 @@ fun MainScreen(
                                     maxLines = 1,
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 10.sp,
-                                        letterSpacing = 0.2.sp
+                                        fontSize = 9.sp,
+                                        letterSpacing = 0.sp
                                     )
                                 )
                             },
@@ -181,7 +180,8 @@ fun MainScreen(
                         ScheduleScreen(
                             groupInfo = currentGroupInfo,
                             scheduleRepository = viewModel.scheduleRepository,
-                            onSyncRequest = { viewModel.syncSchedule() }
+                            onSyncRequest = { viewModel.syncSchedule() },
+                            isSyncing = uiState.isSyncing
                         )
                     }
                     AppTab.TASKS -> {
