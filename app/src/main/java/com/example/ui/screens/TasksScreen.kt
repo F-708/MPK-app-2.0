@@ -78,6 +78,9 @@ import com.example.ui.theme.TextStylePageTitle
 import com.example.ui.util.bouncyClickable
 import com.example.util.MpkCurriculum
 import kotlinx.coroutines.launch
+import com.example.ui.theme.ColorBrandFill
+import com.example.ui.theme.ColorSurfaceHighlight
+import com.example.ui.theme.ColorSurfaceVariantLight
 
 /**
  * Экран учебных заданий студента по официальному Style Guide МПК:
@@ -126,10 +129,10 @@ fun TasksScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Учебные задания",
                         style = TextStylePageTitle,
@@ -141,15 +144,16 @@ fun TasksScreen(
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp,
                             color = ColorBrandBlue
-                        )
+                        ),
+                        maxLines = 1
                     )
                 }
 
-                // Кнопка добавления
+                // Кнопка добавления (фиксированной ширины, без переносов букв)
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     border = BorderStroke(1.dp, ColorBrandBlue),
-                    color = ColorBrandBlue,
+                    color = ColorBrandFill,
                     modifier = Modifier
                         .bouncyClickable { showAddDialog = true }
                         .testTag("add_task_top_btn")
@@ -167,6 +171,8 @@ fun TasksScreen(
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = "ДОБАВИТЬ",
+                            softWrap = false,
+                            maxLines = 1,
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
@@ -261,7 +267,7 @@ fun TasksScreen(
                             modifier = Modifier
                                 .size(56.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFF1F5F9)),
+                                .background(ColorSurfaceHighlight),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -364,7 +370,7 @@ fun TaskItemCard(
 
     Surface(
         shape = RoundedCornerShape(2.dp),
-        color = if (task.isCompleted) Color(0xFFF9FAFB) else ColorBgMain,
+        color = if (task.isCompleted) ColorSurfaceVariantLight else ColorBgMain,
         border = BorderStroke(1.dp, ColorBorderLight),
         shadowElevation = 0.dp,
         modifier = modifier
@@ -638,7 +644,7 @@ fun AddTaskDialog(
         confirmButton = {
             Surface(
                 shape = RoundedCornerShape(2.dp),
-                color = ColorBrandBlue,
+                color = ColorBrandFill,
                 modifier = Modifier.bouncyClickable {
                     if (title.isNotBlank()) {
                         onTaskAdded(title.trim(), description.trim(), selectedSubject, selectedType, dueDate.trim())
@@ -647,6 +653,8 @@ fun AddTaskDialog(
             ) {
                 Text(
                     text = "ДОБАВИТЬ",
+                    softWrap = false,
+                    maxLines = 1,
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,

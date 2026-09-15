@@ -54,6 +54,9 @@ import com.example.ui.theme.ColorTopBar
 import com.example.ui.util.bouncyClickable
 import com.example.util.GroupParser
 import com.example.util.MpkCurriculum
+import com.example.ui.theme.ColorBrandFill
+import com.example.ui.theme.ColorDangerFill
+import com.example.ui.theme.ColorSurfaceHighlight
 
 /**
  * Диалог выбора и смены учебной группы студента по официальному Style Guide МПК.
@@ -96,7 +99,7 @@ fun GroupSelectionDialog(
                     Box(
                         modifier = Modifier
                             .size(32.dp)
-                            .background(ColorBrandBlue, RoundedCornerShape(2.dp)),
+                            .background(ColorBrandFill, RoundedCornerShape(2.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -198,7 +201,7 @@ fun GroupSelectionDialog(
                         val isCurrent = group.canonicalName.equals(currentGroupName, ignoreCase = true)
                         Surface(
                             shape = RoundedCornerShape(2.dp),
-                            color = if (isCurrent) Color(0xFFEDF2F7) else ColorBgMain,
+                            color = if (isCurrent) ColorSurfaceHighlight else ColorBgMain,
                             border = BorderStroke(
                                 1.dp,
                                 if (isCurrent) ColorBrandBlue else ColorBorderLight
@@ -273,7 +276,7 @@ fun GroupSelectionDialog(
                     Spacer(modifier = Modifier.width(6.dp))
                     Surface(
                         shape = RoundedCornerShape(2.dp),
-                        color = ColorBrandBlue,
+                        color = ColorBrandFill,
                         contentColor = Color.White,
                         modifier = Modifier
                             .height(54.dp)
@@ -305,7 +308,7 @@ fun GroupSelectionDialog(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = inputError ?: "",
-                        color = Color(0xFFDC2626),
+                        color = ColorDangerFill,
                         style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp)
                     )
                 }

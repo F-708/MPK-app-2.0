@@ -9,9 +9,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,10 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Info
@@ -39,7 +38,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -60,16 +61,39 @@ import com.example.ui.theme.TextStylePageTitle
 import com.example.ui.util.bouncyClickable
 import java.util.Calendar
 import kotlinx.coroutines.delay
+import com.example.ui.theme.ColorActiveFill
+import com.example.ui.theme.ColorBrandFill
+import com.example.ui.theme.ColorSuccess
+import com.example.ui.theme.ColorSuccessBg
+import com.example.ui.theme.ColorSuccessBorder
+import com.example.ui.theme.ColorSuccessText
+import com.example.ui.theme.ColorSurfaceHighlight
+import com.example.ui.theme.ColorSurfaceVariantLight
+import com.example.ui.theme.ColorTextDisabled
+
+/** Строка списка звонков: урок/инфочас либо перемена между ними. */
+private sealed interface BellRow {
+    data class Lesson(val item: BellItem) : BellRow
+    data class Break(val startMinutes: Int, val endMinutes: Int, val minutes: Int, val isBig: Boolean) : BellRow
+}
 
 /**
  * Экран расписания звонков колледжа МГПК на 2026 год по официальному Style Guide.
+ *
+ * ОСОБЕННОСТИ:
+ * 1. При входе автоматически выбран сегодняшний график (Пн-Ср,Пт / Четверг / Суббота);
+ *    сегодняшний тип дня отмечен синей чертой под кнопкой.
+ * 2. Между уроками — компактные подпункты «перемена N мин».
+ * 3. Справа — вертикальная шкала времени: полосы уроков, риски границ и бегущий
+ *    кружок текущего времени. Активна (синяя) только для сегодняшнего графика;
+ *    для остальных дней шкала серая и неактивная.
  */
 @Composable
 fun BellsScreen(
     modifier: Modifier = Modifier
 ) {
     // Определение текущего дня недели и минут от начала суток
-    val initialDayType = remember {
+    val todayType = remember {
         val cal = Calendar.getInstance()
         val dayOfWeek = when (cal.get(Calendar.DAY_OF_WEEK)) {
             Calendar.MONDAY -> 1
@@ -83,14 +107,15 @@ fun BellsScreen(
         CollegeBellSchedule.getTypeForDay(dayOfWeek)
     }
 
-    var selectedScheduleType by remember { mutableStateOf(initialDayType) }
+    // При входе во вкладку всегда открыт сегодняшний график
+    var selectedScheduleType by remember { mutableStateOf(todayType) }
 
     var currentTimeMinutes by remember {
         val cal = Calendar.getInstance()
         mutableIntStateOf(cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE))
     }
 
-    // Фоновое обновление времени каждую минуту
+    // Фоновое обновление времени каждые 30 секунд
     LaunchedEffect(Unit) {
         while (true) {
             delay(30_000)
@@ -99,9 +124,33 @@ fun BellsScreen(
         }
     }
 
-    val activeSlot = remember(currentTimeMinutes, selectedScheduleType) {
+    val isTodaySelected = selectedScheduleType == todayType
+
+    val activeSlot = remember(currentTimeMinutes, selectedScheduleType, isTodaySelected) {
+        if (!isTodaySelected) null
+        else CollegeBellSchedule.getBellsForType(selectedScheduleType)
+            .firstOrNull { currentTimeMinutes in it.startMinutes..it.endMinutes }
+    }
+
+    // Ряды списка: уроки с переменами между ними
+    val rows = remember(selectedScheduleType) {
         val bells = CollegeBellSchedule.getBellsForType(selectedScheduleType)
-        bells.firstOrNull { currentTimeMinutes in it.startMinutes..it.endMinutes }
+        val result = mutableListOf<BellRow>()
+        bells.forEachIndexed { index, item ->
+            result.add(BellRow.Lesson(item))
+            val next = bells.getOrNull(index + 1) ?: return@forEachIndexed
+            if (item.breakAfterMinutes > 0) {
+                result.add(
+                    BellRow.Break(
+                        startMinutes = item.endMinutes,
+                        endMinutes = item.endMinutes + item.breakAfterMinutes,
+                        minutes = item.breakAfterMinutes,
+                        isBig = item.isBigBreak
+                    )
+                )
+            }
+        }
+        result
     }
 
     Column(
@@ -117,16 +166,17 @@ fun BellsScreen(
                 maxLines = 1
             )
             Text(
-                text = "Основное расписание пар колледжа",
+                text = "Расписание уроков колледжа",
                 style = androidx.compose.ui.text.TextStyle(
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp,
                     color = ColorBrandBlue
-                )
+                ),
+                maxLines = 1
             )
         }
 
-        // Переключатель графиков звонков
+        // Переключатель графиков звонков (сегодняшний отмечен чертой снизу)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -135,28 +185,47 @@ fun BellsScreen(
         ) {
             BellScheduleType.entries.forEach { type ->
                 val isSelected = selectedScheduleType == type
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
-                    color = if (isSelected) ColorTopBar else ColorBgMain,
-                    modifier = Modifier
-                        .weight(1f)
-                        .bouncyClickable { selectedScheduleType = type }
+                val isToday = type == todayType
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Text(
-                        text = when (type) {
-                            BellScheduleType.STANDARD -> "ПН - ПТ"
-                            BellScheduleType.THURSDAY -> "ЧЕТВЕРГ"
-                            BellScheduleType.SATURDAY -> "СУББОТА"
-                        },
-                        style = androidx.compose.ui.text.TextStyle(
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            fontSize = 12.sp,
-                            color = if (isSelected) Color.White else ColorTextBody
-                        ),
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
+                        color = if (isSelected) ColorTopBar else ColorBgMain,
                         modifier = Modifier
-                            .padding(vertical = 8.dp)
-                            .wrapContentWidth(Alignment.CenterHorizontally)
+                            .fillMaxWidth()
+                            .bouncyClickable { selectedScheduleType = type }
+                    ) {
+                        Text(
+                            text = when (type) {
+                                BellScheduleType.STANDARD -> "ПН - ПТ"
+                                BellScheduleType.THURSDAY -> "ЧЕТВЕРГ"
+                                BellScheduleType.SATURDAY -> "СУББОТА"
+                            },
+                            softWrap = false,
+                            maxLines = 1,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 12.sp,
+                                color = if (isSelected) Color.White else ColorTextBody
+                            ),
+                            modifier = Modifier
+                                .padding(vertical = 8.dp)
+                                .wrapContentWidth(Alignment.CenterHorizontally)
+                        )
+                    }
+                    // Черта «сегодня» под кнопкой сегодняшнего графика
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 3.dp)
+                            .width(28.dp)
+                            .height(3.dp)
+                            .background(
+                                if (isToday) ColorActiveBlue else Color.Transparent,
+                                RoundedCornerShape(2.dp)
+                            )
                     )
                 }
             }
@@ -165,7 +234,7 @@ fun BellsScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp)
+                .padding(top = 5.dp)
                 .height(1.dp)
                 .background(ColorDividerLight)
         )
@@ -177,16 +246,23 @@ fun BellsScreen(
         ) { targetType ->
             val bells = CollegeBellSchedule.getBellsForType(targetType)
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 24.dp)
             ) {
-                // Баннер-дисклеймер
-                item {
+                // Список уроков и переменных
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Баннер-дисклеймер
                     Surface(
                         shape = RoundedCornerShape(2.dp),
-                        color = Color(0xFFF8FAFC),
+                        color = ColorSurfaceVariantLight,
                         border = BorderStroke(1.dp, ColorBorderLight),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -226,14 +302,12 @@ fun BellsScreen(
                             }
                         }
                     }
-                }
 
-                // Индикатор текущего активного урока / инфочаса
-                item {
+                    // Индикатор текущего активного урока / инфочаса (только для сегодняшнего графика)
                     activeSlot?.let { currentSlot ->
                         Surface(
                             shape = RoundedCornerShape(2.dp),
-                            color = Color(0xFFEDF2F7),
+                            color = ColorSurfaceHighlight,
                             border = BorderStroke(1.dp, ColorActiveBlue),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -244,7 +318,7 @@ fun BellsScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(30.dp)
-                                        .background(ColorActiveBlue, RoundedCornerShape(2.dp)),
+                                        .background(ColorActiveFill, RoundedCornerShape(2.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -275,31 +349,158 @@ fun BellsScreen(
                             }
                         }
                     }
-                }
 
-                // Список уроков
-                items(bells) { item ->
-                    val isActive = activeSlot == item
-
-                    if (item.isInfoHour) {
-                        InfoHourCard(
-                            item = item,
-                            isActive = isActive
-                        )
-                    } else {
-                        LessonBellCard(
-                            item = item,
-                            isActive = isActive
-                        )
+                    rows.forEach { row ->
+                        when (row) {
+                            is BellRow.Lesson ->
+                                if (row.item.isInfoHour) {
+                                    InfoHourCard(item = row.item, isActive = activeSlot == row.item)
+                                } else {
+                                    LessonBellCard(item = row.item, isActive = activeSlot == row.item)
+                                }
+                            is BellRow.Break -> BreakRow(row)
+                        }
                     }
                 }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // Вертикальная шкала времени с ползунком
+                BellsTimelineRail(
+                    bells = bells,
+                    nowMinutes = currentTimeMinutes,
+                    isActive = isTodaySelected,
+                    modifier = Modifier
+                        .width(20.dp)
+                        .fillMaxHeight()
+                )
             }
         }
     }
 }
 
 /**
- * Карточка урока с указанием времени, длительности и перемены по Style Guide.
+ * Компактный подпункт «перемена» между уроками.
+ */
+@Composable
+private fun BreakRow(row: BellRow.Break) {
+    val range = "${minutesToTime(row.startMinutes)} – ${minutesToTime(row.endMinutes)}"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = if (row.isBig) "перемена ${row.minutes} мин (большая)" else "перемена ${row.minutes} мин",
+            style = androidx.compose.ui.text.TextStyle(
+                fontSize = 11.sp,
+                fontWeight = if (row.isBig) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (row.isBig) ColorBrandBlue else ColorTextMuted
+            )
+        )
+        Text(
+            text = range,
+            style = androidx.compose.ui.text.TextStyle(
+                fontSize = 10.sp,
+                color = ColorTextMuted
+            )
+        )
+    }
+}
+
+private fun minutesToTime(minutes: Int): String =
+    String.format(java.util.Locale.ROOT, "%02d:%02d", minutes / 60, minutes % 60)
+
+/**
+ * Вертикальная шкала времени справа от списка:
+ * - сплошная базовая линия;
+ * - полосы уроков (синие, потемнее — активный урок);
+ * - риски на границах уроков;
+ * - бегущий кружок текущего времени (только для сегодняшнего графика).
+ * Для чужого дня шкала серая и неактивная.
+ */
+@Composable
+private fun BellsTimelineRail(
+    bells: List<BellItem>,
+    nowMinutes: Int,
+    isActive: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val baseColor = if (isActive) ColorTextDisabled else Color(0xFF334155).copy(alpha = 0.4f)
+    val bandColor = if (isActive) ColorActiveBlue.copy(alpha = 0.45f) else Color(0xFF475569).copy(alpha = 0.4f)
+    val activeBandColor = ColorActiveBlue
+    val tickColor = if (isActive) ColorBrandBlue else Color(0xFF475569)
+    val dotColor = ColorActiveBlue
+    val dotRingColor = ColorActiveBlue.copy(alpha = 0.25f)
+
+    val first = bells.minOf { it.startMinutes }
+    val last = bells.maxOf { it.endMinutes }
+    val span = (last - first).coerceAtLeast(1)
+
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val cx = size.width / 2
+        val h = size.height
+
+        fun y(minutes: Int): Float = (minutes - first).toFloat() / span * h
+
+        // Базовая линия
+        drawLine(
+            color = baseColor,
+            start = Offset(cx, 0f),
+            end = Offset(cx, h),
+            strokeWidth = 2.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+
+        // Полосы уроков и риски границ
+        bells.forEach { item ->
+            val top = y(item.startMinutes)
+            val bottom = y(item.endMinutes)
+            val isCurrent = isActive && nowMinutes in item.startMinutes..item.endMinutes
+            drawLine(
+                color = if (isCurrent) activeBandColor else bandColor,
+                start = Offset(cx, top),
+                end = Offset(cx, bottom),
+                strokeWidth = if (isCurrent) 5.dp.toPx() else 4.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+            // Риски границ строки урока
+            drawLine(
+                color = tickColor,
+                start = Offset(cx - 6.dp.toPx(), top),
+                end = Offset(cx + 6.dp.toPx(), top),
+                strokeWidth = 1.5.dp.toPx()
+            )
+            drawLine(
+                color = tickColor,
+                start = Offset(cx - 6.dp.toPx(), bottom),
+                end = Offset(cx + 6.dp.toPx(), bottom),
+                strokeWidth = 1.5.dp.toPx()
+            )
+        }
+
+        // Бегущий кружок текущего времени — только на сегодняшнем графике
+        if (isActive) {
+            val dotY = ((nowMinutes - first).toFloat() / span)
+                .coerceIn(0f, 1f) * h
+            drawCircle(
+                color = dotRingColor,
+                radius = 9.dp.toPx(),
+                center = Offset(cx, dotY)
+            )
+            drawCircle(
+                color = dotColor,
+                radius = 5.dp.toPx(),
+                center = Offset(cx, dotY)
+            )
+        }
+    }
+}
+
+/**
+ * Карточка урока с указанием времени и длительности по Style Guide.
  */
 @Composable
 private fun LessonBellCard(
@@ -323,7 +524,7 @@ private fun LessonBellCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
-                    color = if (isActive) ColorActiveBlue else ColorBrandBlue,
+                    color = if (isActive) ColorActiveFill else ColorBrandFill,
                     contentColor = Color.White,
                     modifier = Modifier.size(28.dp)
                 ) {
@@ -338,49 +539,20 @@ private fun LessonBellCard(
                     }
                 }
                 Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = item.title,
-                        style = androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = if (isActive) ColorActiveBlue else ColorTextTitle
-                        )
+                Text(
+                    text = item.title,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = if (isActive) ColorActiveBlue else ColorTextTitle
                     )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "45 мин",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontSize = 11.sp,
-                                color = ColorTextMuted
-                            )
-                        )
-                        if (item.breakAfterMinutes > 0) {
-                            Text(
-                                text = "•",
-                                style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = ColorTextMuted)
-                            )
-                            Text(
-                                text = if (item.isBigBreak) "перемена ${item.breakAfterMinutes} мин (большая)"
-                                else "перемена ${item.breakAfterMinutes} мин",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 11.sp,
-                                    color = if (item.isBigBreak) ColorBrandBlue else ColorTextMuted,
-                                    fontWeight = if (item.isBigBreak) FontWeight.SemiBold else FontWeight.Normal
-                                )
-                            )
-                        }
-                    }
-                }
+                )
             }
 
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 border = BorderStroke(1.dp, ColorBorderLight),
-                color = Color(0xFFF8FAFC),
+                color = ColorSurfaceVariantLight,
                 modifier = Modifier.wrapContentWidth()
             ) {
                 Text(
@@ -407,8 +579,8 @@ private fun InfoHourCard(
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        color = Color(0xFFF0FDF4),
-        border = BorderStroke(1.dp, if (isActive) ColorActiveBlue else Color(0xFFBBF7D0)),
+        color = ColorSuccessBg,
+        border = BorderStroke(1.dp, if (isActive) ColorActiveBlue else ColorSuccessBorder),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -422,7 +594,7 @@ private fun InfoHourCard(
                 Box(
                     modifier = Modifier
                         .size(28.dp)
-                        .background(Color(0xFF16A34A), RoundedCornerShape(2.dp)),
+                        .background(ColorSuccess, RoundedCornerShape(2.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -439,11 +611,11 @@ private fun InfoHourCard(
                         style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
-                            color = Color(0xFF166534)
+                            color = ColorSuccessText
                         )
                     )
                     Text(
-                        text = "20 мин • перемена 10 мин",
+                        text = "20 мин",
                         style = androidx.compose.ui.text.TextStyle(
                             fontSize = 11.sp,
                             color = ColorTextMuted
@@ -454,7 +626,7 @@ private fun InfoHourCard(
 
             Surface(
                 shape = RoundedCornerShape(2.dp),
-                border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                border = BorderStroke(1.dp, ColorSuccessBorder),
                 color = Color.White,
                 modifier = Modifier.wrapContentWidth()
             ) {
@@ -463,7 +635,7 @@ private fun InfoHourCard(
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
-                        color = Color(0xFF166534)
+                        color = ColorSuccessText
                     ),
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )

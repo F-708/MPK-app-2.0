@@ -20,7 +20,7 @@ private val DarkColorScheme = darkColorScheme(
     secondaryContainer = Color(0xFF1E293B),
     onSecondaryContainer = ColorMenuSubtext,
     tertiary = Color(0xFF38BDF8),
-    onTertiary = Color(0xFF001737),
+    onTertiary = ColorTopBar,
     background = ColorMenuBg,
     onBackground = ColorMenuText,
     surface = ColorMenuBg,
@@ -28,7 +28,7 @@ private val DarkColorScheme = darkColorScheme(
     surfaceVariant = ColorMenuSubBg,
     onSurfaceVariant = ColorMenuSubtext,
     outline = ColorMenuBorder,
-    outlineVariant = Color(0xFF35393D),
+    outlineVariant = ColorMenuBorder,
     error = Color(0xFFF87171),
     onError = Color(0xFF450A0A)
 )
@@ -40,7 +40,7 @@ private val LightColorScheme = lightColorScheme(
     onPrimaryContainer = ColorBrandBlue,
     secondary = ColorActiveBlue,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFEDF2F7),
+    secondaryContainer = ColorSurfaceHighlight,
     onSecondaryContainer = ColorBrandBlue,
     tertiary = ColorTopBar,
     onTertiary = Color.White,
@@ -62,6 +62,11 @@ fun MyApplicationTheme(
     dynamicColor: Boolean = false, // false для строгого сохранения институциональной палитры МПК
     content: @Composable () -> Unit
 ) {
+    // Переключаем палитру дизайн-системы (все токены Color* — живые геттеры)
+    androidx.compose.runtime.SideEffect {
+        paletteState = if (darkTheme) DarkPalette else LightPalette
+    }
+
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current

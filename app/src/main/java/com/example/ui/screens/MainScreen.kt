@@ -54,6 +54,7 @@ import com.example.ui.util.bouncyClickable
 import com.example.ui.viewmodel.AppTab
 import com.example.ui.viewmodel.AppViewModel
 import kotlinx.coroutines.flow.collectLatest
+import com.example.ui.theme.ColorSurfaceHighlight
 
 /**
  * Главный контейнер приложения «МПК Расписание».
@@ -142,17 +143,19 @@ fun MainScreen(
                             label = {
                                 Text(
                                     text = tab.title.uppercase(),
+                                    softWrap = false,
+                                    maxLines = 1,
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 11.sp,
-                                        letterSpacing = 0.3.sp
+                                        fontSize = 10.sp,
+                                        letterSpacing = 0.2.sp
                                     )
                                 )
                             },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = ColorBrandBlue,
                                 selectedTextColor = ColorBrandBlue,
-                                indicatorColor = Color(0xFFEDF2F7),
+                                indicatorColor = ColorSurfaceHighlight,
                                 unselectedIconColor = ColorTextMuted,
                                 unselectedTextColor = ColorTextMuted
                             )

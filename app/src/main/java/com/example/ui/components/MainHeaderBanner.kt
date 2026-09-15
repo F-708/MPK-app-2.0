@@ -74,6 +74,8 @@ import com.example.ui.viewmodel.AppTab
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.example.ui.theme.ColorActiveFill
+import com.example.ui.theme.ColorDangerFill
 
 private const val MPK_HEADER_BANNER_URL = "https://guo-mpk.by/wp-content/uploads/2024/11/cropped-cropped-cropped-logo-na-sajt.png"
 
@@ -264,8 +266,8 @@ fun MainHeaderBanner(
 
                     Surface(
                         shape = RoundedCornerShape(2.dp),
-                        color = if (hasSyncError) Color(0xFFE53935) else ColorTopBar,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF35393D)),
+                        color = if (hasSyncError) ColorDangerFill else ColorTopBar,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ColorMenuBorder),
                         modifier = Modifier
                             .size(30.dp)
                             .bouncyClickable(
@@ -437,7 +439,7 @@ fun MpkMenuSection(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .background(if (isExpanded) ColorActiveBlue else ColorMenuBg)
+                    .background(if (isExpanded) ColorActiveFill else ColorMenuBg)
                     .clickable(onClick = onToggle),
                 contentAlignment = Alignment.Center
             ) {

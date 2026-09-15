@@ -76,6 +76,8 @@ import com.example.ui.util.bouncyClickable
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.example.ui.theme.ColorBrandFill
+import com.example.ui.theme.ColorSurfaceVariantLight
 
 private val MONTH_NAMES_CAPS = listOf(
     "ЯНВАРЬ", "ФЕВРАЛЬ", "МАРТ", "АПРЕЛЬ", "МАЙ", "ИЮНЬ",
@@ -256,8 +258,8 @@ fun CalendarArchiveDialog(
                     singleLine = true,
                     shape = RoundedCornerShape(2.dp),
                     colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color(0xFFF8FAFC),
-                        unfocusedContainerColor = Color(0xFFF8FAFC),
+                        focusedContainerColor = ColorSurfaceVariantLight,
+                        unfocusedContainerColor = ColorSurfaceVariantLight,
                         focusedIndicatorColor = ColorBrandBlue,
                         unfocusedIndicatorColor = ColorBorderLight
                     ),
@@ -506,7 +508,7 @@ fun CalendarArchiveDialog(
                             Surface(
                                 shape = RoundedCornerShape(2.dp),
                                 border = BorderStroke(1.dp, ColorBrandBlue),
-                                color = ColorBrandBlue,
+                                color = ColorBrandFill,
                                 modifier = Modifier
                                     .bouncyClickable {
                                         val cal = parseDateSafely(selectedDateString)

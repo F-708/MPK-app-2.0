@@ -31,6 +31,9 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.theme.ColorBorderLight
 import com.example.ui.theme.ColorBrandBlue
 import com.example.ui.util.bouncyClickable
+import com.example.ui.theme.ColorMenuBorder
+import com.example.ui.theme.ColorSurfaceHighlight
+import com.example.ui.theme.ColorTopBar
 
 /**
  * Бейдж текущей учебной группы студента по Design System МПК.
@@ -48,9 +51,9 @@ fun GroupBadge(
 ) {
     var showDialog by remember { mutableStateOf(false) }
 
-    val bgColor = if (isDarkHeader) Color(0xFF001737) else Color(0xFFEDF2F7)
+    val bgColor = if (isDarkHeader) ColorTopBar else ColorSurfaceHighlight
     val contentColor = if (isDarkHeader) Color.White else ColorBrandBlue
-    val borderColor = if (isDarkHeader) Color(0xFF35393D) else ColorBorderLight
+    val borderColor = if (isDarkHeader) ColorMenuBorder else ColorBorderLight
 
     Surface(
         shape = RoundedCornerShape(2.dp),

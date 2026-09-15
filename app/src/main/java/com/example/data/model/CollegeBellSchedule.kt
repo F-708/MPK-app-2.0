@@ -48,47 +48,47 @@ object CollegeBellSchedule {
 
     // А) Понедельник, вторник, среда, пятница (Стандартный график)
     val STANDARD_BELLS: List<BellItem> = listOf(
-        BellItem(1, 1, "1 урок (1 пара)", "08:15", "09:00", breakAfterMinutes = 10),
-        BellItem(2, 1, "2 урок (1 пара)", "09:10", "09:55", breakAfterMinutes = 25, isBigBreak = true),
-        BellItem(3, 2, "3 урок (2 пара)", "10:20", "11:05", breakAfterMinutes = 10),
-        BellItem(4, 2, "4 урок (2 пара)", "11:15", "12:00", breakAfterMinutes = 25, isBigBreak = true),
-        BellItem(5, 3, "5 урок (3 пара)", "12:25", "13:10", breakAfterMinutes = 10),
-        BellItem(6, 3, "6 урок (3 пара)", "13:20", "14:05", breakAfterMinutes = 10),
-        BellItem(7, 4, "7 урок (4 пара)", "14:15", "15:00", breakAfterMinutes = 10),
-        BellItem(8, 4, "8 урок (4 пара)", "15:10", "15:55", breakAfterMinutes = 10),
-        BellItem(9, 5, "9 урок (5 пара)", "16:05", "16:50", breakAfterMinutes = 10),
-        BellItem(10, 5, "10 урок (5 пара)", "17:00", "17:45", breakAfterMinutes = 10),
-        BellItem(11, 6, "11 урок (6 пара)", "17:55", "18:40", breakAfterMinutes = 10),
-        BellItem(12, 6, "12 урок (6 пара)", "18:50", "19:35", breakAfterMinutes = 0)
+        BellItem(1, 1, "1 урок", "08:15", "09:00", breakAfterMinutes = 10),
+        BellItem(2, 1, "2 урок", "09:10", "09:55", breakAfterMinutes = 25, isBigBreak = true),
+        BellItem(3, 2, "3 урок", "10:20", "11:05", breakAfterMinutes = 10),
+        BellItem(4, 2, "4 урок", "11:15", "12:00", breakAfterMinutes = 25, isBigBreak = true),
+        BellItem(5, 3, "5 урок", "12:25", "13:10", breakAfterMinutes = 10),
+        BellItem(6, 3, "6 урок", "13:20", "14:05", breakAfterMinutes = 10),
+        BellItem(7, 4, "7 урок", "14:15", "15:00", breakAfterMinutes = 10),
+        BellItem(8, 4, "8 урок", "15:10", "15:55", breakAfterMinutes = 10),
+        BellItem(9, 5, "9 урок", "16:05", "16:50", breakAfterMinutes = 10),
+        BellItem(10, 5, "10 урок", "17:00", "17:45", breakAfterMinutes = 10),
+        BellItem(11, 6, "11 урок", "17:55", "18:40", breakAfterMinutes = 10),
+        BellItem(12, 6, "12 урок", "18:50", "19:35", breakAfterMinutes = 0)
     )
 
     // Б) Четверг (Особый график с Информационным часом)
     val THURSDAY_BELLS: List<BellItem> = listOf(
-        BellItem(1, 1, "1 урок (1 пара)", "08:15", "09:00", breakAfterMinutes = 10),
-        BellItem(2, 1, "2 урок (1 пара)", "09:10", "09:55", breakAfterMinutes = 25, isBigBreak = true),
-        BellItem(3, 2, "3 урок (2 пара)", "10:20", "11:05", breakAfterMinutes = 10),
-        BellItem(4, 2, "4 урок (2 пара)", "11:15", "12:00", breakAfterMinutes = 25, isBigBreak = true),
-        BellItem(5, 3, "5 урок (3 пара)", "12:25", "13:10", breakAfterMinutes = 10),
-        BellItem(6, 3, "6 урок (3 пара)", "13:20", "14:05", breakAfterMinutes = 10),
+        BellItem(1, 1, "1 урок", "08:15", "09:00", breakAfterMinutes = 10),
+        BellItem(2, 1, "2 урок", "09:10", "09:55", breakAfterMinutes = 25, isBigBreak = true),
+        BellItem(3, 2, "3 урок", "10:20", "11:05", breakAfterMinutes = 10),
+        BellItem(4, 2, "4 урок", "11:15", "12:00", breakAfterMinutes = 25, isBigBreak = true),
+        BellItem(5, 3, "5 урок", "12:25", "13:10", breakAfterMinutes = 10),
+        BellItem(6, 3, "6 урок", "13:20", "14:05", breakAfterMinutes = 10),
         BellItem(0, null, "Информационный час", "14:15", "14:35", breakAfterMinutes = 10, isInfoHour = true),
-        BellItem(7, 4, "7 урок (4 пара)", "14:45", "15:30", breakAfterMinutes = 10),
-        BellItem(8, 4, "8 урок (4 пара)", "15:40", "16:25", breakAfterMinutes = 10),
-        BellItem(9, 5, "9 урок (5 пара)", "16:35", "17:20", breakAfterMinutes = 10),
-        BellItem(10, 5, "10 урок (5 пара)", "17:30", "18:15", breakAfterMinutes = 10),
-        BellItem(11, 6, "11 урок (6 пара)", "18:25", "19:10", breakAfterMinutes = 10),
-        BellItem(12, 6, "12 урок (6 пара)", "19:20", "20:05", breakAfterMinutes = 0)
+        BellItem(7, 4, "7 урок", "14:45", "15:30", breakAfterMinutes = 10),
+        BellItem(8, 4, "8 урок", "15:40", "16:25", breakAfterMinutes = 10),
+        BellItem(9, 5, "9 урок", "16:35", "17:20", breakAfterMinutes = 10),
+        BellItem(10, 5, "10 урок", "17:30", "18:15", breakAfterMinutes = 10),
+        BellItem(11, 6, "11 урок", "18:25", "19:10", breakAfterMinutes = 10),
+        BellItem(12, 6, "12 урок", "19:20", "20:05", breakAfterMinutes = 0)
     )
 
     // В) Суббота
     val SATURDAY_BELLS: List<BellItem> = listOf(
-        BellItem(1, 1, "1 урок (1 пара)", "08:15", "09:00", breakAfterMinutes = 10),
-        BellItem(2, 1, "2 урок (1 пара)", "09:10", "09:55", breakAfterMinutes = 10),
-        BellItem(3, 2, "3 урок (2 пара)", "10:05", "10:50", breakAfterMinutes = 10),
-        BellItem(4, 2, "4 урок (2 пара)", "11:00", "11:45", breakAfterMinutes = 10),
-        BellItem(5, 3, "5 урок (3 пара)", "11:55", "12:40", breakAfterMinutes = 10),
-        BellItem(6, 3, "6 урок (3 пара)", "12:50", "13:35", breakAfterMinutes = 10),
-        BellItem(7, 4, "7 урок (4 пара)", "13:45", "14:30", breakAfterMinutes = 10),
-        BellItem(8, 4, "8 урок (4 пара)", "14:40", "15:25", breakAfterMinutes = 0)
+        BellItem(1, 1, "1 урок", "08:15", "09:00", breakAfterMinutes = 10),
+        BellItem(2, 1, "2 урок", "09:10", "09:55", breakAfterMinutes = 10),
+        BellItem(3, 2, "3 урок", "10:05", "10:50", breakAfterMinutes = 10),
+        BellItem(4, 2, "4 урок", "11:00", "11:45", breakAfterMinutes = 10),
+        BellItem(5, 3, "5 урок", "11:55", "12:40", breakAfterMinutes = 10),
+        BellItem(6, 3, "6 урок", "12:50", "13:35", breakAfterMinutes = 10),
+        BellItem(7, 4, "7 урок", "13:45", "14:30", breakAfterMinutes = 10),
+        BellItem(8, 4, "8 урок", "14:40", "15:25", breakAfterMinutes = 0)
     )
 
     // Обратная совместимость для существующего кода

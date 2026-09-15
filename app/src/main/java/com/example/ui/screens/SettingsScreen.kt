@@ -76,6 +76,12 @@ import com.example.ui.util.bouncyClickable
 import com.example.util.MpkCurriculum
 import com.example.widget.WidgetUpdateHelper
 import com.example.worker.MpkWorkManagerHelper
+import com.example.ui.theme.ColorBrandFill
+import com.example.ui.theme.ColorSuccess
+import com.example.ui.theme.ColorSuccessBg
+import com.example.ui.theme.ColorSuccessText
+import com.example.ui.theme.ColorSurfaceHighlight
+import com.example.ui.theme.ColorSurfaceVariantLight
 
 /**
  * Экран настроек приложения «МПК Расписание» по официальному Style Guide.
@@ -92,6 +98,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var showGroupDialog by remember { mutableStateOf(false) }
+    var isDebugEnabled by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var isNotificationEnabled by remember {
         mutableStateOf(WidgetUpdateHelper.isNotificationEnabled(context))
     }
@@ -166,7 +173,7 @@ fun SettingsScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(36.dp)
-                                        .background(ColorBrandBlue, RoundedCornerShape(2.dp)),
+                                        .background(ColorBrandFill, RoundedCornerShape(2.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -201,7 +208,7 @@ fun SettingsScreen(
                             Surface(
                                 shape = RoundedCornerShape(2.dp),
                                 border = BorderStroke(1.dp, ColorBrandBlue),
-                                color = ColorBrandBlue,
+                                color = ColorBrandFill,
                                 modifier = Modifier
                                     .bouncyClickable { showGroupDialog = true }
                                     .testTag("change_group_btn")
@@ -264,7 +271,7 @@ fun SettingsScreen(
                                 Surface(
                                     shape = RoundedCornerShape(2.dp),
                                     border = BorderStroke(1.dp, ColorBorderLight),
-                                    color = Color(0xFFF8FAFC)
+                                    color = ColorSurfaceVariantLight
                                 ) {
                                     Text(
                                         text = if (groupInfo.hasSaturdayClasses) "6-дневка (учеба в сб)" else "5-дневка (пн-пт)",
@@ -279,7 +286,7 @@ fun SettingsScreen(
                                 Surface(
                                     shape = RoundedCornerShape(2.dp),
                                     border = BorderStroke(1.dp, ColorBorderLight),
-                                    color = Color(0xFFF8FAFC)
+                                    color = ColorSurfaceVariantLight
                                 ) {
                                     val count = specialty.subjectsByCourse[groupInfo.course]?.size ?: 0
                                     Text(
@@ -317,7 +324,7 @@ fun SettingsScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(32.dp)
-                                        .background(ColorBrandBlue, RoundedCornerShape(2.dp)),
+                                        .background(ColorBrandFill, RoundedCornerShape(2.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -343,9 +350,9 @@ fun SettingsScreen(
                                 shape = RoundedCornerShape(2.dp),
                                 border = BorderStroke(
                                     1.dp,
-                                    if (diagnosticInfo.isSuccess) Color(0xFF16A34A) else ColorBorderLight
+                                    if (diagnosticInfo.isSuccess) ColorSuccess else ColorBorderLight
                                 ),
-                                color = if (diagnosticInfo.isSuccess) Color(0xFFF0FDF4) else Color(0xFFF8FAFC)
+                                color = if (diagnosticInfo.isSuccess) ColorSuccessBg else ColorSurfaceVariantLight
                             ) {
                                 Text(
                                     text = when {
@@ -357,7 +364,7 @@ fun SettingsScreen(
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp,
-                                        color = if (diagnosticInfo.isSuccess) Color(0xFF166534) else ColorBrandBlue
+                                        color = if (diagnosticInfo.isSuccess) ColorSuccessText else ColorBrandBlue
                                     ),
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
@@ -366,52 +373,59 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        DiagnosticRow(label = "Последняя синхронизация", value = diagnosticInfo.lastSyncTime)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(label = "Адрес на сайте", value = diagnosticInfo.checkedUrl, isMonospace = true)
-                        Spacer(modifier = Modifier.height(4.dp))
+                        // Обычному пользователю достаточно трёх строк; подробная
+                        // телеметрия — под тумблером «Дебаг» в самом низу блока
                         DiagnosticRow(label = "HTTP статус", value = if (diagnosticInfo.httpStatusCode > 0) "${diagnosticInfo.httpStatusCode}" else "—")
                         Spacer(modifier = Modifier.height(4.dp))
                         DiagnosticRow(
                             label = "Получено данных",
                             value = if (diagnosticInfo.receivedBytes > 0) {
-                                String.format(java.util.Locale.ROOT, "%.1f КБ (%d Б)", diagnosticInfo.receivedBytes / 1024.0, diagnosticInfo.receivedBytes)
+                                String.format(java.util.Locale.ROOT, "%.1f КБ", diagnosticInfo.receivedBytes / 1024.0)
                             } else "0 Б"
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(label = "Найдено уроков (${groupInfo.canonicalName})", value = "${diagnosticInfo.lessonsFound} уроков")
-                        Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(label = "Состояние", value = diagnosticInfo.statusMessage)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(
-                            label = "Начало ответа сервера",
-                            value = diagnosticInfo.responsePreview.ifBlank { "—" },
-                            isMonospace = true
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(
-                            label = "Начало извлечённого текста",
-                            value = diagnosticInfo.textPreview.ifBlank { "—" },
-                            isMonospace = true
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(
-                            label = "Разбор документа",
-                            value = "формат: ${diagnosticInfo.parseFormat.ifBlank { "—" }}, " +
-                                "стратегия: ${diagnosticInfo.parseStrategy.ifBlank { "—" }}, " +
-                                "фрагментов: ${diagnosticInfo.parseRuns}, " +
-                                "группа найдена: ${if (diagnosticInfo.groupFound) "да" else "нет"}"
-                        )
-                        if (diagnosticInfo.parseError.isNotBlank()) {
+                        DiagnosticRow(label = "Версия приложения", value = "2.5")
+
+                        if (isDebugEnabled) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            DiagnosticRow(label = "Последняя синхронизация", value = diagnosticInfo.lastSyncTime)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            DiagnosticRow(label = "Адрес на сайте", value = diagnosticInfo.checkedUrl, isMonospace = true)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            DiagnosticRow(label = "Получено байт", value = "${diagnosticInfo.receivedBytes}")
+                            Spacer(modifier = Modifier.height(4.dp))
+                            DiagnosticRow(label = "Найдено уроков (${groupInfo.canonicalName})", value = "${diagnosticInfo.lessonsFound} уроков")
+                            Spacer(modifier = Modifier.height(4.dp))
+                            DiagnosticRow(label = "Состояние", value = diagnosticInfo.statusMessage)
                             Spacer(modifier = Modifier.height(4.dp))
                             DiagnosticRow(
-                                label = "Ошибки разбора",
-                                value = diagnosticInfo.parseError,
+                                label = "Начало ответа сервера",
+                                value = diagnosticInfo.responsePreview.ifBlank { "—" },
                                 isMonospace = true
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            DiagnosticRow(
+                                label = "Начало извлечённого текста",
+                                value = diagnosticInfo.textPreview.ifBlank { "—" },
+                                isMonospace = true
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            DiagnosticRow(
+                                label = "Разбор документа",
+                                value = "формат: ${diagnosticInfo.parseFormat.ifBlank { "—" }}, " +
+                                    "стратегия: ${diagnosticInfo.parseStrategy.ifBlank { "—" }}, " +
+                                    "фрагментов: ${diagnosticInfo.parseRuns}, " +
+                                    "группа найдена: ${if (diagnosticInfo.groupFound) "да" else "нет"}"
+                            )
+                            if (diagnosticInfo.parseError.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                DiagnosticRow(
+                                    label = "Ошибки разбора",
+                                    value = diagnosticInfo.parseError,
+                                    isMonospace = true
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(label = "Версия приложения", value = "2.4 (движко-независимый разбор группы)")
 
                         Spacer(modifier = Modifier.height(12.dp))
 
@@ -419,7 +433,7 @@ fun SettingsScreen(
                         Surface(
                             shape = RoundedCornerShape(2.dp),
                             border = BorderStroke(1.dp, ColorBrandBlue),
-                            color = ColorBrandBlue,
+                            color = ColorBrandFill,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .bouncyClickable(onClick = onRunConnectionTest)
@@ -464,6 +478,29 @@ fun SettingsScreen(
                                 }
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Тумблер «Дебаг»: показывает полную телеметрию синхронизации
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Дебаг",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = ColorTextBody
+                                )
+                            )
+                            Switch(
+                                checked = isDebugEnabled,
+                                onCheckedChange = { isDebugEnabled = it },
+                                modifier = Modifier.testTag("debug_toggle")
+                            )
+                        }
                     }
                 }
             }
@@ -486,7 +523,7 @@ fun SettingsScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(32.dp)
-                                        .background(Color(0xFFF1F5F9), RoundedCornerShape(2.dp)),
+                                        .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -551,7 +588,7 @@ fun SettingsScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(32.dp)
-                                        .background(ColorBrandBlue, RoundedCornerShape(2.dp)),
+                                        .background(ColorBrandFill, RoundedCornerShape(2.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
