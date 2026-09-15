@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:allowBackup="true"
@@ -50,6 +52,42 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/schedule_widget_info" />
+        </receiver>
+
+        <!-- Бегущая строка: вертикальная шкала учебного дня (1x3..1x6, растягивается) -->
+        <receiver
+            android:name=".widget.VerticalTimelineWidgetProvider"
+            android:exported="true"
+            android:label="Бегущая строка (вертикальная)">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/timeline_widget_vertical_info" />
+        </receiver>
+
+        <!-- Бегущая строка: горизонтальная шкала учебного дня (3x1..6x1, растягивается) -->
+        <receiver
+            android:name=".widget.HorizontalTimelineWidgetProvider"
+            android:exported="true"
+            android:label="Бегущая строка (горизонтальная)">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/timeline_widget_horizontal_info" />
+        </receiver>
+
+        <!-- Минутный тик таймлайна + перезапуск будильника после перезагрузки -->
+        <receiver
+            android:name=".widget.TimelineAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.widget.ACTION_TIMELINE_TICK" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
         </receiver>
     </application>
 

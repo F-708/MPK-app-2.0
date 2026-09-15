@@ -6,6 +6,7 @@ import com.example.data.local.MpkDatabase
 import com.example.data.repository.ScheduleRepository
 import com.example.data.repository.TaskRepository
 import com.example.ui.screens.BellsScreen
+import com.example.ui.screens.CollegeScreen
 import com.example.ui.screens.ScheduleScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.TasksScreen
@@ -35,20 +36,10 @@ class UiRenderSmokeTest {
     private val group = GroupParser.parse("41О")!!
 
     @Test
-    fun `светлая тема и текстовые стили рендерятся`() {
+    fun `светлая тема единственная и рендерится`() {
         composeRule.setContent {
-            MyApplicationTheme(darkTheme = false) {
-                Text(text = "Светлая", style = TextStylePageTitle)
-            }
-        }
-        composeRule.waitForIdle()
-    }
-
-    @Test
-    fun `тёмная тема и текстовые стили рендерятся`() {
-        composeRule.setContent {
-            MyApplicationTheme(darkTheme = true) {
-                Text(text = "Тёмная", style = TextStylePageTitle)
+            MyApplicationTheme {
+                Text(text = "Мой Политех", style = TextStylePageTitle)
             }
         }
         composeRule.waitForIdle()
@@ -67,9 +58,20 @@ class UiRenderSmokeTest {
 
     @Test
     fun `экран звонков рендерится`() {
+        val repo = ScheduleRepository(MpkDatabase.getInstance(context).lessonDao())
         composeRule.setContent {
             MyApplicationTheme {
-                BellsScreen()
+                BellsScreen(groupInfo = group, scheduleRepository = repo)
+            }
+        }
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun `экран колледжа рендерится`() {
+        composeRule.setContent {
+            MyApplicationTheme {
+                CollegeScreen(groupInfo = group)
             }
         }
         composeRule.waitForIdle()
@@ -92,8 +94,6 @@ class UiRenderSmokeTest {
             MyApplicationTheme {
                 SettingsScreen(
                     groupInfo = group,
-                    isDarkTheme = false,
-                    onThemeChanged = {},
                     onGroupChanged = {},
                     onRunConnectionTest = {}
                 )

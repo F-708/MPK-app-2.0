@@ -38,10 +38,8 @@ class MainActivity : ComponentActivity() {
                 handleIntent(intent, appViewModel)
             }
 
-            MyApplicationTheme(
-                darkTheme = uiState.isDarkTheme,
-                dynamicColor = false // Сохранение фирменных цветов МГПК
-            ) {
+            MyApplicationTheme {
+
                 MainScreen(
                     viewModel = appViewModel,
                     modifier = Modifier.fillMaxSize()

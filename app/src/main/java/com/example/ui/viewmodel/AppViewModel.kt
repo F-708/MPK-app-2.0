@@ -8,7 +8,6 @@ import com.example.data.model.GroupInfo
 import com.example.data.repository.ScheduleRepository
 import com.example.data.repository.TaskRepository
 import com.example.util.GroupParser
-import com.example.widget.WidgetUpdateHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +22,7 @@ enum class AppTab(val title: String) {
     SCHEDULE("Расписание"),
     TASKS("Задания"),
     BELLS("Звонки"),
+    COLLEGE("Колледж"),
     SETTINGS("Настройки")
 }
 
@@ -30,7 +30,6 @@ data class AppUiState(
     val currentGroupName: String = "41О",
     val groupInfo: GroupInfo? = GroupParser.parse("41О"),
     val currentTab: AppTab = AppTab.SCHEDULE,
-    val isDarkTheme: Boolean = false,
     val isSyncing: Boolean = false,
     val hasSyncError: Boolean = false
 )
@@ -58,10 +57,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val toastEvent: SharedFlow<String> = _toastEvent.asSharedFlow()
 
     init {
-        // Восстановление сохранённой темы
-        val prefs = WidgetUpdateHelper.getPrefs(application)
-        _uiState.update { it.copy(isDarkTheme = prefs.getBoolean(PREF_DARK_THEME, false)) }
-
         // Фоновая автосинхронизация при запуске приложения
         syncSchedule(isAutoSync = true)
     }
@@ -87,18 +82,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun toggleTheme(isDark: Boolean) {
-        // Тема сохраняется и переживает перезапуск приложения
-        WidgetUpdateHelper.getPrefs(getApplication())
-            .edit()
-            .putBoolean(PREF_DARK_THEME, isDark)
-            .apply()
-        _uiState.update { it.copy(isDarkTheme = isDark) }
-    }
-
-    companion object {
-        private const val PREF_DARK_THEME = "isDarkTheme"
-    }
 
     fun syncSchedule(isAutoSync: Boolean = false) {
         if (_uiState.value.isSyncing) return

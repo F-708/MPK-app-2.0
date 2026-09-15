@@ -4,6 +4,11 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -90,8 +96,30 @@ private sealed interface BellRow {
  */
 @Composable
 fun BellsScreen(
+    groupInfo: com.example.data.model.GroupInfo,
+    scheduleRepository: com.example.data.repository.ScheduleRepository,
     modifier: Modifier = Modifier
 ) {
+    // Фактическое расписание на сегодня: до какого урока идут занятия
+    val todayDow = remember {
+        when (Calendar.getInstance().get(Calendar.DAY_OF_WEEK)) {
+            Calendar.MONDAY -> 1
+            Calendar.TUESDAY -> 2
+            Calendar.WEDNESDAY -> 3
+            Calendar.THURSDAY -> 4
+            Calendar.FRIDAY -> 5
+            Calendar.SATURDAY -> 6
+            else -> 7
+        }
+    }
+    val todayLessons by scheduleRepository
+        .getLessonsForDay(groupInfo.canonicalName, todayDow)
+        .collectAsState(initial = emptyList<com.example.data.local.entity.LessonEntity>())
+    // Последний урок по факту расписания (null = данных нет, считаем полный день)
+    val lastLessonToday = remember(todayLessons) {
+        todayLessons.maxOfOrNull { it.lessonNumber }
+    }
+
     // Определение текущего дня недели и минут от начала суток
     val todayType = remember {
         val cal = Calendar.getInstance()
@@ -370,6 +398,7 @@ fun BellsScreen(
                     bells = bells,
                     nowMinutes = currentTimeMinutes,
                     isActive = isTodaySelected,
+                    lastLessonToday = lastLessonToday,
                     modifier = Modifier
                         .width(20.dp)
                         .fillMaxHeight()
@@ -415,84 +444,122 @@ private fun minutesToTime(minutes: Int): String =
 
 /**
  * Вертикальная шкала времени справа от списка:
- * - сплошная базовая линия;
- * - полосы уроков (синие, потемнее — активный урок);
- * - риски на границах уроков;
- * - бегущий кружок текущего времени (только для сегодняшнего графика).
- * Для чужого дня шкала серая и неактивная.
+ * - базовая серая линия и риски на границах уроков;
+ * - СИНЯЯ зона от начала 1-го урока до конца последнего урока ПО ФАКТУ
+ *   расписания на сегодня (нет данных — до конца последнего звонка);
+ * - СЕРАЯ зона — остальное время дня;
+ * - бегущий кружок: на занятиях синий и ПУЛЬСИРУЕТ; после последнего урока
+ *   серый, но продолжает двигаться по времени.
+ * Для чужого дня шкала полностью серая и неактивная.
  */
 @Composable
 private fun BellsTimelineRail(
     bells: List<BellItem>,
     nowMinutes: Int,
     isActive: Boolean,
+    lastLessonToday: Int?,
     modifier: Modifier = Modifier
 ) {
-    val baseColor = if (isActive) ColorTextDisabled else Color(0xFF334155).copy(alpha = 0.4f)
-    val bandColor = if (isActive) ColorActiveBlue.copy(alpha = 0.45f) else Color(0xFF475569).copy(alpha = 0.4f)
-    val activeBandColor = ColorActiveBlue
-    val tickColor = if (isActive) ColorBrandBlue else Color(0xFF475569)
-    val dotColor = ColorActiveBlue
-    val dotRingColor = ColorActiveBlue.copy(alpha = 0.25f)
+    val grayColor = Color(0xFF94A3B8).copy(alpha = 0.55f)
+    val grayBand = Color(0xFF64748B).copy(alpha = 0.35f)
+    val blueColor = ColorActiveBlue
 
     val first = bells.minOf { it.startMinutes }
     val last = bells.maxOf { it.endMinutes }
     val span = (last - first).coerceAtLeast(1)
+
+    // Конец синей зоны: последний урок по факту (или последний звонок, если данных нет)
+    val blueEnd = if (isActive) {
+        lastLessonToday?.let { num ->
+            bells.filter { !it.isInfoHour }.lastOrNull { it.lessonNumber <= num }?.endMinutes
+        } ?: last
+    } else -1
+
+    // Точка на занятиях — пульсирует
+    val isOnLessons = isActive && nowMinutes <= blueEnd
+    val pulseRadius by if (isOnLessons) {
+        rememberInfiniteTransition(label = "DotPulse").animateFloat(
+            initialValue = 5f,
+            targetValue = 8f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 900),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "DotPulseRadius"
+        )
+    } else {
+        remember { mutableStateOf(5f) }
+    }
 
     androidx.compose.foundation.Canvas(modifier = modifier) {
         val cx = size.width / 2
         val h = size.height
 
         fun y(minutes: Int): Float = (minutes - first).toFloat() / span * h
+        val blueEndY = y(blueEnd)
 
-        // Базовая линия
+        // Базовая линия: серая часть
         drawLine(
-            color = baseColor,
+            color = if (isActive) grayColor else grayColor.copy(alpha = 0.45f),
             start = Offset(cx, 0f),
             end = Offset(cx, h),
             strokeWidth = 2.dp.toPx(),
             cap = StrokeCap.Round
         )
 
-        // Полосы уроков и риски границ
+        // Синяя зона: от начала до последнего фактического урока
+        if (isActive && blueEnd > first) {
+            drawLine(
+                color = blueColor.copy(alpha = 0.75f),
+                start = Offset(cx, y(first)),
+                end = Offset(cx, blueEndY),
+                strokeWidth = 2.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+            // Отметка конца занятий
+            drawLine(
+                color = blueColor,
+                start = Offset(cx - 6.dp.toPx(), blueEndY),
+                end = Offset(cx + 6.dp.toPx(), blueEndY),
+                strokeWidth = 2.dp.toPx()
+            )
+        }
+
+        // Риски на границах уроков
         bells.forEach { item ->
             val top = y(item.startMinutes)
             val bottom = y(item.endMinutes)
-            val isCurrent = isActive && nowMinutes in item.startMinutes..item.endMinutes
+            val inBlue = isActive && item.startMinutes < blueEnd
             drawLine(
-                color = if (isCurrent) activeBandColor else bandColor,
-                start = Offset(cx, top),
-                end = Offset(cx, bottom),
-                strokeWidth = if (isCurrent) 5.dp.toPx() else 4.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-            // Риски границ строки урока
-            drawLine(
-                color = tickColor,
-                start = Offset(cx - 6.dp.toPx(), top),
-                end = Offset(cx + 6.dp.toPx(), top),
+                color = if (inBlue) blueColor else grayBand,
+                start = Offset(cx - 5.dp.toPx(), top),
+                end = Offset(cx + 5.dp.toPx(), top),
                 strokeWidth = 1.5.dp.toPx()
             )
             drawLine(
-                color = tickColor,
-                start = Offset(cx - 6.dp.toPx(), bottom),
-                end = Offset(cx + 6.dp.toPx(), bottom),
+                color = if (inBlue) blueColor else grayBand,
+                start = Offset(cx - 5.dp.toPx(), bottom),
+                end = Offset(cx + 5.dp.toPx(), bottom),
                 strokeWidth = 1.5.dp.toPx()
             )
         }
 
-        // Бегущий кружок текущего времени — только на сегодняшнем графике
+        // Бегущая точка времени
         if (isActive) {
             val dotY = ((nowMinutes - first).toFloat() / span)
                 .coerceIn(0f, 1f) * h
-            drawCircle(
-                color = dotRingColor,
-                radius = 9.dp.toPx(),
-                center = Offset(cx, dotY)
-            )
+            val dotColor = if (isOnLessons) blueColor else grayColor
+            if (isOnLessons) {
+                // Пульсирующее кольцо
+                drawCircle(
+                    color = blueColor.copy(alpha = 0.25f),
+                    radius = pulseRadius.dp.toPx() + 5.dp.toPx(),
+                    center = Offset(cx, dotY)
+                )
+            }
             drawCircle(
                 color = dotColor,
-                radius = 5.dp.toPx(),
+                radius = pulseRadius.dp.toPx(),
                 center = Offset(cx, dotY)
             )
         }

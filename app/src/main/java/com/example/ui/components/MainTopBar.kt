@@ -2,10 +2,9 @@ package com.example.ui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.example.ui.viewmodel.AppTab
 
 /**
- * Фирменная шапка приложения «МПК Расписание» по официальному Style Guide.
+ * Шапка приложения «Мой Политех».
  */
 @Composable
 fun MainTopBar(
@@ -14,9 +13,6 @@ fun MainTopBar(
     hasSyncError: Boolean = false,
     onGroupChanged: (String) -> Unit,
     onSyncClicked: () -> Unit,
-    onSelectTab: ((AppTab) -> Unit)? = null,
-    onOpenCalendarArchive: (() -> Unit)? = null,
-    onOpenPasteDialog: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     MainHeaderBanner(
@@ -25,9 +21,6 @@ fun MainTopBar(
         hasSyncError = hasSyncError,
         onGroupChanged = onGroupChanged,
         onSyncClicked = onSyncClicked,
-        onSelectTab = onSelectTab,
-        onOpenCalendarArchive = onOpenCalendarArchive,
-        onOpenPasteDialog = onOpenPasteDialog,
         modifier = modifier
     )
 }

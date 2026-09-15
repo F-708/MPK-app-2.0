@@ -28,10 +28,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -89,9 +87,7 @@ import com.example.ui.theme.ColorSurfaceVariantLight
 @Composable
 fun SettingsScreen(
     groupInfo: GroupInfo,
-    isDarkTheme: Boolean,
     diagnosticInfo: SyncDiagnosticInfo = SyncDiagnosticInfo(),
-    onThemeChanged: (Boolean) -> Unit,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -384,7 +380,7 @@ fun SettingsScreen(
                             } else "0 Б"
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(label = "Версия приложения", value = "2.5.1")
+                        DiagnosticRow(label = "Версия приложения", value = "2.6")
 
                         if (isDebugEnabled) {
                             Spacer(modifier = Modifier.height(4.dp))
@@ -499,68 +495,6 @@ fun SettingsScreen(
                                 checked = isDebugEnabled,
                                 onCheckedChange = { isDebugEnabled = it },
                                 modifier = Modifier.testTag("debug_toggle")
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Переключатель темы
-            item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
-                                        contentDescription = null,
-                                        tint = ColorBrandBlue,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Темная тема",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 14.sp,
-                                            color = ColorTextTitle
-                                        )
-                                    )
-                                    Text(
-                                        text = if (isDarkTheme) "Включена" else "Выключена (светлая по умолчанию)",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontSize = 11.sp,
-                                            color = ColorTextMuted
-                                        )
-                                    )
-                                }
-                            }
-
-                            Switch(
-                                checked = isDarkTheme,
-                                onCheckedChange = onThemeChanged,
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = ColorBrandBlue
-                                ),
-                                modifier = Modifier.testTag("theme_switch")
                             )
                         }
                     }

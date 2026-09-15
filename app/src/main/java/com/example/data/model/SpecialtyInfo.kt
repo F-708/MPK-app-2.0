@@ -8,5 +8,7 @@ data class SpecialtyInfo(
     val cipher: String, // Код специальности по ОКРБ (например "5-04-0715-05")
     val fullName: String, // Полное наименование специальности
     val shortName: String, // Краткое наименование
+    val qualification: String = "", // Квалификация выпускника
+    val workerProfessions: List<String> = emptyList(), // Рабочие профессии, получаемые вместе со специальностью
     val subjectsByCourse: Map<Int, List<String>> // Предметы по курсам (1..4)
 )

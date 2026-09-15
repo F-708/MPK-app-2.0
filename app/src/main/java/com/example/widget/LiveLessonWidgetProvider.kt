@@ -34,14 +34,8 @@ class LiveLessonWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // APPWIDGET_UPDATE уже обрабатывает super.onReceive -> onUpdate; не дублируем
         super.onReceive(context, intent)
-        if (intent.action == AppWidgetManager.ACTION_APPWIDGET_UPDATE) {
-            val appWidgetManager = AppWidgetManager.getInstance(context)
-            val ids = intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS)
-            if (ids != null && ids.isNotEmpty()) {
-                updateAppWidgets(context, appWidgetManager, ids)
-            }
-        }
     }
 
     companion object {

@@ -17,10 +17,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -100,9 +102,6 @@ fun MainScreen(
                 },
                 onSyncClicked = {
                     viewModel.syncSchedule()
-                },
-                onSelectTab = { tab ->
-                    viewModel.selectTab(tab)
                 }
             )
         },
@@ -123,6 +122,7 @@ fun MainScreen(
                         Triple(AppTab.SCHEDULE, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
                         Triple(AppTab.TASKS, Icons.Filled.Checklist, Icons.Outlined.Checklist),
                         Triple(AppTab.BELLS, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
+                        Triple(AppTab.COLLEGE, Icons.Filled.School, Icons.Outlined.School),
                         Triple(AppTab.SETTINGS, Icons.Filled.Settings, Icons.Outlined.Settings)
                     )
 
@@ -191,16 +191,18 @@ fun MainScreen(
                         )
                     }
                     AppTab.BELLS -> {
-                        BellsScreen()
+                        BellsScreen(
+                            groupInfo = currentGroupInfo,
+                            scheduleRepository = viewModel.scheduleRepository
+                        )
+                    }
+                    AppTab.COLLEGE -> {
+                        CollegeScreen(groupInfo = currentGroupInfo)
                     }
                     AppTab.SETTINGS -> {
                         SettingsScreen(
                             groupInfo = currentGroupInfo,
-                            isDarkTheme = uiState.isDarkTheme,
                             diagnosticInfo = diagnosticInfo,
-                            onThemeChanged = { isDark ->
-                                viewModel.toggleTheme(isDark)
-                            },
                             onGroupChanged = { newGroup ->
                                 viewModel.setGroup(newGroup)
                             },

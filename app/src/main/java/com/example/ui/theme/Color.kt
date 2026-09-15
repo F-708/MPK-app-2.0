@@ -102,50 +102,7 @@ val LightPalette = MpkPalette(
     badgeDiploma = Color(0xFF0B3564)
 )
 
-/**
- * Тёмная палитра — спокойный графитовый нейтраль с холодным подтоном
- * (не «тёмно-синий нейрослоп»): фон угольно-серый, карточки чуть светлее,
- * акценты — мягкие голубые, заливки кнопок — глубокий синий с белым текстом.
- */
-val DarkPalette = MpkPalette(
-    topBar = Color(0xFF24476E),          // выбранная дата/ячейка: светлее брендового, белый текст читается
-    brandBlue = Color(0xFF7FB0EA),       // акцентный текст/иконки/рамки
-    activeBlue = Color(0xFF58A6FF),      // активный акцент
-    brandFill = Color(0xFF2E5A94),       // заливки кнопок/бейджей (белый текст поверх)
-    activeFill = Color(0xFF0F62B8),
-    menuBg = Color(0xFF161B22),
-    menuSubBg = Color(0xFF10141A),
-    menuBorder = Color(0xFF2A323D),
-    menuText = Color(0xFFFFFFFF),
-    menuSubtext = Color(0xFFC6CFDA),
-    menuIcon = Color(0xFF8B96A5),
-    bgMain = Color(0xFF0E1116),
-    surfaceVariant = Color(0xFF161B22),
-    surfaceHighlight = Color(0xFF1C232D),
-    textTitle = Color(0xFFF2F5F9),
-    textBody = Color(0xFFD7DEE8),
-    textMuted = Color(0xFF8B96A5),
-    textWeekdays = Color(0xFFA6B0BE),
-    textDisabled = Color(0xFF4A5462),
-    borderLight = Color(0xFF262E39),
-    dividerLight = Color(0xFF20262F),
-    success = Color(0xFF34D399),
-    successBg = Color(0xFF0E2A22),
-    successBorder = Color(0xFF1F5643),
-    successText = Color(0xFF6EE7B7),
-    warning = Color(0xFFFBBF24),
-    error = Color(0xFFEF4444),
-    errorText = Color(0xFFF87171),
-    dangerFill = Color(0xFFB91C1C),
-    badgeHW = Color(0xFF4D9FFF),
-    badgeLab = Color(0xFFA78BFA),
-    badgePract = Color(0xFF2DD4BF),
-    badgeExam = Color(0xFFFB7185),
-    badgeCourse = Color(0xFFFBA05C),
-    badgeDiploma = Color(0xFF7FB0EA)
-)
-
-/** Текущая палитра; переключается в MyApplicationTheme. */
+/** Палитра приложения (только светлая — тёмная тема удалена). */
 internal var paletteState by mutableStateOf(LightPalette)
 
 // -------------------------------------------------------------------------

@@ -38,7 +38,7 @@ class Step3NetworkArchiveTest {
 
     @Test
     fun testParseLessonEntitySingleGroup() {
-        val rawContent = "Электронные системы транспортных средств ауд. 203 Иванов И.И."
+        val rawContent = "Электронные системы механических транспортных средств ауд. 203 Иванов И.И."
         val lesson = MpkScheduleParser.createLessonEntity(
             groupName = "41О",
             dayOfWeek = 1,

@@ -87,11 +87,13 @@ class Step1LogicTest {
             assertTrue(specialty!!.fullName.isNotBlank())
             assertTrue(specialty.cipher.isNotBlank())
             
-            // Проверяем наличие предметов для всех 4 курсов
-            for (course in 1..4) {
-                val subjects = specialty.subjectsByCourse[course]
-                assertNotNull("Предметы для специальности '$code' курса $course должны существовать", subjects)
-                assertTrue("Список предметов не должен быть пустым", subjects!!.isNotEmpty())
+            // Проверяем предметы всех курсов, заявленных в учебном плане специальности
+            // (ДОУ и маркетинговая деятельность — 3 года, остальные — 4)
+            val courses = specialty.subjectsByCourse.keys
+            assertTrue("У специальности '$code' должен быть хотя бы один курс", courses.isNotEmpty())
+            for (course in courses) {
+                val subjects = specialty.subjectsByCourse[course]!!
+                assertTrue("Список предметов '$code' курса $course не должен быть пустым", subjects.isNotEmpty())
             }
         }
     }
