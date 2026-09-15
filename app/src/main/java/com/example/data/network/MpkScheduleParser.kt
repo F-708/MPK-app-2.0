@@ -64,16 +64,17 @@ object MpkScheduleParser {
     )
 
     private val DATE_IN_TEXT_REGEX = Regex(
-        "([0-3]?[0-9])[.-]([0-1]?[0-9])[.-](202[0-9])"
+        "([0-3]?[0-9])[.\\-/]([0-1]?[0-9])[.\\-/](202[0-9])"
     )
 
     /**
-     * Шаг А: Сканирует HTML главной страницы расписания и находит ссылки на события дат.
+     * Шаг А: Сканирует HTML / JSON главной страницы расписания и находит ссылки на события дат.
      */
     fun findSchedulePostLinks(html: String, baseUrl: String = "https://guo-mpk.by/"): List<SchedulePostLink> {
         val result = mutableListOf<SchedulePostLink>()
         val seenUrls = mutableSetOf<String>()
 
+        // 1. Поиск ссылок в HTML тегах <a href="...">
         POST_LINK_REGEX.findAll(html).forEach { match ->
             val rawUrl = match.groupValues[1].trim()
             val rawTitle = match.groupValues[2].replace(Regex("<[^>]+>"), " ").trim()
@@ -82,7 +83,6 @@ object MpkScheduleParser {
             if (!seenUrls.contains(absoluteUrl) && !absoluteUrl.endsWith("/raspisanie/") && !absoluteUrl.endsWith("/raspisanie")) {
                 seenUrls.add(absoluteUrl)
 
-                // Извлекаем дату из URL или названия записи
                 val dateMatch = DATE_IN_TEXT_REGEX.find(rawTitle) ?: DATE_IN_TEXT_REGEX.find(rawUrl)
                 val dateString = if (dateMatch != null) {
                     val d = dateMatch.groupValues[1].padStart(2, '0')
@@ -101,12 +101,36 @@ object MpkScheduleParser {
             }
         }
 
+        // 2. Поиск ссылок в JSON ответах WordPress REST API ("link": "...")
+        Regex("\"link\"\\s*:\\s*\"([^\"]+)\"").findAll(html).forEach { match ->
+            val rawUrl = match.groupValues[1].replace("\\/", "/")
+            val absoluteUrl = resolveAbsoluteUrl(baseUrl, rawUrl)
+            if (!seenUrls.contains(absoluteUrl) && !absoluteUrl.endsWith("/raspisanie/")) {
+                seenUrls.add(absoluteUrl)
+                val dateMatch = DATE_IN_TEXT_REGEX.find(absoluteUrl)
+                val dateString = if (dateMatch != null) {
+                    val d = dateMatch.groupValues[1].padStart(2, '0')
+                    val m = dateMatch.groupValues[2].padStart(2, '0')
+                    val y = dateMatch.groupValues[3]
+                    "$d.$m.$y"
+                } else ""
+
+                result.add(
+                    SchedulePostLink(
+                        url = absoluteUrl,
+                        title = "Расписание",
+                        dateString = dateString
+                    )
+                )
+            }
+        }
+
         return result
     }
 
     /**
-     * Шаг Б: Загружает HTML страницы события и извлекает ссылки на документы (.doc / .docx).
-     * Поддерживает декодирование iframe с view.officeapps.live.com и прямые теги <a>.
+     * Шаг Б: Загружает HTML / JSON страницы и извлекает все ссылки на документы (.doc / .docx / uploads).
+     * Поддерживает декодирование iframe с view.officeapps.live.com, drive.google.com, тегов <a> и JSON source_url.
      */
     fun extractDocumentUrls(html: String, baseUrl: String = "https://guo-mpk.by/"): List<String> {
         val urls = mutableSetOf<String>()
@@ -125,10 +149,21 @@ object MpkScheduleParser {
             }
         }
 
-        // 2. Прямые ссылки на .doc / .docx файлы
-        DOC_LINK_REGEX.findAll(html).forEach { match ->
+        // 2. Прямые ссылки на .doc / .docx файлы в тексте / HTML
+        Regex("(?i)(?:href|src|data-src|data-href)=[\"']([^\"']+\\.(?:docx|doc)(?:\\?[^\"']*)?)[\"']").findAll(html).forEach { match ->
             val link = match.groupValues[1]
             urls.add(resolveAbsoluteUrl(baseUrl, link))
+        }
+
+        // 3. Ссылки в JSON (source_url, guid) WordPress
+        Regex("(?i)\"(?:source_url|guid|url)\"\\s*:\\s*\"([^\"]+\\.(?:docx|doc)[^\"]*)\"").findAll(html).forEach { match ->
+            val link = match.groupValues[1].replace("\\/", "/")
+            urls.add(resolveAbsoluteUrl(baseUrl, link))
+        }
+
+        // 4. Ссылки на файлы в блоках wp-content/uploads
+        Regex("(?i)https?://[a-zA-Z0-9.-]+/wp-content/uploads/[a-zA-Z0-9/_.-]+\\.(?:doc|docx)").findAll(html).forEach { match ->
+            urls.add(match.value)
         }
 
         return urls.toList()
@@ -475,17 +510,402 @@ object MpkScheduleParser {
     }
 
     /**
-     * Разбирает текст расписания (из .doc/.docx/plain text) построчно.
+     * Разбирает текст расписания (из .doc/.docx/plain text/таблицы псевдографики).
      */
     fun parsePlainTextSchedule(
         text: String,
         targetGroup: String,
         targetDate: String = ""
     ): List<LessonEntity> {
-        val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
-        val lessons = mutableListOf<LessonEntity>()
+        if (text.isBlank()) return emptyList()
 
-        var currentDay = 1
+        val cleanTargetGroup = GroupParser.cleanRawGroupName(targetGroup).uppercase(Locale.ROOT)
+        val lines = text.lines().map { it.trimEnd() }
+
+        // 1. Извлекаем глобальные метаданные даты и дня недели из заголовка или тела документа
+        var detectedDay = 1
+        var detectedDate = targetDate
+
+        val searchScopeText = lines.take(100).joinToString(" ").lowercase(Locale.ROOT)
+        for ((dayName, dayNum) in DAY_KEYWORDS) {
+            if (searchScopeText.contains(dayName)) {
+                detectedDay = dayNum
+                break
+            }
+        }
+
+        if (detectedDate.isBlank()) {
+            val dateMatch = DATE_IN_TEXT_REGEX.find(searchScopeText)
+            if (dateMatch != null) {
+                val d = dateMatch.groupValues[1].padStart(2, '0')
+                val m = dateMatch.groupValues[2].padStart(2, '0')
+                val y = dateMatch.groupValues[3]
+                detectedDate = "$d.$m.$y"
+            } else {
+                val textMonthMatch = Regex("([0-3]?[0-9])\\s+(январ[яе]|феврал[яе]|март[ае]|апрел[яе]|ма[яе]|июн[яе]|июл[яе]|август[ае]|сентябр[яе]|октябр[яе]|ноябр[яе]|декабр[яе])(?:\\s*(202[0-9]))?", RegexOption.IGNORE_CASE).find(searchScopeText)
+                if (textMonthMatch != null) {
+                    val d = textMonthMatch.groupValues[1].padStart(2, '0')
+                    val monthWord = textMonthMatch.groupValues[2].lowercase(Locale.ROOT)
+                    val m = when {
+                        monthWord.startsWith("янв") -> "01"
+                        monthWord.startsWith("фев") -> "02"
+                        monthWord.startsWith("мар") -> "03"
+                        monthWord.startsWith("апр") -> "04"
+                        monthWord.startsWith("ма") -> "05"
+                        monthWord.startsWith("июн") -> "06"
+                        monthWord.startsWith("июл") -> "07"
+                        monthWord.startsWith("авг") -> "08"
+                        monthWord.startsWith("сен") -> "09"
+                        monthWord.startsWith("окт") -> "10"
+                        monthWord.startsWith("ноя") -> "11"
+                        monthWord.startsWith("дек") -> "12"
+                        else -> "09"
+                    }
+                    val y = textMonthMatch.groupValues.getOrNull(3)?.ifBlank { "2026" } ?: "2026"
+                    detectedDate = "$d.$m.$y"
+                }
+            }
+        }
+
+        // 2. Сначала пробуем разобрать как блочную таблицу МГПК (разделители │, |, \t)
+        val tableLessons = parseTableGridSchedule(lines, cleanTargetGroup, detectedDay, detectedDate)
+        if (tableLessons.isNotEmpty()) {
+            return tableLessons
+        }
+
+        // 3. Fallback: построчный разбор
+        return parseLineByLineFallback(lines, cleanTargetGroup, detectedDay, detectedDate)
+    }
+
+    /**
+     * Парсер официальной сетки расписания МГПК (блоки колонок с разделителями │, |, \t).
+     */
+    fun parseTableGridSchedule(
+        lines: List<String>,
+        targetGroup: String,
+        defaultDay: Int,
+        dateString: String
+    ): List<LessonEntity> {
+        val lessons = mutableListOf<LessonEntity>()
+        var currentDay = defaultDay
+
+        var currentBlockGroups = listOf<String>()
+        var targetColIndex = -1
+
+        var i = 0
+        while (i < lines.size) {
+            val rawLine = lines[i]
+            val line = rawLine.trim()
+
+            if (line.isBlank()) {
+                i++
+                continue
+            }
+
+            // Проверяем день недели
+            val lowerLine = line.lowercase(Locale.ROOT)
+            for ((dayName, dayNum) in DAY_KEYWORDS) {
+                if (lowerLine.contains(dayName)) {
+                    currentDay = dayNum
+                    break
+                }
+            }
+
+            // Проверяем, является ли строка шапкой групп таблицы
+            val delimiter = when {
+                line.contains("│") -> "│"
+                line.contains("|") -> "|"
+                line.contains("\t") -> "\t"
+                else -> null
+            }
+
+            if (delimiter != null) {
+                val cells = line.split(delimiter)
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+
+                // Проверяем, содержатся ли здесь названия групп
+                val validGroupCount = cells.count { GroupParser.isValid(it) }
+                if (validGroupCount >= 2 || (validGroupCount >= 1 && cells.size in 1..8 && cells.any { GroupParser.matchesGroup(it, targetGroup) })) {
+                    // Это заголовок блока групп!
+                    currentBlockGroups = cells
+                    targetColIndex = -1
+                    for ((cIdx, grp) in cells.withIndex()) {
+                        if (GroupParser.matchesGroup(grp, targetGroup)) {
+                            targetColIndex = cIdx
+                            break
+                        }
+                    }
+                    i++
+                    continue
+                }
+
+                // Если в текущем блоке есть наша группа, проверяем строки пар
+                if (targetColIndex != -1 && currentBlockGroups.isNotEmpty()) {
+                    // Проверяем, не является ли это строкой разделителя рамки
+                    val isBorder = line.all { it in "┌┬┐├┼┤┴└┘─|-=+\t " }
+                    if (isBorder) {
+                        i++
+                        continue
+                    }
+
+                    // Разбиваем строку на ячейки (сохраняя пустые ячейки)
+                    val rowCells = splitRowPreservingColumns(line, delimiter)
+
+                    // Проверяем, содержит ли эта строка номер пары
+                    val targetCell1 = rowCells.getOrNull(targetColIndex)?.trim() ?: ""
+                    val hasLessonNumber = targetCell1.isNotEmpty() && targetCell1[0].isDigit() && targetCell1[0].digitToInt() in 1..8
+
+                    // Либо любая другая колонка содержит номер пары в начале
+                    val anyColHasLesson = rowCells.any { c ->
+                        val t = c.trim()
+                        t.isNotEmpty() && t[0].isDigit() && t[0].digitToInt() in 1..8
+                    }
+
+                    if (hasLessonNumber || anyColHasLesson) {
+                        val row1Cells = rowCells
+                        // Следующая строка может содержать преподавателей
+                        var row2Cells = listOf<String>()
+                        if (i + 1 < lines.size) {
+                            val nextLine = lines[i + 1].trim()
+                            val nextDelimiter = when {
+                                nextLine.contains("│") -> "│"
+                                nextLine.contains("|") -> "|"
+                                nextLine.contains("\t") -> "\t"
+                                else -> null
+                            }
+                            val isNextBorder = nextLine.all { it in "┌┬┐├┼┤┴└┘─|-=+\t " }
+                            val isNextGroupHeader = nextDelimiter != null && nextLine.split(nextDelimiter).map { it.trim() }.count { GroupParser.isValid(it) } >= 2
+                            val nextFirstColDigit = nextLine.split(nextDelimiter ?: "│").map { it.trim() }.any { it.isNotEmpty() && it[0].isDigit() && it[0].digitToInt() in 1..8 }
+
+                            if (!isNextBorder && !isNextGroupHeader && !nextFirstColDigit && nextDelimiter != null) {
+                                row2Cells = splitRowPreservingColumns(nextLine, nextDelimiter)
+                                i++ // поглощаем строку преподавателей
+                            }
+                        }
+
+                        val cell1 = row1Cells.getOrNull(targetColIndex)?.trim() ?: ""
+                        val cell2 = row2Cells.getOrNull(targetColIndex)?.trim() ?: ""
+
+                        if (cell1.isNotBlank()) {
+                            val parsedLesson = parseTableCell(
+                                cellSubject = cell1,
+                                cellTeacher = cell2,
+                                groupName = targetGroup,
+                                dayOfWeek = currentDay,
+                                dateString = dateString
+                            )
+                            if (parsedLesson != null && lessons.none { it.dayOfWeek == parsedLesson.dayOfWeek && it.lessonNumber == parsedLesson.lessonNumber }) {
+                                lessons.add(parsedLesson)
+                            }
+                        }
+                    }
+                }
+            }
+
+            i++
+        }
+
+        return lessons
+    }
+
+    /**
+     * Разбивает строку таблицы с сохранением пустот и выравниванием по колонкам.
+     */
+    private fun splitRowPreservingColumns(line: String, delimiter: String): List<String> {
+        val trimmed = line.trim()
+        val withoutOuter = if (trimmed.startsWith(delimiter) && trimmed.endsWith(delimiter) && trimmed.length > 1) {
+            trimmed.substring(1, trimmed.length - 1)
+        } else if (trimmed.startsWith(delimiter)) {
+            trimmed.substring(1)
+        } else if (trimmed.endsWith(delimiter)) {
+            trimmed.substring(0, trimmed.length - 1)
+        } else {
+            trimmed
+        }
+
+        return withoutOuter.split(delimiter)
+    }
+
+    /**
+     * Разбор отдельной ячейки пары из таблицы МГПК (поддерживает 1 и 2 подгруппы, слеши, кабинеты, преподавателей).
+     */
+    fun parseTableCell(
+        cellSubject: String,
+        cellTeacher: String,
+        groupName: String,
+        dayOfWeek: Int,
+        dateString: String
+    ): LessonEntity? {
+        val cleanSubj = cellSubject.trim()
+        if (cleanSubj.isBlank() || cleanSubj == "-" || cleanSubj == "—") return null
+
+        // Номер пары из начала ячейки
+        val lessonNumMatch = Regex("^([1-8])\\s*(.*)$").find(cleanSubj) ?: return null
+        val lessonNumber = lessonNumMatch.groupValues[1].toInt()
+        val rawRest = lessonNumMatch.groupValues[2].trim()
+
+        if (rawRest.isBlank() || rawRest.all { it == '-' || it == '—' || it == ' ' }) {
+            return null
+        }
+
+        val (timeStart, timeEnd) = CollegeBellSchedule.getTimeForNumber(lessonNumber, dayOfWeek)
+
+        // Проверяем наличие кабинетов в формате "331/228", "154/314", "135/ ", "СТД/ ", "224/125", "245/245", "305/303", "142/142"
+        val doubleRoomsPattern = Regex("(?:каб\\.?|ауд\\.?)?\\s*([0-9]{1,3}[а-яА-Яa-zA-Z]?|СТД|-{1,7})\\s*/\\s*(?:каб\\.?|ауд\\.?)?\\s*([0-9]{1,3}[а-яА-Яa-zA-Z]?|СТД|-{1,7})?\\s*$")
+        val doubleRoomsMatch = doubleRoomsPattern.find(rawRest)
+
+        val isExplicitSplit = doubleRoomsMatch != null ||
+                rawRest.contains("/") ||
+                cellTeacher.contains("/") ||
+                cleanSubj.contains("п/г", ignoreCase = true) ||
+                cleanSubj.contains("подгруппа", ignoreCase = true)
+
+        if (isExplicitSplit) {
+            var room1 = ""
+            var room2 = ""
+            var subjPart1 = ""
+            var subjPart2 = ""
+
+            if (doubleRoomsMatch != null) {
+                room1 = doubleRoomsMatch.groupValues[1].trim('-')
+                room2 = doubleRoomsMatch.groupValues[2].trim('-')
+                val subjectSection = rawRest.substring(0, doubleRoomsMatch.range.first).trim()
+                if (subjectSection.contains("/")) {
+                    val subjs = subjectSection.split("/")
+                    subjPart1 = subjs[0].trim()
+                    subjPart2 = subjs.getOrElse(1) { "" }.trim()
+                } else {
+                    subjPart1 = subjectSection
+                    subjPart2 = subjectSection
+                }
+            } else if (rawRest.contains("/")) {
+                val parts = rawRest.split("/")
+                subjPart1 = parts[0].trim()
+                subjPart2 = parts.getOrElse(1) { "" }.trim()
+
+                val r1Match = Regex("(?:каб\\.?|ауд\\.?)?\\s*([0-9]{1,3}[а-яА-Яa-zA-Z]?|СТД)$").find(subjPart1)
+                if (r1Match != null) {
+                    room1 = r1Match.groupValues[1]
+                    subjPart1 = subjPart1.substring(0, r1Match.range.first).trim()
+                }
+                val r2Match = Regex("(?:каб\\.?|ауд\\.?)?\\s*([0-9]{1,3}[а-яА-Яa-zA-Z]?|СТД)$").find(subjPart2)
+                if (r2Match != null) {
+                    room2 = r2Match.groupValues[1]
+                    subjPart2 = subjPart2.substring(0, r2Match.range.first).trim()
+                }
+            } else {
+                val (r, _, s) = extractDetails(rawRest)
+                room1 = r
+                subjPart1 = s
+                subjPart2 = s
+            }
+
+            var teacher1 = ""
+            var teacher2 = ""
+            if (cellTeacher.contains("/")) {
+                val teachers = cellTeacher.split("/")
+                teacher1 = cleanTeacherName(teachers[0])
+                teacher2 = cleanTeacherName(teachers.getOrElse(1) { "" })
+            } else {
+                teacher1 = cleanTeacherName(cellTeacher)
+            }
+
+            val normSubj1 = SubjectFormatter.normalize(subjPart1.ifBlank { rawRest })
+            val normSubj2 = if (subjPart2.isNotBlank() && subjPart2 != subjPart1 && !subjPart2.contains("---")) {
+                SubjectFormatter.normalize(subjPart2)
+            } else normSubj1
+
+            val finalSubjectName = if (normSubj1 != normSubj2 && normSubj2.isNotBlank()) {
+                "$normSubj1 / $normSubj2"
+            } else {
+                normSubj1
+            }
+
+            return LessonEntity(
+                groupName = GroupParser.cleanRawGroupName(groupName),
+                dayOfWeek = dayOfWeek,
+                lessonNumber = lessonNumber,
+                timeStart = timeStart,
+                timeEnd = timeEnd,
+                subjectRaw = finalSubjectName,
+                roomFirst = room1,
+                teacherFirst = teacher1,
+                roomSecond = room2,
+                teacherSecond = teacher2,
+                isSplit = true,
+                dateString = dateString
+            )
+        } else {
+            // Одиночный предмет
+            var room = ""
+            var subject = rawRest
+            val singleRoomMatch = Regex("(?:каб\\.?|ауд\\.?)?\\s*([0-9]{1,3}[а-яА-Яa-zA-Z]?|СТД)$").find(rawRest)
+            if (singleRoomMatch != null) {
+                room = singleRoomMatch.groupValues[1]
+                subject = rawRest.substring(0, singleRoomMatch.range.first).trim()
+            } else {
+                val (r, _, s) = extractDetails(rawRest)
+                room = r
+                subject = s
+            }
+
+            val finalTeacher = cleanTeacherName(cellTeacher)
+            val normSubject = SubjectFormatter.normalize(subject.ifBlank { rawRest })
+
+            return LessonEntity(
+                groupName = GroupParser.cleanRawGroupName(groupName),
+                dayOfWeek = dayOfWeek,
+                lessonNumber = lessonNumber,
+                timeStart = timeStart,
+                timeEnd = timeEnd,
+                subjectRaw = normSubject,
+                roomFirst = room,
+                teacherFirst = finalTeacher,
+                roomSecond = "",
+                teacherSecond = "",
+                isSplit = false,
+                dateString = dateString
+            )
+        }
+    }
+
+    /**
+     * Очищает и форматирует имя преподавателя (удаляет случайные цифры, форматирует инициалы).
+     */
+    fun cleanTeacherName(raw: String): String {
+        var t = raw.replace(Regex("[0-9]"), "").trim()
+        t = t.replace(Regex("\\s+"), " ")
+        t = t.trim(',', '-', '/', '\\', ' ')
+        if (t.isBlank()) return ""
+
+        // Форматирование Фамилия И.О. или Фамилия И.
+        val match = Regex("([А-ЯЁ][а-яё]+)\\s+([А-ЯЁ])\\.?\\s*([А-ЯЁ])?\\.?").find(t)
+        if (match != null) {
+            val surname = match.groupValues[1]
+            val init1 = match.groupValues[2]
+            val init2 = match.groupValues[3]
+            return if (init2.isNotEmpty()) {
+                "$surname $init1.$init2."
+            } else {
+                "$surname $init1."
+            }
+        }
+
+        return t
+    }
+
+    /**
+     * Построчный Fallback-разборщик.
+     */
+    private fun parseLineByLineFallback(
+        lines: List<String>,
+        targetGroup: String,
+        defaultDay: Int,
+        dateString: String
+    ): List<LessonEntity> {
+        val lessons = mutableListOf<LessonEntity>()
+        var currentDay = defaultDay
         var isCurrentGroupActive = false
 
         for (line in lines) {
@@ -497,7 +917,6 @@ object MpkScheduleParser {
                 }
             }
 
-            // Проверяем смену группы в заголовке блока (строго 2 цифры [1-4][1-9] или префикс "группа")
             val groupPattern = Regex("(?:группа\\s+)([1-4][1-9]\\s*[А-ЯA-Z])|\\b([1-4][1-9]\\s*[А-ЯA-Z])\\b", RegexOption.IGNORE_CASE)
             val groupHeaderMatch = groupPattern.find(line)
             if (groupHeaderMatch != null) {
@@ -508,7 +927,6 @@ object MpkScheduleParser {
             }
 
             val isPureHeader = line.matches(Regex("^(?:группа\\s*)?[1-4][1-9]\\s*[А-ЯA-Z](?:\\s+(?:понедельник|вторник|среда|четверг|пятница|суббота))?$", RegexOption.IGNORE_CASE))
-
             val isLineForGroup = !isPureHeader && (GroupParser.matchesGroup(line, targetGroup) || isCurrentGroupActive)
 
             if (isLineForGroup) {
@@ -521,7 +939,7 @@ object MpkScheduleParser {
                     dayOfWeek = currentDay,
                     lessonNumber = lessonNum,
                     rawContent = line,
-                    dateString = targetDate
+                    dateString = dateString
                 )
                 if (lesson != null && lessons.none { it.dayOfWeek == currentDay && it.lessonNumber == lessonNum }) {
                     lessons.add(lesson)

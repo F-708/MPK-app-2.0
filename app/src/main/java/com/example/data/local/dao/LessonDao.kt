@@ -20,6 +20,17 @@ interface LessonDao {
     @Query("SELECT * FROM lessons WHERE groupName = :groupName AND dateString = :dateString ORDER BY lessonNumber ASC")
     fun getLessonsForDate(groupName: String, dateString: String): Flow<List<LessonEntity>>
 
+    @Query("""
+        SELECT * FROM lessons 
+        WHERE groupName = :groupName 
+          AND (
+            (dateString != '' AND dateString = :dateString)
+            OR (dateString = '' AND dayOfWeek = :dayOfWeek)
+          )
+        ORDER BY lessonNumber ASC
+    """)
+    fun getLessonsForDateOrDay(groupName: String, dateString: String, dayOfWeek: Int): Flow<List<LessonEntity>>
+
     @Query("SELECT * FROM lessons WHERE groupName = :groupName ORDER BY dayOfWeek ASC, lessonNumber ASC")
     fun getAllLessonsForGroup(groupName: String): Flow<List<LessonEntity>>
 

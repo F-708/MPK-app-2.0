@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.FileOpen
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -45,8 +47,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -140,6 +144,8 @@ fun ScheduleScreen(
     var selectedDay by remember(groupInfo.canonicalName) { mutableIntStateOf(defaultSelectedDay) }
     var selectedDateString by remember(groupInfo.canonicalName) { mutableStateOf("") }
     var showArchiveDialog by remember { mutableStateOf(false) }
+    var showPasteDialog by remember { mutableStateOf(false) }
+    var pasteInputText by remember { mutableStateOf("") }
 
     // 2. Строгий расчет дат текущей недели от ПОНЕДЕЛЬНИКА
     val weekDays = remember(groupInfo.hasSaturdayClasses) {
@@ -177,6 +183,8 @@ fun ScheduleScreen(
             )
         }
     }
+
+    val currentWeekDay = weekDays.find { it.dayOfWeek == selectedDay }
 
     // 3. Кнопка быстрого перехода на следующий учебный день
     val nextDayButtonText = remember(selectedDay, groupInfo.hasSaturdayClasses, realDayOfWeek) {
@@ -232,11 +240,12 @@ fun ScheduleScreen(
         }
     }
 
-    val lessonsFlow = remember(groupInfo.canonicalName, selectedDay, selectedDateString) {
+    val lessonsFlow = remember(groupInfo.canonicalName, selectedDay, selectedDateString, currentWeekDay?.fullDateString) {
         if (selectedDateString.isNotBlank()) {
             scheduleRepository.getLessonsForDate(groupInfo.canonicalName, selectedDateString)
         } else {
-            scheduleRepository.getLessonsForDay(groupInfo.canonicalName, selectedDay)
+            val targetDate = currentWeekDay?.fullDateString ?: ""
+            scheduleRepository.getLessonsForDateOrDay(groupInfo.canonicalName, targetDate, selectedDay)
         }
     }
     val lessons: List<LessonEntity> by lessonsFlow.collectAsState(initial = emptyList())
@@ -255,7 +264,75 @@ fun ScheduleScreen(
         )
     }
 
-    val currentWeekDay = weekDays.find { it.dayOfWeek == selectedDay }
+    // Диалог вставки текста расписания
+    if (showPasteDialog) {
+        AlertDialog(
+            onDismissRequest = { showPasteDialog = false },
+            title = {
+                Text(
+                    text = "Вставить текст расписания",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Вставьте скопированный текст таблицы расписания (или из Telegram) для группы ${groupInfo.canonicalName}:",
+                        style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    )
+                    OutlinedTextField(
+                        value = pasteInputText,
+                        onValueChange = { pasteInputText = it },
+                        placeholder = { Text("Вставьте текст или сетку расписания...") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp),
+                        maxLines = 10
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (pasteInputText.isNotBlank()) {
+                            coroutineScope.launch {
+                                val parsed = withContext(Dispatchers.IO) {
+                                    MpkScheduleParser.parsePlainTextSchedule(
+                                        text = pasteInputText,
+                                        targetGroup = groupInfo.canonicalName,
+                                        targetDate = currentWeekDay?.fullDateString ?: ""
+                                    )
+                                }
+                                if (parsed.isNotEmpty()) {
+                                    scheduleRepository.saveLessons(parsed)
+                                    Toast.makeText(
+                                        context,
+                                        "Импортировано ${parsed.size} пар для группы ${groupInfo.canonicalName}!",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    showPasteDialog = false
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "Не удалось найти пары для группы ${groupInfo.canonicalName} в этом тексте",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        }
+                    },
+                    enabled = pasteInputText.isNotBlank()
+                ) {
+                    Text("Импортировать")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPasteDialog = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
 
     Column(
         modifier = modifier
@@ -302,6 +379,28 @@ fun ScheduleScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        // Кнопка вставки текста расписания
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .bouncyClickable {
+                                    pasteInputText = ""
+                                    showPasteDialog = true
+                                }
+                                .testTag("paste_text_button")
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentPaste,
+                                    contentDescription = "Вставить текст расписания",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
                         // Кнопка ручного открытия файла расписания .doc/.docx
                         Surface(
                             shape = RoundedCornerShape(8.dp),
@@ -485,9 +584,12 @@ fun ScheduleScreen(
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
                         ) {
                             Button(
                                 onClick = onSyncRequest,
@@ -496,6 +598,7 @@ fun ScheduleScreen(
                                     containerColor = MaterialTheme.colorScheme.primary
                                 ),
                                 modifier = Modifier
+                                    .fillMaxWidth()
                                     .bouncyClickable(onClick = onSyncRequest)
                                     .testTag("empty_state_sync_btn")
                             ) {
@@ -506,28 +609,62 @@ fun ScheduleScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Синхронизировать",
+                                    text = "Синхронизировать с сайтом",
                                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
                                 )
                             }
 
-                            OutlinedButton(
-                                onClick = { filePickerLauncher.launch("*/*") },
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .bouncyClickable { filePickerLauncher.launch("*/*") }
-                                    .testTag("empty_state_file_btn")
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.UploadFile,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Файл .doc",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
-                                )
+                                OutlinedButton(
+                                    onClick = {
+                                        pasteInputText = ""
+                                        showPasteDialog = true
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .bouncyClickable {
+                                            pasteInputText = ""
+                                            showPasteDialog = true
+                                        }
+                                        .testTag("empty_state_paste_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentPaste,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Вставить текст",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        maxLines = 1
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = { filePickerLauncher.launch("*/*") },
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .bouncyClickable { filePickerLauncher.launch("*/*") }
+                                        .testTag("empty_state_file_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.UploadFile,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Файл .doc",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
                     }

@@ -27,6 +27,10 @@ class ScheduleRepository(
         return lessonDao.getLessonsForDate(groupName, dateString).flowOn(Dispatchers.IO)
     }
 
+    fun getLessonsForDateOrDay(groupName: String, dateString: String, dayOfWeek: Int): Flow<List<LessonEntity>> {
+        return lessonDao.getLessonsForDateOrDay(groupName, dateString, dayOfWeek).flowOn(Dispatchers.IO)
+    }
+
     fun getAllLessonsForGroup(groupName: String): Flow<List<LessonEntity>> {
         return lessonDao.getAllLessonsForGroup(groupName).flowOn(Dispatchers.IO)
     }
