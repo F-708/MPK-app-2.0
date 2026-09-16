@@ -255,6 +255,34 @@ class MpkNetworkClient {
         null
     }
 
+    /**
+     * Скачивает и разбирает расписание преподавателей на указанную дату.
+     * Документ: /wp-content/uploads/YYYY/MM/DD.MM.YYYY-raspisanie-prepodavatelej.doc
+     */
+    suspend fun fetchTeacherSchedule(
+        targetCalendar: Calendar = Calendar.getInstance()
+    ): Result<Map<String, List<TeacherSlot>>> = withContext(Dispatchers.IO) {
+        val yyyy = SimpleDateFormat("yyyy", Locale.ROOT).format(targetCalendar.time)
+        val mm = SimpleDateFormat("MM", Locale.ROOT).format(targetCalendar.time)
+        val ddMmYyyy = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(targetCalendar.time)
+        val url = "https://guo-mpk.by/wp-content/uploads/$yyyy/$mm/$ddMmYyyy-raspisanie-prepodavatelej.doc"
+
+        try {
+            val bytes = downloadFileBytes(url)
+            if (bytes == null || bytes.isEmpty()) {
+                return@withContext Result.failure(IOException("Документ не найден: $url"))
+            }
+            val parsed = TeacherScheduleParser.parse(bytes)
+            if (parsed.isEmpty()) {
+                Result.failure(IOException("Не удалось разобрать расписание преподавателей"))
+            } else {
+                Result.success(parsed)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private fun executeRequest(url: String): okhttp3.Response {
         val request = Request.Builder()
             .url(url)

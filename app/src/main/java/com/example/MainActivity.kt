@@ -29,6 +29,10 @@ class MainActivity : ComponentActivity() {
         // Создаем канал уведомлений и регистрируем периодический WorkManager
         NotificationHelper.createNotificationChannel(this)
         com.example.util.BellCountdownNotifier.createChannel(this)
+        // Если постоянная строка включена — поднимаем службу минутного отсчёта
+        if (com.example.util.BellCountdownNotifier.isEnabled(this)) {
+            com.example.util.BellTimerService.start(this)
+        }
         MpkWorkManagerHelper.setupPeriodicScheduleCheck(this)
 
         setContent {

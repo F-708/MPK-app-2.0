@@ -157,7 +157,8 @@ fun MainScreen(
                     groupInfo = currentGroupInfo,
                     scheduleRepository = viewModel.scheduleRepository,
                     onSyncRequest = { viewModel.syncSchedule() },
-                    isSyncing = uiState.isSyncing
+                    isSyncing = uiState.isSyncing,
+                    onTeacherClick = { name -> viewModel.openTeacher(name) }
                 )
                 AppTab.TASKS -> TasksScreen(
                     groupInfo = currentGroupInfo,
@@ -177,11 +178,14 @@ fun MainScreen(
 @Composable
 private fun CollegeTab(viewModel: AppViewModel, groupInfo: GroupInfo) {
     val diagnosticInfo by viewModel.diagnosticInfo.collectAsState()
+    val pendingTeacher by viewModel.uiState.collectAsState()
     CollegeScreen(
         groupInfo = groupInfo,
         scheduleRepository = viewModel.scheduleRepository,
         diagnosticInfo = diagnosticInfo,
         onGroupChanged = { newGroup -> viewModel.setGroup(newGroup) },
-        onRunConnectionTest = { viewModel.syncSchedule() }
+        onRunConnectionTest = { viewModel.syncSchedule() },
+        pendingTeacherName = pendingTeacher.pendingTeacherName,
+        onPendingTeacherConsumed = { viewModel.consumePendingTeacher() }
     )
 }

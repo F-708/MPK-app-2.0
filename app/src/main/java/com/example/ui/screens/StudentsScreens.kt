@@ -354,7 +354,8 @@ fun StudentCardScreen(
             val result = scheduleRepository.syncScheduleFromWeb(student.group)
             loadMessage = result.fold(
                 onSuccess = { count ->
-                    if (count > 0) "Загружено уроков: $count" else "Расписание группы пока не опубликовано"
+                    if (count > 0) "Загружено уроков: $count"
+                    else "Группы ${student.group} нет в опубликованном расписании на эту дату"
                 },
                 onFailure = { "Не удалось загрузить (проверьте интернет)" }
             )
@@ -403,11 +404,14 @@ fun StudentCardScreen(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = student.fullName,
-                    style = TextStylePageTitle.copy(fontSize = 20.sp),
-                    maxLines = 1
+                    style = TextStylePageTitle.copy(fontSize = 19.sp),
+                    maxLines = 2
                 )
                 Text(
-                    text = "Группа ${student.group} • ${student.course} курс",
+                    text = listOf(
+                        "Группа ${student.group}",
+                        if (student.course.isNotBlank()) "${student.course} курс" else ""
+                    ).filter { it.isNotBlank() }.joinToString(" • "),
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp,
@@ -569,7 +573,7 @@ fun StudentCardScreen(
                                 Text(
                                     text = when {
                                         allGroupLessons.isEmpty() ->
-                                            "Расписание группы не загружено"
+                                            "Группы нет в расписании на эту дату"
                                         breakNow != null -> "Перемена (${breakNow.breakAfterMinutes} мин)"
                                         nextLesson != null -> "Сейчас нет урока"
                                         else -> "Уроков на сегодня нет"

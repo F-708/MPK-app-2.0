@@ -263,11 +263,15 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
         when (intent.action) {
             ACTION_TICK -> {
                 BellCountdownWidgetProvider.updateAll(context)
-                // Постоянная строка «До звонка» обновляется тем же тактом
-                com.example.util.BellCountdownNotifier.refresh(context)
                 WidgetAlarm.scheduleNext(context)
             }
-            Intent.ACTION_BOOT_COMPLETED -> WidgetAlarm.scheduleNext(context)
+            Intent.ACTION_BOOT_COMPLETED -> {
+                WidgetAlarm.scheduleNext(context)
+                // Поднимаем службу отсчёта, если строка «До звонка» включена
+                if (com.example.util.BellCountdownNotifier.isEnabled(context)) {
+                    com.example.util.BellTimerService.start(context)
+                }
+            }
         }
     }
 

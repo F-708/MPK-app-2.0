@@ -32,7 +32,9 @@ data class AppUiState(
     val isSyncing: Boolean = false,
     val hasSyncError: Boolean = false,
     /** Показывать обязательный диалог выбора группы (первый вход). */
-    val showGroupSelection: Boolean = false
+    val showGroupSelection: Boolean = false,
+    /** ФИО преподавателя, которого нужно открыть в «Другом» (переход из расписания). */
+    val pendingTeacherName: String? = null
 )
 
 /**
@@ -87,6 +89,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _toastEvent.emit("Выбрана группа: ${parsed.canonicalName}")
             syncSchedule(isAutoSync = false)
         }
+    }
+
+    /**
+     * Открыть карточку преподавателя из любого места приложения:
+     * переключаемся на «Другое» и передаём ФИО для открытия.
+     */
+    fun openTeacher(teacherName: String) {
+        _uiState.update {
+            it.copy(currentTab = AppTab.COLLEGE, pendingTeacherName = teacherName)
+        }
+    }
+
+    /** Сброс после того, как карточка преподавателя открыта. */
+    fun consumePendingTeacher() {
+        _uiState.update { it.copy(pendingTeacherName = null) }
     }
 
     fun syncSchedule(isAutoSync: Boolean = false) {

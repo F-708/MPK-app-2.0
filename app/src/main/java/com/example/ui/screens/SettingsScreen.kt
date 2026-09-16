@@ -312,7 +312,7 @@ fun SettingsScreen(
                             } else "0 Б"
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(label = "Версия приложения", value = "2.10")
+                        DiagnosticRow(label = "Версия приложения", value = "2.11")
 
                         if (isDebugEnabled) {
                             Spacer(modifier = Modifier.height(4.dp))
@@ -802,6 +802,9 @@ private fun BellCountdownNotificationCard() {
     var selectedStyle by remember {
         mutableStateOf(com.example.util.BellCountdownNotifier.getStyle(context))
     }
+    var selectedTheme by remember {
+        mutableStateOf(com.example.util.BellCountdownNotifier.getTheme(context))
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -952,6 +955,57 @@ private fun BellCountdownNotificationCard() {
                                     color = ColorTextMuted
                                 ),
                                 modifier = Modifier.padding(start = 28.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "ЦВЕТОВАЯ ТЕМА",
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = ColorBrandBlue
+                    )
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                com.example.util.BellCountdownNotifier.Theme.entries.forEach { theme ->
+                    val isSelected = selectedTheme == theme
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        border = BorderStroke(1.dp, if (isSelected) ColorBrandBlue else ColorBorderLight),
+                        color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp)
+                            .bouncyClickable {
+                                selectedTheme = theme
+                                com.example.util.BellCountdownNotifier.setTheme(context, theme)
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Кружок-образец цвета
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .background(
+                                        if (theme.accent == 0) ColorSurfaceVariantLight else Color(theme.accent),
+                                        CircleShape
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = theme.title,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 12.sp,
+                                    color = ColorTextBody
+                                )
                             )
                         }
                     }

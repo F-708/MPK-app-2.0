@@ -32,7 +32,8 @@ class StudentsRepository(private val context: Context) {
                 Student(
                     fullName = p.getOrElse(0) { "" },
                     group = p.getOrElse(1) { "" },
-                    course = p.getOrElse(2) { "" },
+                    // В исходной базе курс записан как «4 курс» — оставляем только цифру
+                    course = p.getOrElse(2) { "" }.filter { it.isDigit() },
                     specialtyCode = p.getOrElse(3) { "" },
                     specialty = p.getOrElse(4) { "" },
                     funding = p.getOrElse(5) { "" },

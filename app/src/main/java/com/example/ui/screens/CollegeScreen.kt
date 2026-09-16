@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
@@ -38,10 +39,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -76,6 +79,7 @@ import com.example.ui.theme.ColorTopBar
 import com.example.ui.theme.TextStylePageTitle
 import com.example.ui.util.bouncyClickable
 import com.example.util.MpkCurriculum
+import java.util.Calendar
 
 /** Тёмно-золотая палитра админ-разделов. */
 private val ADMIN_ACCENT = Color(0xFF7A5C00)
@@ -95,11 +99,30 @@ fun CollegeScreen(
     diagnosticInfo: SyncDiagnosticInfo,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit,
+    /** ФИО преподавателя для немедленного открытия (переход из расписания). */
+    pendingTeacherName: String? = null,
+    onPendingTeacherConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var page by rememberSaveable { mutableStateOf(OtherPage.MENU) }
     var selectedStudent by remember { mutableStateOf<Student?>(null) }
     var selectedTeacher by remember { mutableStateOf<Teacher?>(null) }
+    val context = LocalContext.current
+
+    // Переход из расписания: открываем карточку нужного преподавателя
+    LaunchedEffect(pendingTeacherName) {
+        val name = pendingTeacherName ?: return@LaunchedEffect
+        val all = TeachersRepository(context).loadTeachers()
+        val surname = com.example.data.repository.TeacherInsights.surnameOf(name)
+        val found = all.firstOrNull {
+            com.example.data.repository.TeacherInsights.surnameOf(it.name) == surname
+        }
+        if (found != null) {
+            selectedTeacher = found
+            page = OtherPage.TEACHER_CARD
+        }
+        onPendingTeacherConsumed()
+    }
     BackHandler(enabled = page != OtherPage.MENU) { page = OtherPage.MENU }
 
     Column(
@@ -979,7 +1002,9 @@ private fun TeacherCardPageWrapper(
 }
 
 /**
- * Полноэкранная карточка преподавателя: крупное фото и полная информация.
+ * Полноэкранная карточка преподавателя: крупный портрет и разделы
+ * «Контакты и кабинет», «О преподавателе», «Дисциплины», «У вашей группы»
+ * и «Расписание» (сегодня / завтра / любой день).
  */
 @Composable
 private fun TeacherCardPage(
@@ -990,7 +1015,11 @@ private fun TeacherCardPage(
     lessonsWithGroup: Int,
     onBack: () -> Unit
 ) {
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    val tabs = listOf("Контакты", "О преподавателе", "Дисциплины", "У вашей группы", "Расписание")
+
     Column(modifier = Modifier.fillMaxSize()) {
+        // Шапка с портретом
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -998,12 +1027,40 @@ private fun TeacherCardPage(
             verticalAlignment = Alignment.CenterVertically
         ) {
             SubPageBackButton(onBack)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Преподаватель",
-                style = TextStylePageTitle.copy(fontSize = 22.sp),
-                maxLines = 1
-            )
+            Spacer(modifier = Modifier.width(10.dp))
+            TeacherAvatar(teacher = teacher, size = 52.dp, highlight = isActive)
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = teacher.name,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = ColorTextTitle
+                    ),
+                    maxLines = 2
+                )
+                if (teacher.position.isNotBlank()) {
+                    Text(
+                        text = teacher.position,
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontSize = 11.sp,
+                            color = ColorBrandBlue
+                        ),
+                        maxLines = 2
+                    )
+                }
+                if (isActive) {
+                    Text(
+                        text = "ВЕДЁТ У ВАШЕЙ ГРУППЫ",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 9.sp,
+                            color = ColorActiveBlue
+                        )
+                    )
+                }
+            }
         }
 
         Box(
@@ -1013,181 +1070,527 @@ private fun TeacherCardPage(
                 .background(ColorDividerLight)
         )
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        // Под-вкладки
+        androidx.compose.foundation.lazy.LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Фото + ФИО + должность
-            item {
+            items(tabs) { title ->
+                val index = tabs.indexOf(title)
+                val selected = tab == index
                 Surface(
                     shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, if (isActive) ColorActiveBlue else ColorBorderLight),
+                    border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
+                    color = if (selected) ColorTopBar else ColorBgMain,
+                    modifier = Modifier.bouncyClickable { tab = index }
+                ) {
+                    Text(
+                        text = title.uppercase(),
+                        softWrap = false,
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 10.sp,
+                            color = if (selected) Color.White else ColorTextBody
+                        ),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                    )
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(ColorDividerLight)
+        )
+
+        when (tab) {
+            0 -> ContactsTab(teacher)
+            1 -> AboutTab(teacher)
+            2 -> SubjectsTab(teacher)
+            3 -> GroupTab(isActive, lessonsWithGroup, roomsFromSchedule, subjectsFromSchedule)
+            4 -> TeacherScheduleTab(teacher)
+        }
+    }
+}
+
+/** Вкладка «Контакты»: портрет, кабинет, телефон, почта. */
+@Composable
+private fun ContactsTab(teacher: Teacher) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBgMain,
+                border = BorderStroke(1.dp, ColorBorderLight),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("teacher_card")
+                        .padding(16.dp)
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        // Крупный портрет
-                        if (teacher.photo.isNotBlank()) {
-                            coil.compose.AsyncImage(
-                                model = "file:///android_asset/teachers_photos/" + teacher.photo,
-                                contentDescription = teacher.name,
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(180.dp)
-                                    .border(1.dp, ColorBorderLight, RoundedCornerShape(2.dp))
-                                    .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(180.dp)
-                                    .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = teacher.name.split(" ").firstOrNull()?.take(1) ?: "?",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 64.sp
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        if (isActive) {
-                            Surface(
-                                shape = RoundedCornerShape(2.dp),
-                                color = ColorActiveBlue,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            ) {
-                                Text(
-                                    text = "ВЕДЁТ У ВАШЕЙ ГРУППЫ",
-                                    softWrap = false,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 10.sp,
-                                        color = Color.White
-                                    ),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = teacher.name,
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp,
-                                color = ColorTextTitle
-                            ),
-                            textAlign = TextAlign.Center
+                    if (teacher.photo.isNotBlank()) {
+                        coil.compose.AsyncImage(
+                            model = "file:///android_asset/teachers_photos/" + teacher.photo,
+                            contentDescription = teacher.name,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier
+                                .size(170.dp)
+                                .border(1.dp, ColorBorderLight, RoundedCornerShape(2.dp))
+                                .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
                         )
-
-                        if (teacher.position.isNotBlank()) {
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(170.dp)
+                                .background(ColorBrandFill, RoundedCornerShape(2.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text(
-                                text = teacher.position,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 13.sp,
-                                    color = ColorBrandBlue,
-                                    fontWeight = FontWeight.SemiBold
-                                ),
-                                textAlign = TextAlign.Center
+                                text = teacher.name.split(" ").firstOrNull()?.take(1) ?: "?",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 60.sp
                             )
                         }
                     }
                 }
             }
+        }
 
-            // Контакты и служебные сведения
+        item {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBgMain,
+                border = BorderStroke(1.dp, ColorBorderLight),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    SectionLabel("КОНТАКТЫ И КАБИНЕТ")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    if (teacher.room.isNotBlank()) InfoRow("Кабинет", teacher.room)
+                    if (teacher.phone.isNotBlank()) InfoRow("Телефон", teacher.phone)
+                    if (teacher.email.isNotBlank()) InfoRow("E-mail", teacher.email)
+                    if (teacher.room.isBlank() && teacher.phone.isBlank() && teacher.email.isBlank()) {
+                        Text(
+                            text = "Контактные данные в базе не указаны",
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextMuted)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Вкладка «О преподавателе»: подразделение, стаж, категория. */
+@Composable
+private fun AboutTab(teacher: Teacher) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBgMain,
+                border = BorderStroke(1.dp, ColorBorderLight),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    SectionLabel("О ПРЕПОДАВАТЕЛЕ")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    if (teacher.position.isNotBlank()) InfoRow("Должность", teacher.position)
+                    if (teacher.department.isNotBlank()) InfoRow("Подразделение", teacher.department)
+                    if (teacher.experience.isNotBlank()) InfoRow("Педагогический стаж", teacher.experience)
+                    if (teacher.category.isNotBlank()) InfoRow("Квалификационная категория", teacher.category)
+
+                    val nothing = teacher.position.isBlank() && teacher.department.isBlank() &&
+                        teacher.experience.isBlank() && teacher.category.isBlank()
+                    if (nothing) {
+                        Text(
+                            text = "Сведения в базе не заполнены",
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextMuted)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Вкладка «Дисциплины»: официальный перечень из базы колледжа. */
+@Composable
+private fun SubjectsTab(teacher: Teacher) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (teacher.subjects.isBlank()) {
             item {
+                EmptyCard(text = "Перечень дисциплин в базе не заполнен")
+            }
+        } else {
+            item { SectionLabel("ПРЕПОДАВАЕМЫЕ ДИСЦИПЛИНЫ") }
+            // Дисциплины в базе перечислены через запятую или точку с запятой
+            val list = teacher.subjects
+                .split(';', ',')
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+            items(list) { subject ->
                 Surface(
                     shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
+                    color = ColorSurfaceVariantLight,
                     border = BorderStroke(1.dp, ColorBorderLight),
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    Text(
+                        text = subject,
+                        style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextBody),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Вкладка «У вашей группы»: связь с расписанием выбранной группы. */
+@Composable
+private fun GroupTab(
+    isActive: Boolean,
+    lessonsWithGroup: Int,
+    roomsFromSchedule: List<String>,
+    subjectsFromSchedule: List<String>
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (!isActive) {
+            item {
+                EmptyCard(
+                    text = "По расписанию вашей группы этот преподаватель занятий не ведёт.\n\n" +
+                        "Откройте вкладку «Расписание», чтобы посмотреть его полное расписание."
+                )
+            }
+        } else {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorActiveBlue),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        val hasContacts = teacher.room.isNotBlank() ||
-                            teacher.phone.isNotBlank() || teacher.email.isNotBlank()
-                        if (hasContacts) {
-                            SectionLabel("КОНТАКТЫ И КАБИНЕТ")
-                            if (teacher.room.isNotBlank()) InfoRow("Кабинет", teacher.room)
-                            if (teacher.phone.isNotBlank()) InfoRow("Телефон", teacher.phone)
-                            if (teacher.email.isNotBlank()) InfoRow("E-mail", teacher.email)
+                        SectionLabel("ВЕДЁТ У ВАШЕЙ ГРУППЫ")
+                        Spacer(modifier = Modifier.height(6.dp))
+                        if (lessonsWithGroup > 0) InfoRow("Уроков в базе", "$lessonsWithGroup")
+                        if (roomsFromSchedule.isNotEmpty()) {
+                            InfoRow("Ведёт в кабинетах", roomsFromSchedule.joinToString(", "))
                         }
-
-                        val hasService = teacher.department.isNotBlank() ||
-                            teacher.experience.isNotBlank() || teacher.category.isNotBlank()
-                        if (hasService) {
-                            if (hasContacts) Spacer(modifier = Modifier.height(10.dp))
-                            SectionLabel("СЛУЖЕБНЫЕ СВЕДЕНИЯ")
-                            if (teacher.department.isNotBlank()) InfoRow("Подразделение", teacher.department)
-                            if (teacher.experience.isNotBlank()) InfoRow("Педагогический стаж", teacher.experience)
-                            if (teacher.category.isNotBlank()) InfoRow("Квалификационная категория", teacher.category)
+                        if (subjectsFromSchedule.isNotEmpty()) {
+                            InfoRow("Предметы", subjectsFromSchedule.take(6).joinToString("; "))
                         }
                     }
                 }
             }
+        }
+    }
+}
 
-            // Дисциплины из официальной базы
-            if (teacher.subjects.isNotBlank()) {
-                item {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorSurfaceVariantLight,
-                        border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            SectionLabel("ПРЕПОДАВАЕМЫЕ ДИСЦИПЛИНЫ")
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = teacher.subjects,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 13.sp,
-                                    color = ColorTextBody
-                                )
-                            )
-                        }
+/**
+ * Вкладка «Расписание» преподавателя: сегодня, завтра или произвольная дата.
+ * Документ расписания преподавателей скачивается с сайта колледжа по дате.
+ */
+@Composable
+private fun TeacherScheduleTab(teacher: Teacher) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val client = remember { com.example.data.network.MpkNetworkClient() }
+
+    // Смещение от сегодняшнего дня: 0 = сегодня, 1 = завтра, дальше по календарю
+    var dayOffset by rememberSaveable { mutableIntStateOf(0) }
+    var showCalendar by remember { mutableStateOf(false) }
+    var customDate by remember { mutableStateOf<Calendar?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
+    var slots by remember { mutableStateOf<List<com.example.data.network.TeacherSlot>>(emptyList()) }
+
+    // Кэш разобранных расписаний по дате — чтобы не качать один день дважды
+    val cache = remember { mutableMapOf<String, Map<String, List<com.example.data.network.TeacherSlot>>>() }
+
+    val targetCalendar = remember(dayOffset, customDate) {
+        customDate ?: (com.example.util.DebugClock.now(context).clone() as Calendar).apply {
+            add(Calendar.DAY_OF_YEAR, dayOffset)
+        }
+    }
+
+    // Фамилия нужна для поиска в разобранном документе
+    val surname = remember(teacher.name) {
+        com.example.data.repository.TeacherInsights.surnameOf(teacher.name)
+    }
+
+    LaunchedEffect(teacher.name, dayOffset, customDate) {
+        val dateKey = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
+            .format(targetCalendar.time)
+        val parsedAll = cache[dateKey] ?: run {
+            loading = true
+            errorMessage = ""
+            val result = client.fetchTeacherSchedule(targetCalendar)
+            loading = false
+            result.fold(
+                onSuccess = { parsed -> cache[dateKey] = parsed; parsed },
+                onFailure = { e ->
+                    errorMessage = when {
+                        e.message?.contains("не найден") == true -> "Расписание на $dateKey ещё не опубликовано"
+                        else -> "Не удалось загрузить расписание (проверьте интернет)"
                     }
+                    null
+                }
+            )
+        } ?: return@LaunchedEffect
+
+        slots = parsedAll.entries
+            .firstOrNull { com.example.data.repository.TeacherInsights.surnameOf(it.key) == surname }
+            ?.value
+            .orEmpty()
+    }
+
+    if (showCalendar) {
+        com.example.ui.components.CalendarArchiveDialog(
+            groupName = "",
+            scheduleRepository = com.example.data.repository.ScheduleRepository(
+                com.example.data.local.MpkDatabase.getInstance(context).lessonDao()
+            ),
+            onDismiss = { showCalendar = false },
+            onDateSelected = { _, dateStr ->
+                val parsed = try {
+                    val sdf = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
+                    sdf.parse(dateStr.replace("-", "."))
+                } catch (_: Exception) {
+                    null
+                }
+                parsed?.let {
+                    customDate = Calendar.getInstance().apply { time = it }
+                    dayOffset = 0
+                }
+                showCalendar = false
+            }
+        )
+    }
+
+    val dateTitle = remember(targetCalendar) {
+        val sdf = java.text.SimpleDateFormat("dd.MM.yyyy (EEEE)", java.util.Locale("ru"))
+        sdf.format(targetCalendar.time).replaceFirstChar { it.uppercase() }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Переключатель дней: Сегодня / Завтра / Календарь
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            DayChip(
+                title = "СЕГОДНЯ",
+                selected = dayOffset == 0 && customDate == null,
+                onClick = { dayOffset = 0; customDate = null },
+                modifier = Modifier.weight(1f)
+            )
+            DayChip(
+                title = "ЗАВТРА",
+                selected = dayOffset == 1 && customDate == null,
+                onClick = { dayOffset = 1; customDate = null },
+                modifier = Modifier.weight(1f)
+            )
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                border = BorderStroke(1.dp, if (customDate != null) ColorTopBar else ColorBorderLight),
+                color = if (customDate != null) ColorTopBar else ColorBgMain,
+                modifier = Modifier
+                    .size(38.dp)
+                    .bouncyClickable { showCalendar = true }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = "Выбрать дату",
+                        tint = if (customDate != null) Color.White else ColorBrandBlue,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
+        }
 
-            // Связь с расписанием группы: предметы и кабинеты
-            if (isActive && (subjectsFromSchedule.isNotEmpty() || roomsFromSchedule.isNotEmpty() || lessonsWithGroup > 0)) {
-                item {
+        Text(
+            text = dateTitle,
+            style = androidx.compose.ui.text.TextStyle(
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp,
+                color = ColorTextMuted
+            ),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp)
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        when {
+            loading -> Box(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    color = ColorBrandBlue,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+
+            errorMessage.isNotBlank() -> Box(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = errorMessage,
+                    style = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = ColorTextMuted),
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            slots.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "В этот день у преподавателя занятий нет",
+                    style = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = ColorTextMuted),
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(slots) { slot ->
                     Surface(
                         shape = RoundedCornerShape(2.dp),
                         color = ColorBgMain,
-                        border = BorderStroke(1.dp, ColorActiveBlue),
+                        border = BorderStroke(1.dp, ColorBorderLight),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            SectionLabel("У ВАШЕЙ ГРУППЫ")
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            if (lessonsWithGroup > 0) {
-                                InfoRow("Уроков в базе", "$lessonsWithGroup")
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                color = ColorBrandFill,
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = "${slot.lessonNumber}",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
                             }
-                            if (roomsFromSchedule.isNotEmpty()) {
-                                InfoRow("Ведёт в кабинетах", roomsFromSchedule.joinToString(", "))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = slot.subject.ifBlank { "Занятие" },
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = ColorTextTitle
+                                    ),
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = buildString {
+                                        val bells = com.example.data.model.CollegeBellSchedule
+                                            .getBellsForDay(1)
+                                        val time = bells.firstOrNull { it.lessonNumber == slot.lessonNumber }
+                                        if (time != null) append("${time.start}–${time.end}")
+                                        if (slot.groups.isNotEmpty()) {
+                                            if (isNotEmpty()) append(" • ")
+                                            append(slot.groups.joinToString(", "))
+                                        }
+                                    },
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 11.sp,
+                                        color = ColorTextMuted
+                                    ),
+                                    maxLines = 2
+                                )
                             }
-                            if (subjectsFromSchedule.isNotEmpty()) {
-                                InfoRow("Предметы", subjectsFromSchedule.take(5).joinToString("; "))
+                            if (slot.room.isNotBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(2.dp),
+                                    color = ColorSurfaceHighlight,
+                                    border = BorderStroke(1.dp, ColorBorderLight)
+                                ) {
+                                    Text(
+                                        text = "каб. ${slot.room}",
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp,
+                                            color = ColorBrandBlue
+                                        ),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/** Кнопка выбора дня в расписании преподавателя. */
+@Composable
+private fun DayChip(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
+        color = if (selected) ColorTopBar else ColorBgMain,
+        modifier = modifier
+            .height(38.dp)
+            .bouncyClickable(onClick = onClick)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = title,
+                softWrap = false,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 11.sp,
+                    color = if (selected) Color.White else ColorTextBody
+                )
+            )
         }
     }
 }

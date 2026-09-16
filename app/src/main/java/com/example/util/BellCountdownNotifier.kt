@@ -19,8 +19,9 @@ import com.example.widget.WidgetUpdateHelper
 /**
  * Постоянное уведомление «До звонка» — висит в шторке, как навигация в картах.
  *
- * Включено по умолчанию выключено. Обновляется раз в минуту в учебное время
- * тем же алармом, что и виджет. Стиль оформления выбирается в настройках.
+ * Выключено по умолчанию. Минутный такт держит служба BellTimerService,
+ * привязанный к границе минуты устройства (AlarmManager душится Doze).
+ * Оформление: выбор стиля строки и цветовой темы в настройках.
  */
 object BellCountdownNotifier {
 
@@ -33,6 +34,24 @@ object BellCountdownNotifier {
 
     private const val PREF_ENABLED = "bell_notification_enabled"
     private const val PREF_STYLE = "bell_notification_style"
+    private const val PREF_THEME = "bell_notification_theme"
+
+    /**
+     * Цветовая тема строки: подбирается под оформление телефона.
+     * @param accent цвет акцента; 0 = системный (не перекрашивать)
+     * @param colorize заливать ли фон цветом (поддерживается не всеми оболочками)
+     */
+    enum class Theme(val id: String, val title: String, val accent: Int, val colorize: Boolean) {
+        SYSTEM("system", "Системная", 0, false),
+        BRAND("brand", "Фирменный синий", 0xFF0B3564.toInt(), true),
+        SKY("sky", "Яркий синий", 0xFF0072CE.toInt(), true),
+        DARK("dark", "Тёмная", 0xFF232527.toInt(), true),
+        GOLD("gold", "Золотая (админ)", 0xFF7A5C00.toInt(), true);
+
+        companion object {
+            fun from(id: String?): Theme = entries.firstOrNull { it.id == id } ?: SYSTEM
+        }
+    }
 
     /**
      * Стили оформления строки уведомления.
@@ -57,14 +76,24 @@ object BellCountdownNotifier {
     fun setEnabled(context: Context, enabled: Boolean) {
         WidgetUpdateHelper.getPrefs(context).edit().putBoolean(PREF_ENABLED, enabled).apply()
         if (enabled) {
-            show(context)
+            // Минутный такт держит служба — она же показывает уведомление
+            BellTimerService.start(context)
         } else {
+            BellTimerService.stop(context)
             cancel(context)
         }
     }
 
     fun getStyle(context: Context): Style =
         Style.from(WidgetUpdateHelper.getPrefs(context).getString(PREF_STYLE, null))
+
+    fun getTheme(context: Context): Theme =
+        Theme.from(WidgetUpdateHelper.getPrefs(context).getString(PREF_THEME, null))
+
+    fun setTheme(context: Context, theme: Theme) {
+        WidgetUpdateHelper.getPrefs(context).edit().putString(PREF_THEME, theme.id).apply()
+        if (isEnabled(context)) show(context)
+    }
 
     fun setStyle(context: Context, style: Style) {
         WidgetUpdateHelper.getPrefs(context).edit().putString(PREF_STYLE, style.id).apply()
@@ -95,13 +124,16 @@ object BellCountdownNotifier {
     /** Обновляет (или создаёт) постоянное уведомление. */
     fun show(context: Context) {
         if (!isEnabled(context)) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            return
+        if (!canPost(context)) return
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, buildNotification(context))
+        } catch (_: SecurityException) {
+            // Разрешение отозвано — молча выходим
         }
+    }
 
+    /** Уведомление для запуска службы (startForeground требует готовый объект). */
+    fun buildNotification(context: Context): android.app.Notification {
         createChannel(context)
 
         val info = BellCountdownWidgetProvider.countdownInfo(context)
@@ -117,6 +149,8 @@ object BellCountdownNotifier {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val theme = getTheme(context)
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_mpk_emblem)
             .setContentIntent(openIntent)
@@ -126,6 +160,14 @@ object BellCountdownNotifier {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setShowWhen(false)               // время приложения не при чём — не показываем
+
+        // Цветовая тема: акцент и (если поддерживается) заливка фона
+        if (theme.accent != 0) {
+            builder.color = theme.accent
+            if (theme.colorize) {
+                builder.setColorized(true)
+            }
+        }
 
         when (style) {
             Style.COMPACT -> {
@@ -150,12 +192,14 @@ object BellCountdownNotifier {
             }
         }
 
-        try {
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
-        } catch (_: SecurityException) {
-            // Разрешение отозвано — молча выходим
-        }
+        return builder.build()
     }
+
+    /** Разрешены ли уведомления системой. */
+    private fun canPost(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
 
     fun cancel(context: Context) {
         NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)

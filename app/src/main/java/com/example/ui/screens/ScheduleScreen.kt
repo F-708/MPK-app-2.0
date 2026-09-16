@@ -100,6 +100,8 @@ fun ScheduleScreen(
     scheduleRepository: ScheduleRepository,
     onSyncRequest: () -> Unit,
     isSyncing: Boolean = false,
+    /** Переход к карточке преподавателя по тапу на его ФИО. */
+    onTeacherClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -491,7 +493,11 @@ fun ScheduleScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(currentLessons, key = { it.id }) { lesson ->
-                        LessonCard(lesson = lesson, isCurrent = lesson.lessonNumber == currentLessonNumber)
+                        LessonCard(
+                            lesson = lesson,
+                            isCurrent = lesson.lessonNumber == currentLessonNumber,
+                            onTeacherClick = onTeacherClick
+                        )
                     }
                 }
             }
@@ -509,6 +515,7 @@ fun ScheduleScreen(
 fun LessonCard(
     lesson: LessonEntity,
     isCurrent: Boolean = false,
+    onTeacherClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -629,11 +636,16 @@ fun LessonCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (lesson.teacherFirst.isNotBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.bouncyClickable {
+                                onTeacherClick(lesson.teacherFirst)
+                            }
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.Person,
                                 contentDescription = null,
-                                tint = ColorTextMuted,
+                                tint = ColorBrandBlue,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -641,7 +653,8 @@ fun LessonCard(
                                 text = lesson.teacherFirst,
                                 style = androidx.compose.ui.text.TextStyle(
                                     fontSize = 12.sp,
-                                    color = ColorTextBody
+                                    color = ColorBrandBlue,
+                                    fontWeight = FontWeight.SemiBold
                                 ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis

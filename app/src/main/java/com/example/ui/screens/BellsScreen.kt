@@ -369,7 +369,14 @@ private fun LessonBellCard(
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
-        border = BorderStroke(1.dp, if (isActive) ColorActiveBlue else ColorBorderLight),
+        border = BorderStroke(
+            1.dp,
+            when {
+                item.isInfoHour -> Color(0xFF16A34A)
+                isActive -> ColorActiveBlue
+                else -> ColorBorderLight
+            }
+        ),
         shadowElevation = 0.dp,
         modifier = Modifier
             .fillMaxWidth()
@@ -434,32 +441,41 @@ private fun LessonBellCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Бейдж сразу называет урок: «1 УРОК», «ИНФОЧАС» —
+            // без дублирования «1» и «1 урок» рядом
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
-                    color = if (isActive) ColorActiveBlue else ColorBrandBlue,
-                    contentColor = Color.White,
-                    modifier = Modifier.size(28.dp)
+                    color = when {
+                        item.isInfoHour -> Color(0xFF16A34A)
+                        isActive -> ColorActiveBlue
+                        else -> ColorBrandBlue
+                    },
+                    contentColor = Color.White
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                    ) {
+                        if (item.isInfoHour) {
+                            Icon(
+                                imageVector = Icons.Default.Campaign,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
                         Text(
-                            text = "${item.lessonNumber}",
+                            text = if (item.isInfoHour) "ИНФОЧАС" else "${item.lessonNumber} УРОК",
+                            softWrap = false,
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
+                                fontSize = 12.sp
                             )
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = item.title,
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = if (isActive) ColorActiveBlue else ColorTextTitle
-                    )
-                )
             }
 
             Surface(
@@ -470,9 +486,11 @@ private fun LessonBellCard(
             ) {
                 Text(
                     text = item.displayRange,
+                    softWrap = false,
+                    maxLines = 1,
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         color = ColorBrandBlue
                     ),
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
