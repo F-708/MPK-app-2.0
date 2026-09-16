@@ -10,12 +10,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.screens.ActivationScreen
 import com.example.ui.screens.MainScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.AppTab
 import com.example.ui.viewmodel.AppViewModel
+import com.example.util.ActivationStore
 import com.example.util.NotificationHelper
 import com.example.widget.WidgetUpdateHelper
 import com.example.worker.MpkWorkManagerHelper
@@ -45,11 +50,24 @@ class MainActivity : ComponentActivity() {
             }
 
             MyApplicationTheme {
+                // Активация по коду нужна только обычной версии:
+                // админская сборка никуда не расходится и не блокируется.
+                val isAdminBuild = com.example.BuildConfig.FLAVOR == "admin"
+                var activated by remember {
+                    mutableStateOf(isAdminBuild || ActivationStore.isActivated(this@MainActivity))
+                }
 
-                MainScreen(
-                    viewModel = appViewModel,
-                    modifier = Modifier.fillMaxSize()
-                )
+                if (activated) {
+                    MainScreen(
+                        viewModel = appViewModel,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    ActivationScreen(
+                        onActivated = { activated = true },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
     }

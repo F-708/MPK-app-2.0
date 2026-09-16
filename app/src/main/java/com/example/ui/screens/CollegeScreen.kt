@@ -87,7 +87,7 @@ private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
 private val ADMIN_GOLD = Color(0xFFE8C55A)
 
-private enum class OtherPage { MENU, SPECIALTY, TEACHERS, TEACHER_CARD, SETTINGS, STUDENTS, STUDENT_CARD }
+private enum class OtherPage { MENU, SPECIALTY, TEACHERS, TEACHER_CARD, SETTINGS, STUDENTS, STUDENT_CARD, CONNECT }
 
 /**
  * Вкладка «Другое»: специальность, преподаватели, настройки, сайт колледжа.
@@ -137,7 +137,8 @@ fun CollegeScreen(
                 onOpenSpecialty = { page = OtherPage.SPECIALTY },
                 onOpenTeachers = { page = OtherPage.TEACHERS },
                 onOpenSettings = { page = OtherPage.SETTINGS },
-                onOpenStudents = { page = OtherPage.STUDENTS }
+                onOpenStudents = { page = OtherPage.STUDENTS },
+                onOpenConnect = { page = OtherPage.CONNECT }
             )
             OtherPage.SPECIALTY -> MySpecialtyPage(groupInfo) { page = OtherPage.MENU }
             OtherPage.TEACHERS -> TeachersPage(
@@ -161,6 +162,10 @@ fun CollegeScreen(
                 } else {
                     page = OtherPage.TEACHERS
                 }
+            }
+            OtherPage.CONNECT -> Column(modifier = Modifier.fillMaxSize()) {
+                SubPageHeader(title = "Как подключить приложение", onBack = { page = OtherPage.MENU })
+                HowToConnectScreen()
             }
             OtherPage.SETTINGS -> SettingsPage(
                 groupInfo = groupInfo,
@@ -190,7 +195,8 @@ fun CollegeScreen(
                         onOpenSpecialty = { page = OtherPage.SPECIALTY },
                         onOpenTeachers = { page = OtherPage.TEACHERS },
                         onOpenSettings = { page = OtherPage.SETTINGS },
-                        onOpenStudents = { page = OtherPage.STUDENTS }
+                        onOpenStudents = { page = OtherPage.STUDENTS },
+                        onOpenConnect = { page = OtherPage.CONNECT }
                     )
                 }
             }
@@ -208,7 +214,8 @@ private fun OtherMenu(
     onOpenSpecialty: () -> Unit,
     onOpenTeachers: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenStudents: () -> Unit
+    onOpenStudents: () -> Unit,
+    onOpenConnect: () -> Unit
 ) {
     val context = LocalContext.current
     val isAdmin = com.example.BuildConfig.FLAVOR == "admin"
@@ -230,6 +237,15 @@ private fun OtherMenu(
                         subtitle = "Все учащиеся колледжа: фильтры по группам и курсам",
                         badge = "ADMIN",
                         onClick = onOpenStudents
+                    )
+                }
+                item {
+                    AdminMenuCard(
+                        icon = { Icon(Icons.Default.AdminPanelSettings, null, tint = ADMIN_GOLD, modifier = Modifier.size(20.dp)) },
+                        title = "Как подключить приложение",
+                        subtitle = "Код разблокировки для студента — действует одну минуту",
+                        badge = "ADMIN",
+                        onClick = onOpenConnect
                     )
                 }
                 item {
@@ -650,31 +666,64 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
             }
 
             val subjects = specialty.subjectsByCourse[selectedCourse].orEmpty()
-            item {
-                Text(
-                    text = "ПРЕДМЕТЫ ${selectedCourse}-ГО КУРСА (${subjects.size})",
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        color = ColorBrandBlue
-                    )
-                )
-            }
-            items(subjects) { subject ->
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorSurfaceVariantLight,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+            // Курсы, по которым достоверного перечня нет (например, 3-й курс Маркетинга):
+            // вместо пустого списка честная пометка, а не выдуманные предметы
+            val isIncomplete = selectedCourse in specialty.incompleteCourses
+            if (isIncomplete) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorSurfaceVariantLight,
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "ПРЕДМЕТЫ ${selectedCourse}-ГО КУРСА",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = ColorBrandBlue
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Информация повреждена: достоверного перечня предметов " +
+                                    "для этого курса нет — в материалах колледжа на этом месте " +
+                                    "предметы другой специальности.\n\n" +
+                                    "Уточните список в колледже или в деканате.",
+                                style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextBody)
+                            )
+                        }
+                    }
+                }
+            } else {
+                item {
                     Text(
-                        text = subject,
+                        text = "ПРЕДМЕТЫ ${selectedCourse}-ГО КУРСА (${subjects.size})",
                         style = androidx.compose.ui.text.TextStyle(
-                            fontSize = 13.sp,
-                            color = ColorTextBody
-                        ),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = ColorBrandBlue
+                        )
                     )
+                }
+                items(subjects) { subject ->
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorSurfaceVariantLight,
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = subject,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 13.sp,
+                                color = ColorTextBody
+                            ),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1600,6 +1649,28 @@ private fun SubPageBackButton(onBack: () -> Unit) {
                 modifier = Modifier.size(18.dp)
             )
         }
+    }
+}
+
+/**
+ * Шапка подстраницы «Другого»: стрелка назад и заголовок.
+ * Нужна страницам, у которых нет портрета или своей раскладки шапки.
+ */
+@Composable
+private fun SubPageHeader(title: String, onBack: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SubPageBackButton(onBack)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = title,
+            style = TextStylePageTitle,
+            maxLines = 2
+        )
     }
 }
 

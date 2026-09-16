@@ -1,13 +1,16 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Правила резервного копирования (API 30 и ниже).
+
+   Файл активации mpk_activation.xml намеренно исключён: иначе после
+   переустановки Android восстановил бы флаг активации из облачной копии,
+   и приложение открылось бы без кода. Остальные настройки и задания
+   резервируются как обычно.
+
+   См. https://developer.android.com/guide/topics/data/autobackup
+   Внимание: этот файл не используется на устройствах новее API 31 —
+   там работает data_extraction_rules.xml
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="sharedpref" path="mpk_activation.xml"/>
 </full-backup-content>
