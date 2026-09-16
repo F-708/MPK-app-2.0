@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -40,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -69,6 +71,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import com.example.ui.util.bouncyClickable
 import com.example.util.DebugClock
 import java.util.Calendar
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 private val ADMIN_ACCENT = Color(0xFF7A5C00)
@@ -333,12 +336,36 @@ fun StudentCardScreen(
         now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
     }
 
-    val lessons by scheduleRepository
-        .getLessonsForDay(student.group, dow)
-        .collectAsState(initial = emptyList())
-
     val allGroupLessons by scheduleRepository
         .getAllLessonsForGroup(student.group)
+        .collectAsState(initial = emptyList())
+
+    // --- Выбор дня: сегодня / завтра / календарь ---
+    var dayMode by remember(student.group) { mutableStateOf(DayMode.TODAY) }
+    var calendarDate by remember(student.group) { mutableStateOf<String?>(null) }
+    // Суббота и воскресенье -> понедельник (как ScheduleRepository.nextSchoolDay)
+    val tomorrowDow = if (dow >= 6) 1 else dow + 1
+
+    val todayLessons by scheduleRepository
+        .getLessonsForDay(student.group, dow)
+        .collectAsState(initial = emptyList())
+    val tomorrowLessons by scheduleRepository
+        .getLessonsForDay(student.group, tomorrowDow)
+        .collectAsState(initial = emptyList())
+    val calendarFlow = remember(student.group, calendarDate) {
+        calendarDate?.let { scheduleRepository.getLessonsForDate(student.group, it) }
+            ?: flowOf(emptyList())
+    }
+    val calendarLessons by calendarFlow.collectAsState(initial = emptyList())
+    val lessons = when (dayMode) {
+        DayMode.TODAY -> todayLessons
+        DayMode.TOMORROW -> tomorrowLessons
+        DayMode.CALENDAR -> calendarLessons
+    }
+
+    // Даты, на которые есть сохранённое расписание группы
+    val availableDates by scheduleRepository
+        .getDistinctDates(student.group)
         .collectAsState(initial = emptyList())
 
     // --- Автозагрузка расписания группы с сайта ---
@@ -376,15 +403,16 @@ fun StudentCardScreen(
         TeacherInsights(teachers, allGroupLessons)
     }
 
-    val currentLesson = remember(lessons, minutes) {
+    // «Где сейчас» всегда считается по СЕГОДНЯШНЕМУ дню, независимо от выбранного режима
+    val currentLesson = remember(todayLessons, minutes) {
         val bells = CollegeBellSchedule.getBellsForDay(dow)
         val currentNum = bells.firstOrNull { minutes in it.startMinutes..it.endMinutes }?.lessonNumber
         if (currentNum != null && currentNum > 0) {
-            lessons.firstOrNull { it.lessonNumber == currentNum }
+            todayLessons.firstOrNull { it.lessonNumber == currentNum }
         } else null
     }
-    val nextLesson = remember(lessons, minutes, currentLesson) {
-        lessons.filter { it.lessonNumber > (currentLesson?.lessonNumber ?: 0) }
+    val nextLesson = remember(todayLessons, minutes, currentLesson) {
+        todayLessons.filter { it.lessonNumber > (currentLesson?.lessonNumber ?: 0) }
             .minByOrNull { it.lessonNumber }
     }
 
@@ -683,18 +711,103 @@ fun StudentCardScreen(
                 }
             }
 
-            // Расписание группы на сегодня
+            // Расписание группы: сегодня / завтра / календарь
             item {
-                Text(
-                    text = "РАСПИСАНИЕ ГРУППЫ ${student.group} НА СЕГОДНЯ",
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        color = ColorBrandBlue
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        DayMode.entries.forEach { mode ->
+                            val selected = dayMode == mode
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                color = if (selected) ADMIN_ACCENT else ColorBgMain,
+                                border = BorderStroke(1.dp, ADMIN_ACCENT),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .bouncyClickable { dayMode = mode; calendarDate = null }
+                            ) {
+                                Text(
+                                    text = mode.title,
+                                    textAlign = TextAlign.Center,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = if (selected) Color.White else ADMIN_ACCENT
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = when (dayMode) {
+                            DayMode.TODAY -> "РАСПИСАНИЕ ГРУППЫ ${student.group} НА СЕГОДНЯ"
+                            DayMode.TOMORROW -> "РАСПИСАНИЕ ГРУППЫ ${student.group} НА ЗАВТРА"
+                            DayMode.CALENDAR -> calendarDate?.let { "РАСПИСАНИЕ ГРУППЫ ${student.group} НА $it" }
+                                ?: "КАЛЕНДАРЬ ГРУППЫ ${student.group}"
+                        },
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = ColorBrandBlue
+                        )
                     )
-                )
+                }
             }
-            if (lessons.isEmpty()) {
+
+            // Выбор даты — только в режиме календаря
+            if (dayMode == DayMode.CALENDAR) {
+                if (availableDates.isEmpty()) {
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            color = ColorSurfaceVariantLight,
+                            border = BorderStroke(1.dp, ColorBorderLight),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "Архив расписания группы пуст — нажмите «Обновить» справа сверху",
+                                style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextMuted),
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+                } else {
+                    item {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(availableDates) { date ->
+                                val selected = date == calendarDate
+                                Surface(
+                                    shape = RoundedCornerShape(2.dp),
+                                    color = if (selected) ADMIN_ACCENT else ColorBgMain,
+                                    border = BorderStroke(1.dp, ADMIN_ACCENT),
+                                    modifier = Modifier.bouncyClickable { calendarDate = date }
+                                ) {
+                                    Text(
+                                        text = date,
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = if (selected) Color.White else ColorTextBody
+                                        ),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            val displayLessons = lessons
+            if (displayLessons.isEmpty()) {
                 item {
                     Surface(
                         shape = RoundedCornerShape(2.dp),
@@ -703,14 +816,19 @@ fun StudentCardScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = if (isLoading) "Загружаем расписание…" else "На сегодня уроков нет",
+                            text = when {
+                                isLoading -> "Загружаем расписание…"
+                                dayMode == DayMode.CALENDAR && calendarDate == null -> "Выберите дату выше"
+                                dayMode == DayMode.TOMORROW -> "На завтра уроков нет"
+                                else -> "На сегодня уроков нет"
+                            },
                             style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextMuted),
                             modifier = Modifier.padding(12.dp)
                         )
                     }
                 }
             } else {
-                items(lessons) { lesson ->
+                items(displayLessons) { lesson ->
                     Surface(
                         shape = RoundedCornerShape(2.dp),
                         color = ColorSurfaceVariantLight,
@@ -750,9 +868,15 @@ fun StudentCardScreen(
     }
 }
 
+/** Режим показа расписания в карточке ученика. */
+private enum class DayMode(val title: String) {
+    TODAY("Сегодня"),
+    TOMORROW("Завтра"),
+    CALENDAR("Календарь")
+}
+
 @Composable
-private fun BackButton(onBack: () -> Unit) {
-    Surface(
+private fun BackButton(onBack: () -> Unit) {    Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
         border = BorderStroke(1.dp, ColorBorderLight),

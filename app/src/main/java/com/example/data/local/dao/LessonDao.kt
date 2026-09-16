@@ -52,7 +52,13 @@ interface LessonDao {
     @Query("DELETE FROM lessons WHERE groupName = :groupName AND dayOfWeek = :dayOfWeek")
     suspend fun deleteLessonsForDay(groupName: String, dayOfWeek: Int)
 
-    @Query("SELECT DISTINCT dateString FROM lessons WHERE groupName = :groupName AND dateString != '' ORDER BY dateString DESC")
+    // dateString хранится как «дд.ММ.гггг», поэтому обычная сортировка строк дала бы
+    // 31.12 < 01.01 — сортируем по частям: год, месяц, день.
+    @Query("""
+        SELECT DISTINCT dateString FROM lessons
+        WHERE groupName = :groupName AND dateString != ''
+        ORDER BY substr(dateString, 7, 4) DESC, substr(dateString, 4, 2) DESC, substr(dateString, 1, 2) DESC
+    """)
     fun getDistinctDatesForGroup(groupName: String): Flow<List<String>>
 
     @Query("SELECT * FROM lessons WHERE groupName = :groupName AND (subjectRaw LIKE '%' || :query || '%' OR teacherFirst LIKE '%' || :query || '%' OR teacherSecond LIKE '%' || :query || '%' OR roomFirst LIKE '%' || :query || '%') ORDER BY dayOfWeek ASC, lessonNumber ASC")
@@ -60,6 +66,14 @@ interface LessonDao {
 
     @Query("SELECT COUNT(*) FROM lessons WHERE groupName = :groupName")
     suspend fun getLessonCountForGroup(groupName: String): Int
+
+    /** Все встречающиеся даты (по всем группам) — для ограничения размера архива. */
+    @Query("SELECT DISTINCT dateString FROM lessons WHERE dateString != ''")
+    suspend fun getAllDistinctDatesSync(): List<String>
+
+    /** Удаление уроков конкретной даты по всем группам (устаревший архив). */
+    @Query("DELETE FROM lessons WHERE dateString = :dateString")
+    suspend fun deleteLessonsByDate(dateString: String)
 
     @Transaction
     suspend fun replaceScheduleForGroup(groupName: String, newLessons: List<LessonEntity>) {

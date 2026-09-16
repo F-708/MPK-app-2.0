@@ -9,6 +9,32 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 
+/** Формат дат в LessonEntity.dateString — «дд.ММ.гггг» (задаёт MpkScheduleParser). */
+private val DATE_DD_MM_YYYY = Regex("""\d{2}\.\d{2}\.\d{4}""")
+
+/**
+ * Сколько дней архива расписания хранить. Колледж публикует документы раз в день,
+ * и каждая синхронизация добавляет новую дату — без чистки БД растёт бесконечно.
+ */
+private const val ARCHIVE_KEEP_DAYS = 60L
+
+/**
+ * true, если дата «дд.ММ.гггг» старше [cutoffMs]. Строки, не похожие на дату,
+ * НЕ считаются устаревшими: лучше оставить лишнее, чем удалить действующее расписание
+ * (уроки-шаблоны по дню недели хранятся с пустым dateString).
+ */
+internal fun isStaleDate(date: String, cutoffMs: Long): Boolean {
+    if (!DATE_DD_MM_YYYY.matches(date)) return false
+    val cal = Calendar.getInstance()
+    cal.clear()
+    cal.set(
+        date.substring(6, 10).toInt(),
+        date.substring(3, 5).toInt() - 1,
+        date.substring(0, 2).toInt()
+    )
+    return cal.timeInMillis < cutoffMs
+}
+
 /**
  * Репозиторий для работы с расписанием занятий колледжа.
  * Поддерживает локальное хранилище Room, сетевую синхронизацию и календарный архив.
@@ -60,7 +86,21 @@ class ScheduleRepository(
             if (distinct.isNotEmpty()) {
                 replaceSyncedLessons(groupName, distinct)
             }
+            pruneOldLessons()
             distinct.size
+        }
+    }
+
+    /**
+     * Ограничивает архив расписания: без этого БД растёт бесконечно — каждая
+     * синхронизация добавляет новую дату и старые никогда не удаляются.
+     * Чистит по всем группам сразу (включая те, на которые пользователь уже
+     * переключился), поэтому вызывается из синхронизации, а не из удаления группы.
+     */
+    suspend fun pruneOldLessons(keepDays: Long = ARCHIVE_KEEP_DAYS) = withContext(Dispatchers.IO) {
+        val cutoff = System.currentTimeMillis() - keepDays * 24L * 60L * 60L * 1000L
+        for (date in lessonDao.getAllDistinctDatesSync()) {
+            if (isStaleDate(date, cutoff)) lessonDao.deleteLessonsByDate(date)
         }
     }
 
