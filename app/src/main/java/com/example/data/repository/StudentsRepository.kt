@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
+import com.example.util.MpkCurriculum
 
 /**
  * Учащийся колледжа из базы приёмной комиссии (только admin-версия).
@@ -14,7 +15,13 @@ data class Student(
     val funding: String,   // Бюджет / Платное
     val dormitory: String, // Общежитие
     val curator: String,
-    val room: String
+    val room: String,
+    /**
+     * Курс в базе больше, чем курсов у специальности (например, 4-й курс у ДОУ,
+     * где учат три года). Такие записи не удаляем — это живые люди, — но помечаем,
+     * чтобы не отправлять администратора искать несуществующую группу.
+     */
+    val courseMismatch: Boolean = false
 )
 
 /**
@@ -29,17 +36,26 @@ class StudentsRepository(private val context: Context) {
             .filter { it.isNotBlank() }
             .map { line ->
                 val p = line.split(';')
+                val group = p.getOrElse(1) { "" }
+                // В исходной базе курс записан как «4 курс» — оставляем только цифру
+                val course = p.getOrElse(2) { "" }.filter { it.isDigit() }
+                // Буква специальности — последний символ группы («41Д» -> «Д»)
+                val letter = group.lastOrNull()
+                val maxCourse = letter
+                    ?.let { MpkCurriculum.getSpecialty(it) }
+                    ?.subjectsByCourse?.keys?.maxOrNull()
                 Student(
                     fullName = p.getOrElse(0) { "" },
-                    group = p.getOrElse(1) { "" },
-                    // В исходной базе курс записан как «4 курс» — оставляем только цифру
-                    course = p.getOrElse(2) { "" }.filter { it.isDigit() },
+                    group = group,
+                    course = course,
                     specialtyCode = p.getOrElse(3) { "" },
                     specialty = p.getOrElse(4) { "" },
                     funding = p.getOrElse(5) { "" },
                     dormitory = p.getOrElse(6) { "" },
                     curator = p.getOrElse(7) { "" },
-                    room = p.getOrElse(8) { "" }
+                    room = p.getOrElse(8) { "" },
+                    courseMismatch = maxCourse != null &&
+                        (course.toIntOrNull() ?: 0) > maxCourse
                 )
             }
             .filter { it.fullName.isNotBlank() }

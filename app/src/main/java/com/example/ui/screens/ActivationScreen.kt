@@ -120,6 +120,9 @@ fun ActivationScreen(
             placeholder = {
                 Text(
                     text = "0".repeat(UnlockToken.DIGITS),
+                    // Вводимые цифры идут по центру — подсказка тоже должна быть там же
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                     style = TextStyle(fontSize = 22.sp, letterSpacing = 6.sp)
                 )
             },

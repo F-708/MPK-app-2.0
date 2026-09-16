@@ -125,30 +125,9 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(ColorBgMain)
     ) {
-        // Заголовок страницы
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text(
-                text = "Настройки",
-                style = TextStylePageTitle,
-                maxLines = 1
-            )
-            Text(
-                text = "Параметры и диагностика приложения",
-                style = androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    color = ColorBrandBlue
-                )
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ColorDividerLight)
-        )
-
+        // Заголовок страницы рисует вызывающий экран (CollegeScreen.SettingsPage):
+        // там он рядом со стрелкой «назад». Второй такой же заголовок здесь
+        // приводил к тому, что «Настройки» показывались дважды подряд.
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),

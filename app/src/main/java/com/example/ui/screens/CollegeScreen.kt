@@ -163,10 +163,7 @@ fun CollegeScreen(
                     page = OtherPage.TEACHERS
                 }
             }
-            OtherPage.CONNECT -> Column(modifier = Modifier.fillMaxSize()) {
-                SubPageHeader(title = "Как подключить приложение", onBack = { page = OtherPage.MENU })
-                HowToConnectScreen()
-            }
+            OtherPage.CONNECT -> AppCodeScreen(onBack = { page = OtherPage.MENU })
             OtherPage.SETTINGS -> SettingsPage(
                 groupInfo = groupInfo,
                 diagnosticInfo = diagnosticInfo,
@@ -242,7 +239,7 @@ private fun OtherMenu(
                 item {
                     AdminMenuCard(
                         icon = { Icon(Icons.Default.AdminPanelSettings, null, tint = ADMIN_GOLD, modifier = Modifier.size(20.dp)) },
-                        title = "Как подключить приложение",
+                        title = "Код приложения",
                         subtitle = "Код разблокировки для студента — действует одну минуту",
                         badge = "ADMIN",
                         onClick = onOpenConnect
@@ -451,11 +448,21 @@ private fun SettingsPage(
         ) {
             SubPageBackButton(onBack)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Настройки",
-                style = TextStylePageTitle.copy(fontSize = 24.sp),
-                maxLines = 1
-            )
+            Column {
+                Text(
+                    text = "Настройки",
+                    style = TextStylePageTitle.copy(fontSize = 24.sp),
+                    maxLines = 1
+                )
+                Text(
+                    text = "Параметры и диагностика приложения",
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        color = ColorBrandBlue
+                    )
+                )
+            }
         }
 
         Box(

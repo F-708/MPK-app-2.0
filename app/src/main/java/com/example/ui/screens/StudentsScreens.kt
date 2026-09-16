@@ -523,6 +523,21 @@ fun StudentCardScreen(
                         if (student.funding.isNotBlank()) InfoLine("Основа обучения", student.funding)
                         if (student.dormitory.isNotBlank()) InfoLine("Общежитие", student.dormitory)
                         if (student.curator.isNotBlank()) InfoLine("Куратор", student.curator)
+
+                        // Курс в базе выше, чем курсов у специальности: группа
+                        // в расписании не появится, поэтому предупреждаем сразу
+                        if (student.courseMismatch) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "В базе указан ${student.course} курс, но у этой специальности " +
+                                    "меньше курсов обучения. Группы ${student.group} в расписании " +
+                                    "не будет — проверьте группу и курс.",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFB3261E)
+                                )
+                            )
+                        }
                     }
                 }
             }

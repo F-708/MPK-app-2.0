@@ -93,7 +93,17 @@ class Step1LogicTest {
             assertTrue("У специальности '$code' должен быть хотя бы один курс", courses.isNotEmpty())
             for (course in courses) {
                 val subjects = specialty.subjectsByCourse[course]!!
-                assertTrue("Список предметов '$code' курса $course не должен быть пустым", subjects.isNotEmpty())
+                if (course in specialty.incompleteCourses) {
+                    // Курс помечен как повреждённый (нет достоверного перечня):
+                    // список обязан быть пустым — приложение покажет пометку,
+                    // а не выдуманные предметы
+                    assertTrue(
+                        "Курс $course специальности '$code' помечен повреждённым, список должен быть пустым",
+                        subjects.isEmpty()
+                    )
+                } else {
+                    assertTrue("Список предметов '$code' курса $course не должен быть пустым", subjects.isNotEmpty())
+                }
             }
         }
     }

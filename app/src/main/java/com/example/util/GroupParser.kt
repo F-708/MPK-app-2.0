@@ -153,6 +153,11 @@ object GroupParser {
         for (course in 1..4) {
             for (code in specialtyCodes) {
                 val specialty = MpkCurriculum.getSpecialty(code)
+                // Не предлагаем курс, которого у специальности нет: у ДОУ три курса,
+                // и группы 41Д быть не может. Иначе человек уходит искать группу,
+                // которой не существует.
+                val maxCourse = specialty?.subjectsByCourse?.keys?.maxOrNull() ?: 4
+                if (course > maxCourse) continue
                 groups.add(
                     GroupInfo(
                         rawName = "${course}1$code",
