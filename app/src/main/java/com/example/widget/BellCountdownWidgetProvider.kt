@@ -127,34 +127,22 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
 
             val style = WidgetStyle.load(context, appWidgetId)
             views.setInt(R.id.widget_countdown_root, "setBackgroundColor", style.backgroundColor)
-            val mainColor = style.mainColor
-            val subColor = style.subColor
-            views.setTextColor(R.id.tv_countdown, mainColor)
-            views.setTextColor(R.id.tv_countdown_label, subColor)
-            views.setTextColor(R.id.tv_countdown_clock, subColor)
-            views.setTextColor(R.id.tv_countdown_lesson, subColor)
+            views.setTextColor(R.id.tv_countdown_label, style.subColor)
+            views.setTextColor(R.id.tv_countdown_value, style.mainColor)
 
             val info = countdownInfo(context)
-            if (info != null) {
-                val (minutesLeft, label, lessonNum) = info
-                if (minutesLeft < 0) {
-                    // Уроки группы закончились
-                    views.setTextViewText(R.id.tv_countdown, "Уроки")
-                    views.setTextViewText(R.id.tv_countdown_label, "закончились")
-                } else {
-                    val h = minutesLeft / 60
-                    val m = minutesLeft % 60
-                    views.setTextViewText(
-                        R.id.tv_countdown,
-                        if (h > 0) String.format("%d:%02d", h, m) else String.format("%d", m)
-                    )
-                    views.setTextViewText(R.id.tv_countdown_label, if (h > 0) label else "$label, мин")
+            when {
+                // Уроки закончились или данных нет — одна спокойная строка без числа
+                info == null || info.first < 0 -> {
+                    views.setTextViewText(R.id.tv_countdown_label, "Уроки")
+                    views.setTextViewText(R.id.tv_countdown_value, "закончились")
                 }
-            } else {
-                views.setTextViewText(R.id.tv_countdown, "—")
-                views.setTextViewText(R.id.tv_countdown_label, "уроки закончились")
+                else -> {
+                    val (minutesLeft, label, _) = info
+                    views.setTextViewText(R.id.tv_countdown_label, label)
+                    views.setTextViewText(R.id.tv_countdown_value, formatMinutes(minutesLeft))
+                }
             }
-            views.setTextViewText(R.id.tv_countdown_lesson, "")
 
             // Клик — открыть приложение
             val openIntent = PendingIntent.getActivity(
@@ -165,6 +153,21 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_countdown_root, openIntent)
             return views
+        }
+
+        /**
+         * Человекочитаемая длительность: «12 мин», «1 ч 5 мин», «2 ч».
+         * В подавляющем большинстве случаев это просто минуты.
+         */
+        fun formatMinutes(totalMinutes: Long): String {
+            if (totalMinutes <= 0) return "меньше минуты"
+            val h = totalMinutes / 60
+            val m = totalMinutes % 60
+            return when {
+                h == 0L -> "$m мин"
+                m == 0L -> "$h ч"
+                else -> "$h ч $m мин"
+            }
         }
     }
 }
@@ -213,7 +216,17 @@ object WidgetAlarm {
         )
     }
 
+    /** Нужен ли минутный такт: есть виджеты ИЛИ включена постоянная строка «До звонка». */
+    private fun hasWork(context: Context): Boolean {
+        if (com.example.util.BellCountdownNotifier.isEnabled(context)) return true
+        val manager = AppWidgetManager.getInstance(context)
+        return manager.getAppWidgetIds(
+            ComponentName(context, BellCountdownWidgetProvider::class.java)
+        ).isNotEmpty()
+    }
+
     fun scheduleNext(context: Context) {
+        if (!hasWork(context)) return
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val cal = Calendar.getInstance()
         val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
@@ -250,6 +263,8 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
         when (intent.action) {
             ACTION_TICK -> {
                 BellCountdownWidgetProvider.updateAll(context)
+                // Постоянная строка «До звонка» обновляется тем же тактом
+                com.example.util.BellCountdownNotifier.refresh(context)
                 WidgetAlarm.scheduleNext(context)
             }
             Intent.ACTION_BOOT_COMPLETED -> WidgetAlarm.scheduleNext(context)

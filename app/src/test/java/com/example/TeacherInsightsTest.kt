@@ -1,0 +1,189 @@
+package com.example
+
+import com.example.data.local.entity.LessonEntity
+import com.example.data.repository.Teacher
+import com.example.data.repository.TeacherInsights
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * Тесты сопоставления преподавателей расписания с официальной базой
+ * и вывода производной информации (кабинеты, дисциплины, «активность»).
+ *
+ * Данные — реальные ФИО из документов guo-mpk.by и официальной базы колледжа.
+ */
+class TeacherInsightsTest {
+
+    private fun teacher(fullName: String) = Teacher(name = fullName)
+
+    private val base = listOf(
+        teacher("Зыбин Олег Львович"),
+        teacher("Купрейчик Наталья Андреевна"),
+        teacher("Мешалкина Ирина Владимировна"),
+        teacher("Дубатовка Екатерина Анатольевна"),
+        teacher("Березовская Нелли Викторовна"),
+        teacher("Савицкая Ольга Владимировна"),
+        teacher("Савицкая Татьяна Владимировна"),
+        teacher("Будай Инесса Николаевна"),
+        teacher("Кривошей Дмитрий Александрович"),
+    )
+
+    private fun insights(lessons: List<LessonEntity> = emptyList()) =
+        TeacherInsights(base, lessons)
+
+    private fun lesson(
+        teacherFirst: String,
+        teacherSecond: String = "",
+        roomFirst: String = "",
+        roomSecond: String = "",
+        subject: String = "",
+        date: String = ""
+    ) = LessonEntity(
+        groupName = "41О",
+        dayOfWeek = 2,
+        lessonNumber = 1,
+        timeStart = "08:15",
+        timeEnd = "09:00",
+        subjectRaw = subject,
+        roomFirst = roomFirst,
+        teacherFirst = teacherFirst,
+        roomSecond = roomSecond,
+        teacherSecond = teacherSecond,
+        dateString = date
+    )
+
+    // ------------------------- Сопоставление ФИО -------------------------
+
+    @Test
+    fun `точное совпадение по фамилии и инициалам`() {
+        val ti = insights()
+        assertEquals("Зыбин Олег Львович", ti.matchTeacher("Зыбин О.Л.")?.name)
+        assertEquals("Мешалкина Ирина Владимировна", ti.matchTeacher("Мешалкина И.В.")?.name)
+        assertEquals("Дубатовка Екатерина Анатольевна", ti.matchTeacher("Дубатовка Е.А.")?.name)
+    }
+
+    @Test
+    fun `фамилия без инициалов сопоставляется однозначно`() {
+        // В расписании инициалы иногда теряются
+        assertEquals("Кривошей Дмитрий Александрович", insights().matchTeacher("Кривошей Д")?.name)
+        assertEquals("Кривошей Дмитрий Александрович", insights().matchTeacher("Кривошей")?.name)
+    }
+
+    @Test
+    fun `обрезанная фамилия ищется по префиксу`() {
+        // guo-mpk.by обрезает длинные ФИО: «Березовска» вместо «Березовская»
+        assertEquals("Березовская Нелли Викторовна", insights().matchTeacher("Березовска")?.name)
+        assertEquals("Березовская Нелли Викторовна", insights().matchTeacher("Березовск")?.name)
+    }
+
+    @Test
+    fun `однофамильцы различаются по инициалам`() {
+        val ti = insights()
+        assertEquals("Савицкая Ольга Владимировна", ti.matchTeacher("Савицкая О.")?.name)
+        assertEquals("Савицкая Татьяна Владимировна", ti.matchTeacher("Савицкая Т.В.")?.name)
+        // Без инициалов однозначно определить нельзя
+        assertNull(ti.matchTeacher("Савицкая"))
+    }
+
+    @Test
+    fun `неизвестная фамилия возвращает null`() {
+        val ti = insights()
+        assertNull(ti.matchTeacher("Несуществующий И.И."))
+        assertNull(ti.matchTeacher(""))
+        assertNull(ti.matchTeacher("Ы"))
+    }
+
+    @Test
+    fun `разбор строки с двумя преподавателями через слэш`() {
+        val names = TeacherInsights.splitTeacherNames("Зыбин О.Л. /Купрейчик Н.А.")
+        assertEquals(2, names.size)
+        assertEquals("Зыбин О.Л.", names[0])
+        assertEquals("Купрейчик Н.А.", names[1])
+    }
+
+    @Test
+    fun `строки из реального расписания парсятся полностью`() {
+        // Так выглядит ячейка преподавателей в документе guo-mpk.by
+        val raw = "Серединов А/Будай И.Н."
+        val names = TeacherInsights.splitTeacherNames(raw)
+        assertEquals(2, names.size)
+        val ti = insights()
+        assertNull("Серединова нет в базе — не должен ложно сопоставиться", ti.matchTeacher(names[0]))
+        assertEquals("Будай Инесса Николаевна", ti.matchTeacher(names[1])?.name)
+    }
+
+    // ---------------------- Производная информация ----------------------
+
+    @Test
+    fun `активные преподаватели определяются из уроков группы`() {
+        val lessons = listOf(
+            lesson(teacherFirst = "Зыбин О.Л. /Купрейчик Н.А.", roomFirst = "249", roomSecond = "112"),
+            lesson(teacherFirst = "Дубатовка Е.А.", roomFirst = "242"),
+            lesson(teacherFirst = "Посторонний П.П.", roomFirst = "999")
+        )
+        val ti = insights(lessons)
+
+        // Три преподавателя из базы: Зыбин, Купрейчик (из строки через слэш) и Дубатовка.
+        // «Посторонний П.П.» в базе отсутствует и в активные не попадает.
+        assertEquals(3, ti.activeNames.size)
+        assertTrue(ti.isActive("Зыбин Олег Львович"))
+        assertTrue(ti.isActive("Купрейчик Наталья Андреевна"))
+        assertTrue(ti.isActive("Дубатовка Екатерина Анатольевна"))
+        assertTrue("Преподаватель вне базы не попадает в активные", !ti.isActive("Посторонний"))
+    }
+
+    @Test
+    fun `кабинеты преподавателя собираются из расписания по частоте`() {
+        val lessons = listOf(
+            lesson(teacherFirst = "Зыбин О.Л.", roomFirst = "249"),
+            lesson(teacherFirst = "Зыбин О.Л.", roomFirst = "249"),
+            lesson(teacherFirst = "Зыбин О.Л.", roomFirst = "112")
+        )
+        val rooms = insights(lessons).rooms("Зыбин Олег Львович")
+        assertEquals(listOf("249", "112"), rooms)
+    }
+
+    @Test
+    fun `дисциплины преподавателя определяются из его уроков`() {
+        val lessons = listOf(
+            lesson(teacherFirst = "Дубатовка Е.А.", subject = "Системы технологий"),
+            lesson(teacherFirst = "Дубатовка Е.А.", subject = "Охрана труда"),
+            lesson(teacherFirst = "Дубатовка Е.А.", subject = "Системы технологий")
+        )
+        val subjects = insights(lessons).subjects("Дубатовка Екатерина Анатольевна")
+        assertTrue(subjects.contains("Системы технологий"))
+        assertTrue(subjects.contains("Охрана труда"))
+        assertEquals("Дубли убраны", 2, subjects.size)
+    }
+
+    @Test
+    fun `преподаватели с историей расписания подсвечиваются как активные`() {
+        // Даже если урок был вчера — преподаватель встречается у группы
+        val lessons = listOf(
+            lesson(teacherFirst = "Мешалкина И.В.", roomFirst = "339", date = "2026-09-15")
+        )
+        val ti = insights(lessons)
+        assertTrue(ti.isActive("Мешалкина Ирина Владимировна"))
+        assertEquals(1, ti.lessonCount("Мешалкина Ирина Владимировна"))
+        assertEquals("2026.09.15", ti.lastSeenDate("Мешалкина Ирина Владимировна"))
+    }
+
+    @Test
+    fun `сопоставление через второй преподаватель в подгруппе`() {
+        val lessons = listOf(
+            lesson(
+                teacherFirst = "Зыбин О.Л.",
+                teacherSecond = "Купрейчик Н.А.",
+                roomFirst = "249",
+                roomSecond = "112"
+            )
+        )
+        val ti = insights(lessons)
+        // Кабинеты подгрупп распределяются по обоим преподавателям
+        assertNotNull(ti.rooms("Зыбин Олег Львович"))
+        assertNotNull(ti.rooms("Купрейчик Наталья Андреевна"))
+    }
+}

@@ -409,7 +409,11 @@ private fun LessonBellCard(
 
                 // Точка времени на текущей карточке
                 if (dotProgress != null) {
-                    val y = size.height * dotProgress
+                    // Точка ходит не по всей высоте карточки, а с отступом:
+                    // пульсирующее кольцо (до 11dp) не должно касаться рамки урока.
+                    val inset = 16.dp.toPx()
+                    val travel = (size.height - inset * 2).coerceAtLeast(1f)
+                    val y = inset + travel * dotProgress
                     drawCircle(
                         color = RAIL_BLUE_SOFT,
                         radius = pulseRadius.dp.toPx() + 4.dp.toPx(),

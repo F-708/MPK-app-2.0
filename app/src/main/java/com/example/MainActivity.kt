@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
 
         // Создаем канал уведомлений и регистрируем периодический WorkManager
         NotificationHelper.createNotificationChannel(this)
+        com.example.util.BellCountdownNotifier.createChannel(this)
         MpkWorkManagerHelper.setupPeriodicScheduleCheck(this)
 
         setContent {

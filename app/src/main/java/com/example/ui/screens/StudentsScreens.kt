@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.PersonSearch
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -28,11 +29,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,12 +63,17 @@ import com.example.ui.theme.ColorTextMuted
 import com.example.ui.theme.ColorTextTitle
 import com.example.ui.theme.ColorTopBar
 import com.example.ui.theme.TextStylePageTitle
+import com.example.data.repository.TeachersRepository
+import com.example.data.repository.TeacherInsights
+import androidx.compose.material3.CircularProgressIndicator
 import com.example.ui.util.bouncyClickable
 import com.example.util.DebugClock
 import java.util.Calendar
+import kotlinx.coroutines.launch
 
 private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
+private val ADMIN_GOLD = Color(0xFFE8C55A)
 
 /**
  * База данных учащихся (только admin-версия): поиск и фильтры
@@ -296,7 +304,10 @@ private fun StudentRow(student: Student, onClick: () -> Unit) {
 }
 
 /**
- * Карточка ученика + «где сейчас»: текущий урок группы по расписанию.
+ * Карточка учащегося (admin): сведения, «где сейчас» и расписание его группы.
+ *
+ * Расписание группы подгружается с сайта при первом открытии карточки —
+ * иначе для чужих групп (не выбранных в приложении) данных в кэше нет.
  */
 @Composable
 fun StudentCardScreen(
@@ -305,6 +316,7 @@ fun StudentCardScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val now = remember { DebugClock.now() }
     val dow = remember {
         when (now.get(Calendar.DAY_OF_WEEK)) {
@@ -325,15 +337,52 @@ fun StudentCardScreen(
         .getLessonsForDay(student.group, dow)
         .collectAsState(initial = emptyList())
 
+    val allGroupLessons by scheduleRepository
+        .getAllLessonsForGroup(student.group)
+        .collectAsState(initial = emptyList())
+
+    // --- Автозагрузка расписания группы с сайта ---
+    var isLoading by remember(student.group) { mutableStateOf(false) }
+    var loadMessage by remember(student.group) { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+
+    fun loadSchedule() {
+        if (isLoading) return
+        isLoading = true
+        loadMessage = ""
+        scope.launch {
+            val result = scheduleRepository.syncScheduleFromWeb(student.group)
+            loadMessage = result.fold(
+                onSuccess = { count ->
+                    if (count > 0) "Загружено уроков: $count" else "Расписание группы пока не опубликовано"
+                },
+                onFailure = { "Не удалось загрузить (проверьте интернет)" }
+            )
+            isLoading = false
+        }
+    }
+
+    LaunchedEffect(student.group) {
+        // Если для группы ещё нет данных — тихо подтягиваем с сайта
+        if (!scheduleRepository.hasSchedule(student.group)) {
+            loadSchedule()
+        }
+    }
+
+    // Преподаватели, которые ведут у этой группы (сопоставление с официальной базой)
+    val teachers = remember { TeachersRepository(context).loadTeachers() }
+    val insights = remember(teachers, allGroupLessons) {
+        TeacherInsights(teachers, allGroupLessons)
+    }
+
     val currentLesson = remember(lessons, minutes) {
         val bells = CollegeBellSchedule.getBellsForDay(dow)
         val currentNum = bells.firstOrNull { minutes in it.startMinutes..it.endMinutes }?.lessonNumber
         if (currentNum != null && currentNum > 0) {
-            lessons.filter { it.lessonNumber == currentNum }
-                .maxByOrNull { it.lessonNumber }
+            lessons.firstOrNull { it.lessonNumber == currentNum }
         } else null
     }
-    val nextLesson = remember(lessons, minutes) {
+    val nextLesson = remember(lessons, minutes, currentLesson) {
         lessons.filter { it.lessonNumber > (currentLesson?.lessonNumber ?: 0) }
             .minByOrNull { it.lessonNumber }
     }
@@ -351,11 +400,48 @@ fun StudentCardScreen(
         ) {
             BackButton(onBack)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Учащийся",
-                style = TextStylePageTitle.copy(fontSize = 22.sp),
-                maxLines = 1
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = student.fullName,
+                    style = TextStylePageTitle.copy(fontSize = 20.sp),
+                    maxLines = 1
+                )
+                Text(
+                    text = "Группа ${student.group} • ${student.course} курс",
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        color = ADMIN_ACCENT
+                    ),
+                    maxLines = 1
+                )
+            }
+            // Ручное обновление расписания группы
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                border = BorderStroke(1.dp, ADMIN_ACCENT),
+                color = ColorBgMain,
+                modifier = Modifier
+                    .size(36.dp)
+                    .bouncyClickable { loadSchedule() }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = ADMIN_ACCENT,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Обновить расписание группы",
+                            tint = ADMIN_ACCENT,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
         }
 
         Box(
@@ -365,12 +451,29 @@ fun StudentCardScreen(
                 .background(ColorDividerLight)
         )
 
+        if (loadMessage.isNotBlank()) {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorSurfaceVariantLight,
+                border = BorderStroke(1.dp, ColorBorderLight),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = loadMessage,
+                    style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Карточка ученика
+            // Личные и учебные сведения
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -379,18 +482,11 @@ fun StudentCardScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = student.fullName,
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
-                                color = ColorTextTitle
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        InfoLine("Группа", student.group + " (" + student.course + " курс)")
                         InfoLine("Специальность", student.specialty)
-                        if (student.funding.isNotBlank()) InfoLine("Основа", student.funding)
+                        if (student.specialtyCode.isNotBlank()) {
+                            InfoLine("Код специальности", student.specialtyCode)
+                        }
+                        if (student.funding.isNotBlank()) InfoLine("Основа обучения", student.funding)
                         if (student.dormitory.isNotBlank()) InfoLine("Общежитие", student.dormitory)
                         if (student.curator.isNotBlank()) InfoLine("Куратор", student.curator)
                     }
@@ -413,64 +509,140 @@ fun StudentCardScreen(
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
-                                color = Color(0xFFE8C55A)
+                                color = ADMIN_GOLD
                             )
                         )
                         Spacer(modifier = Modifier.height(6.dp))
-                        if (currentLesson != null) {
-                            Text(
-                                text = currentLesson.subjectRaw,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = Color.White
-                                )
-                            )
-                            Text(
-                                text = buildString {
-                                    append("Урок ${currentLesson.lessonNumber} • ${currentLesson.timeStart}–${currentLesson.timeEnd}")
-                                    val rooms = listOf(currentLesson.roomFirst, currentLesson.roomSecond)
-                                        .filter { it.isNotBlank() }
-                                    if (rooms.isNotEmpty()) append(" • каб. ${rooms.joinToString(" / ")}")
-                                },
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 13.sp,
-                                    color = Color(0xFFD9CBA8)
-                                )
-                            )
-                            if (currentLesson.teacherFirst.isNotBlank()) {
+
+                        when {
+                            currentLesson != null -> {
                                 Text(
-                                    text = currentLesson.teacherFirst,
+                                    text = currentLesson.subjectRaw,
                                     style = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 12.sp,
-                                        color = Color(0xFFB8A87F)
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        color = Color.White
                                     )
                                 )
-                            }
-                        } else {
-                            val bells = CollegeBellSchedule.getBellsForDay(dow)
-                            val breakNow = bells.firstOrNull {
-                                minutes > it.endMinutes && minutes < it.endMinutes + it.breakAfterMinutes
-                            }
-                            Text(
-                                text = when {
-                                    breakNow != null -> "Перемена (${breakNow.breakAfterMinutes} мин)"
-                                    nextLesson != null -> "Сейчас нет урока"
-                                    else -> "Уроков сегодня нет"
-                                },
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    color = Color.White
-                                )
-                            )
-                            if (nextLesson != null) {
                                 Text(
-                                    text = "Следующий: урок ${nextLesson.lessonNumber} в ${nextLesson.timeStart} — ${nextLesson.subjectRaw}",
+                                    text = buildString {
+                                        append("Урок ${currentLesson.lessonNumber} • ")
+                                        append("${currentLesson.timeStart}–${currentLesson.timeEnd}")
+                                        val rooms = listOf(currentLesson.roomFirst, currentLesson.roomSecond)
+                                            .filter { it.isNotBlank() }
+                                        if (rooms.isNotEmpty()) append(" • каб. ${rooms.joinToString(" / ")}")
+                                    },
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontSize = 13.sp,
                                         color = Color(0xFFD9CBA8)
                                     )
+                                )
+                                val teacher = listOf(currentLesson.teacherFirst, currentLesson.teacherSecond)
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" / ")
+                                if (teacher.isNotBlank()) {
+                                    Text(
+                                        text = teacher,
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 12.sp,
+                                            color = Color(0xFFB8A87F)
+                                        )
+                                    )
+                                }
+                            }
+                            isLoading -> {
+                                Text(
+                                    text = "Загружаем расписание…",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = Color.White
+                                    )
+                                )
+                            }
+                            else -> {
+                                val bells = CollegeBellSchedule.getBellsForDay(dow)
+                                val breakNow = bells.firstOrNull {
+                                    it.breakAfterMinutes > 0 && minutes > it.endMinutes &&
+                                        minutes < it.endMinutes + it.breakAfterMinutes
+                                }
+                                Text(
+                                    text = when {
+                                        allGroupLessons.isEmpty() ->
+                                            "Расписание группы не загружено"
+                                        breakNow != null -> "Перемена (${breakNow.breakAfterMinutes} мин)"
+                                        nextLesson != null -> "Сейчас нет урока"
+                                        else -> "Уроков на сегодня нет"
+                                    },
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = Color.White
+                                    )
+                                )
+                                if (nextLesson != null) {
+                                    Text(
+                                        text = "Следующий: урок ${nextLesson.lessonNumber} в ${nextLesson.timeStart} — ${nextLesson.subjectRaw}",
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 13.sp,
+                                            color = Color(0xFFD9CBA8)
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Преподаватели, которые ведут у группы
+            if (insights.activeNames.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "ПРЕПОДАВАТЕЛИ ГРУППЫ (${insights.activeNames.size})",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = ADMIN_ACCENT
+                        )
+                    )
+                }
+                items(insights.activeNames.sorted()) { teacherName ->
+                    val rooms = insights.rooms(teacherName)
+                    val subjects = insights.subjects(teacherName)
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorBgMain,
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                            Text(
+                                text = teacherName,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = ColorTextTitle
+                                )
+                            )
+                            if (subjects.isNotEmpty()) {
+                                Text(
+                                    text = subjects.take(3).joinToString("; "),
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 11.sp,
+                                        color = ColorTextMuted
+                                    ),
+                                    maxLines = 2
+                                )
+                            }
+                            if (rooms.isNotEmpty()) {
+                                Text(
+                                    text = "каб. ${rooms.take(4).joinToString(", ")}",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 11.sp,
+                                        color = ColorBrandBlue
+                                    ),
+                                    maxLines = 1
                                 )
                             }
                         }
@@ -478,10 +650,39 @@ fun StudentCardScreen(
                 }
             }
 
-            // Расписание группы на день
+            // Предметы группы
+            val subjects = allGroupLessons.map { it.subjectRaw }.filter { it.isNotBlank() }.distinct().sorted()
+            if (subjects.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "ПРЕДМЕТЫ В РАСПИСАНИИ (${subjects.size})",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = ADMIN_ACCENT
+                        )
+                    )
+                }
+                items(subjects) { subject ->
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorSurfaceVariantLight,
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = subject,
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextBody),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+
+            // Расписание группы на сегодня
             item {
                 Text(
-                    text = "РАСПИСАНИЕ ГРУППЫ ${student.group}",
+                    text = "РАСПИСАНИЕ ГРУППЫ ${student.group} НА СЕГОДНЯ",
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
@@ -489,41 +690,54 @@ fun StudentCardScreen(
                     )
                 )
             }
-            items(lessons) { lesson ->
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorSurfaceVariantLight,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            if (lessons.isEmpty()) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorSurfaceVariantLight,
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "${lesson.lessonNumber}",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = ColorBrandBlue
+                            text = if (isLoading) "Загружаем расписание…" else "На сегодня уроков нет",
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextMuted),
+                            modifier = Modifier.padding(12.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                    }
+                }
+            } else {
+                items(lessons) { lesson ->
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorSurfaceVariantLight,
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = lesson.subjectRaw,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 13.sp,
-                                    color = ColorTextBody
-                                )
+                                text = "${lesson.lessonNumber}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = ColorBrandBlue
                             )
-                            Text(
-                                text = listOf(lesson.timeStart + "–" + lesson.timeEnd,
-                                    lesson.roomFirst).filter { it.isNotBlank() }
-                                    .joinToString(" • "),
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 11.sp,
-                                    color = ColorTextMuted
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = lesson.subjectRaw,
+                                    style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextBody)
                                 )
-                            )
+                                Text(
+                                    text = listOf(
+                                        "${lesson.timeStart}–${lesson.timeEnd}",
+                                        lesson.teacherFirst,
+                                        lesson.roomFirst.takeIf { it.isNotBlank() }?.let { "каб. $it" } ?: ""
+                                    ).filter { it.isNotBlank() }.joinToString(" • "),
+                                    style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = ColorTextMuted)
+                                )
+                            }
                         }
                     }
                 }

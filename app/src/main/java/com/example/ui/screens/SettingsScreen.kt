@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -311,7 +312,7 @@ fun SettingsScreen(
                             } else "0 Б"
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(label = "Версия приложения", value = "2.9")
+                        DiagnosticRow(label = "Версия приложения", value = "2.10")
 
                         if (isDebugEnabled) {
                             Spacer(modifier = Modifier.height(4.dp))
@@ -479,7 +480,7 @@ fun SettingsScreen(
                                         )
                                     )
                                     Text(
-                                        text = if (isNotificationEnabled) "Включены (14:00 – 21:30)" else "Отключены",
+                                        text = if (isNotificationEnabled) "Включены (10:00 – 21:00)" else "Отключены",
                                         style = androidx.compose.ui.text.TextStyle(
                                             fontSize = 11.sp,
                                             color = ColorTextMuted
@@ -517,7 +518,7 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Уведомления о расписании: с 10:00 до 21:00.",
+                            text = "Приходит один раз, когда на сайте появляется расписание на следующий день.",
                             style = androidx.compose.ui.text.TextStyle(
                                 color = ColorTextMuted,
                                 fontSize = 11.sp
@@ -525,6 +526,11 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+
+            // Постоянная строка «До звонка» в шторке уведомлений
+            item {
+                BellCountdownNotificationCard()
             }
 
             // Официальные ресурсы колледжа
@@ -782,3 +788,196 @@ private fun DebugTimeSection() {
         }
     }
 }
+
+/**
+ * Карточка настройки постоянного уведомления «До звонка»:
+ * выключатель и выбор стиля оформления строки.
+ */
+@Composable
+private fun BellCountdownNotificationCard() {
+    val context = LocalContext.current
+    var isOngoingEnabled by remember {
+        mutableStateOf(com.example.util.BellCountdownNotifier.isEnabled(context))
+    }
+    var selectedStyle by remember {
+        mutableStateOf(com.example.util.BellCountdownNotifier.getStyle(context))
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            isOngoingEnabled = true
+            com.example.util.BellCountdownNotifier.setEnabled(context, true)
+            com.example.widget.WidgetAlarm.scheduleNext(context)
+        } else {
+            isOngoingEnabled = false
+        }
+    }
+
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorBgMain,
+        border = BorderStroke(1.dp, ColorBorderLight),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("bell_notification_card")
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = ColorBrandBlue,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Строка «До звонка»",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = ColorTextTitle
+                            )
+                        )
+                        Text(
+                            text = if (isOngoingEnabled) "Показывается в шторке" else "Отключена",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 11.sp,
+                                color = ColorTextMuted
+                            )
+                        )
+                    }
+                }
+
+                Switch(
+                    checked = isOngoingEnabled,
+                    onCheckedChange = { enable ->
+                        if (enable) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                                PackageManager.PERMISSION_GRANTED
+                            ) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                isOngoingEnabled = true
+                                com.example.util.BellCountdownNotifier.setEnabled(context, true)
+                                com.example.widget.WidgetAlarm.scheduleNext(context)
+                            }
+                        } else {
+                            isOngoingEnabled = false
+                            com.example.util.BellCountdownNotifier.setEnabled(context, false)
+                        }
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = ColorBrandBlue
+                    ),
+                    modifier = Modifier.testTag("bell_notification_switch")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Постоянная строка со временем до звонка — обновляется каждую минуту.",
+                style = androidx.compose.ui.text.TextStyle(
+                    color = ColorTextMuted,
+                    fontSize = 11.sp
+                )
+            )
+
+            if (isOngoingEnabled) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "СТИЛЬ СТРОКИ",
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = ColorBrandBlue
+                    )
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                com.example.util.BellCountdownNotifier.Style.entries.forEach { style ->
+                    val isSelected = selectedStyle == style
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        border = BorderStroke(1.dp, if (isSelected) ColorBrandBlue else ColorBorderLight),
+                        color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp)
+                            .bouncyClickable {
+                                selectedStyle = style
+                                com.example.util.BellCountdownNotifier.setStyle(context, style)
+                            }
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = {
+                                        selectedStyle = style
+                                        com.example.util.BellCountdownNotifier.setStyle(context, style)
+                                    },
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = stylePreviewTitle(style),
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = ColorTextTitle
+                                    )
+                                )
+                            }
+                            Text(
+                                text = stylePreviewBody(style),
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 11.sp,
+                                    color = ColorTextMuted
+                                ),
+                                modifier = Modifier.padding(start = 28.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Превью: как выглядит строка уведомления в выбранном стиле. */
+private fun stylePreviewTitle(style: com.example.util.BellCountdownNotifier.Style): String =
+    when (style) {
+        com.example.util.BellCountdownNotifier.Style.COMPACT -> "До звонка: 12 мин"
+        com.example.util.BellCountdownNotifier.Style.WITH_APP_NAME -> "Мой Политех"
+        com.example.util.BellCountdownNotifier.Style.WITH_LESSON -> "До звонка: 12 мин"
+        com.example.util.BellCountdownNotifier.Style.WITH_PROGRESS -> "До звонка: 12 мин"
+    }
+
+private fun stylePreviewBody(style: com.example.util.BellCountdownNotifier.Style): String =
+    when (style) {
+        com.example.util.BellCountdownNotifier.Style.COMPACT ->
+            "Только суть — сколько осталось"
+        com.example.util.BellCountdownNotifier.Style.WITH_APP_NAME ->
+            "Сверху название приложения, ниже отсчёт"
+        com.example.util.BellCountdownNotifier.Style.WITH_LESSON ->
+            "Плюс номер идущего урока или «Перемена»"
+        com.example.util.BellCountdownNotifier.Style.WITH_PROGRESS ->
+            "С полосой прогресса урока"
+    }

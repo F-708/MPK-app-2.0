@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +25,6 @@ import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -36,6 +36,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -57,8 +58,10 @@ import com.example.data.model.SyncDiagnosticInfo
 import com.example.data.repository.ScheduleRepository
 import com.example.data.repository.Student
 import com.example.data.repository.StudentsRepository
+import com.example.data.repository.TeacherInsights
 import com.example.data.repository.Teacher
 import com.example.data.repository.TeachersRepository
+import com.example.ui.theme.ColorActiveBlue
 import com.example.ui.theme.ColorBgMain
 import com.example.ui.theme.ColorBorderLight
 import com.example.ui.theme.ColorBrandBlue
@@ -79,7 +82,7 @@ private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
 private val ADMIN_GOLD = Color(0xFFE8C55A)
 
-private enum class OtherPage { MENU, SPECIALTY, TEACHERS, SETTINGS, STUDENTS, FIND_STUDENT, STUDENT_CARD }
+private enum class OtherPage { MENU, SPECIALTY, TEACHERS, TEACHER_CARD, SETTINGS, STUDENTS, STUDENT_CARD }
 
 /**
  * Вкладка «Другое»: специальность, преподаватели, настройки, сайт колледжа.
@@ -96,6 +99,7 @@ fun CollegeScreen(
 ) {
     var page by rememberSaveable { mutableStateOf(OtherPage.MENU) }
     var selectedStudent by remember { mutableStateOf<Student?>(null) }
+    var selectedTeacher by remember { mutableStateOf<Teacher?>(null) }
     BackHandler(enabled = page != OtherPage.MENU) { page = OtherPage.MENU }
 
     Column(
@@ -109,11 +113,31 @@ fun CollegeScreen(
                 onOpenSpecialty = { page = OtherPage.SPECIALTY },
                 onOpenTeachers = { page = OtherPage.TEACHERS },
                 onOpenSettings = { page = OtherPage.SETTINGS },
-                onOpenStudents = { page = OtherPage.STUDENTS },
-                onOpenFindStudent = { page = OtherPage.FIND_STUDENT }
+                onOpenStudents = { page = OtherPage.STUDENTS }
             )
             OtherPage.SPECIALTY -> MySpecialtyPage(groupInfo) { page = OtherPage.MENU }
-            OtherPage.TEACHERS -> TeachersPage { page = OtherPage.MENU }
+            OtherPage.TEACHERS -> TeachersPage(
+                groupInfo = groupInfo,
+                scheduleRepository = scheduleRepository,
+                onBack = { page = OtherPage.MENU },
+                onOpenTeacher = { teacher ->
+                    selectedTeacher = teacher
+                    page = OtherPage.TEACHER_CARD
+                }
+            )
+            OtherPage.TEACHER_CARD -> {
+                val teacher = selectedTeacher
+                if (teacher != null) {
+                    TeacherCardPageWrapper(
+                        teacher = teacher,
+                        groupInfo = groupInfo,
+                        scheduleRepository = scheduleRepository,
+                        onBack = { page = OtherPage.TEACHERS }
+                    )
+                } else {
+                    page = OtherPage.TEACHERS
+                }
+            }
             OtherPage.SETTINGS -> SettingsPage(
                 groupInfo = groupInfo,
                 diagnosticInfo = diagnosticInfo,
@@ -123,12 +147,6 @@ fun CollegeScreen(
             )
             OtherPage.STUDENTS -> StudentsDatabaseScreen(
                 onBack = { page = OtherPage.MENU },
-                onOpenStudent = { student ->
-                    selectedStudent = student
-                    page = OtherPage.STUDENT_CARD
-                }
-            )
-            OtherPage.FIND_STUDENT -> FindStudentPage(
                 onOpenStudent = { student ->
                     selectedStudent = student
                     page = OtherPage.STUDENT_CARD
@@ -148,8 +166,7 @@ fun CollegeScreen(
                         onOpenSpecialty = { page = OtherPage.SPECIALTY },
                         onOpenTeachers = { page = OtherPage.TEACHERS },
                         onOpenSettings = { page = OtherPage.SETTINGS },
-                        onOpenStudents = { page = OtherPage.STUDENTS },
-                        onOpenFindStudent = { page = OtherPage.FIND_STUDENT }
+                        onOpenStudents = { page = OtherPage.STUDENTS }
                     )
                 }
             }
@@ -167,8 +184,7 @@ private fun OtherMenu(
     onOpenSpecialty: () -> Unit,
     onOpenTeachers: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenStudents: () -> Unit,
-    onOpenFindStudent: () -> Unit
+    onOpenStudents: () -> Unit
 ) {
     val context = LocalContext.current
     val isAdmin = com.example.BuildConfig.FLAVOR == "admin"
@@ -190,15 +206,6 @@ private fun OtherMenu(
                         subtitle = "Все учащиеся колледжа: фильтры по группам и курсам",
                         badge = "ADMIN",
                         onClick = onOpenStudents
-                    )
-                }
-                item {
-                    AdminMenuCard(
-                        icon = { Icon(Icons.Default.PersonSearch, null, tint = ADMIN_GOLD, modifier = Modifier.size(20.dp)) },
-                        title = "Найти ученика",
-                        subtitle = "Поиск по ФИО: где сейчас ученик и его расписание",
-                        badge = "ADMIN",
-                        onClick = onOpenFindStudent
                     )
                 }
                 item {
@@ -651,27 +658,62 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------------
-// Под-экран «Преподаватели» (101 сотрудник с фото из официальной базы)
+// Под-экран «Преподаватели» (101 сотрудник + активные из расписания группы)
 // ---------------------------------------------------------------------------
 
+/** Строка списка преподавателей: пустая = заголовок-разделитель. */
+private sealed interface TeacherRow {
+    data class Header(val title: String) : TeacherRow
+    data class Item(val teacher: Teacher) : TeacherRow
+}
+
 @Composable
-private fun TeachersPage(onBack: () -> Unit) {
+private fun TeachersPage(
+    groupInfo: GroupInfo,
+    scheduleRepository: ScheduleRepository,
+    onBack: () -> Unit,
+    onOpenTeacher: (Teacher) -> Unit
+) {
     val context = LocalContext.current
     val repository = remember { TeachersRepository(context) }
     val teachers = remember { repository.loadTeachers() }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-    var favoritesVersion by remember { mutableStateOf(0) }
-    val favorites = remember(favoritesVersion) { repository.favorites() }
 
-    val filtered = remember(teachers, searchQuery, favorites) {
+    // Все известные уроки группы (все даты в кэше) — для активных преподавателей
+    val allLessons by scheduleRepository
+        .getAllLessonsForGroup(groupInfo.canonicalName)
+        .collectAsState(initial = emptyList())
+
+    val insights = remember(teachers, allLessons) {
+        TeacherInsights(teachers, allLessons)
+    }
+
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+
+    val rows = remember(teachers, searchQuery, insights) {
         val q = searchQuery.trim().lowercase()
-        val base = if (q.isBlank()) teachers else teachers.filter {
+        val filtered = if (q.isBlank()) teachers else teachers.filter {
             it.name.lowercase().contains(q) ||
                 it.subjects.lowercase().contains(q) ||
                 it.position.lowercase().contains(q) ||
-                it.department.lowercase().contains(q)
+                it.department.lowercase().contains(q) ||
+                insights.rooms(it.name).any { room -> room.contains(q) }
         }
-        base.sortedWith(compareByDescending<Teacher> { favorites.contains(it.name) }.thenBy { it.name })
+
+        val active = filtered.filter { insights.isActive(it.name) }.sortedBy { it.name }
+        val rest = filtered.filterNot { insights.isActive(it.name) }.sortedBy { it.name }
+
+        buildList {
+            if (active.isNotEmpty()) {
+                add(TeacherRow.Header("ВЕДУТ У ГРУППЫ ${groupInfo.canonicalName} (${active.size})"))
+                active.forEach { add(TeacherRow.Item(it)) }
+            }
+            if (rest.isNotEmpty()) {
+                if (active.isNotEmpty()) {
+                    add(TeacherRow.Header("ВСЕ ПРЕПОДАВАТЕЛИ (${rest.size})"))
+                }
+                rest.forEach { add(TeacherRow.Item(it)) }
+            }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -683,11 +725,22 @@ private fun TeachersPage(onBack: () -> Unit) {
         ) {
             SubPageBackButton(onBack)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Преподаватели (${teachers.size})",
-                style = TextStylePageTitle.copy(fontSize = 22.sp),
-                maxLines = 1
-            )
+            Column {
+                Text(
+                    text = "Преподаватели",
+                    style = TextStylePageTitle.copy(fontSize = 22.sp),
+                    maxLines = 1
+                )
+                Text(
+                    text = "${teachers.size} сотрудников • ${insights.activeNames.size} ведут у ${groupInfo.canonicalName}",
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        color = ColorBrandBlue
+                    ),
+                    maxLines = 1
+                )
+            }
         }
 
         Box(
@@ -700,7 +753,7 @@ private fun TeachersPage(onBack: () -> Unit) {
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("Поиск: ФИО, дисциплина, должность...") },
+            placeholder = { Text("Поиск: ФИО, дисциплина, кабинет...") },
             leadingIcon = {
                 Icon(Icons.Default.Search, contentDescription = null, tint = ColorBrandBlue, modifier = Modifier.size(18.dp))
             },
@@ -718,77 +771,105 @@ private fun TeachersPage(onBack: () -> Unit) {
                 .testTag("teachers_search_input")
         )
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(filtered) { teacher ->
-                TeacherCard(
-                    teacher = teacher,
-                    isFavorite = favorites.contains(teacher.name),
-                    onToggleFavorite = {
-                        repository.toggleFavorite(teacher.name)
-                        favoritesVersion++
-                    }
+        if (rows.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Ничего не найдено по запросу «$searchQuery»",
+                    style = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = ColorTextMuted)
                 )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(rows) { row ->
+                    when (row) {
+                        is TeacherRow.Header -> Text(
+                            text = row.title,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = ColorBrandBlue
+                            ),
+                            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+                        )
+                        is TeacherRow.Item -> TeacherCard(
+                            teacher = row.teacher,
+                            isActive = insights.isActive(row.teacher.name),
+                            roomsFromSchedule = insights.rooms(row.teacher.name),
+                            onClick = { onOpenTeacher(row.teacher) }
+                        )
+                    }
+                }
             }
         }
     }
 }
 
+/**
+ * Карточка преподавателя в списке.
+ * Если кабинета нет ни в базе, ни в расписании — строка про кабинет не выводится.
+ */
 @Composable
 private fun TeacherCard(
     teacher: Teacher,
-    isFavorite: Boolean,
-    onToggleFavorite: () -> Unit
+    isActive: Boolean,
+    roomsFromSchedule: List<String>,
+    onClick: () -> Unit
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
-        border = BorderStroke(1.dp, ColorBorderLight),
-        modifier = Modifier.fillMaxWidth()
+        border = BorderStroke(1.dp, if (isActive) ColorActiveBlue else ColorBorderLight),
+        modifier = Modifier
+            .fillMaxWidth()
+            .bouncyClickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (teacher.photo.isNotBlank()) {
-                coil.compose.AsyncImage(
-                    model = "file:///android_asset/teachers_photos/" + teacher.photo,
-                    contentDescription = teacher.name,
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = teacher.name.split(" ").firstOrNull()?.take(1) ?: "?",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                }
-            }
+            TeacherAvatar(teacher = teacher, size = 46.dp, highlight = isActive)
 
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                if (isActive) {
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorActiveBlue,
+                        modifier = Modifier.padding(bottom = 3.dp)
+                    ) {
+                        Text(
+                            text = "ВЕДЁТ У ВАС",
+                            softWrap = false,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp,
+                                color = Color.White
+                            ),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+
                 Text(
                     text = teacher.name,
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = ColorTextTitle
-                    )
+                    ),
+                    maxLines = 1
                 )
+
                 val details = listOf(teacher.position, teacher.subjects)
                     .filter { it.isNotBlank() }
                     .joinToString(" • ")
@@ -802,9 +883,16 @@ private fun TeacherCard(
                         maxLines = 2
                     )
                 }
-                if (teacher.room.isNotBlank()) {
+
+                // Кабинет: личный из базы, иначе — из расписания; нет данных — строку не показываем
+                val roomText = when {
+                    teacher.room.isNotBlank() -> "каб. ${teacher.room}"
+                    roomsFromSchedule.isNotEmpty() -> "каб. ${roomsFromSchedule.take(3).joinToString(", ")}"
+                    else -> ""
+                }
+                if (roomText.isNotBlank()) {
                     Text(
-                        text = "каб. ${teacher.room}" + (if (teacher.phone.isNotBlank()) " • ${teacher.phone}" else ""),
+                        text = roomText,
                         style = androidx.compose.ui.text.TextStyle(
                             fontSize = 11.sp,
                             color = ColorBrandBlue
@@ -814,38 +902,94 @@ private fun TeacherCard(
                 }
             }
 
-            IconButton(onClick = onToggleFavorite) {
-                Icon(
-                    imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                    contentDescription = if (isFavorite) "Убрать из избранного" else "В избранное",
-                    tint = if (isFavorite) Color(0xFFF59E0B) else ColorTextMuted,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = ColorTextMuted,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }
 
-// ---------------------------------------------------------------------------
-// Под-экран «Найти ученика» (admin): живой поиск по ФИО/группе
-// ---------------------------------------------------------------------------
-
+/** Фото преподавателя (или инициалы, если снимка нет). */
 @Composable
-private fun FindStudentPage(
-    onOpenStudent: (Student) -> Unit
+private fun TeacherAvatar(
+    teacher: Teacher,
+    size: androidx.compose.ui.unit.Dp,
+    highlight: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val border = if (highlight) ColorActiveBlue else ColorBorderLight
+    if (teacher.photo.isNotBlank()) {
+        coil.compose.AsyncImage(
+            model = "file:///android_asset/teachers_photos/" + teacher.photo,
+            contentDescription = teacher.name,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = modifier
+                .size(size)
+                .border(1.dp, border, RoundedCornerShape(2.dp))
+                .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
+        )
+    } else {
+        Box(
+            modifier = modifier
+                .size(size)
+                .background(ColorBrandFill, RoundedCornerShape(2.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = teacher.name.split(" ").firstOrNull()?.take(1) ?: "?",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = (size.value * 0.4f).sp
+            )
+        }
+    }
+}
+
+/**
+ * Обёртка карточки преподавателя: собирает производные данные
+ * (кабинеты, дисциплины, активность) из расписания группы.
+ */
+@Composable
+private fun TeacherCardPageWrapper(
+    teacher: Teacher,
+    groupInfo: GroupInfo,
+    scheduleRepository: ScheduleRepository,
+    onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val students = remember { StudentsRepository(context).loadStudents() }
-    var query by rememberSaveable { mutableStateOf("") }
+    val repository = remember { TeachersRepository(context) }
+    val teachers = remember { repository.loadTeachers() }
+    val allLessons by scheduleRepository
+        .getAllLessonsForGroup(groupInfo.canonicalName)
+        .collectAsState(initial = emptyList())
 
-    val results = remember(students, query) {
-        val q = query.trim().lowercase()
-        if (q.length < 2) emptyList()
-        else students.filter {
-            it.fullName.lowercase().contains(q) || it.group.lowercase() == q
-        }.take(30)
-    }
+    val insights = remember(teachers, allLessons) { TeacherInsights(teachers, allLessons) }
 
+    TeacherCardPage(
+        teacher = teacher,
+        roomsFromSchedule = insights.rooms(teacher.name),
+        subjectsFromSchedule = insights.subjects(teacher.name),
+        isActive = insights.isActive(teacher.name),
+        lessonsWithGroup = insights.lessonCount(teacher.name),
+        onBack = onBack
+    )
+}
+
+/**
+ * Полноэкранная карточка преподавателя: крупное фото и полная информация.
+ */
+@Composable
+private fun TeacherCardPage(
+    teacher: Teacher,
+    roomsFromSchedule: List<String>,
+    subjectsFromSchedule: List<String>,
+    isActive: Boolean,
+    lessonsWithGroup: Int,
+    onBack: () -> Unit
+) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
@@ -853,32 +997,13 @@ private fun FindStudentPage(
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SubPageBackButton({})
+            SubPageBackButton(onBack)
             Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.PersonSearch,
-                        contentDescription = null,
-                        tint = ADMIN_ACCENT,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Найти ученика",
-                        style = TextStylePageTitle.copy(fontSize = 22.sp),
-                        maxLines = 1
-                    )
-                }
-                Text(
-                    text = "Введите ФИО или группу — увидите, где ученик сейчас",
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontSize = 12.sp,
-                        color = ColorTextMuted
-                    ),
-                    maxLines = 1
-                )
-            }
+            Text(
+                text = "Преподаватель",
+                style = TextStylePageTitle.copy(fontSize = 22.sp),
+                maxLines = 1
+            )
         }
 
         Box(
@@ -888,96 +1013,177 @@ private fun FindStudentPage(
                 .background(ColorDividerLight)
         )
 
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            placeholder = { Text("Фамилия, имя или группа...") },
-            leadingIcon = { Icon(Icons.Default.Search, null, tint = ADMIN_ACCENT, modifier = Modifier.size(18.dp)) },
-            singleLine = true,
-            shape = RoundedCornerShape(2.dp),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = ColorSurfaceVariantLight,
-                unfocusedContainerColor = ColorSurfaceVariantLight,
-                focusedIndicatorColor = ADMIN_ACCENT,
-                unfocusedIndicatorColor = ColorBorderLight
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .testTag("find_student_input")
-        )
-
-        if (query.length >= 2 && results.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Ничего не найдено",
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontSize = 14.sp,
-                        color = ColorTextMuted
-                    )
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(results) { student ->
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBgMain,
-                        border = BorderStroke(1.dp, ColorBorderLight),
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Фото + ФИО + должность
+            item {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, if (isActive) ColorActiveBlue else ColorBorderLight),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("teacher_card")
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .bouncyClickable { onOpenStudent(student) }
+                            .padding(16.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        // Крупный портрет
+                        if (teacher.photo.isNotBlank()) {
+                            coil.compose.AsyncImage(
+                                model = "file:///android_asset/teachers_photos/" + teacher.photo,
+                                contentDescription = teacher.name,
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(180.dp)
+                                    .border(1.dp, ColorBorderLight, RoundedCornerShape(2.dp))
+                                    .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
+                            )
+                        } else {
                             Box(
                                 modifier = Modifier
-                                    .size(34.dp)
-                                    .background(ADMIN_BG, RoundedCornerShape(2.dp)),
+                                    .size(180.dp)
+                                    .background(ColorBrandFill, RoundedCornerShape(2.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = student.group,
-                                    color = ADMIN_GOLD,
+                                    text = teacher.name.split(" ").firstOrNull()?.take(1) ?: "?",
+                                    color = Color.White,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp
+                                    fontSize = 64.sp
                                 )
                             }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        if (isActive) {
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                color = ColorActiveBlue,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            ) {
                                 Text(
-                                    text = student.fullName,
+                                    text = "ВЕДЁТ У ВАШЕЙ ГРУППЫ",
+                                    softWrap = false,
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = ColorTextTitle
-                                    )
-                                )
-                                Text(
-                                    text = student.course + " курс • " + student.funding,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 11.sp,
-                                        color = ColorTextMuted
-                                    )
+                                        fontSize = 10.sp,
+                                        color = Color.White
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
                             }
-                            Icon(
-                                imageVector = Icons.Default.PersonSearch,
-                                contentDescription = null,
-                                tint = ADMIN_ACCENT,
-                                modifier = Modifier.size(16.dp)
+                        }
+
+                        Text(
+                            text = teacher.name,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp,
+                                color = ColorTextTitle
+                            ),
+                            textAlign = TextAlign.Center
+                        )
+
+                        if (teacher.position.isNotBlank()) {
+                            Text(
+                                text = teacher.position,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 13.sp,
+                                    color = ColorBrandBlue,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                textAlign = TextAlign.Center
                             )
+                        }
+                    }
+                }
+            }
+
+            // Контакты и служебные сведения
+            item {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        val hasContacts = teacher.room.isNotBlank() ||
+                            teacher.phone.isNotBlank() || teacher.email.isNotBlank()
+                        if (hasContacts) {
+                            SectionLabel("КОНТАКТЫ И КАБИНЕТ")
+                            if (teacher.room.isNotBlank()) InfoRow("Кабинет", teacher.room)
+                            if (teacher.phone.isNotBlank()) InfoRow("Телефон", teacher.phone)
+                            if (teacher.email.isNotBlank()) InfoRow("E-mail", teacher.email)
+                        }
+
+                        val hasService = teacher.department.isNotBlank() ||
+                            teacher.experience.isNotBlank() || teacher.category.isNotBlank()
+                        if (hasService) {
+                            if (hasContacts) Spacer(modifier = Modifier.height(10.dp))
+                            SectionLabel("СЛУЖЕБНЫЕ СВЕДЕНИЯ")
+                            if (teacher.department.isNotBlank()) InfoRow("Подразделение", teacher.department)
+                            if (teacher.experience.isNotBlank()) InfoRow("Педагогический стаж", teacher.experience)
+                            if (teacher.category.isNotBlank()) InfoRow("Квалификационная категория", teacher.category)
+                        }
+                    }
+                }
+            }
+
+            // Дисциплины из официальной базы
+            if (teacher.subjects.isNotBlank()) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorSurfaceVariantLight,
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            SectionLabel("ПРЕПОДАВАЕМЫЕ ДИСЦИПЛИНЫ")
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = teacher.subjects,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 13.sp,
+                                    color = ColorTextBody
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Связь с расписанием группы: предметы и кабинеты
+            if (isActive && (subjectsFromSchedule.isNotEmpty() || roomsFromSchedule.isNotEmpty() || lessonsWithGroup > 0)) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorBgMain,
+                        border = BorderStroke(1.dp, ColorActiveBlue),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            SectionLabel("У ВАШЕЙ ГРУППЫ")
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            if (lessonsWithGroup > 0) {
+                                InfoRow("Уроков в базе", "$lessonsWithGroup")
+                            }
+                            if (roomsFromSchedule.isNotEmpty()) {
+                                InfoRow("Ведёт в кабинетах", roomsFromSchedule.joinToString(", "))
+                            }
+                            if (subjectsFromSchedule.isNotEmpty()) {
+                                InfoRow("Предметы", subjectsFromSchedule.take(5).joinToString("; "))
+                            }
                         }
                     }
                 }
@@ -985,7 +1191,6 @@ private fun FindStudentPage(
         }
     }
 }
-
 // ---------------------------------------------------------------------------
 // Общие элементы
 // ---------------------------------------------------------------------------

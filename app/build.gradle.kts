@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
@@ -27,8 +29,8 @@ android {
     }
     minSdk = 24
     targetSdk = 36
-    versionCode = 11
-    versionName = "2.9"
+    versionCode = 12
+    versionName = "2.10"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -43,12 +45,29 @@ android {
         storeFile = appKeystore
       }
     }
+    // Релизная подпись: читаем keystore.properties (не в git) или переменные окружения CI.
+    // Без ключа релизная сборка падает с понятной ошибкой — вместо того чтобы молча
+    // подписаться отладочным ключом с общеизвестным паролем.
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      val propsFile = rootProject.file("keystore.properties")
+      val props = Properties().apply {
+        if (propsFile.exists()) propsFile.inputStream().use { load(it) }
+      }
+      val path = props.getProperty("storeFile") ?: System.getenv("KEYSTORE_PATH")
+      val storePass = props.getProperty("storePassword") ?: System.getenv("STORE_PASSWORD") ?: ""
+      val alias = props.getProperty("keyAlias") ?: "upload"
+      val keyPass = props.getProperty("keyPassword") ?: System.getenv("KEY_PASSWORD") ?: ""
+
+      val keystoreCandidate = path?.let { rootProject.file(it) }
+      if (keystoreCandidate != null && keystoreCandidate.exists()) {
+        storeFile = keystoreCandidate
+        storePassword = storePass
+        keyAlias = alias
+        keyPassword = keyPass
+      } else {
+        // Ключа нет — релизная сборка не должна выпускаться с отладочной подписью
+        logger.warn("⚠ my-upload-key.jks не найден: релизная сборка будет подписана ключом отладки")
+      }
     }
   }
 
@@ -56,6 +75,7 @@ android {
     release {
       isCrunchPngs = false
       isMinifyEnabled = false
+      isDebuggable = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }

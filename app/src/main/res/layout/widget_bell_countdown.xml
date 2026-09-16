@@ -3,57 +3,28 @@
     android:id="@+id/widget_countdown_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="horizontal"
+    android:orientation="vertical"
     android:gravity="center"
-    android:padding="12dp">
+    android:padding="10dp">
 
-    <!-- Левая часть: обратный отсчёт -->
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical">
-
-        <TextView
-            android:id="@+id/tv_countdown"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="12"
-            android:textSize="34sp"
-            android:textStyle="bold"
-            android:maxLines="1" />
-
-        <TextView
-            android:id="@+id/tv_countdown_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="до звонка, мин"
-            android:textSize="11sp"
-            android:maxLines="1" />
-    </LinearLayout>
-
-    <!-- Правая часть: время и урок -->
-    <LinearLayout
+    <!-- Основная надпись: «до звонка» / «до урока» / «Уроки закончились» -->
+    <TextView
+        android:id="@+id/tv_countdown_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="end">
+        android:text="до звонка"
+        android:textSize="12sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
 
-        <TextView
-            android:id="@+id/tv_countdown_clock"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="08:15"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:maxLines="1" />
-
-        <TextView
-            android:id="@+id/tv_countdown_lesson"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="идёт 1 урок"
-            android:textSize="11sp"
-            android:maxLines="1" />
-    </LinearLayout>
+    <!-- Крупное значение: «12 мин», «1 ч 20 мин» -->
+    <TextView
+        android:id="@+id/tv_countdown_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="12 мин"
+        android:textSize="26sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
 </LinearLayout>
