@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -948,7 +949,10 @@ private fun TeacherAvatar(
         coil.compose.AsyncImage(
             model = "file:///android_asset/teachers_photos/" + teacher.photo,
             contentDescription = teacher.name,
+            // Фото вертикальные (соотношение от 0,53 до 1,3), поэтому при обрезке
+            // в квадрат прижимаем к верху — иначе срезается лицо.
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            alignment = Alignment.TopCenter,
             modifier = modifier
                 .size(size)
                 .border(1.dp, border, RoundedCornerShape(2.dp))
@@ -1016,7 +1020,7 @@ private fun TeacherCardPage(
     onBack: () -> Unit
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    val tabs = listOf("Контакты", "О преподавателе", "Дисциплины", "У вашей группы", "Расписание")
+    val tabs = listOf("О преподавателе", "Расписание")
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Шапка с портретом
@@ -1107,23 +1111,34 @@ private fun TeacherCardPage(
         )
 
         when (tab) {
-            0 -> ContactsTab(teacher)
-            1 -> AboutTab(teacher)
-            2 -> SubjectsTab(teacher)
-            3 -> GroupTab(isActive, lessonsWithGroup, roomsFromSchedule, subjectsFromSchedule)
-            4 -> TeacherScheduleTab(teacher)
+            0 -> AboutTeacherTab(teacher, isActive, lessonsWithGroup, roomsFromSchedule, subjectsFromSchedule)
+            1 -> TeacherScheduleTab(teacher)
         }
     }
 }
 
-/** Вкладка «Контакты»: портрет, кабинет, телефон, почта. */
+/**
+ * Вкладка «О преподавателе»: фото, сведения, дисциплины, контакты и связь с группой.
+ *
+ * Раньше это были четыре отдельные под-вкладки по паре строк в каждой —
+ * переключателей больше, чем содержимого. Теперь всё в одном списке.
+ *
+ * Блок «Контакты» не показывается вовсе, если контактов нет.
+ */
 @Composable
-private fun ContactsTab(teacher: Teacher) {
+private fun AboutTeacherTab(
+    teacher: Teacher,
+    isActive: Boolean,
+    lessonsWithGroup: Int,
+    roomsFromSchedule: List<String>,
+    subjectsFromSchedule: List<String>
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Портрет — целиком, без обрезки
         item {
             Surface(
                 shape = RoundedCornerShape(2.dp),
@@ -1141,16 +1156,20 @@ private fun ContactsTab(teacher: Teacher) {
                         coil.compose.AsyncImage(
                             model = "file:///android_asset/teachers_photos/" + teacher.photo,
                             contentDescription = teacher.name,
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            // Никакой обрезки: фото разной высоты (от 676x1280 до 650x500),
+                            // при Crop лица обрезались. Fit показывает снимок целиком.
+                            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                             modifier = Modifier
-                                .size(170.dp)
+                                .width(180.dp)
+                                .heightIn(max = 260.dp)
                                 .border(1.dp, ColorBorderLight, RoundedCornerShape(2.dp))
                                 .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
                         )
                     } else {
                         Box(
                             modifier = Modifier
-                                .size(170.dp)
+                                .width(180.dp)
+                                .height(230.dp)
                                 .background(ColorBrandFill, RoundedCornerShape(2.dp)),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1166,39 +1185,7 @@ private fun ContactsTab(teacher: Teacher) {
             }
         }
 
-        item {
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorBgMain,
-                border = BorderStroke(1.dp, ColorBorderLight),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    SectionLabel("КОНТАКТЫ И КАБИНЕТ")
-                    Spacer(modifier = Modifier.height(6.dp))
-                    if (teacher.room.isNotBlank()) InfoRow("Кабинет", teacher.room)
-                    if (teacher.phone.isNotBlank()) InfoRow("Телефон", teacher.phone)
-                    if (teacher.email.isNotBlank()) InfoRow("E-mail", teacher.email)
-                    if (teacher.room.isBlank() && teacher.phone.isBlank() && teacher.email.isBlank()) {
-                        Text(
-                            text = "Контактные данные в базе не указаны",
-                            style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextMuted)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** Вкладка «О преподавателе»: подразделение, стаж, категория. */
-@Composable
-private fun AboutTab(teacher: Teacher) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+        // Сведения из базы
         item {
             Surface(
                 shape = RoundedCornerShape(2.dp),
@@ -1225,23 +1212,12 @@ private fun AboutTab(teacher: Teacher) {
                 }
             }
         }
-    }
-}
 
-/** Вкладка «Дисциплины»: официальный перечень из базы колледжа. */
-@Composable
-private fun SubjectsTab(teacher: Teacher) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
+        // Дисциплины
+        item { SectionLabel("ПРЕПОДАВАЕМЫЕ ДИСЦИПЛИНЫ") }
         if (teacher.subjects.isBlank()) {
-            item {
-                EmptyCard(text = "Перечень дисциплин в базе не заполнен")
-            }
+            item { EmptyCard(text = "Перечень дисциплин в базе не заполнен") }
         } else {
-            item { SectionLabel("ПРЕПОДАВАЕМЫЕ ДИСЦИПЛИНЫ") }
             // Дисциплины в базе перечислены через запятую или точку с запятой
             val list = teacher.subjects
                 .split(';', ',')
@@ -1262,22 +1238,30 @@ private fun SubjectsTab(teacher: Teacher) {
                 }
             }
         }
-    }
-}
 
-/** Вкладка «У вашей группы»: связь с расписанием выбранной группы. */
-@Composable
-private fun GroupTab(
-    isActive: Boolean,
-    lessonsWithGroup: Int,
-    roomsFromSchedule: List<String>,
-    subjectsFromSchedule: List<String>
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+        // Контакты — только когда они действительно есть,
+        // иначе блок не показываем вовсе — пустая заголовком карточка не нужна
+        val hasContacts = teacher.room.isNotBlank() || teacher.phone.isNotBlank() || teacher.email.isNotBlank()
+        if (hasContacts) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        SectionLabel("КОНТАКТЫ")
+                        Spacer(modifier = Modifier.height(6.dp))
+                        if (teacher.room.isNotBlank()) InfoRow("Кабинет", teacher.room)
+                        if (teacher.phone.isNotBlank()) InfoRow("Телефон", teacher.phone)
+                        if (teacher.email.isNotBlank()) InfoRow("E-mail", teacher.email)
+                    }
+                }
+            }
+        }
+
+        // Связь с выбранной группой
         if (!isActive) {
             item {
                 EmptyCard(

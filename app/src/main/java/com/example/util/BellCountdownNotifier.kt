@@ -45,9 +45,10 @@ object BellCountdownNotifier {
         SYSTEM("system", "Системная", 0, false),
         BRAND("brand", "Фирменный синий", 0xFF0B3564.toInt(), true),
         SKY("sky", "Яркий синий", 0xFF0072CE.toInt(), true),
-        DARK("dark", "Тёмная", 0xFF232527.toInt(), true),
-        GOLD("gold", "Золотая (админ)", 0xFF7A5C00.toInt(), true);
+        DARK("dark", "Тёмная", 0xFF232527.toInt(), true);
 
+        // Удалена «Золотая»: выглядела плохо. Сохранённая настройка "gold"
+        // теперь молча откатывается к системной — см. from().
         companion object {
             fun from(id: String?): Theme = entries.firstOrNull { it.id == id } ?: SYSTEM
         }
@@ -140,7 +141,7 @@ object BellCountdownNotifier {
         val style = getStyle(context)
 
         // Тексты в зависимости от состояния дня
-        val (title, text, progressPercent, hasProgress) = buildContent(info, style)
+        val (title, progressPercent, hasProgress) = buildContent(info, style)
 
         val openIntent = PendingIntent.getActivity(
             context,
@@ -169,23 +170,22 @@ object BellCountdownNotifier {
             }
         }
 
+        // Описание раньше дублировало заголовок («До звонка: 5 мин» / «Осталось 5 мин»),
+        // поэтому текста нет ни в одном стиле — только заголовок и, где нужно, полоса.
         when (style) {
             Style.COMPACT -> {
                 builder.setContentTitle(title)
-                if (text.isNotBlank()) builder.setContentText(text)
             }
             Style.WITH_APP_NAME -> {
                 builder.setContentTitle("Мой Политех")
-                builder.setContentText(if (text.isNotBlank()) "$title • $text" else title)
+                builder.setContentText(title)
             }
             Style.WITH_LESSON -> {
                 builder.setContentTitle(title)
-                if (text.isNotBlank()) builder.setContentText(text)
                 builder.setSubText(currentLessonLabel(info))
             }
             Style.WITH_PROGRESS -> {
                 builder.setContentTitle(title)
-                if (text.isNotBlank()) builder.setContentText(text)
                 if (hasProgress) {
                     builder.setProgress(100, progressPercent, false)
                 }
@@ -214,7 +214,6 @@ object BellCountdownNotifier {
 
     private data class Content(
         val title: String,
-        val text: String,
         val progressPercent: Int,
         val hasProgress: Boolean
     )
@@ -224,12 +223,7 @@ object BellCountdownNotifier {
         style: Style
     ): Content {
         if (info == null || info.first < 0) {
-            return Content(
-                title = "Уроки закончились",
-                text = if (style == Style.WITH_PROGRESS) "Хорошего дня!" else "",
-                progressPercent = 100,
-                hasProgress = false
-            )
+            return Content(title = "Уроки закончились", progressPercent = 100, hasProgress = false)
         }
 
         val (minutesLeft, label, _) = info
@@ -241,7 +235,6 @@ object BellCountdownNotifier {
 
         return Content(
             title = label.replaceFirstChar { it.uppercase() } + ": $value",
-            text = if (style == Style.WITH_PROGRESS) "Осталось $value" else "",
             progressPercent = progress,
             hasProgress = style == Style.WITH_PROGRESS
         )

@@ -71,23 +71,63 @@ class ScheduleRepository(
     }
 
     /**
-     * Синхронизация с сайтом: качает расписание на СЕГОДНЯ и на СЛЕДУЮЩИЙ учебный день
-     * (колледж публикует завтрашний документ накануне). Сегодняшний запрос выполняется
-     * последним — его статус остаётся в панели диагностики настроек.
+     * Синхронизация с сайтом.
+     *
+     * Скачиваем ровно то, чего у нас ещё нет: расписание публикуется раз в день,
+     * и если документ на сегодня уже разобран, повторно его тянуть незачем — это
+     * лишняя нагрузка на сайт колледжа и на батарею. Завтрашний документ колледж
+     * публикует накануне, поэтому его проверяем всегда, пока он не появится.
+     *
+     * [force] = true (ручное обновление по кнопке) — перекачиваем оба дня: пользователь
+     * нажал сам, значит ждёт свежих данных.
+     *
+     * Сегодняшний запрос выполняется последним — его статус остаётся в диагностике.
      */
-    suspend fun syncScheduleFromWeb(groupName: String): Result<Int> = withContext(Dispatchers.IO) {
-        val tomorrowLessons = networkClient
-            .fetchScheduleForGroup(groupName, nextSchoolDay())
-            .getOrDefault(emptyList())
+    suspend fun syncScheduleFromWeb(
+        groupName: String,
+        force: Boolean = false
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        val today = Calendar.getInstance()
+        val tomorrow = nextSchoolDay(today)
+        val todayStr = formatDate(today)
+        val tomorrowStr = formatDate(tomorrow)
 
-        networkClient.fetchScheduleForGroup(groupName).mapCatching { todayLessons ->
-            val distinct = (tomorrowLessons + todayLessons)
+        val todayCached = lessonDao.getLessonCountForDate(groupName, todayStr)
+        val tomorrowCached = lessonDao.getLessonCountForDate(groupName, tomorrowStr)
+
+        val needToday = force || todayCached == 0
+        val needTomorrow = force || tomorrowCached == 0
+
+        if (!needToday && !needTomorrow) {
+            // Оба дня уже на месте — в сеть не ходим вообще
+            return@withContext Result.success(todayCached + tomorrowCached)
+        }
+
+        val fetched = mutableListOf<LessonEntity>()
+        if (needTomorrow) {
+            fetched += networkClient
+                .fetchScheduleForGroup(groupName, tomorrow)
+                .getOrDefault(emptyList())
+        }
+
+        return@withContext if (needToday) {
+            networkClient.fetchScheduleForGroup(groupName).mapCatching { todayLessons ->
+                val distinct = (fetched + todayLessons)
+                    .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
+                if (distinct.isNotEmpty()) {
+                    replaceSyncedLessons(groupName, distinct)
+                }
+                pruneOldLessons()
+                distinct.size
+            }
+        } else {
+            val distinct = fetched
                 .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
             if (distinct.isNotEmpty()) {
                 replaceSyncedLessons(groupName, distinct)
             }
             pruneOldLessons()
-            distinct.size
+            Result.success(distinct.size + todayCached)
         }
     }
 
@@ -112,6 +152,14 @@ class ScheduleRepository(
         } while (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
         return cal
     }
+
+    /** Дата в том же формате, в каком её хранит LessonEntity.dateString. */
+    private fun formatDate(calendar: Calendar): String =
+        "%02d.%02d.%04d".format(
+            calendar.get(Calendar.DAY_OF_MONTH),
+            calendar.get(Calendar.MONTH) + 1,
+            calendar.get(Calendar.YEAR)
+        )
 
     /**
      * Заменяет ранее синхронизированные уроки тех же дат (подход МПК v1: delete + insert,

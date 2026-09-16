@@ -373,12 +373,14 @@ fun StudentCardScreen(
     var loadMessage by remember(student.group) { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
-    fun loadSchedule() {
+    fun loadSchedule(force: Boolean = true) {
         if (isLoading) return
         isLoading = true
         loadMessage = ""
         scope.launch {
-            val result = scheduleRepository.syncScheduleFromWeb(student.group)
+            // Кнопка «Обновить» — ручное действие (force = true), автоподгрузка
+            // при открытии карточки — только то, чего ещё нет (force = false)
+            val result = scheduleRepository.syncScheduleFromWeb(student.group, force = force)
             loadMessage = result.fold(
                 onSuccess = { count ->
                     if (count > 0) "Загружено уроков: $count"
@@ -393,7 +395,7 @@ fun StudentCardScreen(
     LaunchedEffect(student.group) {
         // Если для группы ещё нет данных — тихо подтягиваем с сайта
         if (!scheduleRepository.hasSchedule(student.group)) {
-            loadSchedule()
+            loadSchedule(force = false)
         }
     }
 

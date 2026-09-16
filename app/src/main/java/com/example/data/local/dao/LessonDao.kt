@@ -71,6 +71,10 @@ interface LessonDao {
     @Query("SELECT DISTINCT dateString FROM lessons WHERE dateString != ''")
     suspend fun getAllDistinctDatesSync(): List<String>
 
+    /** Сколько уроков группы уже сохранено на конкретную дату («дд.ММ.гггг»). */
+    @Query("SELECT COUNT(*) FROM lessons WHERE groupName = :groupName AND dateString = :dateString")
+    suspend fun getLessonCountForDate(groupName: String, dateString: String): Int
+
     /** Удаление уроков конкретной даты по всем группам (устаревший архив). */
     @Query("DELETE FROM lessons WHERE dateString = :dateString")
     suspend fun deleteLessonsByDate(dateString: String)

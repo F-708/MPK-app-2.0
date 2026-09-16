@@ -110,11 +110,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (_uiState.value.isSyncing) return
 
         val targetGroup = _uiState.value.currentGroupName
+        // Группа ещё не выбрана — синхронизировать нечего, не дёргаем сайт колледжа
+        if (targetGroup.isBlank()) return
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true, hasSyncError = false) }
 
-            val result = scheduleRepository.syncScheduleFromWeb(targetGroup)
+            // Ручное обновление (нажатие кнопки) перекачивает оба дня,
+            // фоновая автосинхронизация — только то, чего ещё нет
+            val result = scheduleRepository.syncScheduleFromWeb(targetGroup, force = !isAutoSync)
 
             result.fold(
                 onSuccess = { count ->

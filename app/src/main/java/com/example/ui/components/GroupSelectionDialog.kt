@@ -69,7 +69,9 @@ fun GroupSelectionDialog(
 ) {
     var selectedCourse by remember {
         val currentInfo = GroupParser.parse(currentGroupName)
-        mutableIntStateOf(currentInfo?.course ?: 4)
+        // 0 = курс ещё не выбран. Раньше по умолчанию подставлялся 4-й курс и группа 41О,
+        // из-за чего выбор выглядел так, будто разработчик сам из 41О.
+        mutableIntStateOf(currentInfo?.course ?: 0)
     }
 
     var manualInput by remember { mutableStateOf("") }
@@ -179,7 +181,7 @@ fun GroupSelectionDialog(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "Группы $selectedCourse курса:",
+                    text = if (selectedCourse == 0) "Сначала выберите курс:" else "Группы $selectedCourse курса:",
                     style = androidx.compose.ui.text.TextStyle(
                         color = ColorTextMuted,
                         fontSize = 12.sp,
@@ -188,55 +190,58 @@ fun GroupSelectionDialog(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Сетка групп выбранного курса
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 200.dp)
-                ) {
-                    items(filteredGroups) { group ->
-                        val isCurrent = group.canonicalName.equals(currentGroupName, ignoreCase = true)
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            color = if (isCurrent) ColorSurfaceHighlight else ColorBgMain,
-                            border = BorderStroke(
-                                1.dp,
-                                if (isCurrent) ColorBrandBlue else ColorBorderLight
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .bouncyClickable {
-                                    onGroupSelected(group.canonicalName)
-                                }
-                        ) {
-                            Column(
+                // Сетка групп выбранного курса. Пока курс не выбран — сетки нет,
+                // чтобы ни одна группа не выглядела «уже предложенной».
+                if (selectedCourse != 0) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp)
+                    ) {
+                        items(filteredGroups) { group ->
+                            val isCurrent = group.canonicalName.equals(currentGroupName, ignoreCase = true)
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                color = if (isCurrent) ColorSurfaceHighlight else ColorBgMain,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isCurrent) ColorBrandBlue else ColorBorderLight
+                                ),
                                 modifier = Modifier
-                                    .padding(vertical = 8.dp, horizontal = 4.dp)
-                                    .fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                    .fillMaxWidth()
+                                    .bouncyClickable {
+                                        onGroupSelected(group.canonicalName)
+                                    }
                             ) {
-                                Text(
-                                    text = group.canonicalName,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        color = if (isCurrent) ColorBrandBlue else ColorTextTitle
-                                    ),
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                val spec = MpkCurriculum.getSpecialty(group.specialtyCode)
-                                Text(
-                                    text = spec?.shortName ?: "",
-                                    style = androidx.compose.ui.text.TextStyle(fontSize = 10.sp, color = ColorTextMuted),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center
-                                )
+                                Column(
+                                    modifier = Modifier
+                                        .padding(vertical = 8.dp, horizontal = 4.dp)
+                                        .fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = group.canonicalName,
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            color = if (isCurrent) ColorBrandBlue else ColorTextTitle
+                                        ),
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    val spec = MpkCurriculum.getSpecialty(group.specialtyCode)
+                                    Text(
+                                        text = spec?.shortName ?: "",
+                                        style = androidx.compose.ui.text.TextStyle(fontSize = 10.sp, color = ColorTextMuted),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                             }
                         }
                     }

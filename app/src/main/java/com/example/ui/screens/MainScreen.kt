@@ -71,8 +71,10 @@ fun MainScreen(
 
     val currentGroupInfo = uiState.groupInfo ?: GroupInfo(
         rawName = uiState.currentGroupName,
-        course = 4,
-        groupNumber = 1,
+        // Нейтральная заглушка: диалог выбора группы открыт и блокирует работу,
+        // поэтому подставлять сюда конкретную группу/курс нельзя.
+        course = 0,
+        groupNumber = 0,
         specialtyCode = 'О'
     )
 

@@ -29,8 +29,12 @@ object WidgetUpdateHelper {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
+    /**
+     * Выбранная группа. Пустая строка — группа ещё не выбрана: раньше здесь
+     * подставлялось «41О», и первый запуск выглядел так, будто разработчик из 41О.
+     */
     fun getSelectedGroup(context: Context): String {
-        return getPrefs(context).getString(KEY_SELECTED_GROUP, "41О") ?: "41О"
+        return getPrefs(context).getString(KEY_SELECTED_GROUP, "") ?: ""
     }
 
     /** Выбирал ли пользователь группу (для показа обязательного диалога первого входа). */

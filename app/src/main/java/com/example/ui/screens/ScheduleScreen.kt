@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.LocationOn
@@ -487,20 +488,90 @@ fun ScheduleScreen(
                     }
                 }
             } else {
+                // Уроки идут не подряд: первых уроков может не быть вовсе (день
+                // начинается со 2-го или 3-го). Раньше это выглядело дырой в списке —
+                // теперь на месте пропуска стоит пометка «урока нет».
+                // Верхнюю границу берём по последнему реальному уроку: про уроки
+                // после него ничего не известно, выдумывать их не нужно.
+                val slots = remember(currentLessons) {
+                    if (currentLessons.isEmpty()) emptyList()
+                    else {
+                        val byNumber = currentLessons.associateBy { it.lessonNumber }
+                        (1..currentLessons.maxOf { it.lessonNumber })
+                            .map { number -> number to byNumber[number] }
+                    }
+                }
+
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(currentLessons, key = { it.id }) { lesson ->
-                        LessonCard(
-                            lesson = lesson,
-                            isCurrent = lesson.lessonNumber == currentLessonNumber,
-                            onTeacherClick = onTeacherClick
-                        )
+                    items(slots, key = { it.first }) { (number, lesson) ->
+                        if (lesson != null) {
+                            LessonCard(
+                                lesson = lesson,
+                                isCurrent = lesson.lessonNumber == currentLessonNumber,
+                                onTeacherClick = onTeacherClick
+                            )
+                        } else {
+                            NoLessonCard(number)
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Пометка на месте урока, которого в расписании нет.
+ *
+ * Нужна, потому что занятия идут не подряд: если первый урок не задан, список
+ * начинался сразу со второго и выглядел как недоделанный экран.
+ */
+@Composable
+private fun NoLessonCard(lessonNumber: Int) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorSurfaceVariantLight,
+        border = BorderStroke(1.dp, ColorDividerLight),
+        shadowElevation = 0.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("no_lesson_card_$lessonNumber")
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorSurfaceHighlight,
+                border = BorderStroke(1.dp, ColorDividerLight),
+                modifier = Modifier.size(24.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "$lessonNumber",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = ColorTextMuted
+                        )
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Урока нет",
+                style = androidx.compose.ui.text.TextStyle(
+                    fontSize = 13.sp,
+                    color = ColorTextMuted
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -597,6 +668,7 @@ fun LessonCard(
                         subject = lesson.shortSubjectName,
                         teacher = lesson.teacherFirst,
                         room = lesson.roomFirst,
+                        onTeacherClick = onTeacherClick,
                         modifier = Modifier.weight(1f)
                     )
 
@@ -612,6 +684,7 @@ fun LessonCard(
                         subject = lesson.shortSubjectName,
                         teacher = lesson.teacherSecond,
                         room = lesson.roomSecond,
+                        onTeacherClick = onTeacherClick,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -636,30 +709,10 @@ fun LessonCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (lesson.teacherFirst.isNotBlank()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.bouncyClickable {
-                                onTeacherClick(lesson.teacherFirst)
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = ColorBrandBlue,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = lesson.teacherFirst,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 12.sp,
-                                    color = ColorBrandBlue,
-                                    fontWeight = FontWeight.SemiBold
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        TeacherChip(
+                            name = lesson.teacherFirst,
+                            onClick = { onTeacherClick(lesson.teacherFirst) }
+                        )
                     }
 
                     if (lesson.roomFirst.isNotBlank()) {
@@ -700,12 +753,68 @@ fun LessonCard(
 /**
  * Панель подгруппы (50% ширины карточки) с микро-бейджем «1» или «2».
  */
+/**
+ * Имя преподавателя как нажимаемая «таблетка».
+ *
+ * Раньше в подгруппах это был просто серый текст без обработчика — по нему нельзя
+ * было перейти. Теперь и в обычной паре, и при разделении это одинаковый элемент
+ * с рамкой и шевроном: рамка и стрелка показывают, что по имени можно нажать.
+ */
+@Composable
+private fun TeacherChip(
+    name: String,
+    onClick: () -> Unit,
+    fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        border = BorderStroke(1.dp, ColorBrandBlue.copy(alpha = 0.4f)),
+        color = ColorSurfaceHighlight,
+        modifier = modifier.bouncyClickable(
+            scaleDown = 0.97f,
+            onClick = onClick
+        )
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 5.dp, end = 2.dp, top = 2.dp, bottom = 2.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Person,
+                contentDescription = null,
+                tint = ColorBrandBlue,
+                modifier = Modifier.size(12.dp)
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+            Text(
+                text = name,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontSize = fontSize,
+                    color = ColorBrandBlue,
+                    fontWeight = FontWeight.SemiBold
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = "Открыть карточку преподавателя",
+                tint = ColorBrandBlue,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
+
 @Composable
 private fun SubgroupPane(
     subgroupNumber: Int,
     subject: String,
     teacher: String,
     room: String,
+    onTeacherClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -762,14 +871,10 @@ private fun SubgroupPane(
 
         if (teacher.isNotBlank()) {
             Spacer(modifier = Modifier.height(3.dp))
-            Text(
-                text = teacher,
-                style = androidx.compose.ui.text.TextStyle(
-                    fontSize = 11.sp,
-                    color = ColorTextMuted
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            TeacherChip(
+                name = teacher,
+                onClick = { onTeacherClick(teacher) },
+                fontSize = 11.sp
             )
         }
     }
