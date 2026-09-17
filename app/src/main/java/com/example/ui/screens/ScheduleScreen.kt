@@ -106,9 +106,6 @@ fun ScheduleScreen(
     onTeacherClick: (String) -> Unit = {},
     /** Переход к карте колледжа по тапу на номер кабинета. */
     onRoomClick: (String) -> Unit = {},
-    /** Задания группы — для пометки «на завтра задано». */
-    taskRepository: com.example.data.repository.TaskRepository? = null,
-    onOpenTasks: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -125,25 +122,6 @@ fun ScheduleScreen(
             com.example.data.repository.TeacherInsights.surnameOf(name) in known
         }
         check
-    }
-
-    // Задания со сроком на завтра: ненавязчивая пометка, что что-то задано,
-    // и переход в задания, чтобы посмотреть. Показываем только когда есть что.
-    val tasksTomorrow = if (taskRepository == null) {
-        emptyList()
-    } else {
-        val flow = remember(groupInfo.canonicalName) {
-            taskRepository.getTasksForGroup(groupInfo.canonicalName)
-        }
-        val all by flow.collectAsState(initial = emptyList())
-        val tomorrowIso = remember {
-            val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
-            String.format(
-                Locale.ROOT, "%04d-%02d-%02d",
-                cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)
-            )
-        }
-        all.filter { !it.isCompleted && it.deadlineDate == tomorrowIso }
     }
 
     // 1. Точный расчет реального сегодняшнего дня
@@ -270,12 +248,7 @@ fun ScheduleScreen(
         CalendarArchiveDialog(
             groupName = groupInfo.canonicalName,
             scheduleRepository = scheduleRepository,
-            onDismiss = { showArchiveDialog = false },
-            onDateSelected = { dayOfWeek, dateStr ->
-                selectedSlot = if (dayOfWeek == calendarDayOfWeek(leftCal)) 0 else 1
-                selectedDateString = dateStr
-                showArchiveDialog = false
-            }
+            onDismiss = { showArchiveDialog = false }
         )
     }
 
@@ -546,51 +519,6 @@ fun ScheduleScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Ненавязчивая пометка: на завтра что-то задано. Появляется
-                    // только когда задания действительно есть.
-                    if (tasksTomorrow.isNotEmpty()) {
-                        item(key = "tomorrow_tasks_note") {
-                            Surface(
-                                shape = RoundedCornerShape(2.dp),
-                                color = ColorSurfaceVariantLight,
-                                border = BorderStroke(1.dp, ColorBorderLight),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .bouncyClickable(onClick = onOpenTasks)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.EventNote,
-                                        contentDescription = null,
-                                        tint = ColorBrandBlue,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "На завтра задано: ${tasksTomorrow.size} — посмотреть",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = ColorBrandBlue
-                                        ),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronRight,
-                                        contentDescription = null,
-                                        tint = ColorBrandBlue,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
                     items(slots, key = { it.first }) { (number, lesson) ->
                         if (lesson != null) {
                             LessonCard(

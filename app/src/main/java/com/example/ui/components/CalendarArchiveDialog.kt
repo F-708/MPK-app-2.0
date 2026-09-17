@@ -102,7 +102,8 @@ fun CalendarArchiveDialog(
     groupName: String,
     scheduleRepository: ScheduleRepository,
     onDismiss: () -> Unit,
-    onDateSelected: (dayOfWeek: Int, dateString: String) -> Unit,
+    /** Вызывается при выборе даты — кому нужно сразу загрузить этот день. */
+    onDateSelected: ((dayOfWeek: Int, dateString: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val calendar = remember { Calendar.getInstance() }
@@ -437,7 +438,24 @@ fun CalendarArchiveDialog(
                                 Box(
                                     modifier = Modifier
                                         .aspectRatio(1.1f)
-                                        .clickable { selectedDateString = dateStr }
+                                        .clickable {
+                                            selectedDateString = dateStr
+                                            // Если вызывающий ждёт выбора — сообщаем сразу,
+                                            // без отдельной кнопки подтверждения
+                                            onDateSelected?.let { callback ->
+                                                val cal = parseDateSafely(dateStr)
+                                                val dow = when (cal?.get(Calendar.DAY_OF_WEEK)) {
+                                                    Calendar.MONDAY -> 1
+                                                    Calendar.TUESDAY -> 2
+                                                    Calendar.WEDNESDAY -> 3
+                                                    Calendar.THURSDAY -> 4
+                                                    Calendar.FRIDAY -> 5
+                                                    Calendar.SATURDAY -> 6
+                                                    else -> 1
+                                                }
+                                                callback(dow, dateStr)
+                                            }
+                                        }
                                         .testTag("calendar_day_$calendarDay"),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -499,7 +517,7 @@ fun CalendarArchiveDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Пары на $selectedDateString (${selectedDateLessons.size}):",
+                                text = "ПАРЫ НА $selectedDateString (${selectedDateLessons.size})",
                                 style = androidx.compose.ui.text.TextStyle(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
@@ -507,38 +525,6 @@ fun CalendarArchiveDialog(
                                 )
                             )
 
-                            Surface(
-                                shape = RoundedCornerShape(2.dp),
-                                border = BorderStroke(1.dp, ColorBrandBlue),
-                                color = ColorBrandFill,
-                                modifier = Modifier
-                                    .bouncyClickable {
-                                        val cal = parseDateSafely(selectedDateString)
-                                        if (cal != null) {
-                                            val dayOfWeek = when (cal.get(Calendar.DAY_OF_WEEK)) {
-                                                Calendar.MONDAY -> 1
-                                                Calendar.TUESDAY -> 2
-                                                Calendar.WEDNESDAY -> 3
-                                                Calendar.THURSDAY -> 4
-                                                Calendar.FRIDAY -> 5
-                                                Calendar.SATURDAY -> 6
-                                                else -> 1
-                                            }
-                                            onDateSelected(dayOfWeek, selectedDateString)
-                                            onDismiss()
-                                        }
-                                    }
-                            ) {
-                                Text(
-                                    text = "ОТКРЫТЬ ДЕНЬ",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = Color.White
-                                    ),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
                         }
 
                         Spacer(modifier = Modifier.height(6.dp))

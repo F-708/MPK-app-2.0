@@ -170,9 +170,7 @@ fun MainScreen(
                     onSyncRequest = { viewModel.syncSchedule() },
                     isSyncing = uiState.isSyncing,
                     onTeacherClick = { name -> viewModel.openTeacher(name) },
-                    onRoomClick = { room -> viewModel.openMap(room) },
-                    taskRepository = viewModel.taskRepository,
-                    onOpenTasks = { viewModel.selectTab(AppTab.TASKS) }
+                    onRoomClick = { room -> viewModel.openMap(room) }
                 )
                 AppTab.TASKS -> TasksScreen(
                     groupInfo = currentGroupInfo,

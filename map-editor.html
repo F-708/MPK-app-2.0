@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Разметка кабинетов — Мой Политех</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: "Segoe UI", Roboto, sans-serif; background: #0f1115; color: #e6e9ef; }
+  #app { display: flex; height: 100%; }
+
+  /* ---------- Левая панель ---------- */
+  #side { width: 320px; min-width: 320px; background: #171a21; border-right: 1px solid #2a2f3a; display: flex; flex-direction: column; }
+  #side h1 { font-size: 15px; margin: 0; padding: 14px 16px 6px; }
+  #side .sub { font-size: 12px; color: #8b93a3; padding: 0 16px 12px; line-height: 1.45; }
+  .block { padding: 10px 16px; border-top: 1px solid #232833; }
+  .block h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #8b93a3; margin: 0 0 8px; font-weight: 700; }
+
+  .floors { display: flex; gap: 6px; }
+  .floors button { flex: 1; padding: 9px 4px; font-size: 12px; font-weight: 700; cursor: pointer;
+    background: #1e232c; color: #c8cedb; border: 1px solid #2f3744; border-radius: 3px; }
+  .floors button.on { background: #0B3564; border-color: #0072CE; color: #fff; }
+
+  .tools { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tools button { flex: 1 1 auto; padding: 8px 10px; font-size: 12px; cursor: pointer;
+    background: #1e232c; color: #c8cedb; border: 1px solid #2f3744; border-radius: 3px; }
+  .tools button.on { background: #0B3564; border-color: #0072CE; color: #fff; font-weight: 700; }
+  .tools button:disabled { opacity: .4; cursor: default; }
+
+  #list { flex: 1; overflow-y: auto; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 6px 16px; font-size: 13px; border-bottom: 1px solid #1d222b; }
+  .row:hover { background: #1c212a; }
+  .row .num { font-weight: 700; color: #7fb2e8; min-width: 44px; }
+  .row .sz { color: #6f7787; font-size: 11px; flex: 1; }
+  .row button { background: none; border: none; color: #ff6b6b; cursor: pointer; font-size: 15px; padding: 0 4px; }
+
+  textarea { width: 100%; height: 150px; background: #0f1115; color: #9fd39f; border: 1px solid #2f3744;
+    border-radius: 3px; font-family: Consolas, monospace; font-size: 11px; padding: 8px; resize: vertical; }
+
+  /* ---------- Сцена ---------- */
+  #stage { flex: 1; position: relative; overflow: hidden; background: #0a0c10; cursor: crosshair; }
+  #stage.panning { cursor: grab; }
+  #stage img { position: absolute; transform-origin: 0 0; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+  #boxes { position: absolute; transform-origin: 0 0; top: 0; left: 0; width: 1px; height: 1px; }
+  .box { position: absolute; border: 2px solid #0072CE; background: rgba(0,114,206,.22); pointer-events: none; }
+  .box span { position: absolute; top: -15px; left: 0; font-size: 10px; font-weight: 700; color: #7fb2e8; white-space: nowrap; }
+  .box.draft { border-color: #ffd166; background: rgba(255,209,102,.25); }
+
+  #hint { position: absolute; left: 12px; bottom: 12px; font-size: 12px; color: #8b93a3;
+    background: rgba(15,17,21,.85); padding: 6px 10px; border-radius: 3px; }
+  #status { position: absolute; right: 12px; top: 12px; font-size: 12px; color: #9fd39f;
+    background: rgba(15,17,21,.85); padding: 6px 10px; border-radius: 3px; }
+
+  /* Окно ввода номера */
+  #modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; }
+  #modal.on { display: flex; }
+  #modal .card { background: #171a21; border: 1px solid #2f3744; border-radius: 4px; padding: 20px; width: 320px; }
+  #modal label { display: block; font-size: 12px; color: #8b93a3; margin-bottom: 6px; }
+  #modal input { width: 100%; padding: 10px; font-size: 20px; font-weight: 700; text-align: center;
+    background: #0f1115; color: #fff; border: 1px solid #0072CE; border-radius: 3px; }
+  #modal .btns { display: flex; gap: 8px; margin-top: 14px; }
+  #modal .btns button { flex: 1; padding: 10px; font-size: 13px; font-weight: 700; cursor: pointer; border-radius: 3px; border: 1px solid #2f3744; background: #1e232c; color: #c8cedb; }
+  #modal .btns button.ok { background: #0B3564; border-color: #0072CE; color: #fff; }
+  #modal .sugg { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  #modal .sugg button { padding: 5px 9px; font-size: 12px; cursor: pointer; background: #1e232c; color: #c8cedb; border: 1px solid #2f3744; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="side">
+    <h1>Разметка кабинетов</h1>
+    <div class="sub">
+      Обведи кабинет рамкой и впиши номер. Инструмент предложит следующий номер
+      по порядку — обычно кабинеты идут подряд, так что чаще всего останется
+      только нажать «Ок». Внизу появится готовый код для приложения.
+    </div>
+
+    <div class="block">
+      <h2>Этаж</h2>
+      <div class="floors" id="floors"></div>
+    </div>
+
+    <div class="block">
+      <h2>Инструмент</h2>
+      <div class="tools">
+        <button id="toolDraw" class="on">Прямоугольник</button>
+        <button id="toolPan">Двигать</button>
+        <button id="btnUndo" disabled>Отменить</button>
+      </div>
+    </div>
+
+    <div class="block">
+      <h2>Размечено: <span id="count">0</span></h2>
+    </div>
+
+    <div id="list"></div>
+
+    <div class="block">
+      <h2>Код для CollegeMap.kt</h2>
+      <textarea id="out" readonly placeholder="Здесь появятся строки put(...)"></textarea>
+      <div class="tools" style="margin-top:8px">
+        <button id="btnCopy">Скопировать</button>
+        <button id="btnClear">Очистить этаж</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="stage">
+    <img id="plan" alt="">
+    <div id="boxes"></div>
+    <div id="hint">Тяни мышью — рамка кабинета. Колесо — зум. Пробел или «Двигать» — перемещение.</div>
+    <div id="status"></div>
+  </div>
+</div>
+
+<div id="modal">
+  <div class="card">
+    <label>Номер кабинета</label>
+    <input id="roomInput" autocomplete="off">
+    <div class="sugg" id="sugg"></div>
+    <div class="btns">
+      <button id="modalCancel">Отмена</button>
+      <button id="modalOk" class="ok">Ок</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Планы лежат в проекте; файл открывается из корня проекта.
+const FLOORS = [
+  { id: '1',    title: '1 этаж',      file: 'app/src/main/res/drawable/map_floor1.jpg' },
+  { id: '2',    title: '2 этаж',      file: 'app/src/main/res/drawable/map_floor2.jpg' },
+  { id: '3-4',  title: '3 и 4 этажи', file: 'app/src/main/res/drawable/map_floor34.jpg' },
+];
+const STORE = 'mpk-map-editor-v1';
+
+const state = {
+  floor: '1',
+  tool: 'draw',
+  zoom: 1,
+  panX: 0,
+  panY: 0,
+  // { '1': [ {room, x, y, w, h}, ... ], ... } — координаты в долях 0..1
+  data: {},
+};
+try { Object.assign(state.data, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch (e) {}
+
+const stage = document.getElementById('stage');
+const plan = document.getElementById('plan');
+const boxesEl = document.getElementById('boxes');
+const out = document.getElementById('out');
+const list = document.getElementById('list');
+const countEl = document.getElementById('count');
+const statusEl = document.getElementById('status');
+
+let imageReady = false;
+let natural = { w: 1000, h: 700 };
+let draft = null;   // текущая рисуемая рамка в долях
+let dragMode = null; // 'draw' | 'pan'
+let dragStart = null;
+
+// ---------- Этажи ----------
+function renderFloors() {
+  const host = document.getElementById('floors');
+  host.innerHTML = '';
+  FLOORS.forEach(f => {
+    const b = document.createElement('button');
+    b.textContent = f.title;
+    b.className = state.floor === f.id ? 'on' : '';
+    b.onclick = () => { state.floor = f.id; state.zoom = 1; state.panX = 0; state.panY = 0; loadFloor(); };
+    host.appendChild(b);
+  });
+}
+
+function loadFloor() {
+  const f = FLOORS.find(x => x.id === state.floor);
+  imageReady = false;
+  plan.onload = () => {
+    imageReady = true;
+    natural = { w: plan.naturalWidth, h: plan.naturalHeight };
+    render();
+  };
+  plan.onerror = () => {
+    statusEl.textContent = 'Не нашёл файл плана — открой страницу из корня проекта';
+  };
+  plan.src = f.file;
+  renderFloors();
+  render();
+}
+
+// ---------- Отрисовка ----------
+function applyTransform() {
+  const t = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
+  plan.style.transform = t;
+  boxesEl.style.transform = t;
+}
+
+function render() {
+  applyTransform();
+  const items = state.data[state.floor] || [];
+  boxesEl.innerHTML = '';
+  items.forEach(it => boxesEl.appendChild(makeBox(it, false)));
+  if (draft) boxesEl.appendChild(makeBox(draft, true));
+
+  countEl.textContent = items.length;
+  renderList(items);
+  renderCode();
+}
+
+function makeBox(it, isDraft) {
+  // Показываем в пикселях исходной картинки: родитель масштабируется через transform
+  const px = it.x * natural.w, py = it.y * natural.h;
+  const pw = it.w * natural.w, ph = it.h * natural.h;
+  const d = document.createElement('div');
+  d.className = 'box' + (isDraft ? ' draft' : '');
+  d.style.left = (px - pw / 2) + 'px';
+  d.style.top = (py - ph / 2) + 'px';
+  d.style.width = pw + 'px';
+  d.style.height = ph + 'px';
+  const s = document.createElement('span');
+  s.textContent = it.room || '…';
+  d.appendChild(s);
+  return d;
+}
+
+function renderList(items) {
+  list.innerHTML = '';
+  items.forEach((it, i) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<span class="num">${it.room}</span>
+      <span class="sz">${(it.w * 100).toFixed(1)}×${(it.h * 100).toFixed(1)}%</span>`;
+    const del = document.createElement('button');
+    del.textContent = '✕';
+    del.title = 'Удалить';
+    del.onclick = () => {
+      items.splice(i, 1);
+      save(); render();
+    };
+    row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+function renderCode() {
+  const lines = [];
+  FLOORS.forEach(f => {
+    const items = state.data[f.id] || [];
+    if (!items.length) return;
+    const fl = f.id === '1' ? 'FIRST' : f.id === '2' ? 'SECOND' : 'THIRD_FOURTH';
+    lines.push(`        // --- ${f.title} ---`);
+    items.slice().sort((a, b) => a.room.localeCompare(b.room, undefined, { numeric: true }))
+      .forEach(it => {
+        lines.push(`        put("${it.room}", RoomPin(Floor.${fl}, ${it.x.toFixed(4)}f, ${it.y.toFixed(4)}f, ${it.w.toFixed(4)}f, ${it.h.toFixed(4)}f))`);
+      });
+    lines.push('');
+  });
+  out.value = lines.join('\n').trim();
+}
+
+function save() {
+  localStorage.setItem(STORE, JSON.stringify(state.data));
+}
+
+// ---------- Ввод номера ----------
+let pendingRect = null;
+
+function nextSuggestions() {
+  // Подсказываем следующие номера по порядку: кабинеты обычно идут подряд
+  const items = state.data[state.floor] || [];
+  const taken = new Set(items.map(i => i.room));
+  const base = state.floor === '1' ? 100 : state.floor === '2' ? 200 : 300;
+  let max = base;
+  taken.forEach(r => { const n = parseInt(r, 10); if (!isNaN(n) && n > max) max = n; });
+
+  const out = [];
+  for (let n = max + 1; out.length < 6 && n < base + 100; n++) {
+    if (!taken.has(String(n))) out.push(String(n));
+  }
+  if (state.floor === '3-4') {
+    // На общем плане есть и 3xx, и 4xx — предложим оба диапазона
+    let m4 = 400;
+    taken.forEach(r => { const n = parseInt(r, 10); if (!isNaN(n) && n > m4 && n < 500) m4 = n; });
+    for (let n = m4 + 1; out.length < 9 && n < 500; n++) {
+      if (!taken.has(String(n))) out.push(String(n));
+    }
+  }
+  return out;
+}
+
+function askRoom(rect, onDone) {
+  pendingRect = rect;
+  const sugg = nextSuggestions();
+  const modal = document.getElementById('modal');
+  const input = document.getElementById('roomInput');
+  const suggHost = document.getElementById('sugg');
+
+  input.value = sugg[0] || '';
+  suggHost.innerHTML = '';
+  sugg.forEach(s => {
+    const b = document.createElement('button');
+    b.textContent = s;
+    b.onclick = () => { input.value = s; input.focus(); };
+    suggHost.appendChild(b);
+  });
+  modal.classList.add('on');
+  input.focus();
+  input.select();
+
+  function finish(ok) {
+    modal.classList.remove('on');
+    document.getElementById('modalOk').onclick = null;
+    document.getElementById('modalCancel').onclick = null;
+    input.onkeydown = null;
+    const value = input.value.trim();
+    if (ok && value) {
+      pendingRect.room = value;
+      (state.data[state.floor] = state.data[state.floor] || []).push(pendingRect);
+      save();
+    }
+    pendingRect = null;
+    draft = null;
+    render();
+    onDone && onDone();
+  }
+
+  document.getElementById('modalOk').onclick = () => finish(true);
+  document.getElementById('modalCancel').onclick = () => finish(false);
+  input.onkeydown = e => {
+    if (e.key === 'Enter') finish(true);
+    if (e.key === 'Escape') finish(false);
+  };
+}
+
+// ---------- Мышь ----------
+function toFraction(clientX, clientY) {
+  const r = stage.getBoundingClientRect();
+  const ix = (clientX - r.left - state.panX) / state.zoom;
+  const iy = (clientY - r.top - state.panY) / state.zoom;
+  return { x: ix / natural.w, y: iy / natural.h, px: ix, py: iy };
+}
+
+stage.addEventListener('mousedown', e => {
+  if (!imageReady) return;
+  const panTool = state.tool === 'pan' || e.button === 1 || spaceDown;
+  if (panTool) {
+    dragMode = 'pan';
+    dragStart = { x: e.clientX - state.panX, y: e.clientY - state.panY };
+    stage.classList.add('panning');
+    return;
+  }
+  if (e.button !== 0) return;
+  dragMode = 'draw';
+  const f = toFraction(e.clientX, e.clientY);
+  draft = { room: '', x: f.x, y: f.y, w: 0, h: 0, _x0: f.x, _y0: f.y };
+});
+
+window.addEventListener('mousemove', e => {
+  if (!dragMode) return;
+  if (dragMode === 'pan') {
+    state.panX = e.clientX - dragStart.x;
+    state.panY = e.clientY - dragStart.y;
+    applyTransform();
+    return;
+  }
+  const f = toFraction(e.clientX, e.clientY);
+  draft.x = (draft._x0 + f.x) / 2;
+  draft.y = (draft._y0 + f.y) / 2;
+  draft.w = Math.abs(f.x - draft._x0);
+  draft.h = Math.abs(f.y - draft._y0);
+  render();
+});
+
+window.addEventListener('mouseup', e => {
+  if (!dragMode) return;
+  if (dragMode === 'pan') {
+    dragMode = null;
+    stage.classList.remove('panning');
+    return;
+  }
+  dragMode = null;
+  // Случайный клик без протяжки — рамку не создаём
+  if (!draft || draft.w < 0.004 || draft.h < 0.004) { draft = null; render(); return; }
+  askRoom(draft);
+});
+
+stage.addEventListener('wheel', e => {
+  if (!imageReady) return;
+  e.preventDefault();
+  const before = toFraction(e.clientX, e.clientY);
+  const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  state.zoom = Math.min(8, Math.max(0.4, state.zoom * factor));
+  // Держим точку под курсором на месте
+  const r = stage.getBoundingClientRect();
+  state.panX = (e.clientX - r.left) - before.px * state.zoom;
+  state.panY = (e.clientY - r.top) - before.py * state.zoom;
+  applyTransform();
+}, { passive: false });
+
+let spaceDown = false;
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { spaceDown = true; stage.classList.add('panning'); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') document.getElementById('btnUndo').click();
+});
+window.addEventListener('keyup', e => {
+  if (e.code === 'Space') { spaceDown = false; stage.classList.remove('panning'); }
+});
+
+// ---------- Кнопки ----------
+document.getElementById('toolDraw').onclick = () => setTool('draw');
+document.getElementById('toolPan').onclick = () => setTool('pan');
+function setTool(t) {
+  state.tool = t;
+  document.getElementById('toolDraw').className = t === 'draw' ? 'on' : '';
+  document.getElementById('toolPan').className = t === 'pan' ? 'on' : '';
+  stage.style.cursor = t === 'pan' ? 'grab' : 'crosshair';
+}
+
+document.getElementById('btnUndo').onclick = () => {
+  const items = state.data[state.floor] || [];
+  items.pop();
+  save(); render();
+};
+
+document.getElementById('btnClear').onclick = () => {
+  if (!confirm('Удалить всю разметку этого этажа?')) return;
+  state.data[state.floor] = [];
+  save(); render();
+};
+
+document.getElementById('btnCopy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(out.value);
+    statusEl.textContent = 'Код скопирован';
+    setTimeout(() => statusEl.textContent = '', 2000);
+  } catch (e) {
+    out.select();
+    document.execCommand('copy');
+  }
+};
+
+loadFloor();
+</script>
+</body>
+</html>

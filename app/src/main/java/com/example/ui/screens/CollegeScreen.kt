@@ -109,8 +109,6 @@ fun CollegeScreen(
     /** Кабинет для немедленного показа на карте (переход из расписания). */
     pendingRoomName: String? = null,
     onPendingRoomConsumed: () -> Unit = {},
-    /** Открыть карту из меню. */
-    onOpenMap: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var page by rememberSaveable { mutableStateOf(OtherPage.MENU) }
@@ -158,7 +156,7 @@ fun CollegeScreen(
                 onOpenSettings = { page = OtherPage.SETTINGS },
                 onOpenStudents = { page = OtherPage.STUDENTS },
                 onOpenConnect = onOpenAppCode,
-                onOpenMap = onOpenMap
+                onOpenMap = { mapRoom = null; page = OtherPage.MAP }
             )
             OtherPage.SPECIALTY -> MySpecialtyPage(groupInfo) { page = OtherPage.MENU }
             OtherPage.TEACHERS -> TeachersPage(
@@ -220,7 +218,7 @@ fun CollegeScreen(
                         onOpenSettings = { page = OtherPage.SETTINGS },
                         onOpenStudents = { page = OtherPage.STUDENTS },
                         onOpenConnect = onOpenAppCode,
-                        onOpenMap = onOpenMap
+                        onOpenMap = { mapRoom = null; page = OtherPage.MAP }
                     )
                 }
             }
@@ -295,7 +293,7 @@ private fun OtherMenu(
                 MenuCard(
                     icon = { Icon(Icons.Default.LocationOn, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
                     title = "Карта колледжа",
-                    subtitle = "Планы этажей: найти кабинет и посмотреть, где он",
+                    subtitle = "Планы этажей и поиск кабинета",
                     onClick = onOpenMap
                 )
             }

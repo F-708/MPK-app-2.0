@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -63,15 +66,15 @@ import com.example.ui.util.bouncyClickable
 import kotlinx.coroutines.launch
 
 /**
- * Карта колледжа: план этажа с поиском кабинета.
+ * Карта колледжа: планы этажей и поиск кабинета.
  *
- * При открытии с указанным кабинетом проигрывается короткая анимация: камера
- * наезжает на кабинет, затем отъезжает и показывает план целиком — так сразу
- * видно и сам кабинет, и где он находится относительно всего этажа. Метка
- * остаётся и пульсирует.
+ * Открывается двумя путями:
+ * - из расписания по нажатию на кабинет — сразу нужный этаж и подсветка,
+ *   строка поиска при этом не нужна и не показывается;
+ * - из меню «Другое» — со строкой поиска, чтобы найти любой кабинет.
  *
- * Планы — сканы пожарных планов эвакуации, те самые, по которым в колледже
- * и ориентируются. Пинч и перетаскивание работают в любой момент.
+ * Кабинет подсвечивается рамкой по контуру и слегка пульсирует, чтобы его
+ * было видно на плотном чертеже. Увести карту за пределы экрана нельзя.
  */
 @Composable
 fun CollegeMapScreen(
@@ -79,17 +82,20 @@ fun CollegeMapScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var roomQuery by remember { mutableStateOf(initialRoom.orEmpty()) }
+    // Из расписания приходят с готовым кабинетом — поиск тогда лишний
+    val cameFromSchedule = !initialRoom.isNullOrBlank()
 
-    // Кабинет, к которому надо перейти: либо из расписания, либо введён вручную
+    var searchInput by remember { mutableStateOf("") }
     var focusedRoom by remember { mutableStateOf(initialRoom?.trim().orEmpty()) }
+    var notFound by remember { mutableStateOf(false) }
     var floor by remember {
-        mutableStateOf(CollegeMap.floorForRoom(initialRoom.orEmpty()) ?: CollegeMap.Floor.FIRST)
+        mutableStateOf(CollegeMap.floorForRoom(focusedRoom) ?: CollegeMap.Floor.FIRST)
     }
 
-    val pin = remember(focusedRoom) { CollegeMap.roomPins[focusedRoom] }
+    val pin = remember(focusedRoom, floor) {
+        CollegeMap.roomPins[focusedRoom]?.takeIf { it.floor == floor }
+    }
 
-    // Если кабинет известен по номеру — переключаемся на его этаж
     LaunchedEffect(focusedRoom) {
         CollegeMap.floorForRoom(focusedRoom)?.let { floor = it }
     }
@@ -99,16 +105,16 @@ fun CollegeMapScreen(
             .fillMaxSize()
             .background(ColorBgMain)
     ) {
-        // Шапка
+        // Шапка: только стрелка и название, без пояснений
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(40.dp)
                     .bouncyClickable(onClick = onBack),
                 contentAlignment = Alignment.Center
             ) {
@@ -116,47 +122,96 @@ fun CollegeMapScreen(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Назад",
                     tint = ColorBrandBlue,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Карта колледжа",
-                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = ColorTextTitle)
-                )
-                Text(
-                    text = floor.hint,
-                    style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-                    maxLines = 1
-                )
-            }
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "Карта колледжа",
+                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 22.sp, color = ColorTextTitle)
+            )
         }
 
-        // Поиск кабинета
-        OutlinedTextField(
-            value = roomQuery,
-            onValueChange = { input ->
-                roomQuery = input.filter { it.isDigit() || it.isLetter() }.take(6)
-            },
-            singleLine = true,
-            placeholder = { Text("Номер кабинета, например 214", fontSize = 13.sp) },
-            textStyle = TextStyle(fontSize = 15.sp, color = ColorTextTitle),
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
-            shape = RoundedCornerShape(2.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = ColorBrandBlue,
-                unfocusedBorderColor = ColorBorderLight,
-                focusedContainerColor = ColorSurfaceVariantLight,
-                unfocusedContainerColor = ColorSurfaceVariantLight,
-                cursorColor = ColorBrandBlue
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp)
-        )
+        // Поиск: только если карту открыли из меню, а не по конкретному кабинету
+        if (!cameFromSchedule) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = searchInput,
+                    onValueChange = { input ->
+                        searchInput = input.filter { it.isDigit() || it.isLetter() }.take(6)
+                        notFound = false
+                    },
+                    singleLine = true,
+                    placeholder = { Text("Кабинет, например 214", fontSize = 13.sp) },
+                    textStyle = TextStyle(fontSize = 15.sp, color = ColorTextTitle),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = KeyboardType.Number
+                    ),
+                    shape = RoundedCornerShape(2.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ColorBrandBlue,
+                        unfocusedBorderColor = ColorBorderLight,
+                        focusedContainerColor = ColorSurfaceVariantLight,
+                        unfocusedContainerColor = ColorSurfaceVariantLight,
+                        cursorColor = ColorBrandBlue
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
 
-        Spacer(modifier = Modifier.height(8.dp))
+                // Кнопка запускает поиск: без неё непонятно, когда он сработает
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBrandFill,
+                    border = BorderStroke(1.dp, ColorBrandFill),
+                    modifier = Modifier
+                        .height(52.dp)
+                        .bouncyClickable {
+                            val query = searchInput.trim()
+                            if (query.isBlank()) {
+                                notFound = false
+                                focusedRoom = ""
+                            } else {
+                                focusedRoom = query
+                                notFound = CollegeMap.roomPins[query] == null
+                            }
+                        }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "НАЙТИ",
+                            softWrap = false,
+                            maxLines = 1,
+                            style = TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color.White
+                            )
+                        )
+                    }
+                }
+            }
+
+            if (notFound) {
+                Text(
+                    text = "Кабинет $focusedRoom не размечен. Открыт нужный этаж — номер видно на плане.",
+                    style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         // Этажи
         Row(
@@ -167,13 +222,10 @@ fun CollegeMapScreen(
         ) {
             CollegeMap.Floor.entries.forEach { item ->
                 val selected = floor == item
-                androidx.compose.material3.Surface(
+                Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = if (selected) ColorBrandFill else ColorBgMain,
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (selected) ColorBrandFill else ColorBorderLight
-                    ),
+                    border = BorderStroke(1.dp, if (selected) ColorBrandFill else ColorBorderLight),
                     modifier = Modifier
                         .weight(1f)
                         .bouncyClickable { floor = item }
@@ -190,51 +242,36 @@ fun CollegeMapScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp)
+                            .padding(vertical = 9.dp)
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
-        // Сам план
         MapCanvas(
             floor = floor,
-            highlightedRoom = focusedRoom.takeIf { CollegeMap.looksLikeRoomNumber(it) },
-            pin = pin?.takeIf { it.floor == floor },
-            onRoomTapped = { found -> roomQuery = found; focusedRoom = found },
+            room = focusedRoom.takeIf { CollegeMap.looksLikeRoomNumber(it) },
+            pin = pin,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-        )
-
-        // Подсказка внизу: что искать и почему не видно метки
-        val hint = when {
-            focusedRoom.isBlank() -> "Введите номер кабинета — покажем, где он находится"
-            pin == null -> "Кабинет $focusedRoom — на этом плане. Метка для него ещё не отмечена, " +
-                "найдите номер на плане или уточните его у нас."
-            else -> "Кабинет $focusedRoom отмечен на плане"
-        }
-        Text(
-            text = hint,
-            style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp)
         )
     }
 }
 
 /**
- * План этажа с зумом, перетаскиванием и анимацией наезда на кабинет.
+ * План этажа: зум, перетаскивание и анимация наезда на кабинет.
+ *
+ * Перемещение ограничено так, чтобы план всегда занимал экран — улететь
+ * в пустоту и потерять карту нельзя.
  */
 @Composable
 private fun MapCanvas(
     floor: CollegeMap.Floor,
-    highlightedRoom: String?,
+    room: String?,
     pin: RoomPin?,
-    onRoomTapped: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -243,11 +280,10 @@ private fun MapCanvas(
     val scale = remember { Animatable(1f) }
     val offsetX = remember { Animatable(0f) }
     val offsetY = remember { Animatable(0f) }
+    val pulse = remember { Animatable(1f) }
 
-    // Картинка плана. Пропорции у всех трёх сканов одинаковые, поэтому
-    // считаем размер один раз: от него зависят координаты метки.
-    val imageAspect = 1.414f
     val imagePainter = painterResource(id = mapResId(floor))
+    val imageAspect = 1.414f
 
     BoxWithConstraints(modifier = modifier.clipToBounds()) {
         val viewW = with(density) { maxWidth.toPx() }
@@ -255,121 +291,143 @@ private fun MapCanvas(
         val imageW = viewW
         val imageH = imageW / imageAspect
 
-        fun focusOn(p: RoomPin, targetScale: Float): Triple<Float, Float, Float> {
-            val px = p.x * imageW
-            val py = p.y * imageH
-            return Triple(targetScale, viewW / 2f - px * targetScale, viewH / 2f - py * targetScale)
+        // Держим план в границах окна: меньше окна — центрируем,
+        // больше — не даём утащить дальше его края
+        fun clampX(value: Float, s: Float): Float {
+            val content = imageW * s
+            return if (content <= viewW) (viewW - content) / 2f
+            else value.coerceIn(viewW - content, 0f)
         }
 
-        // При смене этажа или кабинета: наезд на кабинет, затем отъезд к плану целиком
-        LaunchedEffect(floor, highlightedRoom, pin, viewW, viewH) {
+        fun clampY(value: Float, s: Float): Float {
+            val content = imageH * s
+            return if (content <= viewH) (viewH - content) / 2f
+            else value.coerceIn(viewH - content, 0f)
+        }
+
+        LaunchedEffect(floor, room, pin, viewW, viewH) {
             if (viewW <= 0f || viewH <= 0f) return@LaunchedEffect
 
             if (pin == null) {
                 scope.launch { scale.animateTo(1f, tween(250)) }
-                scope.launch { offsetX.animateTo(0f, tween(250)) }
-                scope.launch { offsetY.animateTo(0f, tween(250)) }
+                scope.launch { offsetX.animateTo(clampX(0f, 1f), tween(250)) }
+                scope.launch { offsetY.animateTo(clampY(0f, 1f), tween(250)) }
                 return@LaunchedEffect
             }
 
+            val px = pin.x * imageW
+            val py = pin.y * imageH
+
             // Фаза 1 — приближение к кабинету
             val zoom = 2.6f
-            val (zs, zx, zy) = focusOn(pin, zoom)
-            scope.launch { scale.animateTo(zs, tween(420, easing = LinearOutSlowInEasing)) }
-            scope.launch { offsetX.animateTo(zx, tween(420, easing = LinearOutSlowInEasing)) }
-            scope.launch { offsetY.animateTo(zy, tween(420, easing = LinearOutSlowInEasing)) }
+            scope.launch { scale.animateTo(zoom, tween(420, easing = LinearOutSlowInEasing)) }
+            scope.launch {
+                offsetX.animateTo(
+                    clampX(viewW / 2f - px * zoom, zoom),
+                    tween(420, easing = LinearOutSlowInEasing)
+                )
+            }
+            scope.launch {
+                offsetY.animateTo(
+                    clampY(viewH / 2f - py * zoom, zoom),
+                    tween(420, easing = LinearOutSlowInEasing)
+                )
+            }
             kotlinx.coroutines.delay(580)
 
-            // Фаза 2 — отъезд: виден весь этаж, метка остаётся
+            // Фаза 2 — отъезд: видно весь этаж, подсветка остаётся
             scope.launch { scale.animateTo(1f, tween(520)) }
-            scope.launch { offsetX.animateTo(0f, tween(520)) }
-            scope.launch { offsetY.animateTo(0f, tween(520)) }
+            scope.launch { offsetX.animateTo(clampX(0f, 1f), tween(520)) }
+            scope.launch { offsetY.animateTo(clampY(0f, 1f), tween(520)) }
+        }
+
+        // Пульсация подсветки: рамка дышит, но не бросается в глаза
+        LaunchedEffect(pin) {
+            if (pin == null) return@LaunchedEffect
+            while (true) {
+                pulse.animateTo(1f, tween(700, easing = LinearOutSlowInEasing))
+                pulse.animateTo(0.45f, tween(700))
+            }
         }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
+                .pointerInput(viewW, viewH) {
                     detectTransformGestures { _, pan, zoom, _ ->
                         scope.launch {
-                            scale.snapTo((scale.value * zoom).coerceIn(1f, 5f))
-                            offsetX.snapTo(offsetX.value + pan.x)
-                            offsetY.snapTo(offsetY.value + pan.y)
+                            val next = (scale.value * zoom).coerceIn(1f, 5f)
+                            scale.snapTo(next)
+                            offsetX.snapTo(clampX(offsetX.value + pan.x, next))
+                            offsetY.snapTo(clampY(offsetY.value + pan.y, next))
                         }
                     }
                 }
         ) {
-          Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = scale.value
-                    scaleY = scale.value
-                    translationX = offsetX.value
-                    translationY = offsetY.value
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
-                }
-          ) {
-            Image(
-                painter = imagePainter,
-                contentDescription = "План: ${floor.title}",
-                contentScale = ContentScale.Fit,
+            Box(
                 modifier = Modifier
-                    .width(with(density) { imageW.toDp() })
-                    .height(with(density) { imageH.toDp() })
-            )
-
-            // Метка кабинета — пульсирует, чтобы её было видно поверх чертежа
-            if (pin != null) {
-                val pulse = remember { Animatable(1f) }
-                LaunchedEffect(pin) {
-                    while (true) {
-                        pulse.animateTo(1.9f, tween(900, easing = LinearOutSlowInEasing))
-                        pulse.snapTo(1f)
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = scale.value
+                        scaleY = scale.value
+                        translationX = offsetX.value
+                        translationY = offsetY.value
+                        transformOrigin = TransformOrigin(0f, 0f)
                     }
-                }
-
-                val markerPx = with(density) { 22.dp.toPx() }
-                Box(
+            ) {
+                Image(
+                    painter = imagePainter,
+                    contentDescription = "План: ${floor.title}",
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier
-                        .offset(
-                            x = with(density) { (pin.x * imageW - markerPx / 2f).toDp() },
-                            y = with(density) { (pin.y * imageH - markerPx / 2f).toDp() }
-                        )
-                        .size(22.dp)
-                ) {
-                    // Расходящийся круг
+                        .width(with(density) { imageW.toDp() })
+                        .height(with(density) { imageH.toDp() })
+                )
+
+                // Подсветка кабинета: рамка по контуру, а не круглая метка —
+                // так видно сам кабинет, а не точку рядом с ним
+                if (pin != null) {
+                    val boxW = pin.w * imageW
+                    val boxH = pin.h * imageH
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
-                            .graphicsLayer {
-                                scaleX = pulse.value
-                                scaleY = pulse.value
-                                alpha = (2.0f - pulse.value).coerceIn(0f, 0.5f)
-                            }
-                            .background(ColorBrandBlue, androidx.compose.foundation.shape.CircleShape)
-                    )
-                    // Ядро метки
-                    Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .background(ColorBrandFill, androidx.compose.foundation.shape.CircleShape)
-                            .border(2.dp, Color.White, androidx.compose.foundation.shape.CircleShape),
-                        contentAlignment = Alignment.Center
+                            .offset(
+                                x = with(density) { (pin.x * imageW - boxW / 2f).toDp() },
+                                y = with(density) { (pin.y * imageH - boxH / 2f).toDp() }
+                            )
+                            .size(
+                                width = with(density) { boxW.toDp() },
+                                height = with(density) { boxH.toDp() }
+                            )
                     ) {
-                        Text(
-                            text = highlightedRoom ?: "",
-                            style = TextStyle(
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            ),
-                            maxLines = 1
+                        // Заливка — чтобы кабинет читался даже на пёстром плане
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(ColorBrandBlue.copy(alpha = 0.18f * pulse.value))
+                                .border(
+                                    2.dp,
+                                    ColorBrandBlue.copy(alpha = pulse.value),
+                                    RoundedCornerShape(1.dp)
+                                )
                         )
+                        if (!room.isNullOrBlank()) {
+                            Text(
+                                text = room,
+                                style = TextStyle(
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ColorBrandBlue
+                                ),
+                                maxLines = 1,
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .offset(y = (-11).dp)
+                            )
+                        }
                     }
                 }
             }
-          }
         }
     }
 }
