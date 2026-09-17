@@ -684,22 +684,34 @@ fun AddTaskDialog(
                             TextButton(onClick = { showDatePicker = false }) { Text("ОТМЕНА") }
                         }
                     ) {
-                        DatePicker(
-                            state = datePickerState,
-                            title = null,
-                            headline = null,
-                            showModeToggle = false,
-                            // По умолчанию выбранный день — тёмная цифра на синем
-                            // кружке, её почти не видно. Делаем инверсию: белым по синему.
-                            colors = DatePickerDefaults.colors(
-                                selectedDayContainerColor = ColorBrandFill,
-                                selectedDayContentColor = Color.White,
-                                todayContentColor = ColorBrandBlue,
-                                todayDateBorderColor = ColorBrandBlue,
-                                dayContentColor = ColorTextBody,
-                                weekdayContentColor = ColorTextMuted
+                        // Материаловский календарь берёт цвет цифры выбранного дня
+                        // из цветовой схемы, а params colors() в этой версии
+                        // перекрываются не полностью. Поэтому подменяем схему
+                        // локально: primary — заливка кружка, onPrimary — цвет цифры.
+                        androidx.compose.material3.MaterialTheme(
+                            colorScheme = androidx.compose.material3.MaterialTheme.colorScheme.copy(
+                                primary = ColorBrandFill,
+                                onPrimary = Color.White,
+                                surface = ColorBgMain,
+                                onSurface = ColorTextTitle,
+                                onSurfaceVariant = ColorTextBody
                             )
-                        )
+                        ) {
+                            DatePicker(
+                                state = datePickerState,
+                                title = null,
+                                headline = null,
+                                showModeToggle = false,
+                                colors = DatePickerDefaults.colors(
+                                    selectedDayContainerColor = ColorBrandFill,
+                                    selectedDayContentColor = Color.White,
+                                    todayContentColor = ColorBrandBlue,
+                                    todayDateBorderColor = ColorBrandBlue,
+                                    dayContentColor = ColorTextBody,
+                                    weekdayContentColor = ColorTextMuted
+                                )
+                            )
+                        }
                     }
                 }
             }

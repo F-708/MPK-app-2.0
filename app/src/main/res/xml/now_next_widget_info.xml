@@ -6,6 +6,6 @@
     android:targetCellHeight="2"
     android:updatePeriodMillis="0"
     android:initialLayout="@layout/widget_now_next"
-    android:previewImage="@mipmap/ic_launcher"
+    android:previewImage="@drawable/widget_preview_countdown"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen" />
