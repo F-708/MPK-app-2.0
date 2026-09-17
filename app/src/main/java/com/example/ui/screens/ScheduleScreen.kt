@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
@@ -103,6 +104,11 @@ fun ScheduleScreen(
     isSyncing: Boolean = false,
     /** Переход к карточке преподавателя по тапу на его ФИО. */
     onTeacherClick: (String) -> Unit = {},
+    /** Переход к карте колледжа по тапу на номер кабинета. */
+    onRoomClick: (String) -> Unit = {},
+    /** Задания группы — для пометки «на завтра задано». */
+    taskRepository: com.example.data.repository.TaskRepository? = null,
+    onOpenTasks: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -119,6 +125,25 @@ fun ScheduleScreen(
             com.example.data.repository.TeacherInsights.surnameOf(name) in known
         }
         check
+    }
+
+    // Задания со сроком на завтра: ненавязчивая пометка, что что-то задано,
+    // и переход в задания, чтобы посмотреть. Показываем только когда есть что.
+    val tasksTomorrow = if (taskRepository == null) {
+        emptyList()
+    } else {
+        val flow = remember(groupInfo.canonicalName) {
+            taskRepository.getTasksForGroup(groupInfo.canonicalName)
+        }
+        val all by flow.collectAsState(initial = emptyList())
+        val tomorrowIso = remember {
+            val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
+            String.format(
+                Locale.ROOT, "%04d-%02d-%02d",
+                cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)
+            )
+        }
+        all.filter { !it.isCompleted && it.deadlineDate == tomorrowIso }
     }
 
     // 1. Точный расчет реального сегодняшнего дня
@@ -521,13 +546,59 @@ fun ScheduleScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    // Ненавязчивая пометка: на завтра что-то задано. Появляется
+                    // только когда задания действительно есть.
+                    if (tasksTomorrow.isNotEmpty()) {
+                        item(key = "tomorrow_tasks_note") {
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                color = ColorSurfaceVariantLight,
+                                border = BorderStroke(1.dp, ColorBorderLight),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .bouncyClickable(onClick = onOpenTasks)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.EventNote,
+                                        contentDescription = null,
+                                        tint = ColorBrandBlue,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "На завтра задано: ${tasksTomorrow.size} — посмотреть",
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = ColorBrandBlue
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = null,
+                                        tint = ColorBrandBlue,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     items(slots, key = { it.first }) { (number, lesson) ->
                         if (lesson != null) {
                             LessonCard(
                                 lesson = lesson,
                                 isCurrent = lesson.lessonNumber == currentLessonNumber,
                                 onTeacherClick = onTeacherClick,
-                                isTeacherKnown = isTeacherKnown
+                                isTeacherKnown = isTeacherKnown,
+                                onRoomClick = onRoomClick
                             )
                         } else {
                             NoLessonCard(number)
@@ -604,6 +675,7 @@ fun LessonCard(
     onTeacherClick: (String) -> Unit = {},
     /** Есть ли преподаватель в базе колледжа. Нет в базе — не делаем кликабельным. */
     isTeacherKnown: (String) -> Boolean = { true },
+    onRoomClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -687,6 +759,7 @@ fun LessonCard(
                         room = lesson.roomFirst,
                         onTeacherClick = onTeacherClick,
                         isTeacherKnown = isTeacherKnown,
+                        onRoomClick = onRoomClick,
                         modifier = Modifier.weight(1f)
                     )
 
@@ -704,6 +777,7 @@ fun LessonCard(
                         room = lesson.roomSecond,
                         onTeacherClick = onTeacherClick,
                         isTeacherKnown = isTeacherKnown,
+                        onRoomClick = onRoomClick,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -741,7 +815,10 @@ fun LessonCard(
                             shape = RoundedCornerShape(2.dp),
                             border = BorderStroke(1.dp, ColorBorderLight),
                             color = ColorSurfaceHighlight,
-                            modifier = Modifier.wrapContentWidth()
+                            modifier = Modifier
+                                .wrapContentWidth()
+                                // Кабинет ведёт на карту колледжа: видно, где он
+                                .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) }
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -855,6 +932,7 @@ private fun SubgroupPane(
     room: String,
     onTeacherClick: (String) -> Unit,
     isTeacherKnown: (String) -> Boolean,
+    onRoomClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -891,7 +969,8 @@ private fun SubgroupPane(
                         fontWeight = FontWeight.Bold,
                         color = ColorBrandBlue,
                         fontSize = 11.sp
-                    )
+                    ),
+                    modifier = Modifier.bouncyClickable(scaleDown = 0.97f) { onRoomClick(room) }
                 )
             }
         }

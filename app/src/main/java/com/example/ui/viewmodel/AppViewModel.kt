@@ -39,7 +39,9 @@ data class AppUiState(
      * Экран «Код приложения» занимает весь экран — рисуется вместо основного
      * интерфейса, чтобы не было ни баннера, ни нижних вкладок.
      */
-    val showAppCode: Boolean = false
+    val showAppCode: Boolean = false,
+    /** Кабинет, который нужно показать на карте (переход из расписания). */
+    val pendingRoom: String? = null
 )
 
 /**
@@ -109,6 +111,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Сброс после того, как карточка преподавателя открыта. */
     fun consumePendingTeacher() {
         _uiState.update { it.copy(pendingTeacherName = null) }
+    }
+
+    /** Открыть карту на нужном кабинете (нажатие на кабинет в расписании). */
+    fun openMap(room: String) {
+        _uiState.update {
+            it.copy(currentTab = AppTab.COLLEGE, pendingRoom = room)
+        }
+    }
+
+    /** Сброс после того, как карта открыта. */
+    fun consumePendingRoom() {
+        _uiState.update { it.copy(pendingRoom = null) }
     }
 
     /** Открыть полноэкранный «Код приложения» (админская версия). */

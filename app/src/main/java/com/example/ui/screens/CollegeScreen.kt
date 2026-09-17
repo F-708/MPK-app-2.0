@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
@@ -87,7 +88,7 @@ private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
 private val ADMIN_GOLD = Color(0xFFE8C55A)
 
-private enum class OtherPage { MENU, SPECIALTY, TEACHERS, TEACHER_CARD, SETTINGS, STUDENTS, STUDENT_CARD }
+private enum class OtherPage { MENU, SPECIALTY, TEACHERS, TEACHER_CARD, SETTINGS, STUDENTS, STUDENT_CARD, MAP }
 
 /**
  * Вкладка «Другое»: специальность, преподаватели, настройки, сайт колледжа.
@@ -105,12 +106,28 @@ fun CollegeScreen(
     /** ФИО преподавателя для немедленного открытия (переход из расписания). */
     pendingTeacherName: String? = null,
     onPendingTeacherConsumed: () -> Unit = {},
+    /** Кабинет для немедленного показа на карте (переход из расписания). */
+    pendingRoomName: String? = null,
+    onPendingRoomConsumed: () -> Unit = {},
+    /** Открыть карту из меню. */
+    onOpenMap: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var page by rememberSaveable { mutableStateOf(OtherPage.MENU) }
     var selectedStudent by remember { mutableStateOf<Student?>(null) }
     var selectedTeacher by remember { mutableStateOf<Teacher?>(null) }
     val context = LocalContext.current
+
+    // Кабинет, который открывается на карте: приходит из расписания либо сбрасывается
+    var mapRoom by remember { mutableStateOf(pendingRoomName) }
+
+    // Переход из расписания: открываем карту сразу на нужном кабинете
+    LaunchedEffect(pendingRoomName) {
+        val room = pendingRoomName ?: return@LaunchedEffect
+        mapRoom = room
+        page = OtherPage.MAP
+        onPendingRoomConsumed()
+    }
 
     // Переход из расписания: открываем карточку нужного преподавателя
     LaunchedEffect(pendingTeacherName) {
@@ -140,7 +157,8 @@ fun CollegeScreen(
                 onOpenTeachers = { page = OtherPage.TEACHERS },
                 onOpenSettings = { page = OtherPage.SETTINGS },
                 onOpenStudents = { page = OtherPage.STUDENTS },
-                onOpenConnect = onOpenAppCode
+                onOpenConnect = onOpenAppCode,
+                onOpenMap = onOpenMap
             )
             OtherPage.SPECIALTY -> MySpecialtyPage(groupInfo) { page = OtherPage.MENU }
             OtherPage.TEACHERS -> TeachersPage(
@@ -165,6 +183,13 @@ fun CollegeScreen(
                     page = OtherPage.TEACHERS
                 }
             }
+            OtherPage.MAP -> CollegeMapScreen(
+                initialRoom = mapRoom,
+                onBack = {
+                    mapRoom = null
+                    page = OtherPage.MENU
+                }
+            )
             OtherPage.SETTINGS -> SettingsPage(
                 groupInfo = groupInfo,
                 diagnosticInfo = diagnosticInfo,
@@ -194,7 +219,8 @@ fun CollegeScreen(
                         onOpenTeachers = { page = OtherPage.TEACHERS },
                         onOpenSettings = { page = OtherPage.SETTINGS },
                         onOpenStudents = { page = OtherPage.STUDENTS },
-                        onOpenConnect = onOpenAppCode
+                        onOpenConnect = onOpenAppCode,
+                        onOpenMap = onOpenMap
                     )
                 }
             }
@@ -213,7 +239,8 @@ private fun OtherMenu(
     onOpenTeachers: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenStudents: () -> Unit,
-    onOpenConnect: () -> Unit
+    onOpenConnect: () -> Unit,
+    onOpenMap: () -> Unit
 ) {
     val context = LocalContext.current
     val isAdmin = com.example.BuildConfig.FLAVOR == "admin"
@@ -262,6 +289,14 @@ private fun OtherMenu(
                     title = "Моя специальность",
                     subtitle = "Группа ${groupInfo.canonicalName}: код, квалификация, предметы по курсам",
                     onClick = onOpenSpecialty
+                )
+            }
+            item {
+                MenuCard(
+                    icon = { Icon(Icons.Default.LocationOn, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
+                    title = "Карта колледжа",
+                    subtitle = "Планы этажей: найти кабинет и посмотреть, где он",
+                    onClick = onOpenMap
                 )
             }
             item {
