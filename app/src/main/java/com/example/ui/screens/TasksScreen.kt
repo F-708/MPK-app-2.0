@@ -29,9 +29,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDefaults
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -42,7 +39,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -522,7 +518,7 @@ fun AddTaskDialog(
     var description by remember { mutableStateOf("") }
     var dueDateMillis by remember { mutableStateOf<Long?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
-    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = null)
+    val currentYear = remember { java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) }
     var selectedType by remember { mutableStateOf(TaskType.HOMEWORK) }
 
     val officialSubjects = remember(groupInfo.specialtyCode, groupInfo.course) {
@@ -672,47 +668,18 @@ fun AddTaskDialog(
                 }
 
                 if (showDatePicker) {
-                    DatePickerDialog(
-                        onDismissRequest = { showDatePicker = false },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                dueDateMillis = datePickerState.selectedDateMillis
-                                showDatePicker = false
-                            }) { Text("ГОТОВО") }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showDatePicker = false }) { Text("ОТМЕНА") }
+                    com.example.ui.components.SimpleDatePickerDialog(
+                        initialDateIso = dueDateMillis?.let { isoDate(it) },
+                        // Годы: с текущего по год последнего курса — раньше смысла нет
+                        // (расписание пишется вперёд), дальше учёба всё равно закончится
+                        minYear = currentYear,
+                        maxYear = currentYear + 4,
+                        onDismiss = { showDatePicker = false },
+                        onConfirm = { iso ->
+                            dueDateMillis = millisFromIso(iso)
+                            showDatePicker = false
                         }
-                    ) {
-                        // Материаловский календарь берёт цвет цифры выбранного дня
-                        // из цветовой схемы, а params colors() в этой версии
-                        // перекрываются не полностью. Поэтому подменяем схему
-                        // локально: primary — заливка кружка, onPrimary — цвет цифры.
-                        androidx.compose.material3.MaterialTheme(
-                            colorScheme = androidx.compose.material3.MaterialTheme.colorScheme.copy(
-                                primary = ColorBrandFill,
-                                onPrimary = Color.White,
-                                surface = ColorBgMain,
-                                onSurface = ColorTextTitle,
-                                onSurfaceVariant = ColorTextBody
-                            )
-                        ) {
-                            DatePicker(
-                                state = datePickerState,
-                                title = null,
-                                headline = null,
-                                showModeToggle = false,
-                                colors = DatePickerDefaults.colors(
-                                    selectedDayContainerColor = ColorBrandFill,
-                                    selectedDayContentColor = Color.White,
-                                    todayContentColor = ColorBrandBlue,
-                                    todayDateBorderColor = ColorBrandBlue,
-                                    dayContentColor = ColorTextBody,
-                                    weekdayContentColor = ColorTextMuted
-                                )
-                            )
-                        }
-                    }
+                    )
                 }
             }
         },
@@ -797,4 +764,14 @@ internal fun isoDate(millis: Long): String {
 internal fun formatDateForShow(raw: String): String {
     val m = Regex("""^(\d{4})-(\d{2})-(\d{2})$""").find(raw.trim()) ?: return raw
     return "${m.groupValues[3]}.${m.groupValues[2]}.${m.groupValues[1]}"
+}
+
+/** «ГГГГ-ММ-ДД» → миллисекунды (по UTC — как и isoDate). */
+internal fun millisFromIso(iso: String): Long? {
+    val m = Regex("""^(\d{4})-(\d{2})-(\d{2})$""").find(iso.trim()) ?: return null
+    val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+        clear()
+        set(m.groupValues[1].toInt(), m.groupValues[2].toInt() - 1, m.groupValues[3].toInt())
+    }
+    return cal.timeInMillis
 }

@@ -603,40 +603,7 @@ fun CalendarArchiveDialog(
     }
 }
 
-/**
- * Рассчитывает список ячеек для отображения сетки месяца (с учетом смещения дня недели понедельника).
- */
-private fun calculateMonthDays(year: Int, month: Int): List<Int?> {
-    val cal = Calendar.getInstance().apply {
-        set(Calendar.YEAR, year)
-        set(Calendar.MONTH, month)
-        set(Calendar.DAY_OF_MONTH, 1)
-    }
-
-    val firstDayOfWeek = cal.get(Calendar.DAY_OF_WEEK) // 1 = Sunday, 2 = Monday...
-    val offset = when (firstDayOfWeek) {
-        Calendar.MONDAY -> 0
-        Calendar.TUESDAY -> 1
-        Calendar.WEDNESDAY -> 2
-        Calendar.THURSDAY -> 3
-        Calendar.FRIDAY -> 4
-        Calendar.SATURDAY -> 5
-        Calendar.SUNDAY -> 6
-        else -> 0
-    }
-
-    val maxDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-    val list = mutableListOf<Int?>()
-
-    for (i in 0 until offset) {
-        list.add(null)
-    }
-    for (d in 1..maxDays) {
-        list.add(d)
-    }
-
-    return list
-}
+// calculateMonthDays живёт в MonthGrid.kt — одна реализация на всё приложение
 
 /**
  * Безопасный парсер строк дат различных форматов.

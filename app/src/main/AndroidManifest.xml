@@ -86,7 +86,7 @@
 
         <!-- Настройка виджета при добавлении -->
         <activity
-            android:name=".widget.BellCountdownConfigActivity"
+            android:name=".widget.WidgetConfigActivity"
             android:exported="true"
             android:theme="@style/Theme.MyApplication">
             <intent-filter>

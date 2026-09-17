@@ -13,7 +13,7 @@ import com.example.data.model.CollegeBellSchedule
 import com.example.util.SubjectFormatter
 
 /**
- * Виджет «Сейчас / дальше» — малая версия расписания.
+ * Виджет «Сейчас и дальше» (2x3) — малая версия расписания.
  *
  * Отвечает на один вопрос: что идёт прямо сейчас и что будет следующим.
  * Полное расписание дня — в отдельном большом виджете.
@@ -41,6 +41,17 @@ class NowNextWidgetProvider : AppWidgetProvider() {
         private fun buildViews(context: Context, appWidgetId: Int): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_now_next)
 
+            val style = WidgetStyle.load(context, appWidgetId)
+            val showRoom = WidgetOptions.showRoom(context, appWidgetId)
+
+            views.setInt(R.id.now_next_root, "setBackgroundColor", style.backgroundColor)
+            views.setTextColor(R.id.tv_now_label, style.subColor)
+            views.setTextColor(R.id.tv_next_label, style.subColor)
+            views.setTextColor(R.id.tv_now_subject, style.mainColor)
+            views.setTextColor(R.id.tv_next_subject, style.mainColor)
+            views.setTextColor(R.id.tv_now_details, style.subColor)
+            views.setTextColor(R.id.tv_next_details, style.subColor)
+
             val now = WidgetData.minuteOfDay(context)
             val lessons = WidgetData.todayLessons(context)
 
@@ -54,7 +65,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             if (current != null) {
                 views.setTextViewText(R.id.tv_now_label, "СЕЙЧАС")
                 views.setTextViewText(R.id.tv_now_subject, SubjectFormatter.getShortName(current.subjectRaw))
-                views.setTextViewText(R.id.tv_now_details, detailsOf(current))
+                views.setTextViewText(R.id.tv_now_details, detailsOf(current, showRoom))
             } else {
                 // Перемена или до начала занятий: не оставляем пустоту
                 views.setTextViewText(
@@ -72,7 +83,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             if (next != null) {
                 views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                 views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next.subjectRaw))
-                views.setTextViewText(R.id.tv_next_details, detailsOf(next))
+                views.setTextViewText(R.id.tv_next_details, detailsOf(next, showRoom))
             } else {
                 views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                 views.setTextViewText(
@@ -93,11 +104,13 @@ class NowNextWidgetProvider : AppWidgetProvider() {
         }
 
         /** «08:15–09:00 • каб. 214»; кабинет не пишем, если его нет. */
-        private fun detailsOf(lesson: LessonEntity): String {
+        /** «08:15–09:00 • каб. 214»; кабинет — если он есть и включён в настройках. */
+        private fun detailsOf(lesson: LessonEntity, showRoom: Boolean): String {
+            val time = "${lesson.timeStart}–${lesson.timeEnd}"
+            if (!showRoom) return time
             val rooms = listOf(lesson.roomFirst, lesson.roomSecond)
                 .filter { it.isNotBlank() }
                 .distinct()
-            val time = "${lesson.timeStart}–${lesson.timeEnd}"
             return if (rooms.isEmpty()) time else "$time • каб. ${rooms.joinToString("/")}"
         }
     }

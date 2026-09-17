@@ -218,11 +218,33 @@ enum class CountdownMode(val title: String, val description: String) {
     }
 }
 
-/** Стиль виджета: цвет фона и текста, настраивается при добавлении. */enum class WidgetStyle(val backgroundColor: Int, val mainColor: Int, val subColor: Int, val title: String) {
-    LIGHT(0xFFFFFFFF.toInt(), 0xFF0B3564.toInt(), 0xFF6B7280.toInt(), "Белый"),
-    DARK(0xFF001737.toInt(), 0xFFFFFFFF.toInt(), 0xFFB9C6D8.toInt(), "Тёмно-синий"),
-    BLUE(0xFF0B3564.toInt(), 0xFFFFFFFF.toInt(), 0xFFAFC6E4.toInt(), "Фирменный синий"),
-    SKY(0xFF0072CE.toInt(), 0xFFFFFFFF.toInt(), 0xFFD5E9FA.toInt(), "Яркий синий");
+/** Стиль виджета: цвет фона и текста, настраивается при добавлении. */
+enum class WidgetStyle(
+    val backgroundColor: Int,
+    val mainColor: Int,
+    val subColor: Int,
+    /** Фон подсвеченной (текущей) строки в виджетах-списках. */
+    val highlightColor: Int,
+    /** Цвет прошедших строк — приглушённый, чтобы не отвлекал. */
+    val pastColor: Int,
+    val title: String
+) {
+    LIGHT(
+        0xFFFFFFFF.toInt(), 0xFF111827.toInt(), 0xFF6B7280.toInt(),
+        0xFFE8F0FA.toInt(), 0xFF9AA3AF.toInt(), "Белый"
+    ),
+    DARK(
+        0xFF001737.toInt(), 0xFFFFFFFF.toInt(), 0xFFB9C6D8.toInt(),
+        0xFF0B3564.toInt(), 0xFF5A6B85.toInt(), "Тёмно-синий"
+    ),
+    BLUE(
+        0xFF0B3564.toInt(), 0xFFFFFFFF.toInt(), 0xFFAFC6E4.toInt(),
+        0xFF16457F.toInt(), 0xFF6E86A6.toInt(), "Фирменный синий"
+    ),
+    SKY(
+        0xFF0072CE.toInt(), 0xFFFFFFFF.toInt(), 0xFFD5E9FA.toInt(),
+        0xFF0B3564.toInt(), 0xFF8FB8DD.toInt(), "Яркий синий"
+    );
 
     companion object {
         private const val PREF_PREFIX = "widget_style_"

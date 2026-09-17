@@ -6,17 +6,20 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.widget.RemoteViews
 import com.example.R
 import com.example.data.model.CollegeBellSchedule
 
 /**
- * Виджет «Звонки» — расписание звонков на сегодня с подсветкой текущего урока.
+ * Виджет «Звонки» — расписание звонков колледжа с подсветкой текущего урока.
+ *
+ * Строка максимально короткая: слева номер урока, справа время. Слова
+ * «1 урок» рядом с цифрой «1» были лишними — номер урока и так понятен,
+ * а место в виджете дорогое. Для инфочаса вместо номера — «инф».
  *
  * В отличие от виджета расписания, который зависит от выбранной группы, этот
- * показывает общее расписание звонков колледжа: по нему ориентируются, когда
- * урока в базе нет, а понять, сколько идёт пара, всё равно нужно.
+ * показывает общее расписание звонков: по нему ориентируются, когда урока
+ * в базе нет, а понять, сколько идёт пара, всё равно нужно.
  */
 class BellsWidgetProvider : AppWidgetProvider() {
 
@@ -29,13 +32,6 @@ class BellsWidgetProvider : AppWidgetProvider() {
 
     companion object {
 
-        private const val COLOR_CURRENT_BG = 0xFFE8F0FA.toInt()
-        private const val COLOR_CURRENT_TEXT = 0xFF0B3564.toInt()
-        private const val COLOR_PAST_TEXT = 0xFF9AA3AF.toInt()
-        private const val COLOR_TEXT = 0xFF111827.toInt()
-        private const val COLOR_SUB = 0xFF6B7280.toInt()
-        private const val COLOR_TRANSPARENT = Color.TRANSPARENT
-
         fun updateAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, BellsWidgetProvider::class.java))
@@ -44,6 +40,10 @@ class BellsWidgetProvider : AppWidgetProvider() {
 
         private fun buildViews(context: Context, appWidgetId: Int): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_bells)
+            val style = WidgetStyle.load(context, appWidgetId)
+
+            views.setInt(R.id.bells_root, "setBackgroundColor", style.backgroundColor)
+            views.setTextColor(R.id.tv_bells_header, style.subColor)
 
             val now = WidgetData.minuteOfDay(context)
             val dow = WidgetData.dayOfWeek(context)
@@ -57,31 +57,25 @@ class BellsWidgetProvider : AppWidgetProvider() {
                 val isCurrent = now in bell.startMinutes..bell.endMinutes
                 val isPast = now > bell.endMinutes
 
-                val row = RemoteViews(context.packageName, R.layout.widget_row_list)
+                val row = RemoteViews(context.packageName, R.layout.widget_row_bell)
                 row.setInt(
                     R.id.row_root,
                     "setBackgroundColor",
-                    if (isCurrent) COLOR_CURRENT_BG else COLOR_TRANSPARENT
+                    if (isCurrent) style.highlightColor else style.backgroundColor
                 )
 
-                val label = if (bell.isInfoHour) "инфочас" else "${bell.lessonNumber}"
                 val textColor = when {
-                    isCurrent -> COLOR_CURRENT_TEXT
-                    isPast -> COLOR_PAST_TEXT
-                    else -> COLOR_TEXT
+                    isCurrent -> style.mainColor
+                    isPast -> style.pastColor
+                    else -> style.mainColor
                 }
 
-                row.setTextViewText(R.id.row_number, label)
+                // Инфочас — не урок, у него нет номера
+                row.setTextViewText(R.id.row_number, if (bell.isInfoHour) "инф" else "${bell.lessonNumber}")
                 row.setTextColor(R.id.row_number, textColor)
 
                 row.setTextViewText(R.id.row_time, "${bell.start}–${bell.end}")
-                row.setTextColor(R.id.row_time, if (isCurrent) COLOR_CURRENT_TEXT else COLOR_SUB)
-
-                row.setTextViewText(R.id.row_subject, bell.title)
-                row.setTextColor(R.id.row_subject, textColor)
-
-                // В этом виджете кабинет не нужен — место отдано времени
-                row.setTextViewText(R.id.row_room, "")
+                row.setTextColor(R.id.row_time, if (isCurrent) style.mainColor else style.subColor)
 
                 views.addView(R.id.bells_rows, row)
             }

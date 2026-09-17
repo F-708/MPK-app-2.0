@@ -65,4 +65,17 @@ object WidgetUpdateHelper {
         TodayScheduleWidgetProvider.updateAll(context)
         BellsWidgetProvider.updateAll(context)
     }
+
+    /**
+     * Обновляет один конкретный виджет — нужен сразу после настройки, чтобы
+     * пользователь увидел выбранную тему, не дожидаясь минутного такта.
+     */
+    fun updateOne(context: Context, appWidgetId: Int) {
+        when (WidgetKind.of(context, appWidgetId)) {
+            WidgetKind.COUNTDOWN -> BellCountdownWidgetProvider.updateAll(context)
+            WidgetKind.NOW_NEXT -> NowNextWidgetProvider.updateAll(context)
+            WidgetKind.TODAY -> TodayScheduleWidgetProvider.updateAll(context)
+            WidgetKind.BELLS -> BellsWidgetProvider.updateAll(context)
+        }
+    }
 }

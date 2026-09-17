@@ -6,18 +6,17 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.widget.RemoteViews
 import com.example.R
 import com.example.data.local.entity.LessonEntity
 
 /**
- * Виджет «Расписание на сегодня» — большая вертикальная версия.
+ * Виджет «Расписание на сегодня» — весь день списком.
  *
- * Весь день списком: номер, время, предмет, кабинет. Текущий урок подсвечен,
- * прошедшие приглушены — по виджету видно, где ты находишься, не открывая приложение.
+ * Строка: номер, время, предмет, кабинет. Текущий урок подсвечен, прошедшие
+ * приглушены. Широкий (4–5 клеток), поэтому название предмета влезает целиком.
  *
- * Строки добавляются в LinearLayout через addView: так один и тот же макет строки
+ * Строки добавляются в LinearLayout через addView: один макет строки
  * переиспользуется для любого количества уроков, без отдельного RemoteViewsService.
  */
 class TodayScheduleWidgetProvider : AppWidgetProvider() {
@@ -32,14 +31,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
     companion object {
 
         /** Больше этого числа строк виджет не покажет — дальше он бесполезен на экране. */
-        private const val MAX_ROWS = 9
-
-        private const val COLOR_CURRENT_BG = 0xFFE8F0FA.toInt()
-        private const val COLOR_CURRENT_TEXT = 0xFF0B3564.toInt()
-        private const val COLOR_PAST_TEXT = 0xFF9AA3AF.toInt()
-        private const val COLOR_TEXT = 0xFF111827.toInt()
-        private const val COLOR_SUB = 0xFF6B7280.toInt()
-        private const val COLOR_TRANSPARENT = Color.TRANSPARENT
+        private const val MAX_ROWS = 12
 
         fun updateAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
@@ -49,6 +41,13 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
 
         private fun buildViews(context: Context, appWidgetId: Int): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_today_schedule)
+            val style = WidgetStyle.load(context, appWidgetId)
+            val showRoom = WidgetOptions.showRoom(context, appWidgetId)
+
+            views.setInt(R.id.today_root, "setBackgroundColor", style.backgroundColor)
+            views.setTextColor(R.id.tv_today_header, style.subColor)
+            views.setTextColor(R.id.tv_today_empty, style.subColor)
+
             val now = WidgetData.minuteOfDay(context)
             val lessons = WidgetData.todayLessons(context)
             val group = WidgetUpdateHelper.getSelectedGroup(context)
@@ -65,7 +64,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             } else {
                 views.setViewVisibility(R.id.tv_today_empty, android.view.View.GONE)
                 lessons.take(MAX_ROWS).forEach { lesson ->
-                    views.addView(R.id.today_rows, buildRow(context, lesson, now))
+                    views.addView(R.id.today_rows, buildRow(context, lesson, now, style, showRoom))
                 }
             }
 
@@ -79,25 +78,35 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             return views
         }
 
-        private fun buildRow(context: Context, lesson: LessonEntity, now: Int): RemoteViews {
+        private fun buildRow(
+            context: Context,
+            lesson: LessonEntity,
+            now: Int,
+            style: WidgetStyle,
+            showRoom: Boolean
+        ): RemoteViews {
             val row = RemoteViews(context.packageName, R.layout.widget_row_list)
 
             val isCurrent = now in lesson.startMinutes()..lesson.endMinutes()
             val isPast = now > lesson.endMinutes()
 
             val textColor = when {
-                isCurrent -> COLOR_CURRENT_TEXT
-                isPast -> COLOR_PAST_TEXT
-                else -> COLOR_TEXT
+                isCurrent -> style.mainColor
+                isPast -> style.pastColor
+                else -> style.mainColor
             }
 
-            row.setInt(R.id.row_root, "setBackgroundColor", if (isCurrent) COLOR_CURRENT_BG else COLOR_TRANSPARENT)
+            row.setInt(
+                R.id.row_root,
+                "setBackgroundColor",
+                if (isCurrent) style.highlightColor else style.backgroundColor
+            )
 
             row.setTextViewText(R.id.row_number, "${lesson.lessonNumber}")
             row.setTextColor(R.id.row_number, textColor)
 
             row.setTextViewText(R.id.row_time, "${lesson.timeStart}–${lesson.timeEnd}")
-            row.setTextColor(R.id.row_time, if (isCurrent) COLOR_CURRENT_TEXT else COLOR_SUB)
+            row.setTextColor(R.id.row_time, if (isCurrent) style.mainColor else style.subColor)
 
             row.setTextViewText(
                 R.id.row_subject,
@@ -106,8 +115,11 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             row.setTextColor(R.id.row_subject, textColor)
 
             val room = lesson.roomFirst.takeIf { it.isNotBlank() } ?: lesson.roomSecond
-            row.setTextViewText(R.id.row_room, room.takeIf { it.isNotBlank() }?.let { "каб. $it" } ?: "")
-            row.setTextColor(R.id.row_room, COLOR_SUB)
+            row.setTextViewText(
+                R.id.row_room,
+                if (showRoom && room.isNotBlank()) "каб. $room" else ""
+            )
+            row.setTextColor(R.id.row_room, style.subColor)
 
             return row
         }
