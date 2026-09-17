@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Виджет «Расписание на сегодня»: вертикальный список уроков группы -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/today_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FFFFFFFF"
+    android:padding="10dp">
+
+    <TextView
+        android:id="@+id/tv_today_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="РАСПИСАНИЕ"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:textColor="#0B3564"
+        android:maxLines="1" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="4dp"
+        android:background="#E2E8F0" />
+
+    <LinearLayout
+        android:id="@+id/today_rows"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+
+    <TextView
+        android:id="@+id/tv_today_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="На сегодня уроков нет"
+        android:textSize="12sp"
+        android:textColor="#6B7280"
+        android:paddingTop="6dp"
+        android:visibility="gone" />
+
+</LinearLayout>

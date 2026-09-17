@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Виджет «Сейчас / дальше»: что идёт прямо сейчас и что будет следующим -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/now_next_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FFFFFFFF"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/tv_now_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="СЕЙЧАС"
+        android:textSize="9sp"
+        android:textStyle="bold"
+        android:textColor="#6B7280"
+        android:maxLines="1" />
+
+    <TextView
+        android:id="@+id/tv_now_subject"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="—"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#111827"
+        android:maxLines="2" />
+
+    <TextView
+        android:id="@+id/tv_now_details"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="11sp"
+        android:textColor="#0B3564"
+        android:maxLines="1" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="#E2E8F0" />
+
+    <TextView
+        android:id="@+id/tv_next_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="ДАЛЬШЕ"
+        android:textSize="9sp"
+        android:textStyle="bold"
+        android:textColor="#6B7280"
+        android:maxLines="1" />
+
+    <TextView
+        android:id="@+id/tv_next_subject"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="—"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#111827"
+        android:maxLines="2" />
+
+    <TextView
+        android:id="@+id/tv_next_details"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="11sp"
+        android:textColor="#0B3564"
+        android:maxLines="1" />
+
+</LinearLayout>

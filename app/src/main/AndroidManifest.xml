@@ -45,6 +45,45 @@
                 android:resource="@xml/bell_countdown_widget_info" />
         </receiver>
 
+        <!-- Виджет «Сейчас / дальше» (3x2): что идёт сейчас и что будет следующим -->
+        <receiver
+            android:name=".widget.NowNextWidgetProvider"
+            android:exported="true"
+            android:label="Сейчас и дальше">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/now_next_widget_info" />
+        </receiver>
+
+        <!-- Виджет «Расписание на сегодня» (4x4): весь день списком -->
+        <receiver
+            android:name=".widget.TodayScheduleWidgetProvider"
+            android:exported="true"
+            android:label="Расписание на сегодня">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_schedule_widget_info" />
+        </receiver>
+
+        <!-- Виджет «Звонки» (2x4): расписание звонков с подсветкой текущего -->
+        <receiver
+            android:name=".widget.BellsWidgetProvider"
+            android:exported="true"
+            android:label="Звонки">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/bells_widget_info" />
+        </receiver>
+
         <!-- Настройка виджета при добавлении -->
         <activity
             android:name=".widget.BellCountdownConfigActivity"

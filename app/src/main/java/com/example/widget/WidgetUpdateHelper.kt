@@ -56,9 +56,13 @@ object WidgetUpdateHelper {
     }
 
     /**
-     * Обновляет все экземпляры 2x2 и 4x2 виджетов.
+     * Обновляет все виджеты приложения: «До звонка», «Сейчас/дальше»
+     * и остальные, которые появятся.
      */
     fun updateAllWidgets(context: Context) {
         BellCountdownWidgetProvider.updateAll(context)
+        NowNextWidgetProvider.updateAll(context)
+        TodayScheduleWidgetProvider.updateAll(context)
+        BellsWidgetProvider.updateAll(context)
     }
 }

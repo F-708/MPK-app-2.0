@@ -54,7 +54,10 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
         }
 
         /** Данные обратного отсчёта с учётом дебаг-времени и факта уроков группы. */
-        fun countdownInfo(context: Context): Triple<Long, String, Int>? {
+        fun countdownInfo(
+            context: Context,
+            mode: CountdownMode = CountdownMode.GROUP_LESSONS
+        ): Triple<Long, String, Int>? {
             val cal = com.example.util.DebugClock.now(context)
             val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
                 Calendar.MONDAY -> 1
@@ -92,31 +95,35 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             if (minutes < first.startMinutes) {
                 return Triple((first.startMinutes - minutes).toLong(), "до 1 урока", 0)
             }
-            // Уроки закончились: по звонкам ИЛИ по факту уроков группы
-            val group = WidgetUpdateHelper.getSelectedGroup(context)
-            val lastGroupLesson = try {
-                kotlinx.coroutines.runBlocking {
-                    val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
-                        Calendar.MONDAY -> 1; Calendar.TUESDAY -> 2; Calendar.WEDNESDAY -> 3
-                        Calendar.THURSDAY -> 4; Calendar.FRIDAY -> 5; Calendar.SATURDAY -> 6
-                        else -> 7
+            // Уроки закончились — но когда именно, зависит от выбранного режима:
+            // «по своей группе» заканчиваем на последнем СВОЁМ уроке,
+            // «по звонкам» — идём до конца общего расписания звонков колледжа.
+            if (mode == CountdownMode.GROUP_LESSONS) {
+                val group = WidgetUpdateHelper.getSelectedGroup(context)
+                val lastGroupLesson = try {
+                    kotlinx.coroutines.runBlocking {
+                        val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
+                            Calendar.MONDAY -> 1; Calendar.TUESDAY -> 2; Calendar.WEDNESDAY -> 3
+                            Calendar.THURSDAY -> 4; Calendar.FRIDAY -> 5; Calendar.SATURDAY -> 6
+                            else -> 7
+                        }
+                        val lessons = com.example.data.local.MpkDatabase.getInstance(context)
+                            .lessonDao().getLessonsForDaySync(group, dow)
+                        val latestDate = lessons.filter { it.dateString.isNotBlank() }
+                            .maxOfOrNull { it.dateString.replace("-", ".") }
+                        val today = if (latestDate != null) {
+                            lessons.filter { it.dateString.isBlank() || it.dateString.replace("-", ".") == latestDate }
+                        } else lessons
+                        today.maxOfOrNull { it.lessonNumber }
                     }
-                    val lessons = com.example.data.local.MpkDatabase.getInstance(context)
-                        .lessonDao().getLessonsForDaySync(group, dow)
-                    val latestDate = lessons.filter { it.dateString.isNotBlank() }
-                        .maxOfOrNull { it.dateString.replace("-", ".") }
-                    val today = if (latestDate != null) {
-                        lessons.filter { it.dateString.isBlank() || it.dateString.replace("-", ".") == latestDate }
-                    } else lessons
-                    today.maxOfOrNull { it.lessonNumber }
+                } catch (_: Exception) {
+                    null
                 }
-            } catch (_: Exception) {
-                null
-            }
-            if (lastGroupLesson != null) {
-                val lastBell = bells.lastOrNull { !it.isInfoHour && it.lessonNumber <= lastGroupLesson }
-                if (lastBell != null && minutes > lastBell.endMinutes) {
-                    return Triple(-1L, "уроки закончились", 0)
+                if (lastGroupLesson != null) {
+                    val lastBell = bells.lastOrNull { !it.isInfoHour && it.lessonNumber <= lastGroupLesson }
+                    if (lastBell != null && minutes > lastBell.endMinutes) {
+                        return Triple(-1L, "уроки закончились", 0)
+                    }
                 }
             }
             return null
@@ -130,7 +137,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.tv_countdown_label, style.subColor)
             views.setTextColor(R.id.tv_countdown_value, style.mainColor)
 
-            val info = countdownInfo(context)
+            val info = countdownInfo(context, CountdownMode.load(context, appWidgetId))
             when {
                 // Уроки закончились или данных нет — одна спокойная строка без числа
                 info == null || info.first < 0 -> {
@@ -172,8 +179,46 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
     }
 }
 
-/** Стиль виджета: цвет фона и текста, настраивается при добавлении. */
-enum class WidgetStyle(val backgroundColor: Int, val mainColor: Int, val subColor: Int, val title: String) {
+/**
+ * До чего считать обратный отсчёт в виджете «До звонка».
+ *
+ * GROUP_LESSONS — до конца уроков СВОЕЙ группы: как только последний урок
+ * группы закончился, виджет пишет «Уроки закончились», даже если в колледже
+ * ещё идут занятия у других.
+ * ALL_BELLS — до конца общего расписания звонков колледжа.
+ */
+enum class CountdownMode(val title: String, val description: String) {
+    GROUP_LESSONS(
+        "До конца моих уроков",
+        "Отсчёт заканчивается на последнем уроке вашей группы"
+    ),
+    ALL_BELLS(
+        "До конца всех звонков",
+        "Отсчёт идёт до последнего звонка в колледже"
+    );
+
+    companion object {
+        private const val PREF_PREFIX = "countdown_mode_"
+
+        fun load(context: Context, appWidgetId: Int): CountdownMode {
+            val name = WidgetUpdateHelper.getPrefs(context).getString(PREF_PREFIX + appWidgetId, null)
+            return entries.firstOrNull { it.name == name } ?: GROUP_LESSONS
+        }
+
+        fun save(context: Context, appWidgetId: Int, mode: CountdownMode) {
+            WidgetUpdateHelper.getPrefs(context)
+                .edit()
+                .putString(PREF_PREFIX + appWidgetId, mode.name)
+                .apply()
+        }
+
+        fun remove(context: Context, appWidgetId: Int) {
+            WidgetUpdateHelper.getPrefs(context).edit().remove(PREF_PREFIX + appWidgetId).apply()
+        }
+    }
+}
+
+/** Стиль виджета: цвет фона и текста, настраивается при добавлении. */enum class WidgetStyle(val backgroundColor: Int, val mainColor: Int, val subColor: Int, val title: String) {
     LIGHT(0xFFFFFFFF.toInt(), 0xFF0B3564.toInt(), 0xFF6B7280.toInt(), "Белый"),
     DARK(0xFF001737.toInt(), 0xFFFFFFFF.toInt(), 0xFFB9C6D8.toInt(), "Тёмно-синий"),
     BLUE(0xFF0B3564.toInt(), 0xFFFFFFFF.toInt(), 0xFFAFC6E4.toInt(), "Фирменный синий"),
@@ -216,13 +261,17 @@ object WidgetAlarm {
         )
     }
 
-    /** Нужен ли минутный такт: есть виджеты ИЛИ включена постоянная строка «До звонка». */
+    /** Нужен ли минутный такт: есть ЛЮБОЙ виджет ИЛИ включена постоянная строка «До звонка». */
     private fun hasWork(context: Context): Boolean {
         if (com.example.util.BellCountdownNotifier.isEnabled(context)) return true
         val manager = AppWidgetManager.getInstance(context)
-        return manager.getAppWidgetIds(
-            ComponentName(context, BellCountdownWidgetProvider::class.java)
-        ).isNotEmpty()
+        val anyWidget = listOf(
+            BellCountdownWidgetProvider::class.java,
+            NowNextWidgetProvider::class.java,
+            TodayScheduleWidgetProvider::class.java,
+            BellsWidgetProvider::class.java
+        ).any { manager.getAppWidgetIds(ComponentName(context, it)).isNotEmpty() }
+        return anyWidget
     }
 
     fun scheduleNext(context: Context) {

@@ -61,6 +61,7 @@ class BellCountdownConfigActivity : ComponentActivity() {
         }
 
         var selected by mutableStateOf(WidgetStyle.LIGHT)
+        var mode by mutableStateOf(CountdownMode.GROUP_LESSONS)
 
         setContent {
             MyApplicationTheme {
@@ -128,6 +129,52 @@ class BellCountdownConfigActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(24.dp))
 
+                        Text(
+                            text = "До чего считать",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorTextTitle
+                        )
+                        Text(
+                            text = "Когда обратный отсчёт должен заканчиваться",
+                            fontSize = 13.sp,
+                            color = ColorTextMuted,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        CountdownMode.entries.forEach { option ->
+                            val isSelected = mode == option
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) ColorBrandBlue else ColorBorderLight
+                                ),
+                                color = ColorBgMain,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .bouncyClickable { mode = option }
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = option.title,
+                                        fontSize = 14.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = ColorTextBody
+                                    )
+                                    Text(
+                                        text = option.description,
+                                        fontSize = 12.sp,
+                                        color = ColorTextMuted
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
                         Surface(
                             shape = RoundedCornerShape(2.dp),
                             color = ColorBrandFill,
@@ -135,6 +182,7 @@ class BellCountdownConfigActivity : ComponentActivity() {
                                 .fillMaxWidth()
                                 .bouncyClickable {
                                     WidgetStyle.save(this@BellCountdownConfigActivity, appWidgetId, selected)
+                                    CountdownMode.save(this@BellCountdownConfigActivity, appWidgetId, mode)
                                     // Сразу отрисуем виджет выбранным стилем
                                     val manager = AppWidgetManager.getInstance(this@BellCountdownConfigActivity)
                                     BellCountdownWidgetProvider.updateWidgets(this@BellCountdownConfigActivity, manager, intArrayOf(appWidgetId))
