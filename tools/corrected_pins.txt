@@ -1,61 +1,4 @@
-package com.example.data.model
-
-/**
- * Карта колледжа: планы этажей и поиск кабинета.
- *
- * Основа — три скана пожарных планов эвакуации, по которым в колледже
- * и ориентируются. Номер кабинета однозначно говорит об этаже: 1xx — первый,
- * 2xx — второй, 3xx — третий, 4xx — четвёртый. Это правило работает всегда,
- * поэтому «куда идти» приложение знает точно даже там, где метка кабинета
- * на плане ещё не проставлена.
- */
-object CollegeMap {
-
-    /** План этажа: файл в assets и человеческое название. */
-    enum class Floor(val id: String, val title: String, val assetFile: String, val hint: String) {
-        FIRST("1", "1 этаж", "map_floor1.jpg", "Актовый зал, библиотека, столовая"),
-        SECOND("2", "2 этаж", "map_floor2.jpg", "Учебная часть, приёмная, преподавательская"),
-        THIRD_FOURTH("3-4", "3 и 4 этажи", "map_floor34.jpg", "Один план на два этажа");
-
-        companion object {
-            fun from(id: String?): Floor = entries.firstOrNull { it.id == id } ?: FIRST
-        }
-    }
-
-    /**
-     * Этаж по номеру кабинета.
-     *
-     * Первая цифра номера — этаж. Если номер нестандартный (например «спортзал»
-     * или «актовый зал»), возвращаем null: лучше показать все планы, чем соврать.
-     */
-    fun floorForRoom(room: String): Floor? {
-        val digits = room.trim().takeWhile { it.isDigit() }
-        if (digits.isEmpty()) return null
-        return when (digits.first()) {
-            '1' -> Floor.FIRST
-            '2' -> Floor.SECOND
-            '3', '4' -> Floor.THIRD_FOURTH
-            else -> null
-        }
-    }
-
-    /** Есть ли осмысленный номер кабинета (а не «спортзал», «актовый зал»). */
-    fun looksLikeRoomNumber(room: String): Boolean =
-        room.trim().firstOrNull()?.isDigit() == true
-
-    /**
-     * Известные положения кабинетов на плане.
-     *
-     * Координаты — доли от ширины и высоты картинки (0..1), а не пиксели:
-     * так они не поедут, если план пересканируют в другом разрешении.
-     *
-     * Разметка сделана инструментом `map-editor.html` по контурам кабинетов,
-     * затем границы прижаты к линиям стен скриптом `tools/snap_pins.py`.
-     * Кабинеты, которых здесь нет, всё равно открываются — приложение покажет
-     * нужный этаж и сам номер, найти его на плане не составит труда.
-     */
-    val roomPins: Map<String, RoomPin> = buildMap {
-        // --- 1 этаж ---
+        // --- FIRST ---
         put("101", RoomPin(Floor.FIRST, 0.4927f, 0.2411f, 0.0138f, 0.0452f))
         put("102", RoomPin(Floor.FIRST, 0.5103f, 0.2705f, 0.0249f, 0.0427f))
         put("103", RoomPin(Floor.FIRST, 0.5331f, 0.4096f, 0.0224f, 0.0794f))
@@ -118,7 +61,7 @@ object CollegeMap {
         put("154", RoomPin(Floor.FIRST, 0.2696f, 0.2259f, 0.0387f, 0.0684f))
         put("155", RoomPin(Floor.FIRST, 0.3401f, 0.2821f, 0.0989f, 0.0733f))
 
-        // --- 2 этаж ---
+        // --- SECOND ---
         put("201", RoomPin(Floor.SECOND, 0.5378f, 0.2739f, 0.0335f, 0.0291f))
         put("201-1", RoomPin(Floor.SECOND, 0.5382f, 0.2461f, 0.0326f, 0.0267f))
         put("201-2", RoomPin(Floor.SECOND, 0.5382f, 0.3176f, 0.0326f, 0.0582f))
@@ -184,7 +127,7 @@ object CollegeMap {
         put("258", RoomPin(Floor.SECOND, 0.4541f, 0.2467f, 0.0275f, 0.0303f))
         put("259", RoomPin(Floor.SECOND, 0.4845f, 0.2515f, 0.0335f, 0.0376f))
 
-        // --- 3 и 4 этажи ---
+        // --- THIRD_FOURTH ---
         put("301", RoomPin(Floor.THIRD_FOURTH, 0.4936f, 0.4854f, 0.0189f, 0.0947f))
         put("302", RoomPin(Floor.THIRD_FOURTH, 0.5000f, 0.4102f, 0.0318f, 0.0558f))
         put("303", RoomPin(Floor.THIRD_FOURTH, 0.5000f, 0.3489f, 0.0318f, 0.0667f))
@@ -248,24 +191,3 @@ object CollegeMap {
         put("403", RoomPin(Floor.THIRD_FOURTH, 0.7622f, 0.1626f, 0.0584f, 0.0607f))
         put("404", RoomPin(Floor.THIRD_FOURTH, 0.7781f, 0.2227f, 0.0352f, 0.0570f))
         put("405", RoomPin(Floor.THIRD_FOURTH, 0.7657f, 0.2937f, 0.0567f, 0.0485f))
-    }
-}
-
-/**
- * Положение кабинета на плане.
- *
- * [x] и [y] — центр кабинета, [w] и [h] — размеры подсветки.
- * Всё в долях от ширины и высоты плана (не в пикселях):
- * так разметка не поедет, если план пересканируют в другом разрешении.
- *
- * Разметку удобно делать через `tools/map-editor.html`:
- * рисуешь прямоугольники по контуру кабинетов и получаешь готовые строки кода.
- */
-data class RoomPin(
-    val floor: CollegeMap.Floor,
-    val x: Float,
-    val y: Float,
-    /** Ширина подсветки. По умолчанию — небольшая рамка. */
-    val w: Float = 0.045f,
-    val h: Float = 0.04f
-)
