@@ -87,6 +87,15 @@ fun MainScreen(
         )
     }
 
+    // «Код приложения» — отдельный полноэкранный режим: ни баннера, ни нижних вкладок
+    if (uiState.showAppCode) {
+        com.example.ui.screens.AppCodeScreen(
+            onBack = { viewModel.closeAppCode() },
+            modifier = modifier.fillMaxSize()
+        )
+        return
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = { MainTopBar() },
@@ -187,6 +196,7 @@ private fun CollegeTab(viewModel: AppViewModel, groupInfo: GroupInfo) {
         diagnosticInfo = diagnosticInfo,
         onGroupChanged = { newGroup -> viewModel.setGroup(newGroup) },
         onRunConnectionTest = { viewModel.syncSchedule() },
+        onOpenAppCode = { viewModel.openAppCode() },
         pendingTeacherName = pendingTeacher.pendingTeacherName,
         onPendingTeacherConsumed = { viewModel.consumePendingTeacher() }
     )

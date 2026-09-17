@@ -107,6 +107,20 @@ fun ScheduleScreen(
 ) {
     val context = LocalContext.current
 
+    // Преподаватели из базы колледжа. Тех, кого там нет (например, ведут только
+    // замену), нельзя открыть в карточку — значит, и выглядеть нажимаемыми они
+    // не должны.
+    val isTeacherKnown: (String) -> Boolean = remember(context) {
+        val known = com.example.data.repository.TeachersRepository(context)
+            .loadTeachers()
+            .map { com.example.data.repository.TeacherInsights.surnameOf(it.name) }
+            .toHashSet()
+        val check: (String) -> Boolean = { name ->
+            com.example.data.repository.TeacherInsights.surnameOf(name) in known
+        }
+        check
+    }
+
     // 1. Точный расчет реального сегодняшнего дня
     val realNow = remember { Calendar.getInstance() }
     val realDayOfWeek = remember {
@@ -512,7 +526,8 @@ fun ScheduleScreen(
                             LessonCard(
                                 lesson = lesson,
                                 isCurrent = lesson.lessonNumber == currentLessonNumber,
-                                onTeacherClick = onTeacherClick
+                                onTeacherClick = onTeacherClick,
+                                isTeacherKnown = isTeacherKnown
                             )
                         } else {
                             NoLessonCard(number)
@@ -587,6 +602,8 @@ fun LessonCard(
     lesson: LessonEntity,
     isCurrent: Boolean = false,
     onTeacherClick: (String) -> Unit = {},
+    /** Есть ли преподаватель в базе колледжа. Нет в базе — не делаем кликабельным. */
+    isTeacherKnown: (String) -> Boolean = { true },
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -669,6 +686,7 @@ fun LessonCard(
                         teacher = lesson.teacherFirst,
                         room = lesson.roomFirst,
                         onTeacherClick = onTeacherClick,
+                        isTeacherKnown = isTeacherKnown,
                         modifier = Modifier.weight(1f)
                     )
 
@@ -685,6 +703,7 @@ fun LessonCard(
                         teacher = lesson.teacherSecond,
                         room = lesson.roomSecond,
                         onTeacherClick = onTeacherClick,
+                        isTeacherKnown = isTeacherKnown,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -711,7 +730,9 @@ fun LessonCard(
                     if (lesson.teacherFirst.isNotBlank()) {
                         TeacherChip(
                             name = lesson.teacherFirst,
-                            onClick = { onTeacherClick(lesson.teacherFirst) }
+                            onClick = if (isTeacherKnown(lesson.teacherFirst)) {
+                                { onTeacherClick(lesson.teacherFirst) }
+                            } else null
                         )
                     }
 
@@ -759,14 +780,32 @@ fun LessonCard(
  * Раньше в подгруппах это был просто серый текст без обработчика — по нему нельзя
  * было перейти. Теперь и в обычной паре, и при разделении это одинаковый элемент
  * с рамкой и шевроном: рамка и стрелка показывают, что по имени можно нажать.
+ *
+ * [onClick] = null — преподавателя нет в базе колледжа (например, ведёт только
+ * замену). Такой остаётся обычным текстом: открывать по нему нечего, и делать
+ * вид, что он нажимается, нельзя.
  */
 @Composable
 private fun TeacherChip(
     name: String,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
     modifier: Modifier = Modifier
 ) {
+    if (onClick == null) {
+        Text(
+            text = name,
+            style = androidx.compose.ui.text.TextStyle(
+                fontSize = fontSize,
+                color = ColorTextMuted
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = modifier
+        )
+        return
+    }
+
     Surface(
         shape = RoundedCornerShape(2.dp),
         border = BorderStroke(1.dp, ColorBrandBlue.copy(alpha = 0.4f)),
@@ -815,6 +854,7 @@ private fun SubgroupPane(
     teacher: String,
     room: String,
     onTeacherClick: (String) -> Unit,
+    isTeacherKnown: (String) -> Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -873,7 +913,9 @@ private fun SubgroupPane(
             Spacer(modifier = Modifier.height(3.dp))
             TeacherChip(
                 name = teacher,
-                onClick = { onTeacherClick(teacher) },
+                onClick = if (isTeacherKnown(teacher)) {
+                    { onTeacherClick(teacher) }
+                } else null,
                 fontSize = 11.sp
             )
         }

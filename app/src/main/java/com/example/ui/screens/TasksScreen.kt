@@ -27,7 +27,10 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -37,6 +40,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -474,7 +479,7 @@ fun TaskItemCard(
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = "Срок: ${task.deadlineDate}",
+                            text = "Срок: ${formatDateForShow(task.deadlineDate)}",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontSize = 11.sp,
                                 color = ColorTextMuted
@@ -514,7 +519,9 @@ fun AddTaskDialog(
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var dueDate by remember { mutableStateOf("") }
+    var dueDateMillis by remember { mutableStateOf<Long?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = null)
     var selectedType by remember { mutableStateOf(TaskType.HOMEWORK) }
 
     val officialSubjects = remember(groupInfo.specialtyCode, groupInfo.course) {
@@ -630,15 +637,60 @@ fun AddTaskDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedTextField(
-                    value = dueDate,
-                    onValueChange = { dueDate = it },
-                    label = { Text("Срок сдачи (опционально)", fontSize = 12.sp) },
-                    placeholder = { Text("Например: 24 сентября", fontSize = 12.sp) },
-                    singleLine = true,
+                // Срок сдачи выбирается в календаре, а не пишется текстом:
+                // иначе в поле попадало что угодно («на следующей неделе»),
+                // и задание нельзя было отсортировать по дате.
+                Surface(
                     shape = RoundedCornerShape(2.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .bouncyClickable { showDatePicker = true }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = null,
+                            tint = ColorBrandBlue,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = dueDateMillis?.let { "Срок сдачи: ${formatDateForShow(isoDate(it))}" }
+                                ?: "Срок сдачи — выбрать дату",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 13.sp,
+                                color = if (dueDateMillis == null) ColorTextMuted else ColorTextTitle
+                            )
+                        )
+                    }
+                }
+
+                if (showDatePicker) {
+                    DatePickerDialog(
+                        onDismissRequest = { showDatePicker = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                dueDateMillis = datePickerState.selectedDateMillis
+                                showDatePicker = false
+                            }) { Text("ГОТОВО") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDatePicker = false }) { Text("ОТМЕНА") }
+                        }
+                    ) {
+                        DatePicker(
+                            state = datePickerState,
+                            title = null,
+                            headline = null,
+                            showModeToggle = false
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
@@ -647,7 +699,13 @@ fun AddTaskDialog(
                 color = ColorBrandFill,
                 modifier = Modifier.bouncyClickable {
                     if (title.isNotBlank()) {
-                        onTaskAdded(title.trim(), description.trim(), selectedSubject, selectedType, dueDate.trim())
+                        onTaskAdded(
+                            title.trim(),
+                            description.trim(),
+                            selectedSubject,
+                            selectedType,
+                            dueDateMillis?.let { isoDate(it) } ?: ""
+                        )
                     }
                 }
             ) {
@@ -683,4 +741,37 @@ fun AddTaskDialog(
             }
         }
     )
+}
+
+
+// ---------------------------------------------------------------------------
+// Даты срока сдачи
+// ---------------------------------------------------------------------------
+
+/**
+ * Миллисекунды из календаря → «ГГГГ-ММ-ДД».
+ * Календарь Material 3 отдаёт UTC-полночь, поэтому и читаем его в UTC —
+ * иначе в любом отрицательном поясе дата сдвинется на день назад.
+ */
+internal fun isoDate(millis: Long): String {
+    val c = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+        timeInMillis = millis
+    }
+    return String.format(
+        java.util.Locale.ROOT, "%04d-%02d-%02d",
+        c.get(java.util.Calendar.YEAR),
+        c.get(java.util.Calendar.MONTH) + 1,
+        c.get(java.util.Calendar.DAY_OF_MONTH)
+    )
+}
+
+/**
+ * Дата сдачи для показа: «ГГГГ-ММ-ДД» → «ДД.ММ.ГГГГ».
+ *
+ * Старые задания могли содержать в этом поле произвольный текст
+ * («на следующей неделе») — такое показываем как есть, чтобы ничего не потерять.
+ */
+internal fun formatDateForShow(raw: String): String {
+    val m = Regex("""^(\d{4})-(\d{2})-(\d{2})$""").find(raw.trim()) ?: return raw
+    return "${m.groupValues[3]}.${m.groupValues[2]}.${m.groupValues[1]}"
 }

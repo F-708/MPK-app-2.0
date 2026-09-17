@@ -301,7 +301,9 @@ fun CalendarArchiveDialog(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(searchResults, key = { it.id }) { lesson ->
-                                LessonCard(lesson = lesson)
+                                // В архиве переход в карточку не работает, поэтому имя
+                                    // преподавателя показываем обычным текстом, без шеврона
+                                    LessonCard(lesson = lesson, isTeacherKnown = { false })
                             }
                         }
                     }
@@ -573,7 +575,9 @@ fun CalendarArchiveDialog(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 items(selectedDateLessons, key = { it.id }) { lesson ->
-                                    LessonCard(lesson = lesson)
+                                    // В архиве переход в карточку не работает, поэтому имя
+                                    // преподавателя показываем обычным текстом, без шеврона
+                                    LessonCard(lesson = lesson, isTeacherKnown = { false })
                                 }
                             }
                         }

@@ -77,7 +77,8 @@ class UiRenderSmokeTest {
                     scheduleRepository = repo,
                     diagnosticInfo = com.example.data.model.SyncDiagnosticInfo(),
                     onGroupChanged = {},
-                    onRunConnectionTest = {}
+                    onRunConnectionTest = {},
+                    onOpenAppCode = {}
                 )
             }
         }

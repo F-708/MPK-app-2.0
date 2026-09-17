@@ -34,7 +34,12 @@ data class AppUiState(
     /** Показывать обязательный диалог выбора группы (первый вход). */
     val showGroupSelection: Boolean = false,
     /** ФИО преподавателя, которого нужно открыть в «Другом» (переход из расписания). */
-    val pendingTeacherName: String? = null
+    val pendingTeacherName: String? = null,
+    /**
+     * Экран «Код приложения» занимает весь экран — рисуется вместо основного
+     * интерфейса, чтобы не было ни баннера, ни нижних вкладок.
+     */
+    val showAppCode: Boolean = false
 )
 
 /**
@@ -104,6 +109,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Сброс после того, как карточка преподавателя открыта. */
     fun consumePendingTeacher() {
         _uiState.update { it.copy(pendingTeacherName = null) }
+    }
+
+    /** Открыть полноэкранный «Код приложения» (админская версия). */
+    fun openAppCode() {
+        _uiState.update { it.copy(showAppCode = true) }
+    }
+
+    fun closeAppCode() {
+        _uiState.update { it.copy(showAppCode = false) }
     }
 
     fun syncSchedule(isAutoSync: Boolean = false) {

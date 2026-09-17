@@ -87,7 +87,7 @@ private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
 private val ADMIN_GOLD = Color(0xFFE8C55A)
 
-private enum class OtherPage { MENU, SPECIALTY, TEACHERS, TEACHER_CARD, SETTINGS, STUDENTS, STUDENT_CARD, CONNECT }
+private enum class OtherPage { MENU, SPECIALTY, TEACHERS, TEACHER_CARD, SETTINGS, STUDENTS, STUDENT_CARD }
 
 /**
  * Вкладка «Другое»: специальность, преподаватели, настройки, сайт колледжа.
@@ -100,6 +100,8 @@ fun CollegeScreen(
     diagnosticInfo: SyncDiagnosticInfo,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit,
+    /** Открыть полноэкранный «Код приложения» (admin). Рисуется вне этого экрана. */
+    onOpenAppCode: () -> Unit,
     /** ФИО преподавателя для немедленного открытия (переход из расписания). */
     pendingTeacherName: String? = null,
     onPendingTeacherConsumed: () -> Unit = {},
@@ -138,7 +140,7 @@ fun CollegeScreen(
                 onOpenTeachers = { page = OtherPage.TEACHERS },
                 onOpenSettings = { page = OtherPage.SETTINGS },
                 onOpenStudents = { page = OtherPage.STUDENTS },
-                onOpenConnect = { page = OtherPage.CONNECT }
+                onOpenConnect = onOpenAppCode
             )
             OtherPage.SPECIALTY -> MySpecialtyPage(groupInfo) { page = OtherPage.MENU }
             OtherPage.TEACHERS -> TeachersPage(
@@ -163,7 +165,6 @@ fun CollegeScreen(
                     page = OtherPage.TEACHERS
                 }
             }
-            OtherPage.CONNECT -> AppCodeScreen(onBack = { page = OtherPage.MENU })
             OtherPage.SETTINGS -> SettingsPage(
                 groupInfo = groupInfo,
                 diagnosticInfo = diagnosticInfo,
@@ -193,7 +194,7 @@ fun CollegeScreen(
                         onOpenTeachers = { page = OtherPage.TEACHERS },
                         onOpenSettings = { page = OtherPage.SETTINGS },
                         onOpenStudents = { page = OtherPage.STUDENTS },
-                        onOpenConnect = { page = OtherPage.CONNECT }
+                        onOpenConnect = onOpenAppCode
                     )
                 }
             }
