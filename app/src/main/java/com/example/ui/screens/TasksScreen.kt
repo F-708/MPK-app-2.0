@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -687,7 +688,17 @@ fun AddTaskDialog(
                             state = datePickerState,
                             title = null,
                             headline = null,
-                            showModeToggle = false
+                            showModeToggle = false,
+                            // По умолчанию выбранный день — тёмная цифра на синем
+                            // кружке, её почти не видно. Делаем инверсию: белым по синему.
+                            colors = DatePickerDefaults.colors(
+                                selectedDayContainerColor = ColorBrandFill,
+                                selectedDayContentColor = Color.White,
+                                todayContentColor = ColorBrandBlue,
+                                todayDateBorderColor = ColorBrandBlue,
+                                dayContentColor = ColorTextBody,
+                                weekdayContentColor = ColorTextMuted
+                            )
                         )
                     }
                 }

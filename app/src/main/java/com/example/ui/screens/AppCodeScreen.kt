@@ -6,13 +6,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -76,12 +79,15 @@ fun AppCodeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxSize()
             .background(ADMIN_BG)
+            // Экран рисуется от края до края (edge-to-edge), поэтому без отступа
+            // сверху стрелка «назад» залезала на часы системной строки
+            .windowInsetsPadding(WindowInsets.statusBars)
     ) {
         // Стрелка назад — единственный элемент управления
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -100,12 +106,13 @@ fun AppCodeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             }
         }
 
-        // Код по центру всего оставшегося пространства
+        // Код занимает ВСЁ оставшееся место (weight, а не fillMaxSize — иначе
+        // полоса жизни кода уезжала за нижний край экрана и её не было видно)
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 28.dp)
-                .padding(bottom = 40.dp),
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp, vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {
             Box(
@@ -132,7 +139,7 @@ fun AppCodeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(3.dp)
+                .height(6.dp)
                 .background(ADMIN_BG_DEEP)
         ) {
             Box(
@@ -142,6 +149,6 @@ fun AppCodeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     .background(ADMIN_GOLD)
             )
         }
-        Spacer(modifier = Modifier.height(0.dp))
+        Spacer(modifier = Modifier.height(6.dp))
     }
 }
