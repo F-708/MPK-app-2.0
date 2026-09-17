@@ -23,9 +23,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Edit
@@ -48,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,7 +77,10 @@ import com.example.ui.theme.ColorTextTitle
 import com.example.ui.theme.ColorTopBar
 import com.example.ui.theme.TextStylePageTitle
 import com.example.ui.util.bouncyClickable
+import com.example.util.AppThemeStore
 import com.example.util.MpkCurriculum
+import com.example.util.defaultBackupFileName
+import kotlinx.coroutines.launch
 import com.example.widget.WidgetUpdateHelper
 import com.example.worker.MpkWorkManagerHelper
 import com.example.ui.theme.ColorBrandFill
@@ -113,6 +119,61 @@ fun SettingsScreen(
             isNotificationEnabled = false
             WidgetUpdateHelper.setNotificationEnabled(context, false)
             MpkWorkManagerHelper.setupPeriodicScheduleCheck(context)
+        }
+    }
+
+    // Тема приложения: применяется сразу, экраны перекрашиваются без перезапуска
+    var currentTheme by remember { mutableStateOf(AppThemeStore.load(context)) }
+    fun onThemePicked(theme: com.example.ui.theme.AppTheme) {
+        AppThemeStore.save(context, theme)
+        currentTheme = theme
+    }
+
+    // Резервная копия: файл выбирает пользователь, разрешения не нужны
+    var backupMessage by remember { mutableStateOf("") }
+    val backupScope = rememberCoroutineScope()
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        backupScope.launch {
+            backupMessage = try {
+                val json = com.example.util.BackupManager.buildBackup(context)
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(json.toByteArray(Charsets.UTF_8))
+                }
+                "Копия сохранена"
+            } catch (e: Exception) {
+                "Не удалось сохранить: ${e.message}"
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        backupScope.launch {
+            backupMessage = try {
+                val json = context.contentResolver.openInputStream(uri)
+                    ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                if (json.isNullOrBlank()) {
+                    "Файл пустой"
+                } else {
+                    com.example.util.BackupManager.restoreBackup(context, json).fold(
+                        onSuccess = { result ->
+                            val parts = mutableListOf("Восстановлено заданий: ${result.tasksRestored}")
+                            result.groupRestored?.let { parts += "группа $it" }
+                            if (result.warnings.isNotEmpty()) parts += result.warnings.joinToString("; ")
+                            parts.joinToString(". ")
+                        },
+                        onFailure = { "Не удалось прочитать файл: ${it.message}" }
+                    )
+                }
+            } catch (e: Exception) {
+                "Не удалось прочитать файл: ${e.message}"
+            }
         }
     }
 
@@ -412,6 +473,120 @@ fun SettingsScreen(
                         if (isDebugEnabled) {
                             Spacer(modifier = Modifier.height(10.dp))
                             DebugTimeSection()
+                        }
+                    }
+                }
+            }
+
+            // Тема всего приложения
+            item {
+                SectionHeader("ТЕМА ПРИЛОЖЕНИЯ")
+            }
+            items(com.example.ui.theme.AppTheme.entries.toList()) { theme ->
+                val isSelected = currentTheme == theme
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, if (isSelected) ColorBrandBlue else ColorBorderLight),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .bouncyClickable { onThemePicked(theme) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Образец: шапка и кнопка в цветах темы
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(theme.palette.topBar, RoundedCornerShape(2.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 22.dp, height = 8.dp)
+                                    .background(theme.palette.brandBlue, RoundedCornerShape(1.dp))
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = theme.title,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 14.sp,
+                                    color = ColorTextTitle
+                                )
+                            )
+                            Text(
+                                text = theme.hint,
+                                style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted)
+                            )
+                        }
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = ColorBrandBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Резервная копия настроек и заданий
+            item {
+                SectionHeader("ДАННЫЕ")
+            }
+            item {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "Резервная копия",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = ColorTextTitle
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Настройки и все учебные задания сохраняются в файл. " +
+                                "Файл можно перекинуть на другой телефон " +
+                                "или использовать как запасную копию.",
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ActionChip(
+                                text = "СОХРАНИТЬ В ФАЙЛ",
+                                filled = true,
+                                modifier = Modifier.weight(1f),
+                                onClick = { exportLauncher.launch(defaultBackupFileName(context)) }
+                            )
+                            ActionChip(
+                                text = "ВОССТАНОВИТЬ",
+                                filled = false,
+                                modifier = Modifier.weight(1f),
+                                onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }
+                            )
+                        }
+                        if (backupMessage.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = backupMessage,
+                                style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorBrandBlue)
+                            )
                         }
                     }
                 }
@@ -1014,3 +1189,51 @@ private fun stylePreviewBody(style: com.example.util.BellCountdownNotifier.Style
         com.example.util.BellCountdownNotifier.Style.WITH_PROGRESS ->
             "С полосой прогресса урока"
     }
+
+/** Заголовок раздела настроек. */
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text = text,
+        style = androidx.compose.ui.text.TextStyle(
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+            color = ColorBrandBlue
+        ),
+        modifier = Modifier.padding(top = 4.dp)
+    )
+}
+
+/** Плоская кнопка-действие в стиле приложения (без скруглений и теней). */
+@Composable
+private fun ActionChip(
+    text: String,
+    filled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = if (filled) ColorBrandFill else ColorBgMain,
+        border = BorderStroke(1.dp, if (filled) ColorBrandFill else ColorBorderLight),
+        modifier = modifier.bouncyClickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                softWrap = false,
+                maxLines = 1,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = if (filled) Color.White else ColorTextTitle
+                )
+            )
+        }
+    }
+}

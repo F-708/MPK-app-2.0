@@ -31,6 +31,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Тема приложения применяется до первого кадра: все экраны берут цвета
+        // из общей палитры, поэтому достаточно поменять её здесь
+        com.example.ui.theme.applyAppTheme(com.example.util.AppThemeStore.load(this))
+
         // Создаем канал уведомлений и регистрируем периодический WorkManager
         NotificationHelper.createNotificationChannel(this)
         com.example.util.BellCountdownNotifier.createChannel(this)
