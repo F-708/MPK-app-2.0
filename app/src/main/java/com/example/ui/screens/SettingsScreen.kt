@@ -185,6 +185,79 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
 
+            item { SectionHeader("МОЯ ГРУППА") }
+            item {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(ColorBrandFill, RoundedCornerShape(2.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.School,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = groupInfo.canonicalName,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        color = ColorTextTitle
+                                    )
+                                )
+                                val spec = specialty?.shortName
+                                if (!spec.isNullOrBlank()) {
+                                    Text(
+                                        text = spec,
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 11.sp,
+                                            color = ColorTextMuted
+                                        ),
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            color = ColorBrandFill,
+                            modifier = Modifier.bouncyClickable { showGroupDialog = true }
+                        ) {
+                            Text(
+                                text = "СМЕНИТЬ",
+                                softWrap = false,
+                                maxLines = 1,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    color = Color.White
+                                ),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             item {
                 SectionHeader("ТЕМА ПРИЛОЖЕНИЯ")
             }
