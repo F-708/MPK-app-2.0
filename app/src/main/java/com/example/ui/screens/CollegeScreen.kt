@@ -108,6 +108,8 @@ fun CollegeScreen(
     onPendingTeacherConsumed: () -> Unit = {},
     /** Кабинет для немедленного показа на карте (переход из расписания). */
     pendingRoomName: String? = null,
+    /** Кабинет текущего урока — от него строится маршрут. */
+    pendingFromRoomName: String? = null,
     onPendingRoomConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -118,11 +120,13 @@ fun CollegeScreen(
 
     // Кабинет, который открывается на карте: приходит из расписания либо сбрасывается
     var mapRoom by remember { mutableStateOf(pendingRoomName) }
+    var mapFromRoom by remember { mutableStateOf(pendingFromRoomName) }
 
     // Переход из расписания: открываем карту сразу на нужном кабинете
     LaunchedEffect(pendingRoomName) {
         val room = pendingRoomName ?: return@LaunchedEffect
         mapRoom = room
+        mapFromRoom = pendingFromRoomName
         page = OtherPage.MAP
         onPendingRoomConsumed()
     }
@@ -156,7 +160,8 @@ fun CollegeScreen(
                 onOpenSettings = { page = OtherPage.SETTINGS },
                 onOpenStudents = { page = OtherPage.STUDENTS },
                 onOpenConnect = onOpenAppCode,
-                onOpenMap = { mapRoom = null; page = OtherPage.MAP }
+                // Из меню карта открывается без маршрута: кабинет просто подсветится
+                onOpenMap = { mapRoom = null; mapFromRoom = null; page = OtherPage.MAP }
             )
             OtherPage.SPECIALTY -> MySpecialtyPage(groupInfo) { page = OtherPage.MENU }
             OtherPage.TEACHERS -> TeachersPage(
@@ -183,8 +188,10 @@ fun CollegeScreen(
             }
             OtherPage.MAP -> CollegeMapScreen(
                 initialRoom = mapRoom,
+                fromRoom = mapFromRoom,
                 onBack = {
                     mapRoom = null
+                    mapFromRoom = null
                     page = OtherPage.MENU
                 }
             )
@@ -218,7 +225,8 @@ fun CollegeScreen(
                         onOpenSettings = { page = OtherPage.SETTINGS },
                         onOpenStudents = { page = OtherPage.STUDENTS },
                         onOpenConnect = onOpenAppCode,
-                        onOpenMap = { mapRoom = null; page = OtherPage.MAP }
+                        // Из меню карта открывается без маршрута: кабинет просто подсветится
+                onOpenMap = { mapRoom = null; mapFromRoom = null; page = OtherPage.MAP }
                     )
                 }
             }

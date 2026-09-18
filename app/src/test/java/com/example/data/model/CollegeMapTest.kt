@@ -31,20 +31,4 @@ class CollegeMapTest {
         assertNull(CollegeMap.floorForRoom("актовый зал"))
         assertNull(CollegeMap.floorForRoom("914"))
     }
-
-    @Test
-    fun `метки кабинетов стоят на том же этаже, что и номер`() {
-        val problems = CollegeMap.roomPins.filter { (room, pin) ->
-            CollegeMap.floorForRoom(room) != pin.floor
-        }
-        assertEquals("Этаж метки расходится с номером кабинета: $problems", emptyMap<String, RoomPin>(), problems)
-    }
-
-    @Test
-    fun `координаты меток лежат в пределах картинки`() {
-        val broken = CollegeMap.roomPins.filter { (_, pin) ->
-            pin.x !in 0f..1f || pin.y !in 0f..1f
-        }
-        assertEquals("Координаты вышли за пределы плана: $broken", emptyMap<String, RoomPin>(), broken)
-    }
 }

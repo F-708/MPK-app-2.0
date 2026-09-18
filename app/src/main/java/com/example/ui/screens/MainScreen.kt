@@ -170,7 +170,7 @@ fun MainScreen(
                     onSyncRequest = { viewModel.syncSchedule() },
                     isSyncing = uiState.isSyncing,
                     onTeacherClick = { name -> viewModel.openTeacher(name) },
-                    onRoomClick = { room -> viewModel.openMap(room) }
+                    onRoomClick = { room, fromRoom -> viewModel.openMap(room, fromRoom) }
                 )
                 AppTab.TASKS -> TasksScreen(
                     groupInfo = currentGroupInfo,
@@ -201,6 +201,7 @@ private fun CollegeTab(viewModel: AppViewModel, groupInfo: GroupInfo) {
         pendingTeacherName = pendingTeacher.pendingTeacherName,
         onPendingTeacherConsumed = { viewModel.consumePendingTeacher() },
         pendingRoomName = pendingTeacher.pendingRoom,
+        pendingFromRoomName = pendingTeacher.pendingFromRoom,
         onPendingRoomConsumed = { viewModel.consumePendingRoom() }
     )
 }

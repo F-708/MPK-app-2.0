@@ -104,8 +104,11 @@ fun ScheduleScreen(
     isSyncing: Boolean = false,
     /** Переход к карточке преподавателя по тапу на его ФИО. */
     onTeacherClick: (String) -> Unit = {},
-    /** Переход к карте колледжа по тапу на номер кабинета. */
-    onRoomClick: (String) -> Unit = {},
+    /**
+     * Переход к карте по тапу на номер кабинета.
+     * Второй аргумент — кабинет текущего урока: от него проложат маршрут.
+     */
+    onRoomClick: (room: String, fromRoom: String?) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -505,6 +508,16 @@ fun ScheduleScreen(
                 // теперь на месте пропуска стоит пометка «урока нет».
                 // Верхнюю границу берём по последнему реальному уроку: про уроки
                 // после него ничего не известно, выдумывать их не нужно.
+                // Кабинет текущего урока — от него проложат маршрут на карте.
+                // Если сейчас нет урока (перемена, вечер), маршрут не строим.
+                val fromRoom = remember(currentLessons, currentLessonNumber) {
+                    currentLessonNumber?.let { n ->
+                        currentLessons.firstOrNull { it.lessonNumber == n }
+                            ?.let { listOf(it.roomFirst, it.roomSecond) }
+                            ?.firstOrNull { it.isNotBlank() }
+                    }
+                }
+
                 val slots = remember(currentLessons) {
                     if (currentLessons.isEmpty()) emptyList()
                     else {
@@ -526,7 +539,7 @@ fun ScheduleScreen(
                                 isCurrent = lesson.lessonNumber == currentLessonNumber,
                                 onTeacherClick = onTeacherClick,
                                 isTeacherKnown = isTeacherKnown,
-                                onRoomClick = onRoomClick
+                                onRoomClick = { room -> onRoomClick(room, fromRoom) }
                             )
                         } else {
                             NoLessonCard(number)

@@ -41,7 +41,12 @@ data class AppUiState(
      */
     val showAppCode: Boolean = false,
     /** Кабинет, который нужно показать на карте (переход из расписания). */
-    val pendingRoom: String? = null
+    val pendingRoom: String? = null,
+    /**
+     * Кабинет текущего урока — от него строится маршрут. Пусто, если карту
+     * открыли из меню: тогда маршрута нет, кабинет просто подсвечивается.
+     */
+    val pendingFromRoom: String? = null
 )
 
 /**
@@ -113,16 +118,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(pendingTeacherName = null) }
     }
 
-    /** Открыть карту на нужном кабинете (нажатие на кабинет в расписании). */
-    fun openMap(room: String) {
+    /**
+     * Открыть карту на нужном кабинете (нажатие на кабинет в расписании).
+     * [fromRoom] — кабинет текущего урока: от него проложат маршрут.
+     */
+    fun openMap(room: String, fromRoom: String? = null) {
         _uiState.update {
-            it.copy(currentTab = AppTab.COLLEGE, pendingRoom = room)
+            it.copy(currentTab = AppTab.COLLEGE, pendingRoom = room, pendingFromRoom = fromRoom)
         }
     }
 
     /** Сброс после того, как карта открыта. */
     fun consumePendingRoom() {
-        _uiState.update { it.copy(pendingRoom = null) }
+        _uiState.update { it.copy(pendingRoom = null, pendingFromRoom = null) }
     }
 
     /** Открыть полноэкранный «Код приложения» (админская версия). */
