@@ -333,7 +333,10 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             ACTION_TICK -> {
-                BellCountdownWidgetProvider.updateAll(context)
+                // Обновляем ВСЕ виджеты, а не только «До звонка»: иначе
+                // «Сейчас и дальше», «Расписание» и «Звонки» не переключали
+                // текущий урок, пока не откроешь приложение
+                WidgetUpdateHelper.updateAllWidgets(context)
                 WidgetAlarm.scheduleNext(context)
             }
             Intent.ACTION_BOOT_COMPLETED -> {

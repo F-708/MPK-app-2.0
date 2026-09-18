@@ -103,7 +103,13 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var showGroupDialog by remember { mutableStateOf(false) }
-    var isDebugEnabled by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    // Состояние берём у самих часов, а не из своей переменной: подменённое
+    // время хранится в настройках и переживает перезапуск. Иначе тумблер
+    // показывал бы «выключено», а приложение жило бы по подставленному времени,
+    // и выключить это было бы нечем.
+    var isDebugEnabled by remember {
+        mutableStateOf(com.example.util.DebugClock.isOverridden(context))
+    }
     var isNotificationEnabled by remember {
         mutableStateOf(WidgetUpdateHelper.isNotificationEnabled(context))
     }
@@ -449,27 +455,52 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Тумблер «Дебаг»: показывает полную телеметрию синхронизации
+                    }
+                }
+            }
+
+            // Тумблер «Дебаг» стоит ОТДЕЛЬНО от блока, который открывает.
+            // Раньше он лежал внутри него — включить было невозможно.
+            item {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Дебаг",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = ColorTextBody
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Дебаг",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = ColorTextBody
+                                    )
                                 )
-                            )
+                                Text(
+                                    text = "Диагностика сети и подмена времени",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 11.sp,
+                                        color = ColorTextMuted
+                                    )
+                                )
+                            }
                             Switch(
                                 checked = isDebugEnabled,
-                                onCheckedChange = { isDebugEnabled = it },
+                                onCheckedChange = { on ->
+                                    isDebugEnabled = on
+                                    // Выключили — сбрасываем подменённое время
+                                    if (!on) com.example.util.DebugClock.setOverride(context, null)
+                                },
                                 modifier = Modifier.testTag("debug_toggle")
                             )
                         }
-
                         if (isDebugEnabled) {
                             Spacer(modifier = Modifier.height(10.dp))
                             DebugTimeSection()
@@ -728,6 +759,56 @@ fun SettingsScreen(
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://guo-mpk.by/raspisanie/"))
                                 context.startActivity(intent)
                             }
+                        )
+                    }
+                }
+            }
+
+            // Обратная связь: замечания, ошибки, пожелания
+            item { SectionHeader("ОБРАТНАЯ СВЯЗЬ") }
+            item {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "Нашли ошибку или что-то неудобно?",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = ColorTextTitle
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Напишите в Telegram — отвечу и починю. " +
+                                "Особенно полезны замечания по расписанию: " +
+                                "если урок не тот, не там или его нет.",
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        ActionChip(
+                            text = "НАПИСАТЬ В TELEGRAM",
+                            filled = true,
+                            onClick = {
+                                val intent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://t.me/Betterthannothing12")
+                                )
+                                context.startActivity(intent)
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "@Betterthannothing12",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = ColorBrandBlue
+                            )
                         )
                     }
                 }

@@ -83,17 +83,9 @@ fun MainScreen(
         com.example.ui.components.GroupSelectionDialog(
             currentGroupName = uiState.currentGroupName,
             onDismissRequest = { /* Выбор обязателен при первом входе — не закрываем */ },
+            showClose = false,
             onGroupSelected = { newGroup -> viewModel.setGroup(newGroup) }
         )
-    }
-
-    // «Код приложения» — отдельный полноэкранный режим: ни баннера, ни нижних вкладок
-    if (uiState.showAppCode) {
-        com.example.ui.screens.AppCodeScreen(
-            onBack = { viewModel.closeAppCode() },
-            modifier = modifier.fillMaxSize()
-        )
-        return
     }
 
     Scaffold(
@@ -197,7 +189,6 @@ private fun CollegeTab(viewModel: AppViewModel, groupInfo: GroupInfo) {
         diagnosticInfo = diagnosticInfo,
         onGroupChanged = { newGroup -> viewModel.setGroup(newGroup) },
         onRunConnectionTest = { viewModel.syncSchedule() },
-        onOpenAppCode = { viewModel.openAppCode() },
         pendingTeacherName = pendingTeacher.pendingTeacherName,
         onPendingTeacherConsumed = { viewModel.consumePendingTeacher() },
         pendingRoomName = pendingTeacher.pendingRoom,

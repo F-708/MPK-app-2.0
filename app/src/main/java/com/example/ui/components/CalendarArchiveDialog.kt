@@ -414,11 +414,16 @@ fun CalendarArchiveDialog(
                         calculateMonthDays(displayedYear, displayedMonth)
                     }
 
+                    // Высоту считаем по числу недель в месяце. Раньше стояло
+                    // жёсткое ограничение 220dp с запретом прокрутки — в месяцах
+                    // из шести недель последняя неделя не помещалась и была
+                    // недостижима вовсе.
+                    val weekCount = (daysInMonth.size + 6) / 7
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(7),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 220.dp),
+                            .height((weekCount * 46).dp),
                         userScrollEnabled = false
                     ) {
                         items(daysInMonth) { calendarDay ->

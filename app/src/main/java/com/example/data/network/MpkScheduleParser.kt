@@ -659,7 +659,12 @@ object MpkScheduleParser {
                         monthWord.startsWith("дек") -> "12"
                         else -> "09"
                     }
-                    val y = textMonthMatch.groupValues.getOrNull(3)?.ifBlank { "2026" } ?: "2026"
+                    // Год берём текущий, а не зашитый: раньше стояло «2026»,
+                    // и с 2027 года даты без года считались бы устаревшими —
+                    // чистка архива удаляла бы действующее расписание.
+                    val thisYear = java.util.Calendar.getInstance()
+                        .get(java.util.Calendar.YEAR).toString()
+                    val y = textMonthMatch.groupValues.getOrNull(3)?.ifBlank { thisYear } ?: thisYear
                     detectedDate = "$d.$m.$y"
                 }
             }

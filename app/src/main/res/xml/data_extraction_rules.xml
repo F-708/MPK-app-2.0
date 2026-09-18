@@ -1,19 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
    Правила резервного копирования для API 31+.
-
-   mpk_activation.xml исключён из облачной копии: иначе после переустановки
-   Android восстановил бы активацию, и приложение открылось бы без кода.
-   Перенос на новое устройство (device-transfer) активацию сохраняет —
-   это тот же пользователь со своим телефоном, вводить код заново не нужно.
-
+   Резервируются настройки группы, уведомлений и учебные задания.
    См. https://developer.android.com/about/versions/12/backup-restore#xml-changes
 -->
 <data-extraction-rules>
-    <cloud-backup>
-        <exclude domain="sharedpref" path="mpk_activation.xml"/>
-    </cloud-backup>
-    <device-transfer>
-        <include domain="sharedpref" path="mpk_activation.xml"/>
-    </device-transfer>
+    <cloud-backup />
+    <device-transfer />
 </data-extraction-rules>

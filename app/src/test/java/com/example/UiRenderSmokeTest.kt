@@ -78,7 +78,6 @@ class UiRenderSmokeTest {
                     diagnosticInfo = com.example.data.model.SyncDiagnosticInfo(),
                     onGroupChanged = {},
                     onRunConnectionTest = {},
-                    onOpenAppCode = {}
                 )
             }
         }

@@ -65,6 +65,11 @@ import com.example.ui.theme.ColorSurfaceHighlight
 fun GroupSelectionDialog(
     currentGroupName: String,
     onDismissRequest: () -> Unit,
+    /**
+     * Показывать крестик закрытия. При первом входе выбор группы обязателен,
+     * закрывать диалог нечем — там крестик только путал.
+     */
+    showClose: Boolean = true,
     onGroupSelected: (String) -> Unit
 ) {
     var selectedCourse by remember {
@@ -121,15 +126,17 @@ fun GroupSelectionDialog(
                         )
                     )
                 }
-                IconButton(
-                    onClick = onDismissRequest,
-                    modifier = Modifier.bouncyClickable(onClick = onDismissRequest)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Закрыть",
-                        tint = ColorTextMuted
-                    )
+                if (showClose) {
+                    IconButton(
+                        onClick = onDismissRequest,
+                        modifier = Modifier.bouncyClickable(onClick = onDismissRequest)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Закрыть",
+                            tint = ColorTextMuted
+                        )
+                    }
                 }
             }
         },

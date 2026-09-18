@@ -101,8 +101,6 @@ fun CollegeScreen(
     diagnosticInfo: SyncDiagnosticInfo,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit,
-    /** Открыть полноэкранный «Код приложения» (admin). Рисуется вне этого экрана. */
-    onOpenAppCode: () -> Unit,
     /** ФИО преподавателя для немедленного открытия (переход из расписания). */
     pendingTeacherName: String? = null,
     onPendingTeacherConsumed: () -> Unit = {},
@@ -159,7 +157,6 @@ fun CollegeScreen(
                 onOpenTeachers = { page = OtherPage.TEACHERS },
                 onOpenSettings = { page = OtherPage.SETTINGS },
                 onOpenStudents = { page = OtherPage.STUDENTS },
-                onOpenConnect = onOpenAppCode,
                 // Из меню карта открывается без маршрута: кабинет просто подсветится
                 onOpenMap = { mapRoom = null; mapFromRoom = null; page = OtherPage.MAP }
             )
@@ -224,7 +221,6 @@ fun CollegeScreen(
                         onOpenTeachers = { page = OtherPage.TEACHERS },
                         onOpenSettings = { page = OtherPage.SETTINGS },
                         onOpenStudents = { page = OtherPage.STUDENTS },
-                        onOpenConnect = onOpenAppCode,
                         // Из меню карта открывается без маршрута: кабинет просто подсветится
                 onOpenMap = { mapRoom = null; mapFromRoom = null; page = OtherPage.MAP }
                     )
@@ -245,7 +241,6 @@ private fun OtherMenu(
     onOpenTeachers: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenStudents: () -> Unit,
-    onOpenConnect: () -> Unit,
     onOpenMap: () -> Unit
 ) {
     val context = LocalContext.current
@@ -268,15 +263,6 @@ private fun OtherMenu(
                         subtitle = "Все учащиеся колледжа: фильтры по группам и курсам",
                         badge = "ADMIN",
                         onClick = onOpenStudents
-                    )
-                }
-                item {
-                    AdminMenuCard(
-                        icon = { Icon(Icons.Default.AdminPanelSettings, null, tint = ADMIN_GOLD, modifier = Modifier.size(20.dp)) },
-                        title = "Код приложения",
-                        subtitle = "Код разблокировки для студента — действует одну минуту",
-                        badge = "ADMIN",
-                        onClick = onOpenConnect
                     )
                 }
                 item {

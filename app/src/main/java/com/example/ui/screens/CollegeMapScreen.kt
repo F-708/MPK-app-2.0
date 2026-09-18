@@ -31,7 +31,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -55,6 +58,9 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.graphics.graphicsLayer
@@ -123,6 +129,8 @@ fun CollegeMapScreen(
 
     val cameFromSchedule = !initialRoom.isNullOrBlank()
     var query by remember { mutableStateOf("") }
+    // Введён номер, которого нет ни на одном этаже — поле подсветится красным
+    var searchFailed by remember { mutableStateOf(false) }
     var target by remember { mutableStateOf(initialRoom?.trim().orEmpty()) }
     var floorId by remember {
         mutableStateOf(CollegeMap.floorForRoom(initialRoom.orEmpty())?.id ?: "1")
@@ -162,16 +170,12 @@ fun CollegeMapScreen(
             Spacer(modifier = Modifier.height(4.dp))
             SearchField(
                 value = query,
-                onValueChange = { query = it },
+                onValueChange = { query = it; searchFailed = false },
                 onFound = { found ->
                     target = found
-                    found.toIntOrNull()?.let { }
+                    searchFailed = found.isNotBlank() && findRoomEverywhere(mapData, found) == null
                 },
-                knownRooms = remember(mapData) {
-                    buildList {
-                        listOf("1", "2", "3-4").forEach { f -> addAll(mapData.floor(f).rooms.map { it.number }) }
-                    }.filter { it.isNotBlank() }
-                }
+                notFound = searchFailed
             )
         }
 
@@ -199,12 +203,16 @@ fun CollegeMapScreen(
                 .weight(1f)
         )
 
-        RoomPanel(
-            room = targetRoom,
-            startRoom = startRoom,
-            route = route,
-            hasRouteGraph = floor.corridors.isNotEmpty() || floor.nodes.isNotEmpty()
-        )
+        // Табличку снизу убрали: если кабинета нет, об этом говорит само поле
+        // поиска — красным, там же, где вводили номер.
+        if (targetRoom != null) {
+            RoomPanel(
+                room = targetRoom,
+                startRoom = startRoom,
+                route = route,
+                hasRouteGraph = floor.corridors.isNotEmpty() || floor.nodes.isNotEmpty()
+            )
+        }
     }
 }
 
@@ -254,7 +262,7 @@ private fun RoomPanel(
             ) {
                 Surface(
                     shape = RoundedCornerShape(3.dp),
-                    color = ColorBrandFill,
+                    color = if (room.status == "nonexistent") DEAD_COLOR else ColorBrandFill,
                     modifier = Modifier.size(52.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -369,12 +377,16 @@ private fun MapHeader(subtitle: String, onBack: () -> Unit) {
  * Поле поиска кабинета. Своя реализация вместо стандартного поля: у того
  * высота и ширина зависят от содержимого, из-за чего вёрстка разъезжалась.
  */
+/** Есть ли такой кабинет хоть на одном этаже. */
+private fun findRoomEverywhere(mapData: CollegeMapData, number: String): MapRoom? =
+    listOf("1", "2", "3-4").firstNotNullOfOrNull { mapData.floor(it).room(number) }
+
 @Composable
 private fun SearchField(
     value: String,
     onValueChange: (String) -> Unit,
     onFound: (String) -> Unit,
-    knownRooms: List<String>
+    notFound: Boolean
 ) {
     Row(
         modifier = Modifier
@@ -385,8 +397,11 @@ private fun SearchField(
     ) {
         Surface(
             shape = RoundedCornerShape(3.dp),
-            color = ColorSurfaceVariantLight,
-            border = BorderStroke(1.dp, ColorBorderLight),
+            color = if (notFound) Color(0xFFFDECEC) else ColorSurfaceVariantLight,
+            border = BorderStroke(
+                if (notFound) 2.dp else 1.dp,
+                if (notFound) DEAD_COLOR else ColorBorderLight
+            ),
             modifier = Modifier
                 .weight(1f)
                 .height(46.dp)
@@ -398,7 +413,7 @@ private fun SearchField(
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = null,
-                    tint = ColorTextMuted,
+                    tint = if (notFound) DEAD_COLOR else ColorTextMuted,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -409,6 +424,12 @@ private fun SearchField(
                             style = TextStyle(fontSize = 14.sp, color = ColorTextMuted),
                             maxLines = 1
                         )
+                    } else if (notFound) {
+                        Text(
+                            text = "$value — такого кабинета нет",
+                            style = TextStyle(fontSize = 14.sp, color = DEAD_COLOR),
+                            maxLines = 1
+                        )
                     }
                     BasicTextField(
                         value = value,
@@ -416,7 +437,10 @@ private fun SearchField(
                             onValueChange(input.filter { it.isDigit() || it.isLetter() }.take(6))
                         },
                         singleLine = true,
-                        textStyle = TextStyle(fontSize = 15.sp, color = ColorTextTitle),
+                        textStyle = TextStyle(
+                            fontSize = 15.sp,
+                            color = if (notFound) Color.Transparent else ColorTextTitle
+                        ),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -539,15 +563,15 @@ private fun MapCanvas(
     // картинки. Раньше здесь стояли 1376 и 768 — номера выходили вчетверо
     // крупнее кабинета и налезали друг на друга.
     val measurer = rememberTextMeasurer()
-    val numberLayouts: Map<String, TextLayoutResult> = remember(floorId, floor, imgW, imgH) {
+    // Все номера меряем одним размером, а на экране показываем тоже одним —
+    // так они выглядят одинаково и не «прыгают» при приближении.
+    val baseFontPx = 22f
+    val numberLayouts: Map<String, TextLayoutResult> = remember(floorId, floor, density) {
         floor.rooms.filter { it.number.isNotBlank() }.associate { r ->
-            val wPx = r.w * imgW
-            val hPx = r.h * imgH
-            val fontPx = (minOf(hPx * 0.34f, wPx * 0.24f)).coerceIn(7f, 24f)
             r.id to measurer.measure(
                 text = r.number,
                 style = TextStyle(
-                    fontSize = with(density) { fontPx.toSp() },
+                    fontSize = with(density) { baseFontPx.toSp() },
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF0B3564)
                 ),
@@ -642,7 +666,8 @@ private fun MapCanvas(
                         pulse = pulse,
                         zoom = k,
                         numberLayouts = numberLayouts,
-                        minScreenPxPerDp = with(density) { 1.dp.toPx() }
+                        minScreenPxPerDp = with(density) { 1.dp.toPx() },
+                        baseFontPx = baseFontPx
                     )
                 }
             }
@@ -655,23 +680,28 @@ private fun MapCanvas(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            ZoomButton("+") {
+            // Приближение вокруг центра экрана: раньше после анимации смещение
+            // дёргалось и вид «тянуло влево».
+            fun zoomTo(z: Float) {
+                val target = z.coerceIn(restZoom(), 8f)
+                val cx = viewW / 2f
+                val cy = viewH / 2f
+                val bx = (cx - offsetX.value) / scale.value
+                val by = (cy - offsetY.value) / scale.value
                 scope.launch {
-                    val z = (scale.value * 1.4f).coerceAtMost(8f)
-                    scale.animateTo(z, tween(200))
-                    offsetX.snapTo(clampX(offsetX.value, z))
-                    offsetY.snapTo(clampY(offsetY.value, z))
+                    scale.animateTo(target, tween(220))
+                }
+                scope.launch {
+                    offsetX.animateTo(clampX(cx - bx * target, target), tween(220))
+                }
+                scope.launch {
+                    offsetY.animateTo(clampY(cy - by * target, target), tween(220))
                 }
             }
-            ZoomButton("−") {
-                scope.launch {
-                    val z = (scale.value / 1.4f).coerceAtLeast(restZoom())
-                    scale.animateTo(z, tween(200))
-                    offsetX.snapTo(clampX(offsetX.value, z))
-                    offsetY.snapTo(clampY(offsetY.value, z))
-                }
-            }
-            ZoomButton("⤢") {
+
+            ZoomButton(Icons.Default.Add) { zoomTo(scale.value * 1.5f) }
+            ZoomButton(Icons.Default.Remove) { zoomTo(scale.value / 1.5f) }
+            ZoomButton(Icons.Default.ZoomOutMap) {
                 scope.launch {
                     val z = restZoom()
                     scale.animateTo(z, tween(250))
@@ -683,21 +713,23 @@ private fun MapCanvas(
     }
 }
 
-/** Круглая кнопка зума поверх плана. */
+/** Кнопка зума поверх плана. */
 @Composable
-private fun ZoomButton(label: String, onClick: () -> Unit) {
+private fun ZoomButton(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(3.dp),
         color = ColorBgMain,
         border = BorderStroke(1.dp, ColorBorderLight),
         modifier = Modifier
-            .size(38.dp)
+            .size(42.dp)
             .bouncyClickable(onClick = onClick)
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = label,
-                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ColorBrandBlue)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = ColorBrandBlue,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
@@ -714,8 +746,10 @@ private fun DrawScope.drawMap(
     pulse: Float,
     zoom: Float,
     numberLayouts: Map<String, TextLayoutResult>,
-    /** Сколько пикселей в одном dp — чтобы задать порог «кабинет мелкий» в dp. */
-    minScreenPxPerDp: Float
+    /** Сколько пикселей в одном dp — чтобы задать размер надписей в dp. */
+    minScreenPxPerDp: Float,
+    /** Размер, которым измерены номера: от него считаем масштаб отрисовки. */
+    baseFontPx: Float
 ) {
     val unit = 1f / zoom     // компенсация зума, чтобы линии на экране не толстели
 
@@ -725,8 +759,8 @@ private fun DrawScope.drawMap(
             moveTo(routePoints[0].x * imgW, routePoints[0].y * imgH)
             routePoints.drop(1).forEach { lineTo(it.x * imgW, it.y * imgH) }
         }
-        drawPath(path, ROUTE_OUTLINE, style = Stroke(9f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round))
-        drawPath(path, ROUTE_COLOR, style = Stroke(4.5f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        drawPath(path, ROUTE_OUTLINE, style = Stroke(12f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        drawPath(path, ROUTE_COLOR, style = Stroke(6f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round))
     }
 
     // --- Конец маршрута: подсвеченный кабинет ---
@@ -760,24 +794,40 @@ private fun DrawScope.drawMap(
     }
 
     // --- Номера кабинетов ---
-    // Показываем только те, что влезают в кабинет на экране: иначе при мелком
-    // масштабе шесть десятков номеров налезают друг на друга в кашу.
-    // Приблизил — номеров становится больше.
-    val minRoomPx = 22f * minScreenPxPerDp
-    floor.rooms.forEach { r ->
-        val layout = numberLayouts[r.id] ?: return@forEach
-        if (r.w * imgW * zoom < minRoomPx) return@forEach
-        val cx = r.x * imgW
-        val cy = r.y * imgH
-        drawText(
-            textLayoutResult = layout,
-            topLeft = Offset(
-                cx - layout.size.width / 2f,
-                cy - layout.size.height / 2f
-            ),
-            color = if (r.status == "nonexistent") DEAD_COLOR else Color(0xFF0B3564)
-        )
-    }
+    // Правило: номер никогда не вылезает за свой кабинет. Не влез — не рисуем
+    // (появится при приближении). Так цифры не налезают на соседние кабинеты.
+    // Узкие и высокие кабинеты подписываем повёрнутым номером — вдоль кабинета.
+    val wantedPx = 11f * minScreenPxPerDp            // желаемая высота цифры на экране
+    floor.rooms
+        .filter { it.number.isNotBlank() }
+        .sortedByDescending { it.w * it.h }
+        .forEach { r ->
+            val layout = numberLayouts[r.id] ?: return@forEach
+            val fitScale = wantedPx / (baseFontPx * zoom)
+            val tw = layout.size.width * fitScale
+            val th = layout.size.height * fitScale
+
+            // Вертикальный кабинет — цифры вдоль его высоты
+            val vertical = r.h > r.w * 1.6f
+            val needW = (if (vertical) th else tw) + 2f * minScreenPxPerDp
+            val needH = (if (vertical) tw else th) + 2f * minScreenPxPerDp
+            if (r.w * imgW * zoom < needW || r.h * imgH * zoom < needH) return@forEach
+
+            val cx = r.x * imgW
+            val cy = r.y * imgH
+            val color = if (r.status == "nonexistent") DEAD_COLOR else Color(0xFF0B3564)
+
+            withTransform({
+                if (vertical) rotate(90f, Offset(cx, cy))
+                scale(fitScale, fitScale, Offset(cx, cy))
+            }) {
+                drawText(
+                    textLayoutResult = layout,
+                    topLeft = Offset(cx - layout.size.width / 2f, cy - layout.size.height / 2f),
+                    color = color
+                )
+            }
+        }
 
     // --- Начало маршрута: зелёная точка ---
     if (startRoom != null && routePoints != null) {
@@ -802,13 +852,15 @@ private fun DrawScope.drawEntrance(e: MapEntrance, imgW: Float, imgH: Float, uni
     val a = Math.toRadians(e.dir.toDouble())
     val c = Math.cos(a).toFloat()
     val s = Math.sin(a).toFloat()
-    val len = 16f * unit
+    val len = 13f * unit
     val tip = Offset(x + c * len, y + s * len)
     val tail = Offset(x - c * len, y - s * len)
-    val head = Offset(tip.x - c * 8f * unit, tip.y - s * 8f * unit)
-    val hw = 5f * unit
+    val head = Offset(tip.x - c * 7f * unit, tip.y - s * 7f * unit)
+    val hw = 4.5f * unit
 
-    drawLine(color, tail, head, strokeWidth = 3.5f * unit, cap = StrokeCap.Round)
+    // Сначала белая подложка — чтобы стрелка читалась на любом фоне плана
+    drawLine(ROUTE_OUTLINE, tail, head, strokeWidth = 5.5f * unit, cap = StrokeCap.Round)
+    drawLine(color, tail, head, strokeWidth = 3f * unit, cap = StrokeCap.Round)
     drawPath(
         Path().apply {
             moveTo(tip.x, tip.y)
