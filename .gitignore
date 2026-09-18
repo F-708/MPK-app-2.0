@@ -24,3 +24,4 @@ keystore.properties
 
 # Тестовое окружение редактора
 .testenv/node_modules/
+.testenv/shots/
