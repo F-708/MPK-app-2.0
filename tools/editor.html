@@ -126,9 +126,9 @@
       </div>
     </div>
 
-    <div class="sec" id="dirBox" style="display:none">
-      <h2>Куда входят — направление стрелки</h2>
-      <div class="row wrap" id="dirs"></div>
+    <div class="sec" id="toolOpts" style="display:none">
+      <h2 id="toolOptsTitle">Настройки инструмента</h2>
+      <div id="toolOptsBody"></div>
     </div>
 
     <div class="sec">
@@ -309,7 +309,7 @@ const S = {
   layers: { rooms: true, numbers: true, corridors: true, nodes: true,
             labels: true, callouts: true, routes: true, entrances: true },
   pending: null, anchorNode: null, calloutTarget: null,
-  drag: null, statusToApply: 'nonexistent', entranceDir: 90,
+  drag: null, statusToApply: 'nonexistent', entranceDir: 90, corridorWidth: 0.012,
 };
 
 const uid = p => p + '_' + Math.random().toString(36).slice(2, 9);
@@ -890,17 +890,68 @@ function switchFloor(id) {
   render();
 }
 
-function renderDirs() {
-  const box = $('dirBox');
-  box.style.display = (S.tool === 'entrance') ? '' : 'none';
-  if (S.tool !== 'entrance') return;
-  $('dirs').innerHTML = DIRS.map(d =>
-    '<button class="btn sm ' + (S.entranceDir === d[0] ? 'on' : '') + '" data-dir="' + d[0] + '">' +
-    esc(d[1]) + '</button>').join('');
-  $('dirs').querySelectorAll('[data-dir]').forEach(b => b.onclick = () => {
-    S.entranceDir = Number(b.dataset.dir);
-    renderDirs();
+/**
+ * Панель настроек текущего инструмента. Показывает только то, что нужно
+ * выбранному инструменту: статус, направление, толщину, масштаб.
+ */
+function renderToolOptions() {
+  const box = $('toolOpts');
+  const body = $('toolOptsBody');
+  const title = $('toolOptsTitle');
+
+  const rows = [];
+  let need = true;
+
+  if (S.tool === 'status') {
+    title.textContent = 'Какой статус ставить';
+    rows.push('<div class="row wrap">' + STATUSES.map(st =>
+      '<button class="btn sm ' + (S.statusToApply === st[0] ? 'on' : '') +
+      '" data-status="' + st[0] + '">' + esc(st[1]) + '</button>').join('') + '</div>');
+    rows.push('<div class="muted" style="margin-top:6px">Выбери статус и кликай по кабинетам подряд.</div>');
+  } else if (S.tool === 'entrance') {
+    title.textContent = 'Куда входят — направление стрелки';
+    rows.push('<div class="row wrap">' + DIRS.map(d =>
+      '<button class="btn sm ' + (S.entranceDir === d[0] ? 'on' : '') +
+      '" data-dir="' + d[0] + '">' + esc(d[1]) + '</button>').join('') + '</div>');
+    rows.push('<div class="muted" style="margin-top:6px">Стрелка показывает, куда входят.</div>');
+  } else if (S.tool === 'corridor') {
+    title.textContent = 'Толщина коридора';
+    const px = Math.round((S.corridorWidth || 0.012) * NAT.w);
+    rows.push('<input type="range" id="corridorWidth" min="4" max="40" step="1" value="' + px + '" style="width:100%">');
+    rows.push('<div class="muted" id="corridorWidthLabel">' + px + ' пикселей на плане</div>');
+  } else if (S.tool === 'ruler') {
+    title.textContent = 'Масштаб в метрах';
+    rows.push('<label class="f">Сколько метров в ширине плана</label>');
+    rows.push('<input type="number" id="scaleMeters" min="1" step="1" value="' +
+      (S.scaleMeters || '') + '" placeholder="например 120">');
+    rows.push('<div class="muted" style="margin-top:6px">Укажи один раз — линейка начнёт показывать метры.</div>');
+  } else {
+    need = false;
+  }
+
+  box.style.display = need ? '' : 'none';
+  if (!need) return;
+  body.innerHTML = rows.join('');
+
+  body.querySelectorAll('[data-status]').forEach(b => b.onclick = () => {
+    S.statusToApply = b.dataset.status;
+    renderToolOptions(); render();
   });
+  body.querySelectorAll('[data-dir]').forEach(b => b.onclick = () => {
+    S.entranceDir = Number(b.dataset.dir);
+    renderToolOptions();
+  });
+  const cw = body.querySelector('#corridorWidth');
+  if (cw) cw.oninput = () => {
+    S.corridorWidth = Number(cw.value) / NAT.w;
+    body.querySelector('#corridorWidthLabel').textContent = cw.value + ' пикселей на плане';
+  };
+  const sm = body.querySelector('#scaleMeters');
+  if (sm) sm.oninput = () => {
+    const v = parseFloat(sm.value);
+    S.scaleMeters = isNaN(v) ? null : v;
+    saveLocal();
+  };
 }
 
 function setTool(t) {
@@ -910,13 +961,9 @@ function setTool(t) {
   stage.className = (t === 'pan') ? 'tool-pan' : 'tool-cross';
   buildPanel();
   render();
-  renderDirs();
+  renderToolOptions();
   const info = TOOLS.find(x => x[0] === t);
-  $('hint').textContent = (info ? info[3] : '') +
-    (t === 'status' ? '  Текущий статус: ' + statusStyle(S.statusToApply)[1] + '.' : '') +
-    (t === 'entrance'
-      ? '  Стрелка смотрит: ' + (DIRS.find(d => d[0] === S.entranceDir) || DIRS[0])[1] + '.'
-      : '');
+  $('hint').textContent = info ? info[3] : '';
 }
 
 // ===========================================================================
@@ -1027,18 +1074,16 @@ overlay.addEventListener('pointerup', () => {
   const t = S.drag.type;
 
   if (t === 'rect') {
-    const r = S.drag.rect;
+    const r = S.drag.rect, preset = S.drag.preset;
     S.drag = null; S.pending = null;
     if (r && (r.x1 - r.x0) > 0.006 && (r.y1 - r.y0) > 0.006) {
-      const room = {
-        id: uid('room'), number: '', title: '', note: '', status: 'normal',
-        x: round4((r.x0 + r.x1) / 2), y: round4((r.y0 + r.y1) / 2),
-        w: round4(r.x1 - r.x0), h: round4(r.y1 - r.y0),
-      };
-      data().rooms.push(room);
-      S.selection = [{ type: 'room', id: room.id }];
-      afterChange();
-      ask('Номер кабинета', '', v => { if (v) room.number = v; afterChange(); }, nextNumbers());
+      makeRoom(r.x0 * NAT.w, r.y0 * NAT.h, r.x1 * NAT.w, r.y1 * NAT.h);
+      return;
+    }
+    // Протяжки не было — значит, это клик. Если вокруг нашёлся кабинет,
+    // создаём его сразу, ничего тянуть не нужно.
+    if (preset) {
+      makeRoom(preset.x0, preset.y0, preset.x1, preset.y1);
       return;
     }
     render(); return;
@@ -1078,10 +1123,26 @@ function startSelect(e, hit, norm) {
 
 /** Клик внутри кабинета — рамка определяется сама. */
 function startRoom(e, pt) {
-  const guess = 26;
-  const c = autoContour(pt.x - guess, pt.y - guess, pt.x + guess, pt.y + guess);
-  S.drag = { type: 'rect', px0: pt.x, py0: pt.y, rect: null, preset: c };
+  // Запоминаем контур вокруг точки клика: если мышь не потянут,
+  // кабинет создастся по нему — то есть простым кликом
+  const guess = 24;
+  const preset = autoContour(pt.x - guess, pt.y - guess, pt.x + guess, pt.y + guess);
+  const big = (preset.x1 - preset.x0) > 20 && (preset.y1 - preset.y0) > 20;
+  S.drag = { type: 'rect', px0: pt.x, py0: pt.y, rect: null, preset: big ? preset : null };
   overlay.setPointerCapture(e.pointerId);
+}
+
+/** Создаёт кабинет из готового прямоугольника в пикселях. */
+function makeRoom(px0, py0, px1, py1) {
+  const room = {
+    id: uid('room'), number: '', title: '', note: '', status: 'normal',
+    x: round4(((px0 + px1) / 2) / NAT.w), y: round4(((py0 + py1) / 2) / NAT.h),
+    w: round4((px1 - px0) / NAT.w), h: round4((py1 - py0) / NAT.h),
+  };
+  data().rooms.push(room);
+  S.selection = [{ type: 'room', id: room.id }];
+  afterChange();
+  ask('Номер кабинета', '', v => { if (v) room.number = v; afterChange(); }, nextNumbers());
 }
 
 function applyStatus(hit) {
@@ -1118,7 +1179,7 @@ function finishPoly() {
   S.pending = null;
   if (points.length < 2) { render(); return; }
   if (type === 'corridor') {
-    data().corridors.push({ id: uid('cor'), points, width: 0.012 });
+    data().corridors.push({ id: uid('cor'), points, width: S.corridorWidth || 0.012 });
     afterChange(); toast('Коридор добавлен');
   } else if (type === 'route') {
     ask('Название маршрута (необязательно)', '', v => {

@@ -116,16 +116,49 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   }
   check('инструменты включаются', toolBad.length === 0, toolBad.join(', '));
 
-  console.log('— направление стрелки входа');
+  console.log('— настройки инструментов');
+  // Статус: раньше выбрать было негде, всегда ставилось «не существует»
+  await page.evaluate(() => setTool('status'));
+  await wait(300);
+  const stBox = await page.evaluate(() => ({
+    видно: getComputedStyle(document.getElementById('toolOpts')).display !== 'none',
+    кнопок: document.querySelectorAll('#toolOptsBody [data-status]').length,
+  }));
+  check('у «Статуса» появился выбор', stBox.видно && stBox.кнопок === 4, JSON.stringify(stBox));
+  await page.evaluate(() => document.querySelectorAll('#toolOptsBody [data-status]')[1].click());
+  check('статус выбирается', await page.evaluate(() => S.statusToApply === 'closed'));
+
+  // Направление входа
   await page.evaluate(() => setTool('entrance'));
   await wait(300);
   const dirBoxVisible = await page.evaluate(() =>
-    getComputedStyle(document.getElementById('dirBox')).display !== 'none');
-  check('блок направления появляется', dirBoxVisible);
-  const dirBtns = await page.evaluate(() => document.querySelectorAll('#dirs .btn').length);
-  check('четыре направления', dirBtns === 4, 'кнопок ' + dirBtns);
-  await page.evaluate(() => document.querySelectorAll('#dirs .btn')[1].click());
-  check('направление выбирается', await page.evaluate(() => S.entranceDir === 90));
+    getComputedStyle(document.getElementById('toolOpts')).display !== 'none' &&
+    document.querySelectorAll('#toolOptsBody [data-dir]').length === 4);
+  check('направление входа выбирается', dirBoxVisible);
+  await page.evaluate(() => document.querySelectorAll('#toolOptsBody [data-dir]')[1].click());
+  check('направление переключилось', await page.evaluate(() => S.entranceDir === 90));
+
+  // Толщина коридора
+  await page.evaluate(() => setTool('corridor'));
+  await wait(300);
+  const cwOk = await page.evaluate(() => !!document.querySelector('#toolOptsBody #corridorWidth'));
+  check('толщина коридора настраивается', cwOk);
+  await page.evaluate(() => {
+    const el = document.querySelector('#toolOptsBody #corridorWidth');
+    el.value = 30; el.oninput();
+  });
+  check('толщина применилась', await page.evaluate(() => Math.abs(S.corridorWidth * NAT.w - 30) < 1));
+
+  // Масштаб для линейки
+  await page.evaluate(() => setTool('ruler'));
+  await wait(300);
+  const smOk = await page.evaluate(() => !!document.querySelector('#toolOptsBody #scaleMeters'));
+  check('масштаб в метрах задаётся', smOk);
+  await page.evaluate(() => {
+    const el = document.querySelector('#toolOptsBody #scaleMeters');
+    el.value = 120; el.oninput();
+  });
+  check('масштаб применился', await page.evaluate(() => S.scaleMeters === 120));
 
   // Ставим вход и смотрим, что нарисовалась стрелка
   await page.evaluate(() => {
@@ -155,6 +188,51 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   check('кабинеты загрузились (61+64+63)',
     counts.one === 61 && counts.two === 64 && counts.tf === 63, JSON.stringify(counts));
   await page.screenshot({ path: path.join(SHOTS, '02-кабинеты.png') });
+
+  console.log('— создание кабинета простым кликом');
+  const clickRoom = await page.evaluate(() => {
+    // чистим этаж и щёлкаем по пустому месту внутри реального кабинета
+    const keep = JSON.stringify(S.data['1'].rooms);
+    S.data['1'].rooms = [];
+    render();
+    const p = rectPx(JSON.parse(keep)[5]);   // берём настоящий кабинет как ориентир
+    centerOn(p.x / NAT.w, p.y / NAT.h, 1.5);
+    const r = document.getElementById('stage').getBoundingClientRect();
+    return {
+      x: r.left + (p.x + p.w / 2) * S.zoom + S.panX,
+      y: r.top + (p.y + p.h / 2) * S.zoom + S.panY,
+      образец: { w: Math.round(p.w), h: Math.round(p.h) },
+      сохранить: keep,
+    };
+  });
+  await page.evaluate(() => setTool('room'));
+  await page.mouse.click(clickRoom.x, clickRoom.y);
+  await wait(600);
+  const created = await page.evaluate(() => {
+    const r = S.data['1'].rooms[0];
+    return r ? { w: Math.round(r.w * NAT.w), h: Math.round(r.h * NAT.h) } : null;
+  });
+  check('клик создал кабинет', created !== null, 'кабинетов: ' + (created ? 1 : 0));
+  if (created) {
+    check('размер совпал с настоящим кабинетом',
+      Math.abs(created.w - clickRoom.образец.w) <= 6 &&
+      Math.abs(created.h - clickRoom.образец.h) <= 6,
+      'получилось ' + created.w + 'x' + created.h + ', у образца ' +
+      clickRoom.образец.w + 'x' + clickRoom.образец.h);
+  }
+  // Закрываем окно ввода номера, иначе оно перекроет сцену и помешает дальше
+  await page.evaluate(() => document.getElementById('mCancel').click());
+  await wait(200);
+  // Возвращаем данные И приводим историю в согласованный вид,
+  // иначе последующая отмена вернёт состояние с лишним кабинетом
+  await page.evaluate(k => {
+    S.data['1'].rooms = JSON.parse(k);
+    S.history = []; S.hIndex = -1;
+    pushHistory();
+    render();
+  }, clickRoom.сохранить);
+  await wait(300);
+
 
   console.log('— прижатие к стенам: решающая проверка');
   // Кабинеты из rooms.json уже стоят по стенам, поэтому повторное выравнивание
