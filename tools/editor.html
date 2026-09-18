@@ -112,9 +112,13 @@
         <button class="btn wide" id="btnUndo" disabled>Отменить</button>
         <button class="btn wide" id="btnRedo" disabled>Вернуть</button>
       </div>
-      <label class="chk" style="margin-top:8px">
-        <input type="checkbox" id="snap" checked> Прилипание к сетке и соседям
+      <label class="chk">
+        <input type="checkbox" id="autoContour" checked> Автоконтур по стенам
       </label>
+      <label class="chk">
+        <input type="checkbox" id="alignNeighbors" checked> Ровнять с соседними кабинетами
+      </label>
+      <button class="btn wide" id="btnSnapAll" style="margin-top:8px">Выровнять весь этаж по стенам</button>
     </div>
 
     <div class="sec">
@@ -232,7 +236,7 @@ const FLOORS = [
 
 const TOOLS = [
   ['select',   'Выделять',   'V', 'Клик — выбрать. Рамкой — выделить несколько. Тянуть выделенное — двигать.'],
-  ['room',     'Кабинет',    'R', 'Протяни рамку вокруг кабинета — он создастся и спросит номер.'],
+  ['room',     'Кабинет',    'R', 'Протяни рамку примерно — она сама прижмётся к стенам кабинета.'],
   ['corridor', 'Коридор',    'C', 'Кликами ставь точки ломаной. Enter или двойной клик — закончить.'],
   ['node',     'Узел',       'N', 'Клик — поставить узел. С выделенным узлом соединится линией.'],
   ['label',    'Подпись',    'T', 'Клик — поставить текст в произвольном месте плана.'],
@@ -275,7 +279,6 @@ const S = {
   images: {},                 // id -> data URL (если план заменили)
   selection: [],              // [{type, id}]
   history: [], hIndex: -1,
-  snap: true,
   opacity: 1,
   layers: { rooms: true, numbers: true, corridors: true, nodes: true, labels: true,
             callouts: true, routes: true, entrances: true },
@@ -322,30 +325,6 @@ function eventToImage(e) {
 
 function currentImageSrc() {
   return S.images[S.floor] || FLOORS.find(f => f.id === S.floor).file;
-}
-
-// --- Прилипание: к сетке 0.5% и к краям соседних кабинетов -------------------
-const GRID = 0.005;
-
-function snapValue(v, neighbours) {
-  if (!S.snap) return v;
-  let best = Math.round(v / GRID) * GRID;
-  let bestD = Math.abs(best - v);
-  neighbours.forEach(n => {
-    const d = Math.abs(n - v);
-    if (d < bestD) { bestD = d; best = n; }
-  });
-  return bestD < 0.008 ? best : v;
-}
-
-function roomEdges(exceptId) {
-  const xs = [], ys = [];
-  floorData().rooms.forEach(r => {
-    if (r.id === exceptId) return;
-    xs.push(round4(r.x - r.w / 2), round4(r.x + r.w / 2));
-    ys.push(round4(r.y - r.h / 2), round4(r.y + r.h / 2));
-  });
-  return { xs, ys };
 }
 
 // ===========================================================================
@@ -818,6 +797,120 @@ function nextNumbers() {
 //  Работа с картинкой
 // ===========================================================================
 
+// Массив стен: 1 — тёмный пиксель линии, 0 — всё остальное.
+// Строится один раз при загрузке плана, дальше по нему ищем контуры.
+let wallMask = null, WM = 0, WH = 0;
+
+function buildWallMask() {
+  try {
+    const c = document.createElement('canvas');
+    c.width = NAT.w; c.height = NAT.h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(plan, 0, 0);
+    const data = ctx.getImageData(0, 0, NAT.w, NAT.h).data;
+    WM = NAT.w; WH = NAT.h;
+    wallMask = new Uint8Array(WM * WH);
+    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      const lum = (r + g + b) / 3;
+      if (lum < 145 && Math.abs(r - g) < 60 && Math.abs(r - b) < 60) wallMask[p] = 1;
+    }
+  } catch (e) {
+    wallMask = null;   // например, картинка не отдала пиксели
+  }
+}
+
+/** Ищет стену рядом с вертикальной гранью: возвращает x линии. */
+function snapCol(xGuess, y0, y1, window) {
+  const w = window || 22;
+  const lo = Math.max(0, xGuess - w), hi = Math.min(WM - 1, xGuess + w);
+  const span = Math.max(1, y1 - y0);
+  let best = xGuess, bestScore = 0;
+  for (let x = lo; x <= hi; x++) {
+    let count = 0;
+    for (let y = y0; y <= y1; y++) count += wallMask[y * WM + x];
+    const cover = count / span;
+    if (cover > bestScore || (cover === bestScore && Math.abs(x - xGuess) < Math.abs(best - xGuess))) {
+      bestScore = cover; best = x;
+    }
+  }
+  return bestScore >= 0.45 ? best : xGuess;
+}
+
+/** Ищет стену рядом с горизонтальной гранью: возвращает y линии. */
+function snapRow(yGuess, x0, x1, window) {
+  const w = window || 22;
+  const lo = Math.max(0, yGuess - w), hi = Math.min(WH - 1, yGuess + w);
+  const span = Math.max(1, x1 - x0);
+  let best = yGuess, bestScore = 0;
+  for (let y = lo; y <= hi; y++) {
+    let count = 0;
+    for (let x = x0; x <= x1; x++) count += wallMask[y * WM + x];
+    const cover = count / span;
+    if (cover > bestScore || (cover === bestScore && Math.abs(y - yGuess) < Math.abs(best - yGuess))) {
+      bestScore = cover; best = y;
+    }
+  }
+  return bestScore >= 0.45 ? best : yGuess;
+}
+
+/**
+ * Прижимает нарисованную рамку к контуру кабинета.
+ * Вход и выход — в пикселях картинки.
+ */
+function autoContour(x0, y0, x1, y1) {
+  if (!wallMask) return { x0, y0, x1, y1 };
+
+  let X0 = x0, X1 = x1, Y0 = y0, Y1 = y1;
+
+  if ($('autoContour').checked) {
+    X0 = snapCol(x0, y0, y1);
+    X1 = snapCol(x1, y0, y1);
+    if (X1 - X0 < 6) { X0 = x0; X1 = x1; }          // не нашли стену — оставляем как нарисовано
+    Y0 = snapRow(y0, X0, X1);
+    Y1 = snapRow(y1, X0, X1);
+    if (Y1 - Y0 < 5) { Y0 = y0; Y1 = y1; }
+  }
+
+  // Выравнивание по краям соседних кабинетов: ряды перестают «плясать»
+  if ($('alignNeighbors').checked) {
+    const tol = 9;
+    const xs = [], ys = [];
+    floorData().rooms.forEach(r => {
+      const p = rectPx(r);
+      xs.push(Math.round(p.x), Math.round(p.x + p.w));
+      ys.push(Math.round(p.y), Math.round(p.y + p.h));
+    });
+    const nearest = (v, list) => {
+      let bestV = v, bestD = tol;
+      list.forEach(c => { const d = Math.abs(c - v); if (d < bestD) { bestD = d; bestV = c; } });
+      return bestV;
+    };
+    X0 = nearest(X0, xs); X1 = nearest(X1, xs);
+    Y0 = nearest(Y0, ys); Y1 = nearest(Y1, ys);
+  }
+
+  return { x0: X0, y0: Y0, x1: X1, y1: Y1 };
+}
+
+/** Пересчитывает контур у всех кабинетов этажа. */
+function snapAllRooms() {
+  if (!wallMask) { toast('План ещё не загрузился'); return; }
+  let changed = 0;
+  floorData().rooms.forEach(r => {
+    const p = rectPx(r);
+    const c = autoContour(p.x, p.y, p.x + p.w, p.y + p.h);
+    if (c.x1 - c.x0 < 4 || c.y1 - c.y0 < 4) return;
+    if (Math.abs(c.x0 - p.x) + Math.abs(c.y0 - p.y) > 0.5) changed++;
+    r.x = round4(((c.x0 + c.x1) / 2) / NAT.w);
+    r.y = round4(((c.y0 + c.y1) / 2) / NAT.h);
+    r.w = round4((c.x1 - c.x0) / NAT.w);
+    r.h = round4((c.y1 - c.y0) / NAT.h);
+  });
+  afterChange();
+  toast('Подогнано кабинетов: ' + changed);
+}
+
 function loadPlanImage() {
   const src = currentImageSrc();
   plan.onload = () => {
@@ -825,6 +918,7 @@ function loadPlanImage() {
     resizeOverlay();
     clampPan();
     applyTransform();
+    buildWallMask();
     // Перерисовываем: до загрузки картинки размеры плана неизвестны,
     // и объекты могли лечь в неверном масштабе
     render();
@@ -874,16 +968,17 @@ overlay.addEventListener('pointermove', e => {
     return;
   }
   if (S.drag.type === 'rect') {
-    const edges = roomEdges(null);
-    let x0 = S.drag.x0, y0 = S.drag.y0;
-    let x1 = clamp(pt.x / NAT.w, 0, 1), y1 = clamp(pt.y / NAT.h, 0, 1);
-    if (S.snap) {
-      x0 = snapValue(x0, edges.xs); y0 = snapValue(y0, edges.ys);
-      x1 = snapValue(x1, edges.xs); y1 = snapValue(y1, edges.ys);
-    }
+    // Работаем в пикселях картинки: контур ищется по ним
+    let px0 = Math.min(S.drag.px0, pt.x), px1 = Math.max(S.drag.px0, pt.x);
+    let py0 = Math.min(S.drag.py0, pt.y), py1 = Math.max(S.drag.py0, pt.y);
+
+    // Автоконтур показываем сразу при рисовании — видно, к чему прижмётся
+    const c = autoContour(px0, py0, px1, py1);
+    px0 = c.x0; py0 = c.y0; px1 = c.x1; py1 = c.y1;
+
     S.drag.rect = {
-      x0: Math.min(x0, x1), y0: Math.min(y0, y1),
-      x1: Math.max(x0, x1), y1: Math.max(y0, y1),
+      x0: clamp(px0 / NAT.w, 0, 1), y0: clamp(py0 / NAT.h, 0, 1),
+      x1: clamp(px1 / NAT.w, 0, 1), y1: clamp(py1 / NAT.h, 0, 1),
     };
     S.pending = { type: 'draft', points: [] };
     drawDraftRect();
@@ -995,7 +1090,8 @@ function startSelect(e, hit, norm) {
 }
 
 function startRectDrag(e, norm) {
-  S.drag = { type: 'rect', x0: norm.x, y0: norm.y, rect: null };
+  const pt = eventToImage(e);
+  S.drag = { type: 'rect', x0: norm.x, y0: norm.y, px0: pt.x, py0: pt.y, rect: null };
   overlay.setPointerCapture(e.pointerId);
 }
 
@@ -1309,7 +1405,6 @@ function exportPng() {
 function bindButtons() {
   $('btnUndo').onclick = undo;
   $('btnRedo').onclick = redo;
-  $('snap').onchange = () => { S.snap = $('snap').checked; };
   $('search').oninput = renderList;
   $('filter').onchange = renderList;
 
@@ -1335,6 +1430,7 @@ function bindButtons() {
     e.target.dataset.mode = '';
   };
 
+  $('btnSnapAll').onclick = snapAllRooms;
   $('btnSvg').onclick = exportSvg;
   $('btnPng').onclick = exportPng;
 
@@ -1369,7 +1465,6 @@ function start() {
   const restored = loadLocal();
   plan.style.opacity = S.opacity;
   $('opacity').value = S.opacity;
-  $('snap').checked = S.snap;
 
   loadPlanImage();
   buildPanel();
