@@ -283,7 +283,11 @@ private fun MapCanvas(
     val pulse = remember { Animatable(1f) }
 
     val imagePainter = painterResource(id = mapResId(floor))
-    val imageAspect = 1.414f
+    // Пропорции берём у самой картинки: планы меняются, и жёсткое число
+    // разъехалось бы с новым изображением
+    val imageAspect = imagePainter.intrinsicSize.let { size ->
+        if (size.height > 0f && size.width > 0f) size.width / size.height else 1.414f
+    }
 
     BoxWithConstraints(modifier = modifier.clipToBounds()) {
         val viewW = with(density) { maxWidth.toPx() }
