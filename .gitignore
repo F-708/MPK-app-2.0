@@ -21,3 +21,6 @@ keystore.properties
 *.jks
 *.keystore
 *.apk
+
+# Тестовое окружение редактора
+.testenv/node_modules/
