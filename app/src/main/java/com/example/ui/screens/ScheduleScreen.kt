@@ -84,38 +84,20 @@ import com.example.ui.theme.ColorBrandFill
 import com.example.ui.theme.ColorSurfaceHighlight
 import com.example.ui.theme.ColorSurfaceVariantLight
 
-/**
- * Главный экран расписания занятий колледжа ГУО «МГПК».
- *
- * СООТВЕТСТВИЕ ДИЗАЙН-СИСТЕМЕ И БИЗНЕС-ПРАВИЛАМ:
- * 1. Крупный заголовок страницы «Расписание» (32–34px Bold, Sentence case, #111827).
- * 2. Две ячейки дней: «Сегодня» и следующий учебный день (суббота учебна только
- *    для 1 курса или при наличии субботних уроков в базе; в выходные — Пн и Вт).
- * 3. Календарь-архив — справа от ячеек дней, открывает выбор любой даты.
- * 4. Запрет фейковых предметов: при отсутствии пар — аккуратный Empty State.
- * 5. Разделение по подгруппам: ровно 50/50 с микро-бейджами «1» и «2».
- * 6. Геометрия 0-2px, отсутствие теней (elevation 0dp), 1px рамки #E2E8F0.
- */
 @Composable
 fun ScheduleScreen(
     groupInfo: GroupInfo,
     scheduleRepository: ScheduleRepository,
     onSyncRequest: () -> Unit,
     isSyncing: Boolean = false,
-    /** Переход к карточке преподавателя по тапу на его ФИО. */
+
     onTeacherClick: (String) -> Unit = {},
-    /**
-     * Переход к карте по тапу на номер кабинета.
-     * Второй аргумент — кабинет текущего урока: от него проложат маршрут.
-     */
+
     onRoomClick: (room: String, fromRoom: String?) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
 
-    // Преподаватели из базы колледжа. Тех, кого там нет (например, ведут только
-    // замену), нельзя открыть в карточку — значит, и выглядеть нажимаемыми они
-    // не должны.
     val isTeacherKnown: (String) -> Boolean = remember(context) {
         val known = com.example.data.repository.TeachersRepository(context)
             .loadTeachers()
@@ -127,7 +109,6 @@ fun ScheduleScreen(
         check
     }
 
-    // 1. Точный расчет реального сегодняшнего дня
     val realNow = remember { Calendar.getInstance() }
     val realDayOfWeek = remember {
         when (realNow.get(Calendar.DAY_OF_WEEK)) {
@@ -137,12 +118,10 @@ fun ScheduleScreen(
             Calendar.THURSDAY -> 4
             Calendar.FRIDAY -> 5
             Calendar.SATURDAY -> 6
-            else -> 7 // Воскресенье
+            else -> 7
         }
     }
 
-    // Суббота — учебный день для 1 курса, а также для любой группы,
-    // у которой в базе есть уроки на субботу (расписание публикуется накануне)
     val saturdayLessons by scheduleRepository
         .getLessonsForDay(groupInfo.canonicalName, 6)
         .collectAsState(initial = emptyList<com.example.data.local.entity.LessonEntity>())
@@ -160,13 +139,11 @@ fun ScheduleScreen(
 
     fun isSchoolDay(dow: Int): Boolean = dow in 1..5 || (dow == 6 && saturdayIsSchoolDay)
 
-    // Две ячейки дней: слева — текущий учебный день (сегодня; в выходные — понедельник),
-    // справа — следующий учебный день (со 2–4 курса в пятницу это понедельник, а не суббота)
     val daySlots = remember(groupInfo.canonicalName, saturdayIsSchoolDay, realDayOfWeek) {
         val left = Calendar.getInstance().apply {
             when (realDayOfWeek) {
-                6 -> if (!saturdayIsSchoolDay) add(Calendar.DAY_OF_YEAR, 2) // Сб без занятий -> Пн
-                7 -> add(Calendar.DAY_OF_YEAR, 1)                           // Вс -> Пн
+                6 -> if (!saturdayIsSchoolDay) add(Calendar.DAY_OF_YEAR, 2)
+                7 -> add(Calendar.DAY_OF_YEAR, 1)
             }
         }
         val right = (left.clone() as Calendar).apply {
@@ -194,7 +171,6 @@ fun ScheduleScreen(
     val activeDayOfWeek = if (selectedSlot == 0) calendarDayOfWeek(leftCal) else calendarDayOfWeek(rightCal)
     val activeCal = if (selectedSlot == 0) leftCal else rightCal
 
-    // Подпись под заголовком: «Сегодня, 16.09» / «Завтра, 17.09» / «Понедельник, 21.09»
     val dayNamesNominative = listOf("", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье")
     val subtitleText = if (selectedDateString.isNotBlank()) {
         "${dayNamesNominative[activeDayOfWeek]} • $selectedDateString"
@@ -209,10 +185,9 @@ fun ScheduleScreen(
         String.format(java.util.Locale.ROOT, "%s, %02d.%02d", prefix, d, m)
     }
 
-    // Текущий урок по времени (показывается на ячейке «Сегодня»)
     val currentLessonNumber = remember(activeDayOfWeek, selectedSlot) {
         if (selectedSlot == 0 && leftIsToday) {
-            val cal = com.example.util.DebugClock.now(context)
+            val cal = java.util.Calendar.getInstance()
             val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
             val bells = CollegeBellSchedule.getBellsForDay(activeDayOfWeek)
             bells.firstOrNull { minutes in it.startMinutes..it.endMinutes }?.lessonNumber
@@ -220,19 +195,15 @@ fun ScheduleScreen(
         } else null
     }
 
-    // 2. Поток расписания из Room: null = идёт первая загрузка из базы
-    //    (чтобы не мигало «не опубликовано» до прихода данных)
     val lessonsFromDbState: List<com.example.data.local.entity.LessonEntity>? by scheduleRepository
         .getLessonsForDay(groupInfo.canonicalName, activeDayOfWeek)
         .collectAsState(initial = null)
     val lessonsFromDb = lessonsFromDbState ?: emptyList()
     val isInitialLoad = lessonsFromDbState == null
 
-    // 3. Фильтрация по архивной дате или последнему снапшоту дня
     val lessons: List<com.example.data.local.entity.LessonEntity> = remember(lessonsFromDb, selectedDateString) {
         if (selectedDateString.isBlank()) {
-            // Обычный просмотр дня: общие уроки (без даты) + только ПОСЛЕДНИЙ
-            // датированный снапшот этого дня, чтобы архивные даты не дублировали карточки
+
             val latestDated = lessonsFromDb
                 .filter { it.dateString.isNotBlank() }
                 .maxOfOrNull { it.dateString.replace("-", ".") }
@@ -246,7 +217,6 @@ fun ScheduleScreen(
         }
     }
 
-    // Диалог архива
     if (showArchiveDialog) {
         CalendarArchiveDialog(
             groupName = groupInfo.canonicalName,
@@ -260,10 +230,7 @@ fun ScheduleScreen(
             .fillMaxSize()
             .background(ColorBgMain)
     ) {
-        // =========================================================================
-        // =========================================================================
-        // Заголовок страницы «Расписание» + подпись выбранного дня + синхронизация
-        // =========================================================================
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -288,7 +255,6 @@ fun ScheduleScreen(
                 )
             }
 
-            // Кнопка синхронизации с сайтом (вращается во время обновления)
             val infiniteTransition = rememberInfiniteTransition(label = "SyncRotation")
             val rotation by infiniteTransition.animateFloat(
                 initialValue = 0f,
@@ -318,11 +284,6 @@ fun ScheduleScreen(
             }
         }
 
-        // =========================================================================
-        // Панель дней: [Сегодня][Следующий учебный день][Календарь-архив]
-        // Левая ячейка — текущий учебный день, правая — следующий учебный день
-        // (для 2–4 курсов в пятницу это понедельник; в выходные — Пн и Вт)
-        // =========================================================================
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -356,7 +317,6 @@ fun ScheduleScreen(
                 modifier = Modifier.weight(1f)
             )
 
-            // Календарь-архив: выбор любой даты
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 border = BorderStroke(1.dp, ColorBorderLight),
@@ -385,16 +345,13 @@ fun ScheduleScreen(
                 .background(ColorDividerLight)
         )
 
-        // =========================================================================
-        // Список пар или чистый Empty State
-        // =========================================================================
         AnimatedContent(
             targetState = lessons,
             transitionSpec = { fadeIn() togetherWith fadeOut() },
             label = "ScheduleListAnimation"
         ) { currentLessons ->
             if (isInitialLoad) {
-                // Первый кадр: база ещё не отдала кэш — тихий skeleton
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -408,7 +365,7 @@ fun ScheduleScreen(
                     )
                 }
             } else if (currentLessons.isEmpty()) {
-                // Empty State строго без фейковых уроков
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -503,13 +460,7 @@ fun ScheduleScreen(
                     }
                 }
             } else {
-                // Уроки идут не подряд: первых уроков может не быть вовсе (день
-                // начинается со 2-го или 3-го). Раньше это выглядело дырой в списке —
-                // теперь на месте пропуска стоит пометка «урока нет».
-                // Верхнюю границу берём по последнему реальному уроку: про уроки
-                // после него ничего не известно, выдумывать их не нужно.
-                // Кабинет текущего урока — от него проложат маршрут на карте.
-                // Если сейчас нет урока (перемена, вечер), маршрут не строим.
+
                 val fromRoom = remember(currentLessons, currentLessonNumber) {
                     currentLessonNumber?.let { n ->
                         currentLessons.firstOrNull { it.lessonNumber == n }
@@ -551,12 +502,6 @@ fun ScheduleScreen(
     }
 }
 
-/**
- * Пометка на месте урока, которого в расписании нет.
- *
- * Нужна, потому что занятия идут не подряд: если первый урок не задан, список
- * начинался сразу со второго и выглядел как недоделанный экран.
- */
 @Composable
 private fun NoLessonCard(lessonNumber: Int) {
     Surface(
@@ -603,18 +548,12 @@ private fun NoLessonCard(lessonNumber: Int) {
     }
 }
 
-/**
- * Карточка пары (обычная или с делением 50/50 по подгруппам) по Design System МПК:
- * - Скругление: 2px (строгая геометрия).
- * - Рамка: 1px solid #E2E8F0.
- * - Отсутствие теней (elevation 0dp).
- */
 @Composable
 fun LessonCard(
     lesson: LessonEntity,
     isCurrent: Boolean = false,
     onTeacherClick: (String) -> Unit = {},
-    /** Есть ли преподаватель в базе колледжа. Нет в базе — не делаем кликабельным. */
+
     isTeacherKnown: (String) -> Boolean = { true },
     onRoomClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
@@ -629,7 +568,7 @@ fun LessonCard(
             .testTag("lesson_card_${lesson.lessonNumber}")
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Заголовок пары: номер пары (плашка 2px), время, акроним
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -663,7 +602,6 @@ fun LessonCard(
                     )
                 }
 
-                // Акроним предмета
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     border = BorderStroke(1.dp, ColorBorderLight),
@@ -685,14 +623,14 @@ fun LessonCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             if (lesson.isSplit) {
-                // Разделение ровно 50/50 с микро-бейджами «1» и «2»
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(IntrinsicSize.Min),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Подгруппа 1
+
                     SubgroupPane(
                         subgroupNumber = 1,
                         subject = lesson.shortSubjectName,
@@ -710,7 +648,6 @@ fun LessonCard(
                         modifier = Modifier.fillMaxHeight()
                     )
 
-                    // Подгруппа 2
                     SubgroupPane(
                         subgroupNumber = 2,
                         subject = lesson.shortSubjectName,
@@ -723,7 +660,7 @@ fun LessonCard(
                     )
                 }
             } else {
-                // Одиночная пара для всей группы
+
                 Text(
                     text = lesson.shortSubjectName,
                     style = androidx.compose.ui.text.TextStyle(
@@ -758,7 +695,7 @@ fun LessonCard(
                             color = ColorSurfaceHighlight,
                             modifier = Modifier
                                 .wrapContentWidth()
-                                // Кабинет ведёт на карту колледжа: видно, где он
+
                                 .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) }
                         ) {
                             Row(
@@ -789,20 +726,6 @@ fun LessonCard(
     }
 }
 
-/**
- * Панель подгруппы (50% ширины карточки) с микро-бейджем «1» или «2».
- */
-/**
- * Имя преподавателя как нажимаемая «таблетка».
- *
- * Раньше в подгруппах это был просто серый текст без обработчика — по нему нельзя
- * было перейти. Теперь и в обычной паре, и при разделении это одинаковый элемент
- * с рамкой и шевроном: рамка и стрелка показывают, что по имени можно нажать.
- *
- * [onClick] = null — преподавателя нет в базе колледжа (например, ведёт только
- * замену). Такой остаётся обычным текстом: открывать по нему нечего, и делать
- * вид, что он нажимается, нельзя.
- */
 @Composable
 private fun TeacherChip(
     name: String,
@@ -885,7 +808,7 @@ private fun SubgroupPane(
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth()
         ) {
-            // Микро-бейдж подгруппы «1» или «2»
+
             Surface(
                 shape = CircleShape,
                 color = ColorBrandFill,
@@ -942,10 +865,6 @@ private fun SubgroupPane(
     }
 }
 
-/**
- * Ячейка дня на панели расписания: заголовок (СЕГОДНЯ / ЗАВТРА / ПОНЕДЕЛЬНИК) + дата.
- * Выбранная ячейка — заливка ColorTopBar с белым текстом, строгая геометрия 2px.
- */
 @Composable
 private fun DaySlotCell(
     title: String,

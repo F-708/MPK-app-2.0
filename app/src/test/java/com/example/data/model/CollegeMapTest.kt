@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** Этаж по номеру кабинета: 1xx — первый, 2xx — второй, 3xx и 4xx — общий план. */
 class CollegeMapTest {
 
     @Test
@@ -25,7 +24,7 @@ class CollegeMapTest {
 
     @Test
     fun `нестандартные кабинеты не привязываются к этажу наугад`() {
-        // Лучше показать все планы, чем отправить не на тот этаж
+
         assertNull(CollegeMap.floorForRoom(""))
         assertNull(CollegeMap.floorForRoom("спортзал"))
         assertNull(CollegeMap.floorForRoom("актовый зал"))

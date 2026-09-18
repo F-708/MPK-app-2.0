@@ -8,19 +8,8 @@ import com.example.ui.theme.AppTheme
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Резервная копия настроек и заданий в файл.
- *
- * Формат — JSON с номером версии. При чтении все поля берутся с значениями
- * по умолчанию, а незнакомые ключи игнорируются: файл, сохранённый более
- * старой версией приложения, обязан открыться в новой без потерь.
- *
- * Задания переносятся ВМЕСТЕ с группами — иначе при смене группы копия
- * оказалась бы пустой.
- */
 object BackupManager {
 
-    /** Версия формата. Поднимать только при несовместимом изменении структуры. */
     private const val FORMAT_VERSION = 1
 
     private const val KEY_VERSION = "version"
@@ -36,15 +25,6 @@ object BackupManager {
         val warnings: List<String>
     )
 
-    // -----------------------------------------------------------------------
-    // Экспорт
-    // -----------------------------------------------------------------------
-
-    /**
-     * Собирает содержимое резервной копии.
-     *
-     * @param includeTasks класть ли задания (настройки можно сохранить и отдельно)
-     */
     suspend fun buildBackup(context: Context, includeTasks: Boolean = true): String {
         val root = JSONObject()
         root.put(KEY_VERSION, FORMAT_VERSION)
@@ -70,8 +50,7 @@ object BackupManager {
     }
 
     private fun taskToJson(task: StudentTaskEntity): JSONObject = JSONObject().apply {
-        // id намеренно не сохраняем: при восстановлении база выдаст свои номера,
-        // иначе та же копия, залитая дважды, создала бы дубли с теми же id
+
         put("groupName", task.groupName)
         put("course", task.course)
         put("subjectName", task.subjectName)
@@ -83,18 +62,6 @@ object BackupManager {
         put("createdAt", task.createdAt)
     }
 
-    // -----------------------------------------------------------------------
-    // Импорт
-    // -----------------------------------------------------------------------
-
-    /**
-     * Восстанавливает данные из файла.
-     *
-     * Задания ДОБАВЛЯЮТСЯ к уже имеющимся, но одинаковые не
-     * дублируются: если такое же задание уже есть, оно пропускается.
-     * Так копию можно залить дважды без вреда и нельзя случайно
-     * стереть текущие записи неудачным файлом.
-     */
     suspend fun restoreBackup(
         context: Context,
         json: String
@@ -108,7 +75,6 @@ object BackupManager {
                 "Что удалось — восстановлено, остальное пропущено."
         }
 
-        // --- Настройки ---
         val settings = root.optJSONObject(KEY_SETTINGS)
         var groupRestored: String? = null
         var themeRestored = false
@@ -126,13 +92,12 @@ object BackupManager {
             WidgetUpdateHelper.setNotificationEnabled(context, settings.optBoolean("notificationsEnabled"))
         }
 
-        // --- Задания ---
         val dao = MpkDatabase.getInstance(context).taskDao()
         val array = root.optJSONArray(KEY_TASKS)
         var restored = 0
 
         if (array != null) {
-            // Ключ уже существующих заданий — чтобы не плодить дубли
+
             val existing = dao.getAllTasks()
                 .map { it.dedupeKey() }
                 .toHashSet()
@@ -179,14 +144,9 @@ object BackupManager {
     }
 }
 
-/**
- * Отпечаток задания для поиска дублей при восстановлении.
- * id не годится: после восстановления база выдаёт свои номера.
- */
 private fun StudentTaskEntity.dedupeKey(): String =
     listOf(groupName, subjectName, title, deadlineDate).joinToString("|").lowercase()
 
-/** Имя файла резервной копии с датой — чтобы копии не перезаписывали друг друга. */
 fun defaultBackupFileName(context: Context): String {
     val cal = java.util.Calendar.getInstance()
     val stamp = String.format(

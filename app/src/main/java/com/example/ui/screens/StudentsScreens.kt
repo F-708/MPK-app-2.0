@@ -69,7 +69,6 @@ import com.example.data.repository.TeachersRepository
 import com.example.data.repository.TeacherInsights
 import androidx.compose.material3.CircularProgressIndicator
 import com.example.ui.util.bouncyClickable
-import com.example.util.DebugClock
 import java.util.Calendar
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -78,10 +77,6 @@ private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
 private val ADMIN_GOLD = Color(0xFFE8C55A)
 
-/**
- * База данных учащихся (только admin-версия): поиск и фильтры
- * по всем 1703 учащимся колледжа.
- */
 @Composable
 fun StudentsDatabaseScreen(
     onBack: () -> Unit,
@@ -113,7 +108,7 @@ fun StudentsDatabaseScreen(
             .fillMaxSize()
             .background(ColorBgMain)
     ) {
-        // Шапка с кнопкой назад
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -173,7 +168,6 @@ fun StudentsDatabaseScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         )
 
-        // Фильтры: группы и курсы
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -306,12 +300,6 @@ private fun StudentRow(student: Student, onClick: () -> Unit) {
     }
 }
 
-/**
- * Карточка учащегося (admin): сведения, «где сейчас» и расписание его группы.
- *
- * Расписание группы подгружается с сайта при первом открытии карточки —
- * иначе для чужих групп (не выбранных в приложении) данных в кэше нет.
- */
 @Composable
 fun StudentCardScreen(
     student: Student,
@@ -320,7 +308,7 @@ fun StudentCardScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val now = remember { DebugClock.now() }
+    val now = remember { Calendar.getInstance() }
     val dow = remember {
         when (now.get(Calendar.DAY_OF_WEEK)) {
             Calendar.MONDAY -> 1
@@ -340,10 +328,9 @@ fun StudentCardScreen(
         .getAllLessonsForGroup(student.group)
         .collectAsState(initial = emptyList())
 
-    // --- Выбор дня: сегодня / завтра / календарь ---
     var dayMode by remember(student.group) { mutableStateOf(DayMode.TODAY) }
     var calendarDate by remember(student.group) { mutableStateOf<String?>(null) }
-    // Суббота и воскресенье -> понедельник (как ScheduleRepository.nextSchoolDay)
+
     val tomorrowDow = if (dow >= 6) 1 else dow + 1
 
     val todayLessons by scheduleRepository
@@ -363,12 +350,10 @@ fun StudentCardScreen(
         DayMode.CALENDAR -> calendarLessons
     }
 
-    // Даты, на которые есть сохранённое расписание группы
     val availableDates by scheduleRepository
         .getDistinctDates(student.group)
         .collectAsState(initial = emptyList())
 
-    // --- Автозагрузка расписания группы с сайта ---
     var isLoading by remember(student.group) { mutableStateOf(false) }
     var loadMessage by remember(student.group) { mutableStateOf("") }
     val scope = rememberCoroutineScope()
@@ -378,8 +363,7 @@ fun StudentCardScreen(
         isLoading = true
         loadMessage = ""
         scope.launch {
-            // Кнопка «Обновить» — ручное действие (force = true), автоподгрузка
-            // при открытии карточки — только то, чего ещё нет (force = false)
+
             val result = scheduleRepository.syncScheduleFromWeb(student.group, force = force)
             loadMessage = result.fold(
                 onSuccess = { count ->
@@ -393,19 +377,17 @@ fun StudentCardScreen(
     }
 
     LaunchedEffect(student.group) {
-        // Если для группы ещё нет данных — тихо подтягиваем с сайта
+
         if (!scheduleRepository.hasSchedule(student.group)) {
             loadSchedule(force = false)
         }
     }
 
-    // Преподаватели, которые ведут у этой группы (сопоставление с официальной базой)
     val teachers = remember { TeachersRepository(context).loadTeachers() }
     val insights = remember(teachers, allGroupLessons) {
         TeacherInsights(teachers, allGroupLessons)
     }
 
-    // «Где сейчас» всегда считается по СЕГОДНЯШНЕМУ дню, независимо от выбранного режима
     val currentLesson = remember(todayLessons, minutes) {
         val bells = CollegeBellSchedule.getBellsForDay(dow)
         val currentNum = bells.firstOrNull { minutes in it.startMinutes..it.endMinutes }?.lessonNumber
@@ -450,7 +432,7 @@ fun StudentCardScreen(
                     maxLines = 1
                 )
             }
-            // Ручное обновление расписания группы
+
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 border = BorderStroke(1.dp, ADMIN_ACCENT),
@@ -507,7 +489,7 @@ fun StudentCardScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Личные и учебные сведения
+
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -524,8 +506,6 @@ fun StudentCardScreen(
                         if (student.dormitory.isNotBlank()) InfoLine("Общежитие", student.dormitory)
                         if (student.curator.isNotBlank()) InfoLine("Куратор", student.curator)
 
-                        // Курс в базе выше, чем курсов у специальности: группа
-                        // в расписании не появится, поэтому предупреждаем сразу
                         if (student.courseMismatch) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
@@ -542,7 +522,6 @@ fun StudentCardScreen(
                 }
             }
 
-            // Где сейчас
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -644,7 +623,6 @@ fun StudentCardScreen(
                 }
             }
 
-            // Преподаватели, которые ведут у группы
             if (insights.activeNames.isNotEmpty()) {
                 item {
                     Text(
@@ -699,7 +677,6 @@ fun StudentCardScreen(
                 }
             }
 
-            // Предметы группы
             val subjects = allGroupLessons.map { it.subjectRaw }.filter { it.isNotBlank() }.distinct().sorted()
             if (subjects.isNotEmpty()) {
                 item {
@@ -728,7 +705,6 @@ fun StudentCardScreen(
                 }
             }
 
-            // Расписание группы: сегодня / завтра / календарь
             item {
                 Column {
                     Row(
@@ -777,7 +753,6 @@ fun StudentCardScreen(
                 }
             }
 
-            // Выбор даты — только в режиме календаря
             if (dayMode == DayMode.CALENDAR) {
                 if (availableDates.isEmpty()) {
                     item {
@@ -885,7 +860,6 @@ fun StudentCardScreen(
     }
 }
 
-/** Режим показа расписания в карточке ученика. */
 private enum class DayMode(val title: String) {
     TODAY("Сегодня"),
     TOMORROW("Завтра"),

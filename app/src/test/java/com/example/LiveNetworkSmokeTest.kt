@@ -7,10 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 
-/**
- * ЖИВОЙ сетевой тест: полный путь устройства (OkHttp -> сайт -> парсер) без Room/UI.
- * Пропускается, если хост недоступен из окружения (например, в CI).
- */
 class LiveNetworkSmokeTest {
 
     @Test

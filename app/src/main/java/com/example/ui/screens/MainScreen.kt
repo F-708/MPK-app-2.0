@@ -48,12 +48,6 @@ import com.example.ui.viewmodel.AppTab
 import com.example.ui.viewmodel.AppViewModel
 import kotlinx.coroutines.flow.collectLatest
 
-/**
- * Главный контейнер приложения «Мой Политех».
- *
- * Оптимизация: вкладки переключаются без AnimatedContent (мгновенно, без
- * двойной отрисовки), диагностика читается только внутри вкладки «Другое».
- */
 @Composable
 fun MainScreen(
     viewModel: AppViewModel,
@@ -71,18 +65,16 @@ fun MainScreen(
 
     val currentGroupInfo = uiState.groupInfo ?: GroupInfo(
         rawName = uiState.currentGroupName,
-        // Нейтральная заглушка: диалог выбора группы открыт и блокирует работу,
-        // поэтому подставлять сюда конкретную группу/курс нельзя.
+
         course = 0,
         groupNumber = 0,
         specialtyCode = 'О'
     )
 
-    // Обязательный выбор группы при первом входе (после установки/переустановки)
     if (uiState.showGroupSelection) {
         com.example.ui.components.GroupSelectionDialog(
             currentGroupName = uiState.currentGroupName,
-            onDismissRequest = { /* Выбор обязателен при первом входе — не закрываем */ },
+            onDismissRequest = {  },
             showClose = false,
             onGroupSelected = { newGroup -> viewModel.setGroup(newGroup) }
         )
@@ -154,7 +146,7 @@ fun MainScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Прямое переключение вкладок без анимации — максимум FPS
+
             when (uiState.currentTab) {
                 AppTab.SCHEDULE -> ScheduleScreen(
                     groupInfo = currentGroupInfo,
@@ -178,7 +170,6 @@ fun MainScreen(
     }
 }
 
-/** Вкладка «Другое»: диагностика читается здесь, а не на уровне всего приложения. */
 @Composable
 private fun CollegeTab(viewModel: AppViewModel, groupInfo: GroupInfo) {
     val diagnosticInfo by viewModel.diagnosticInfo.collectAsState()
@@ -186,7 +177,6 @@ private fun CollegeTab(viewModel: AppViewModel, groupInfo: GroupInfo) {
     CollegeScreen(
         groupInfo = groupInfo,
         scheduleRepository = viewModel.scheduleRepository,
-        diagnosticInfo = diagnosticInfo,
         onGroupChanged = { newGroup -> viewModel.setGroup(newGroup) },
         onRunConnectionTest = { viewModel.syncSchedule() },
         pendingTeacherName = pendingTeacher.pendingTeacherName,

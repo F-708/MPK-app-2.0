@@ -12,14 +12,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Комплексные тесты для Шага 4:
- * 1. Сканирование ссылок на страницы расписания и iframe Office Viewer.
- * 2. Парсинг бинарных потоков .doc (CP1251 и UTF-16LE).
- * 3. Деление пар на 2 кабинета («каб. 215 / каб. 308»).
- * 4. Точный расчет дат недели от Понедельника.
- * 5. Поведение кнопки быстрого перехода на следующий учебный день.
- */
 class Step4BugfixTest {
 
     private val CP1251 = Charset.forName("windows-1251")
@@ -58,7 +50,7 @@ class Step4BugfixTest {
 
     @Test
     fun testTwoRoomParsingVariations() {
-        // Вариант 1: «каб. 215 / каб. 308»
+
         val lesson1 = MpkScheduleParser.createLessonEntity(
             groupName = "41О",
             dayOfWeek = 1,
@@ -70,7 +62,6 @@ class Step4BugfixTest {
         assertEquals("215", lesson1.roomFirst)
         assertEquals("308", lesson1.roomSecond)
 
-        // Вариант 2: «каб. 101 - каб. 102»
         val lesson2 = MpkScheduleParser.createLessonEntity(
             groupName = "41О",
             dayOfWeek = 2,
@@ -82,7 +73,6 @@ class Step4BugfixTest {
         assertEquals("101", lesson2.roomFirst)
         assertEquals("102", lesson2.roomSecond)
 
-        // Вариант 3: «215 / 308»
         val lesson3 = MpkScheduleParser.createLessonEntity(
             groupName = "41О",
             dayOfWeek = 3,
@@ -97,7 +87,7 @@ class Step4BugfixTest {
 
     @Test
     fun testBinaryDocCp1251StreamParsing() {
-        // Симулируем бинарный поток .doc в кодировке CP1251
+
         val simulatedDocText = "Понедельник\n1 пара: 41О Охрана труда каб. 204 Ковалев В.П.\n2 пара: 41О ТОЭ ауд. 301 Смирнов Д.А."
         val bytes = simulatedDocText.toByteArray(CP1251)
 
@@ -111,7 +101,7 @@ class Step4BugfixTest {
 
     @Test
     fun testBinaryDocUtf16LeStreamParsing() {
-        // Симулируем бинарный поток .doc в кодировке UTF-16LE
+
         val simulatedDocText = "Вторник\n1 пара: 41О Математика каб. 105 Сидорова Е.Н."
         val bytes = simulatedDocText.toByteArray(Charsets.UTF_16LE)
 
@@ -128,18 +118,17 @@ class Step4BugfixTest {
         val locale = Locale.forLanguageTag("ru-BY")
         val cal = Calendar.getInstance(locale).apply {
             firstDayOfWeek = Calendar.MONDAY
-            set(2026, Calendar.SEPTEMBER, 15) // Вторник, 15 сентября 2026
+            set(2026, Calendar.SEPTEMBER, 15)
         }
 
-        val currentDayOfWeek = cal.get(Calendar.DAY_OF_WEEK) // Calendar.TUESDAY = 3
+        val currentDayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
         val daysFromMonday = if (currentDayOfWeek == Calendar.SUNDAY) 6 else currentDayOfWeek - Calendar.MONDAY
-        cal.add(Calendar.DAY_OF_MONTH, -daysFromMonday) // Переход на Понедельник 14 сентября 2026
+        cal.add(Calendar.DAY_OF_MONTH, -daysFromMonday)
 
         assertEquals(14, cal.get(Calendar.DAY_OF_MONTH))
         assertEquals(Calendar.SEPTEMBER, cal.get(Calendar.MONTH))
         assertEquals(2026, cal.get(Calendar.YEAR))
 
-        // Проверяем все 6 дней недели (Пн-Сб)
         val expectedDays = listOf(14, 15, 16, 17, 18, 19)
         for (i in 0..5) {
             val dayCal = (cal.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, i) }
@@ -149,14 +138,12 @@ class Step4BugfixTest {
 
     @Test
     fun testQuickNextDayButtonLogic() {
-        val course1Group = GroupParser.parse("11О")!! // 1 курс -> шестидневка
-        val course4Group = GroupParser.parse("41О")!! // 4 курс -> пятидневка
+        val course1Group = GroupParser.parse("11О")!!
+        val course4Group = GroupParser.parse("41О")!!
 
         assertTrue(course1Group.hasSaturdayClasses)
         assertFalse(course4Group.hasSaturdayClasses)
 
-        // В пятницу (день 5):
-        // 1 курс видит «Завтра (Сб)»
         val fridayBtnCourse1 = when {
             5 == 5 && course1Group.hasSaturdayClasses -> "Завтра (Сб)"
             5 == 5 && !course1Group.hasSaturdayClasses -> "Понедельник"
@@ -164,7 +151,6 @@ class Step4BugfixTest {
         }
         assertEquals("Завтра (Сб)", fridayBtnCourse1)
 
-        // 2-4 курсы видят «Понедельник»
         val fridayBtnCourse4 = when {
             5 == 5 && course4Group.hasSaturdayClasses -> "Завтра (Сб)"
             5 == 5 && !course4Group.hasSaturdayClasses -> "Понедельник"
@@ -172,14 +158,12 @@ class Step4BugfixTest {
         }
         assertEquals("Понедельник", fridayBtnCourse4)
 
-        // В субботу (день 6) или воскресенье: все видят «Понедельник»
         val saturdayBtn = when {
             6 == 6 -> "Понедельник"
             else -> "Завтра"
         }
         assertEquals("Понедельник", saturdayBtn)
 
-        // С понедельника по четверг (дни 1..4): «Завтра»
         val tuesdayBtn = when {
             2 == 5 && course4Group.hasSaturdayClasses -> "Завтра (Сб)"
             2 == 5 && !course4Group.hasSaturdayClasses -> "Понедельник"

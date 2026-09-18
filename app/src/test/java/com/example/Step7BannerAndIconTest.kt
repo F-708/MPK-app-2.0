@@ -15,11 +15,10 @@ class Step7BannerAndIconTest {
     @Test
     fun testDirectUrlGenerationForSpecificDate() {
         val networkClient = MpkNetworkClient()
-        
-        // Фиксируем календарь на вторник, 15 сентября 2026 года
+
         val cal = Calendar.getInstance(TimeZone.getTimeZone("GMT+3")).apply {
             set(Calendar.YEAR, 2026)
-            set(Calendar.MONTH, Calendar.SEPTEMBER) // 8 = Сентябрь в 0-based index
+            set(Calendar.MONTH, Calendar.SEPTEMBER)
             set(Calendar.DAY_OF_MONTH, 15)
             set(Calendar.HOUR_OF_DAY, 10)
         }
@@ -28,8 +27,7 @@ class Step7BannerAndIconTest {
         assertTrue(directUrls.isNotEmpty())
 
         val urlsOnly = directUrls.map { it.first }
-        
-        // Проверяем прямую ссылку для 15.09.2026
+
         val expectedDirectUrl = "https://guo-mpk.by/wp-content/uploads/2026/09/15.09.2026-raspisanie-uchashhihsya.doc"
         assertTrue(
             "Список URL должен содержать $expectedDirectUrl, получено: $urlsOnly",
@@ -40,7 +38,7 @@ class Step7BannerAndIconTest {
     @Test
     fun testEventUrlGenerationForSpecificDate() {
         val networkClient = MpkNetworkClient()
-        
+
         val cal = Calendar.getInstance(TimeZone.getTimeZone("GMT+3")).apply {
             set(Calendar.YEAR, 2026)
             set(Calendar.MONTH, Calendar.SEPTEMBER)

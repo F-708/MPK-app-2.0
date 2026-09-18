@@ -11,12 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
 
-/**
- * Тактильный модификатор упругого нажатия (bouncy click).
- *
- * При нажатии элемент мгновенно сжимается до scaleDown (по умолчанию 0.95f)
- * за 120ms без системных задержек.
- */
 fun Modifier.bouncyClickable(
     enabled: Boolean = true,
     scaleDown: Float = 0.95f,
@@ -38,7 +32,7 @@ fun Modifier.bouncyClickable(
         }
         .clickable(
             interactionSource = interactionSource,
-            indication = null, // Упругий scale заменяет серый ripple для мгновенного тактильного отклика
+            indication = null,
             enabled = enabled,
             onClick = onClick
         )

@@ -59,7 +59,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.GroupInfo
-import com.example.data.model.SyncDiagnosticInfo
 import com.example.data.repository.ScheduleRepository
 import com.example.data.repository.Student
 import com.example.data.repository.StudentsRepository
@@ -83,30 +82,24 @@ import com.example.ui.util.bouncyClickable
 import com.example.util.MpkCurriculum
 import java.util.Calendar
 
-/** Тёмно-золотая палитра админ-разделов. */
 private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
 private val ADMIN_GOLD = Color(0xFFE8C55A)
 
 private enum class OtherPage { MENU, SPECIALTY, TEACHERS, TEACHER_CARD, SETTINGS, STUDENTS, STUDENT_CARD, MAP }
 
-/**
- * Вкладка «Другое»: специальность, преподаватели, настройки, сайт колледжа.
- * В admin-версии дополнительно: база данных учащихся и поиск ученика.
- */
 @Composable
 fun CollegeScreen(
     groupInfo: GroupInfo,
     scheduleRepository: ScheduleRepository,
-    diagnosticInfo: SyncDiagnosticInfo,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit,
-    /** ФИО преподавателя для немедленного открытия (переход из расписания). */
+
     pendingTeacherName: String? = null,
     onPendingTeacherConsumed: () -> Unit = {},
-    /** Кабинет для немедленного показа на карте (переход из расписания). */
+
     pendingRoomName: String? = null,
-    /** Кабинет текущего урока — от него строится маршрут. */
+
     pendingFromRoomName: String? = null,
     onPendingRoomConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -116,11 +109,9 @@ fun CollegeScreen(
     var selectedTeacher by remember { mutableStateOf<Teacher?>(null) }
     val context = LocalContext.current
 
-    // Кабинет, который открывается на карте: приходит из расписания либо сбрасывается
     var mapRoom by remember { mutableStateOf(pendingRoomName) }
     var mapFromRoom by remember { mutableStateOf(pendingFromRoomName) }
 
-    // Переход из расписания: открываем карту сразу на нужном кабинете
     LaunchedEffect(pendingRoomName) {
         val room = pendingRoomName ?: return@LaunchedEffect
         mapRoom = room
@@ -129,7 +120,6 @@ fun CollegeScreen(
         onPendingRoomConsumed()
     }
 
-    // Переход из расписания: открываем карточку нужного преподавателя
     LaunchedEffect(pendingTeacherName) {
         val name = pendingTeacherName ?: return@LaunchedEffect
         val all = TeachersRepository(context).loadTeachers()
@@ -157,7 +147,7 @@ fun CollegeScreen(
                 onOpenTeachers = { page = OtherPage.TEACHERS },
                 onOpenSettings = { page = OtherPage.SETTINGS },
                 onOpenStudents = { page = OtherPage.STUDENTS },
-                // Из меню карта открывается без маршрута: кабинет просто подсветится
+
                 onOpenMap = { mapRoom = null; mapFromRoom = null; page = OtherPage.MAP }
             )
             OtherPage.SPECIALTY -> MySpecialtyPage(groupInfo) { page = OtherPage.MENU }
@@ -194,7 +184,6 @@ fun CollegeScreen(
             )
             OtherPage.SETTINGS -> SettingsPage(
                 groupInfo = groupInfo,
-                diagnosticInfo = diagnosticInfo,
                 onGroupChanged = onGroupChanged,
                 onRunConnectionTest = onRunConnectionTest,
                 onBack = { page = OtherPage.MENU }
@@ -221,7 +210,7 @@ fun CollegeScreen(
                         onOpenTeachers = { page = OtherPage.TEACHERS },
                         onOpenSettings = { page = OtherPage.SETTINGS },
                         onOpenStudents = { page = OtherPage.STUDENTS },
-                        // Из меню карта открывается без маршрута: кабинет просто подсветится
+
                 onOpenMap = { mapRoom = null; mapFromRoom = null; page = OtherPage.MAP }
                     )
                 }
@@ -229,10 +218,6 @@ fun CollegeScreen(
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Список разделов
-// ---------------------------------------------------------------------------
 
 @Composable
 private fun OtherMenu(
@@ -255,7 +240,7 @@ private fun OtherMenu(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (isAdmin) {
-                // === Админ-разделы (тёмно-золотой стиль) ===
+
                 item {
                     AdminMenuCard(
                         icon = { Icon(Icons.Default.AdminPanelSettings, null, tint = ADMIN_GOLD, modifier = Modifier.size(20.dp)) },
@@ -381,7 +366,6 @@ private fun MenuCard(
     }
 }
 
-/** Админская карточка: тёмно-золотой стиль с бейджем ADMIN. */
 @Composable
 private fun AdminMenuCard(
     icon: @Composable () -> Unit,
@@ -455,14 +439,9 @@ private fun AdminMenuCard(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Страница настроек (встроенный SettingsScreen с шапкой «Назад»)
-// ---------------------------------------------------------------------------
-
 @Composable
 private fun SettingsPage(
     groupInfo: GroupInfo,
-    diagnosticInfo: SyncDiagnosticInfo,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit,
     onBack: () -> Unit
@@ -502,16 +481,11 @@ private fun SettingsPage(
 
         SettingsScreen(
             groupInfo = groupInfo,
-            diagnosticInfo = diagnosticInfo,
             onGroupChanged = onGroupChanged,
             onRunConnectionTest = onRunConnectionTest
         )
     }
 }
-
-// ---------------------------------------------------------------------------
-// Под-экран «Моя специальность»
-// ---------------------------------------------------------------------------
 
 @Composable
 private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
@@ -569,7 +543,6 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
                 return@LazyColumn
             }
 
-            // Отсек 1: специальность, код, квалификация
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -637,7 +610,6 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
                 }
             }
 
-            // Отсек 2: рабочие профессии
             if (specialty.workerProfessions.isNotEmpty()) {
                 item { SectionLabel("РАБОЧИЕ ПРОФЕССИИ") }
                 items(specialty.workerProfessions) { profession ->
@@ -659,7 +631,6 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
                 }
             }
 
-            // Отсек 3: предметы по курсам
             item { SectionLabel("ПРЕДМЕТЫ ПО КУРСАМ") }
             item {
                 Row(
@@ -701,8 +672,7 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
             }
 
             val subjects = specialty.subjectsByCourse[selectedCourse].orEmpty()
-            // Курсы, по которым достоверного перечня нет (например, 3-й курс Маркетинга):
-            // вместо пустого списка честная пометка, а не выдуманные предметы
+
             val isIncomplete = selectedCourse in specialty.incompleteCourses
             if (isIncomplete) {
                 item {
@@ -765,11 +735,6 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Под-экран «Преподаватели» (101 сотрудник + активные из расписания группы)
-// ---------------------------------------------------------------------------
-
-/** Строка списка преподавателей: пустая = заголовок-разделитель. */
 private sealed interface TeacherRow {
     data class Header(val title: String) : TeacherRow
     data class Item(val teacher: Teacher) : TeacherRow
@@ -786,7 +751,6 @@ private fun TeachersPage(
     val repository = remember { TeachersRepository(context) }
     val teachers = remember { repository.loadTeachers() }
 
-    // Все известные уроки группы (все даты в кэше) — для активных преподавателей
     val allLessons by scheduleRepository
         .getAllLessonsForGroup(groupInfo.canonicalName)
         .collectAsState(initial = emptyList())
@@ -921,10 +885,6 @@ private fun TeachersPage(
     }
 }
 
-/**
- * Карточка преподавателя в списке.
- * Если кабинета нет ни в базе, ни в расписании — строка про кабинет не выводится.
- */
 @Composable
 private fun TeacherCard(
     teacher: Teacher,
@@ -992,7 +952,6 @@ private fun TeacherCard(
                     )
                 }
 
-                // Кабинет: личный из базы, иначе — из расписания; нет данных — строку не показываем
                 val roomText = when {
                     teacher.room.isNotBlank() -> "каб. ${teacher.room}"
                     roomsFromSchedule.isNotEmpty() -> "каб. ${roomsFromSchedule.take(3).joinToString(", ")}"
@@ -1020,7 +979,6 @@ private fun TeacherCard(
     }
 }
 
-/** Фото преподавателя (или инициалы, если снимка нет). */
 @Composable
 private fun TeacherAvatar(
     teacher: Teacher,
@@ -1033,8 +991,7 @@ private fun TeacherAvatar(
         coil.compose.AsyncImage(
             model = "file:///android_asset/teachers_photos/" + teacher.photo,
             contentDescription = teacher.name,
-            // Фото вертикальные (соотношение от 0,53 до 1,3), поэтому при обрезке
-            // в квадрат прижимаем к верху — иначе срезается лицо.
+
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             alignment = Alignment.TopCenter,
             modifier = modifier
@@ -1059,10 +1016,6 @@ private fun TeacherAvatar(
     }
 }
 
-/**
- * Обёртка карточки преподавателя: собирает производные данные
- * (кабинеты, дисциплины, активность) из расписания группы.
- */
 @Composable
 private fun TeacherCardPageWrapper(
     teacher: Teacher,
@@ -1089,11 +1042,6 @@ private fun TeacherCardPageWrapper(
     )
 }
 
-/**
- * Полноэкранная карточка преподавателя: крупный портрет и разделы
- * «Контакты и кабинет», «О преподавателе», «Дисциплины», «У вашей группы»
- * и «Расписание» (сегодня / завтра / любой день).
- */
 @Composable
 private fun TeacherCardPage(
     teacher: Teacher,
@@ -1107,7 +1055,7 @@ private fun TeacherCardPage(
     val tabs = listOf("О преподавателе", "Расписание")
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Шапка с портретом
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1158,7 +1106,6 @@ private fun TeacherCardPage(
                 .background(ColorDividerLight)
         )
 
-        // Под-вкладки
         androidx.compose.foundation.lazy.LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -1201,14 +1148,6 @@ private fun TeacherCardPage(
     }
 }
 
-/**
- * Вкладка «О преподавателе»: фото, сведения, дисциплины, контакты и связь с группой.
- *
- * Раньше это были четыре отдельные под-вкладки по паре строк в каждой —
- * переключателей больше, чем содержимого. Теперь всё в одном списке.
- *
- * Блок «Контакты» не показывается вовсе, если контактов нет.
- */
 @Composable
 private fun AboutTeacherTab(
     teacher: Teacher,
@@ -1222,7 +1161,7 @@ private fun AboutTeacherTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Портрет — целиком, без обрезки
+
         item {
             Surface(
                 shape = RoundedCornerShape(2.dp),
@@ -1240,8 +1179,7 @@ private fun AboutTeacherTab(
                         coil.compose.AsyncImage(
                             model = "file:///android_asset/teachers_photos/" + teacher.photo,
                             contentDescription = teacher.name,
-                            // Никакой обрезки: фото разной высоты (от 676x1280 до 650x500),
-                            // при Crop лица обрезались. Fit показывает снимок целиком.
+
                             contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                             modifier = Modifier
                                 .width(180.dp)
@@ -1269,7 +1207,6 @@ private fun AboutTeacherTab(
             }
         }
 
-        // Сведения из базы
         item {
             Surface(
                 shape = RoundedCornerShape(2.dp),
@@ -1297,12 +1234,11 @@ private fun AboutTeacherTab(
             }
         }
 
-        // Дисциплины
         item { SectionLabel("ПРЕПОДАВАЕМЫЕ ДИСЦИПЛИНЫ") }
         if (teacher.subjects.isBlank()) {
             item { EmptyCard(text = "Перечень дисциплин в базе не заполнен") }
         } else {
-            // Дисциплины в базе перечислены через запятую или точку с запятой
+
             val list = teacher.subjects
                 .split(';', ',')
                 .map { it.trim() }
@@ -1323,8 +1259,6 @@ private fun AboutTeacherTab(
             }
         }
 
-        // Контакты — только когда они действительно есть,
-        // иначе блок не показываем вовсе — пустая заголовком карточка не нужна
         val hasContacts = teacher.room.isNotBlank() || teacher.phone.isNotBlank() || teacher.email.isNotBlank()
         if (hasContacts) {
             item {
@@ -1345,7 +1279,6 @@ private fun AboutTeacherTab(
             }
         }
 
-        // Связь с выбранной группой
         if (!isActive) {
             item {
                 EmptyCard(
@@ -1378,17 +1311,12 @@ private fun AboutTeacherTab(
     }
 }
 
-/**
- * Вкладка «Расписание» преподавателя: сегодня, завтра или произвольная дата.
- * Документ расписания преподавателей скачивается с сайта колледжа по дате.
- */
 @Composable
 private fun TeacherScheduleTab(teacher: Teacher) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val client = remember { com.example.data.network.MpkNetworkClient() }
 
-    // Смещение от сегодняшнего дня: 0 = сегодня, 1 = завтра, дальше по календарю
     var dayOffset by rememberSaveable { mutableIntStateOf(0) }
     var showCalendar by remember { mutableStateOf(false) }
     var customDate by remember { mutableStateOf<Calendar?>(null) }
@@ -1396,16 +1324,14 @@ private fun TeacherScheduleTab(teacher: Teacher) {
     var errorMessage by remember { mutableStateOf("") }
     var slots by remember { mutableStateOf<List<com.example.data.network.TeacherSlot>>(emptyList()) }
 
-    // Кэш разобранных расписаний по дате — чтобы не качать один день дважды
     val cache = remember { mutableMapOf<String, Map<String, List<com.example.data.network.TeacherSlot>>>() }
 
     val targetCalendar = remember(dayOffset, customDate) {
-        customDate ?: (com.example.util.DebugClock.now(context).clone() as Calendar).apply {
+        customDate ?: (java.util.Calendar.getInstance().clone() as Calendar).apply {
             add(Calendar.DAY_OF_YEAR, dayOffset)
         }
     }
 
-    // Фамилия нужна для поиска в разобранном документе
     val surname = remember(teacher.name) {
         com.example.data.repository.TeacherInsights.surnameOf(teacher.name)
     }
@@ -1465,7 +1391,7 @@ private fun TeacherScheduleTab(teacher: Teacher) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Переключатель дней: Сегодня / Завтра / Календарь
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1633,7 +1559,6 @@ private fun TeacherScheduleTab(teacher: Teacher) {
     }
 }
 
-/** Кнопка выбора дня в расписании преподавателя. */
 @Composable
 private fun DayChip(
     title: String,
@@ -1662,9 +1587,6 @@ private fun DayChip(
         }
     }
 }
-// ---------------------------------------------------------------------------
-// Общие элементы
-// ---------------------------------------------------------------------------
 
 @Composable
 private fun SubPageBackButton(onBack: () -> Unit) {
@@ -1687,10 +1609,6 @@ private fun SubPageBackButton(onBack: () -> Unit) {
     }
 }
 
-/**
- * Шапка подстраницы «Другого»: стрелка назад и заголовок.
- * Нужна страницам, у которых нет портрета или своей раскладки шапки.
- */
 @Composable
 private fun SubPageHeader(title: String, onBack: () -> Unit) {
     Row(

@@ -12,15 +12,6 @@ import com.example.data.local.entity.LessonEntity
 import com.example.data.model.CollegeBellSchedule
 import com.example.util.SubjectFormatter
 
-/**
- * Виджет «Сейчас и дальше» (2x3) — малая версия расписания.
- *
- * Отвечает на один вопрос: что идёт прямо сейчас и что будет следующим.
- * Полное расписание дня — в отдельном большом виджете.
- *
- * Если сейчас перемена или уроков ещё нет — в блоке «СЕЙЧАС» показываем
- * ближайшее, а не пустую строку: виджет должен быть полезен в любой момент дня.
- */
 class NowNextWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
@@ -56,7 +47,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             val lessons = WidgetData.todayLessons(context)
 
             val current = lessons.firstOrNull { now in it.startMinutes()..it.endMinutes() }
-            // «Дальше» — следующий урок после текущего, либо первый, который ещё не начался
+
             val next = when {
                 current != null -> lessons.firstOrNull { it.lessonNumber > current.lessonNumber }
                 else -> lessons.firstOrNull { it.startMinutes() > now }
@@ -67,7 +58,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.tv_now_subject, SubjectFormatter.getShortName(current.subjectRaw))
                 views.setTextViewText(R.id.tv_now_details, detailsOf(current, showRoom))
             } else {
-                // Перемена или до начала занятий: не оставляем пустоту
+
                 views.setTextViewText(
                     R.id.tv_now_label,
                     if (lessons.isEmpty()) "СЕГОДНЯ" else "СЕЙЧАС"
@@ -103,8 +94,6 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             return views
         }
 
-        /** «08:15–09:00 • каб. 214»; кабинет не пишем, если его нет. */
-        /** «08:15–09:00 • каб. 214»; кабинет — если он есть и включён в настройках. */
         private fun detailsOf(lesson: LessonEntity, showRoom: Boolean): String {
             val time = "${lesson.timeStart}–${lesson.timeEnd}"
             if (!showRoom) return time
@@ -116,17 +105,15 @@ class NowNextWidgetProvider : AppWidgetProvider() {
     }
 }
 
-/** Общие данные для виджетов: время, звонки, уроки группы на сегодня. */
 object WidgetData {
 
     fun minuteOfDay(context: Context): Int {
-        val cal = com.example.util.DebugClock.now(context)
+        val cal = java.util.Calendar.getInstance()
         return cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
     }
 
-    /** День недели 1..7 (1 — понедельник). */
     fun dayOfWeek(context: Context): Int =
-        when (com.example.util.DebugClock.now(context).get(java.util.Calendar.DAY_OF_WEEK)) {
+        when (java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK)) {
             java.util.Calendar.MONDAY -> 1
             java.util.Calendar.TUESDAY -> 2
             java.util.Calendar.WEDNESDAY -> 3
@@ -136,12 +123,6 @@ object WidgetData {
             else -> 7
         }
 
-    /**
-     * Уроки выбранной группы на сегодня, по возрастанию номера.
-     *
-     * Из базы могут прийти уроки разных дат (архив), поэтому оставляем только
-     * самую свежую: сначала записи с датой, при её отсутствии — без даты.
-     */
     fun todayLessons(context: Context): List<LessonEntity> {
         val group = WidgetUpdateHelper.getSelectedGroup(context)
         if (group.isBlank()) return emptyList()
@@ -162,7 +143,6 @@ object WidgetData {
         }
     }
 
-    /** «Перемена до 10:20» — если сейчас перемена; иначе null. */
     fun breakInfo(context: Context, minute: Int): String? {
         val bells = CollegeBellSchedule.getBellsForDay(dayOfWeek(context))
         val bell = bells.firstOrNull {
@@ -174,7 +154,6 @@ object WidgetData {
     }
 }
 
-/** Минуты от полуночи для времени урока «08:15». */
 internal fun LessonEntity.startMinutes(): Int = parseHhMm(timeStart)
 internal fun LessonEntity.endMinutes(): Int = parseHhMm(timeEnd)
 

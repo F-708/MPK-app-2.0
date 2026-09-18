@@ -9,9 +9,6 @@ import androidx.room.Update
 import com.example.data.local.entity.StudentTaskEntity
 import kotlinx.coroutines.flow.Flow
 
-/**
- * DAO для студенческих заданий.
- */
 @Dao
 interface TaskDao {
 
@@ -24,7 +21,6 @@ interface TaskDao {
     @Query("SELECT * FROM student_tasks WHERE groupName = :groupName AND isCompleted = 0 ORDER BY deadlineDate ASC")
     fun getPendingTasksForGroup(groupName: String): Flow<List<StudentTaskEntity>>
 
-    /** Все задания всех групп — для резервной копии. */
     @Query("SELECT * FROM student_tasks ORDER BY id ASC")
     suspend fun getAllTasks(): List<StudentTaskEntity>
 

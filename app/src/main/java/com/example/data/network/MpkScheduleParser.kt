@@ -13,50 +13,26 @@ import java.util.zip.ZipInputStream
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
-/**
- * Структура ссылки на запись расписания на сайте колледжа.
- */
 data class SchedulePostLink(
     val url: String,
     val title: String,
     val dateString: String = ""
 )
 
-/**
- * Статистика последнего парсинга — для панели диагностики в настройках.
- * Показывает, в каком формате пришел документ и какая стратегия сработала.
- */
 data class ParseStats(
-    val format: String = "",      // doc-utf16 / doc-cp1251 / docx / html / text
-    val strategy: String = "",    // grid / cells / line / docx-xml
+    val format: String = "",
+    val strategy: String = "",
     val runsExtracted: Int = 0,
     val groupFound: Boolean = false,
     val wasHtml: Boolean = false,
-    /** Ошибки стратегий разбора: «grid:IllegalState...; cells:...» — пусто, если всё чисто */
+
     val parseError: String = "",
-    /** Первые символы извлечённого текста — видно, что именно видит парсер */
+
     val textPreview: String = ""
 )
 
-/**
- * Парсер расписания занятий ГУО «МГПК» с официального сайта guo-mpk.by.
- *
- * Архитектурные возможности:
- * 1. Сканирование главной страницы https://guo-mpk.by/raspisanie/ для поиска записей дат
- * 2. Извлечение ссылок из <iframe src="view.officeapps.live.com/op/embed.aspx?src=..."> с декодированием URL
- * 3. Отказоустойчивый потоковый экстрактор текста из бинарных файлов .doc (Word 97-2004 OLE2) в UTF-16LE и CP1251
- * 4. Парсинг современных .docx через ZipInputStream и word/document.xml
- * 5. ТРИ стратегии разбора текста, от точной к грубой:
- *    a) grid  — таблица с разделителями │ / | / таб (эталонный формат документов сайта)
- *    b) cells — позиционное восстановление по пронумерованным ячейкам БЕЗ разделителей
- *         (страховка на случай любых искажений текста: работают даже если рамки потеряны)
- *    c) line  — построчный разбор произвольного текста (вставка из Telegram и т.п.)
- * 6. Распознавание 2 подгрупп и 2 кабинетов (каб. 215 / каб. 308) с разметкой 50/50
- * 7. Нормализация дисциплин строго по MpkCurriculum через SubjectFormatter.normalize()
- */
 object MpkScheduleParser {
 
-    /** Статистика последнего вызова parseFile/parsePlainTextSchedule (для диагностики). */
     @Volatile
     var lastParseStats: ParseStats = ParseStats()
 
@@ -96,14 +72,10 @@ object MpkScheduleParser {
         "([0-3]?[0-9])[.\\-/]([0-1]?[0-9])[.\\-/](202[0-9])"
     )
 
-    /**
-     * Шаг А: Сканирует HTML / JSON главной страницы расписания и находит ссылки на события дат.
-     */
     fun findSchedulePostLinks(html: String, baseUrl: String = "https://guo-mpk.by/"): List<SchedulePostLink> {
         val result = mutableListOf<SchedulePostLink>()
         val seenUrls = mutableSetOf<String>()
 
-        // 1. Поиск ссылок в HTML тегах <a href="...">
         POST_LINK_REGEX.findAll(html).forEach { match ->
             val rawUrl = match.groupValues[1].trim()
             val rawTitle = match.groupValues[2].replace(Regex("<[^>]+>"), " ").trim()
@@ -130,7 +102,6 @@ object MpkScheduleParser {
             }
         }
 
-        // 2. Поиск ссылок в JSON ответах WordPress REST API ("link": "...")
         Regex("\"link\"\\s*:\\s*\"([^\"]+)\"").findAll(html).forEach { match ->
             val rawUrl = match.groupValues[1].replace("\\/", "/")
             val absoluteUrl = resolveAbsoluteUrl(baseUrl, rawUrl)
@@ -157,14 +128,9 @@ object MpkScheduleParser {
         return result
     }
 
-    /**
-     * Шаг Б: Загружает HTML / JSON страницы и извлекает все ссылки на документы (.doc / .docx / uploads).
-     * Поддерживает декодирование iframe с view.officeapps.live.com, drive.google.com, тегов <a> и JSON source_url.
-     */
     fun extractDocumentUrls(html: String, baseUrl: String = "https://guo-mpk.by/"): List<String> {
         val urls = mutableSetOf<String>()
 
-        // 1. Проверяем iframe со встроенным Office Viewer (view.officeapps.live.com/op/embed.aspx?src=...)
         IFRAME_SRC_REGEX.findAll(html).forEach { match ->
             val iframeSrc = match.groupValues[1]
             OFFICE_VIEWER_SRC_REGEX.find(iframeSrc)?.let { officeMatch ->
@@ -178,7 +144,6 @@ object MpkScheduleParser {
             }
         }
 
-        // 2. Прямые ссылки на .doc / .docx файлы в тексте / HTML (исключая ссылки просмотрщиков)
         Regex("(?i)(?:href|src|data-src|data-href)=[\"']([^\"']+\\.(?:docx|doc)(?:\\?[^\"']*)?)[\"']").findAll(html).forEach { match ->
             val link = match.groupValues[1]
             if (!link.contains("officeapps.live.com") && !link.contains("docs.google.com")) {
@@ -186,13 +151,11 @@ object MpkScheduleParser {
             }
         }
 
-        // 3. Ссылки в JSON (source_url, guid) WordPress
         Regex("(?i)\"(?:source_url|guid|url)\"\\s*:\\s*\"([^\"]+\\.(?:docx|doc)[^\"]*)\"").findAll(html).forEach { match ->
             val link = match.groupValues[1].replace("\\/", "/")
             urls.add(resolveAbsoluteUrl(baseUrl, link))
         }
 
-        // 4. Ссылки на файлы в блоках wp-content/uploads
         Regex("(?i)https?://[a-zA-Z0-9.-]+/wp-content/uploads/[a-zA-Z0-9/_.-]+\\.(?:doc|docx)").findAll(html).forEach { match ->
             urls.add(match.value)
         }
@@ -200,9 +163,6 @@ object MpkScheduleParser {
         return urls.toList()
     }
 
-    /**
-     * Универсальный метод парсинга файла: автоматически определяет формат (.docx vs .doc vs HTML) и разбирает данные.
-     */
     fun parseFile(
         bytes: ByteArray,
         targetGroup: String,
@@ -210,7 +170,6 @@ object MpkScheduleParser {
     ): List<LessonEntity> {
         if (bytes.isEmpty()) return emptyList()
 
-        // 0. Если сайт вернул HTML-страницу вместо документа (ошибка/защита) — честно фиксируем это
         val head = String(bytes.copyOfRange(0, minOf(600, bytes.size)), Charsets.UTF_8)
             .lowercase(Locale.ROOT)
         if (head.contains("<!doctype html") || head.contains("<html")) {
@@ -218,25 +177,20 @@ object MpkScheduleParser {
             return emptyList()
         }
 
-        // 1. Проверяем сигнатуру ZIP (DOCX: 50 4B 03 04)
         if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte() && bytes[2] == 0x03.toByte() && bytes[3] == 0x04.toByte()) {
             resetStats("docx")
             val docxLessons = parseDocx(ByteArrayInputStream(bytes), targetGroup, targetDate)
             if (docxLessons.isNotEmpty()) return docxLessons
         }
 
-        // 2. Бинарный Word 97-2004 (.doc OLE2) потоковый экстрактор
         resetStats("doc")
         val docLessons = parseDocBinary(bytes, targetGroup, targetDate)
         if (docLessons.isNotEmpty()) return docLessons
 
-        // Для настоящего бинарного OLE2 .doc текстовые фолбэки бессмысленны (обе кодировки
-        // уже опробованы в parseDocBinary) — сохраняем статистику doc-этапа, включая ошибки
         val isOleDoc = bytes.size >= 4 && bytes[0] == 0xD0.toByte() && bytes[1] == 0xCF.toByte() &&
             bytes[2] == 0x11.toByte() && bytes[3] == 0xE0.toByte()
         if (isOleDoc) return emptyList()
 
-        // 3. Fallback: разбор как плоского текста в UTF-8 / CP1251
         resetStats("text")
         val textUtf8 = String(bytes, Charsets.UTF_8)
         val textLessons = runCatching { parsePlainTextSchedule(textUtf8, targetGroup, targetDate) }
@@ -259,14 +213,6 @@ object MpkScheduleParser {
             .getOrDefault(emptyList())
     }
 
-    /**
-     * Шаг В: Отказоустойчивый потоковый экстрактор текста из бинарных файлов .doc (Word 97-2004 OLE2).
-     *
-     * Современные документы guo-mpk.by хранят текст таблицы в UTF-16LE (с символами рамок │─┬┴),
-     * поэтому UTF-16 извлекается ПЕРВЫМ. CP1251 — запасной путь для старых файлов (подход МПК v1):
-     * он запускается только если в UTF-16 ничего не нашлось, чтобы бинарный мусор
-     * OLE2-контейнера не засорял текст и не ломал определение дня недели.
-     */
     fun parseDocBinary(
         bytes: ByteArray,
         targetGroup: String,
@@ -286,8 +232,6 @@ object MpkScheduleParser {
             if (utf16Lessons.isNotEmpty()) return utf16Lessons
         }
 
-        // Запасная кодировка для старых файлов. ВАЖНО: статистику основного (UTF-16) этапа
-        // не затираем, если CP1251 ничего не дал — иначе диагностика теряет главные улики.
         val utf16Stats = lastParseStats.copy()
         val cp1251Runs = extractCp1251Runs(bytes)
         lastParseStats = lastParseStats.copy(format = "doc-cp1251", runsExtracted = cp1251Runs.size)
@@ -302,7 +246,7 @@ object MpkScheduleParser {
                 .getOrDefault(emptyList())
             if (cp1251Lessons.isNotEmpty()) return cp1251Lessons
         }
-        // Ничего не нашли: возвращаем статистику UTF-16 этапа (она информативнее)
+
         if (lastParseStats.parseError.isBlank() && lastParseStats.textPreview.isBlank()) {
             lastParseStats = utf16Stats
         } else if (utf16Stats.textPreview.isNotBlank()) {
@@ -315,24 +259,21 @@ object MpkScheduleParser {
         return emptyList()
     }
 
-    /**
-     * Извлекает непрерывные последовательности печатных символов CP1251.
-     */
     private fun extractCp1251Runs(bytes: ByteArray): List<String> {
         val runs = mutableListOf<String>()
         val buffer = mutableListOf<Byte>()
 
         for (b in bytes) {
             val unsigned = b.toInt() and 0xFF
-            // Символы: пробелы, табы, переводы строк, ячейка Word (0x07), печатный ASCII (0x20..0x7E), CP1251 кириллица (0x80..0xFF)
+
             val isValid = (unsigned in 0x20..0x7E) ||
-                    (unsigned in 0xC0..0xFF) || // Кириллица А..я
-                    unsigned == 0xA8 || unsigned == 0xB8 || // Ё, ё
+                    (unsigned in 0xC0..0xFF) ||
+                    unsigned == 0xA8 || unsigned == 0xB8 ||
                     unsigned == 0x09 || unsigned == 0x0A || unsigned == 0x0D || unsigned == 0x07
 
             if (isValid) {
                 if (unsigned == 0x07) {
-                    // Разделитель ячейки в Word 97
+
                     buffer.add(0x09.toByte())
                 } else {
                     buffer.add(b)
@@ -356,10 +297,6 @@ object MpkScheduleParser {
         return runs
     }
 
-    /**
-     * Извлекает последовательности UTF-16LE.
-     * Публичный для тестов: позволяет эмулировать потерю символов рамок.
-     */
     fun extractUtf16LeRuns(bytes: ByteArray): List<String> {
         val runs = mutableListOf<String>()
         val buffer = mutableListOf<Byte>()
@@ -369,13 +306,9 @@ object MpkScheduleParser {
             val b0 = bytes[i].toInt() and 0xFF
             val b1 = bytes[i + 1].toInt() and 0xFF
 
-            // ASCII в UTF-16LE: b1 == 0, b0 in 0x20..0x7E / 0x09 / 0x0A / 0x0D / 0x07
-            // Кириллица в UTF-16LE: b1 == 4, b0 in 0x00..0xFF (U+0400..U+04FF)
             val isAscii = b1 == 0 && ((b0 in 0x20..0x7E) || b0 == 0x09 || b0 == 0x0A || b0 == 0x0D || b0 == 0x07)
             val isCyrillic = (b1 == 4 && b0 in 0x00..0x5F) || (b1 == 4 && (b0 == 0x01 || b0 == 0x51))
-            // Символы рамок таблицы Word (U+2500..U+25FF: │ ─ ┬ ┴ ├ ┤ ┌ ┐ └ ┘).
-            // КРИТИЧНО: без них таблица расписания guo-mpk.by рассыпается на отдельные
-            // ячейки без разделителей, и колонка группы теряется.
+
             val isBoxDrawing = b1 == 0x25
 
             if (isAscii || isCyrillic || isBoxDrawing) {
@@ -390,9 +323,7 @@ object MpkScheduleParser {
             } else {
                 if (buffer.size >= 6) {
                     val decoded = String(buffer.toByteArray(), Charsets.UTF_16LE)
-                    // Пустые (пробельные) последовательности — это ПУСТЫЕ ЯЧЕЙКИ таблицы:
-                    // сохраняем их как маркеры, чтобы колонки групп не съезжали при
-                    // позиционном восстановлении таблицы без рамок.
+
                     if (decoded.any { it in 'А'..'я' || it in 'A'..'z' || it in '0'..'9' } ||
                         decoded.length >= 6 && decoded.all { it.isWhitespace() }
                     ) {
@@ -412,9 +343,6 @@ object MpkScheduleParser {
         return runs
     }
 
-    /**
-     * Шаг Г: Парсинг DOCX файла (через распаковку word/document.xml).
-     */
     fun parseDocx(
         inputStream: InputStream,
         targetGroup: String,
@@ -440,9 +368,6 @@ object MpkScheduleParser {
         return parseDocxXml(documentXml, targetGroup, targetDate)
     }
 
-    /**
-     * Парсинг XML разметки документа Word (таблицы расписания).
-     */
     fun parseDocxXml(
         xmlContent: String,
         targetGroup: String,
@@ -521,9 +446,6 @@ object MpkScheduleParser {
         return lessons
     }
 
-    /**
-     * Парсинг двумерной таблицы из строк ячеек.
-     */
     private fun parseTableData(
         rows: List<List<String>>,
         targetGroup: String,
@@ -588,9 +510,6 @@ object MpkScheduleParser {
         return result
     }
 
-    /**
-     * Поиск номера урока в строке (документы МГПК нумеруют занятия уроками 1..10).
-     */
     private fun detectLessonNumber(row: List<String>): Int? {
         for (cell in row.take(3)) {
             val trimmed = cell.trim()
@@ -607,9 +526,6 @@ object MpkScheduleParser {
         return null
     }
 
-    /**
-     * Разбирает текст расписания (из .doc/.docx/plain text/таблицы псевдографики).
-     */
     fun parsePlainTextSchedule(
         text: String,
         targetGroup: String,
@@ -620,7 +536,6 @@ object MpkScheduleParser {
         val cleanTargetGroup = GroupParser.cleanRawGroupName(targetGroup).uppercase(Locale.ROOT)
         val lines = text.lines().map { it.trimEnd() }
 
-        // 1. Извлекаем глобальные метаданные даты и дня недели из заголовка или тела документа
         var detectedDay = 1
         var detectedDate = targetDate
 
@@ -659,9 +574,7 @@ object MpkScheduleParser {
                         monthWord.startsWith("дек") -> "12"
                         else -> "09"
                     }
-                    // Год берём текущий, а не зашитый: раньше стояло «2026»,
-                    // и с 2027 года даты без года считались бы устаревшими —
-                    // чистка архива удаляла бы действующее расписание.
+
                     val thisYear = java.util.Calendar.getInstance()
                         .get(java.util.Calendar.YEAR).toString()
                     val y = textMonthMatch.groupValues.getOrNull(3)?.ifBlank { thisYear } ?: thisYear
@@ -670,14 +583,11 @@ object MpkScheduleParser {
             }
         }
 
-        // Превью извлечённого текста — ключевая диагностика: видно, что именно видит парсер
         lastParseStats = lastParseStats.copy(
             textPreview = text.replace(Regex("\\s+"), " ").take(120)
         )
         val strategyErrors = mutableListOf<String>()
 
-        // 2. Стратегия A: блочная таблица МГПК с разделителями (│, |, таб) — эталонный формат.
-        //    Каждая стратегия изолирована: падение одной не должно убивать весь разбор.
         val tableLessons = runCatching { parseTableGridSchedule(lines, cleanTargetGroup, detectedDay, detectedDate) }
             .onFailure { strategyErrors.add("grid:${it.javaClass.simpleName}: ${it.message}") }
             .getOrDefault(emptyList())
@@ -686,8 +596,6 @@ object MpkScheduleParser {
             return tableLessons
         }
 
-        // 3. Стратегия B: позиционное восстановление по пронумерованным ячейкам БЕЗ разделителей.
-        //    Страховка на случай, если символы рамок потеряны при извлечении текста.
         val cellLessons = runCatching { parseCellRunsSchedule(lines, cleanTargetGroup, detectedDay, detectedDate) }
             .onFailure { strategyErrors.add("cells:${it.javaClass.simpleName}: ${it.message}") }
             .getOrDefault(emptyList())
@@ -696,7 +604,6 @@ object MpkScheduleParser {
             return cellLessons
         }
 
-        // 4. Стратегия C: построчный разбор произвольного текста
         val lineLessons = runCatching { parseLineByLineFallback(lines, cleanTargetGroup, detectedDay, detectedDate) }
             .onFailure { strategyErrors.add("line:${it.javaClass.simpleName}: ${it.message}") }
             .getOrDefault(emptyList())
@@ -707,17 +614,6 @@ object MpkScheduleParser {
         return lineLessons
     }
 
-    /**
-     * СТРАТЕГИЯ B. Позиционное восстановление таблицы расписания по ячейкам без разделителей.
-     *
-     * Документы МГПК устроены так: сначала строка заголовков групп (подряд идущие коды
-     * групп: 41Г, 41Н, 42Н, 41О...), затем для каждого урока — строка ячеек предметов
-     * (все начинаются с номера урока: «3 ЭкОрган...319/339»), затем строка ячеек
-     * преподавателей. Пустая ячейка урока — это ячейка с номером и пробелами («1      »),
-     * поэтому выравнивание колонок сохраняется даже без символов рамок.
-     *
-     * Возвращает пустой список, если целевой группы в документе нет.
-     */
     fun parseCellRunsSchedule(
         lines: List<String>,
         targetGroup: String,
@@ -726,7 +622,6 @@ object MpkScheduleParser {
     ): List<LessonEntity> {
         val lessons = mutableListOf<LessonEntity>()
 
-        // 1. Найти блоки заголовков групп: >= 2 подряд идущих валидных кода групп
         data class HeaderBlock(val groups: List<String>, val endIdx: Int)
 
         val blocks = mutableListOf<HeaderBlock>()
@@ -755,7 +650,6 @@ object MpkScheduleParser {
             if (targetCol == -1) continue
             targetBlockFound = true
 
-            // Блок заканчивается началом следующего заголовка групп (или концом документа)
             val end = if (bIdx + 1 < blocks.size) {
                 indexOfNextHeaderStart(lines, from = block.endIdx) ?: lines.size
             } else lines.size
@@ -771,7 +665,6 @@ object MpkScheduleParser {
         return lessons
     }
 
-    /** Индекс начала следующего блока заголовков групп (>= 2 подряд валидных групп), начиная с from. */
     private fun indexOfNextHeaderStart(lines: List<String>, from: Int): Int? {
         var i = from
         while (i < lines.size) {
@@ -790,7 +683,6 @@ object MpkScheduleParser {
         return null
     }
 
-    /** Разбор ячеек одного блока групп (между концом заголовка и следующим заголовком). */
     private fun parseCellRunsBetween(
         lines: List<String>,
         from: Int,
@@ -811,12 +703,11 @@ object MpkScheduleParser {
             }
             val lessonNum = leadingLessonNumberOf(line)
             if (lessonNum == null) {
-                // не ячейка урока (мусор, продолжения, подписи) — пропускаем
+
                 i++
                 continue
             }
 
-            // Собираем строку ячеек предметов: подряд идущие ячейки с ЭТИМ ЖЕ номером урока
             val subjectCells = mutableListOf<String>()
             var k = i
             while (k < to && leadingLessonNumberOf(lines[k]) == lessonNum) {
@@ -824,15 +715,12 @@ object MpkScheduleParser {
                 k++
             }
 
-            // Собираем строку ячеек преподавателей: не-числовые ячейки.
-            // Пустая ЯЧЕЙКА — это строка из ~25 пробелов (фиксированная ширина колонки);
-            // почти пустая строка (< 6 символов) — межстрочный разделитель, её пропускаем.
             val teacherCells = mutableListOf<String>()
             var m = k
             while (m < to && teacherCells.size < groupCount) {
                 val t = lines[m]
                 if (leadingLessonNumberOf(t) != null) break
-                if (t.isNotBlank() && GroupParser.isValid(t.trim())) break // начался следующий блок
+                if (t.isNotBlank() && GroupParser.isValid(t.trim())) break
                 if (t.length < 6) {
                     m++
                     continue
@@ -841,7 +729,6 @@ object MpkScheduleParser {
                 m++
             }
 
-            // Выравнивание колонок возможно только при полном размере строки
             if (subjectCells.size == groupCount) {
                 val subj = subjectCells[targetCol].trim()
                 val teach = teacherCells.getOrNull(targetCol)?.trim() ?: ""
@@ -856,7 +743,6 @@ object MpkScheduleParser {
         return result
     }
 
-    /** Номер урока в начале ячейки (« 3 ЭкОрган…» -> 3; «10      » -> 10) либо null. */
     private fun leadingLessonNumberOf(line: String): Int? {
         val trimmed = line.trimStart()
         if (trimmed.isEmpty()) return null
@@ -864,9 +750,6 @@ object MpkScheduleParser {
         return match.groupValues[1].toIntOrNull()
     }
 
-    /**
-     * Парсер официальной сетки расписания МГПК (блоки колонок с разделителями │, |, \t).
-     */
     fun parseTableGridSchedule(
         lines: List<String>,
         targetGroup: String,
@@ -889,7 +772,6 @@ object MpkScheduleParser {
                 continue
             }
 
-            // Проверяем день недели
             val lowerLine = line.lowercase(Locale.ROOT)
             for ((dayName, dayNum) in DAY_KEYWORDS) {
                 if (lowerLine.contains(dayName)) {
@@ -898,7 +780,6 @@ object MpkScheduleParser {
                 }
             }
 
-            // Проверяем, является ли строка шапкой групп таблицы
             val delimiter = when {
                 line.contains("│") -> "│"
                 line.contains("|") -> "|"
@@ -911,10 +792,9 @@ object MpkScheduleParser {
                     .map { it.trim() }
                     .filter { it.isNotBlank() }
 
-                // Проверяем, содержатся ли здесь названия групп
                 val validGroupCount = cells.count { GroupParser.isValid(it) }
                 if (validGroupCount >= 2 || (validGroupCount >= 1 && cells.size in 1..8 && cells.any { GroupParser.matchesGroup(it, targetGroup) })) {
-                    // Это заголовок блока групп!
+
                     currentBlockGroups = cells
                     targetColIndex = -1
                     for ((cIdx, grp) in cells.withIndex()) {
@@ -927,23 +807,19 @@ object MpkScheduleParser {
                     continue
                 }
 
-                // Если в текущем блоке есть наша группа, проверяем строки пар
                 if (targetColIndex != -1 && currentBlockGroups.isNotEmpty()) {
-                    // Проверяем, не является ли это строкой разделителя рамки
+
                     val isBorder = line.all { it in "┌┬┐├┼┤┴└┘─|-=+\t " }
                     if (isBorder) {
                         i++
                         continue
                     }
 
-                    // Разбиваем строку на ячейки (сохраняя пустые ячейки)
                     val rowCells = splitRowPreservingColumns(line, delimiter)
 
-                    // Проверяем, содержит ли эта строка номер пары
                     val targetCell1 = rowCells.getOrNull(targetColIndex)?.trim() ?: ""
                     val hasLessonNumber = targetCell1.isNotEmpty() && targetCell1[0].isDigit() && targetCell1[0].digitToInt() in 1..9
 
-                    // Либо любая другая колонка содержит номер пары в начале
                     val anyColHasLesson = rowCells.any { c ->
                         val t = c.trim()
                         t.isNotEmpty() && t[0].isDigit() && t[0].digitToInt() in 1..9
@@ -951,7 +827,7 @@ object MpkScheduleParser {
 
                     if (hasLessonNumber || anyColHasLesson) {
                         val row1Cells = rowCells
-                        // Следующая строка может содержать преподавателей
+
                         var row2Cells = listOf<String>()
                         if (i + 1 < lines.size) {
                             val nextLine = lines[i + 1].trim()
@@ -967,7 +843,7 @@ object MpkScheduleParser {
 
                             if (!isNextBorder && !isNextGroupHeader && !nextFirstColDigit && nextDelimiter != null) {
                                 row2Cells = splitRowPreservingColumns(nextLine, nextDelimiter)
-                                i++ // поглощаем строку преподавателей
+                                i++
                             }
                         }
 
@@ -996,9 +872,6 @@ object MpkScheduleParser {
         return lessons
     }
 
-    /**
-     * Разбивает строку таблицы с сохранением пустот и выравниванием по колонкам.
-     */
     private fun splitRowPreservingColumns(line: String, delimiter: String): List<String> {
         val trimmed = line.trim()
         val withoutOuter = if (trimmed.startsWith(delimiter) && trimmed.endsWith(delimiter) && trimmed.length > 1) {
@@ -1014,9 +887,6 @@ object MpkScheduleParser {
         return withoutOuter.split(delimiter)
     }
 
-    /**
-     * Разбор отдельной ячейки пары из таблицы МГПК (поддерживает 1 и 2 подгруппы, слеши, кабинеты, преподавателей).
-     */
     fun parseTableCell(
         cellSubject: String,
         cellTeacher: String,
@@ -1027,7 +897,6 @@ object MpkScheduleParser {
         val cleanSubj = cellSubject.trim()
         if (cleanSubj.isBlank() || cleanSubj == "-" || cleanSubj == "—") return null
 
-        // Номер урока из начала ячейки (документы МГПК нумеруют уроками 1..10)
         val lessonNumMatch = Regex("^(10|[1-9])\\s*(.*)$").find(cleanSubj) ?: return null
         val lessonNumber = lessonNumMatch.groupValues[1].toInt()
         val rawRest = lessonNumMatch.groupValues[2].trim()
@@ -1038,7 +907,6 @@ object MpkScheduleParser {
 
         val (timeStart, timeEnd) = CollegeBellSchedule.getTimeForLessonNumber(lessonNumber, dayOfWeek)
 
-        // Проверяем наличие кабинетов в формате "331/228", "154/314", "135/ ", "СТД/ ", "224/125", "245/245", "305/303", "142/142"
         val doubleRoomsPattern = Regex("(?:каб\\.?|ауд\\.?)?\\s*([0-9]{1,3}[Ѐ-ӿa-zA-Z]?|СТД|-{1,7})\\s*/\\s*(?:каб\\.?|ауд\\.?)?\\s*([0-9]{1,3}[Ѐ-ӿa-zA-Z]?|СТД|-{1,7})?\\s*$")
         val doubleRoomsMatch = doubleRoomsPattern.find(rawRest)
 
@@ -1124,7 +992,7 @@ object MpkScheduleParser {
                 dateString = dateString
             )
         } else {
-            // Одиночный предмет
+
             var room = ""
             var subject = rawRest
             val singleRoomMatch = Regex("(?:каб\\.?|ауд\\.?)?\\s*([0-9]{1,3}[Ѐ-ӿa-zA-Z]?|СТД)$").find(rawRest)
@@ -1157,16 +1025,12 @@ object MpkScheduleParser {
         }
     }
 
-    /**
-     * Очищает и форматирует имя преподавателя (удаляет случайные цифры, форматирует инициалы).
-     */
     fun cleanTeacherName(raw: String): String {
         var t = raw.replace(Regex("[0-9]"), "").trim()
         t = t.replace(Regex("\\s+"), " ")
         t = t.trim(',', '-', '/', '\\', ' ')
         if (t.isBlank()) return ""
 
-        // Форматирование Фамилия И.О. или Фамилия И.
         val match = Regex("([\\u0410-\\u042F\\u0401][\\u0430-\\u044F\\u0451]+)\\s+([\\u0410-\\u042F\\u0401])\\.?\\s*([\\u0410-\\u042F\\u0401])?\\.?").find(t)
         if (match != null) {
             val surname = match.groupValues[1]
@@ -1182,9 +1046,6 @@ object MpkScheduleParser {
         return t
     }
 
-    /**
-     * Построчный Fallback-разборщик.
-     */
     private fun parseLineByLineFallback(
         lines: List<String>,
         targetGroup: String,
@@ -1239,10 +1100,6 @@ object MpkScheduleParser {
         return lessons
     }
 
-    /**
-     * Создает сущность LessonEntity из сырого текста ячейки расписания.
-     * Обрабатывает подгруппы, кабинеты, преподавателей и нормализует дисциплины через SubjectFormatter.
-     */
     fun createLessonEntity(
         groupName: String,
         dayOfWeek: Int,
@@ -1255,7 +1112,6 @@ object MpkScheduleParser {
 
         val (timeStart, timeEnd) = CollegeBellSchedule.getTimeForLessonNumber(lessonNumber, dayOfWeek)
 
-        // Проверяем наличие 2 кабинетов или 2 подгрупп
         val doubleRooms = extractDoubleRooms(trimmed)
         val isExplicitSplit = trimmed.contains("1 п/г", ignoreCase = true) ||
                 trimmed.contains("1п/г", ignoreCase = true) ||
@@ -1321,9 +1177,6 @@ object MpkScheduleParser {
         }
     }
 
-    /**
-     * Поиск двух кабинетов (например «каб. 215 / каб. 308», «215 / 308», «каб. 215 - каб. 308», «ауд. 101а / 102»).
-     */
     private fun extractDoubleRooms(text: String): Pair<String, String>? {
         val pattern = Regex("(?:каб\\.?|ауд\\.?)\\s*([0-9]{1,3}[Ѐ-ӿa-zA-Z]?)\\s*[/,-]\\s*(?:каб\\.?|ауд\\.?)\\s*([0-9]{1,3}[Ѐ-ӿa-zA-Z]?)", RegexOption.IGNORE_CASE)
         val match = pattern.find(text)
@@ -1340,15 +1193,11 @@ object MpkScheduleParser {
         return null
     }
 
-    /**
-     * Извлечение кабинета, преподавателя и названия предмета из текста.
-     */
     private fun extractDetails(text: String): Triple<String, String, String> {
         var room = ""
         var teacher = ""
         var subject = text
 
-        // 1. Поиск кабинета/аудитории
         val roomMatch = Regex("(?:каб\\.?|ауд\\.?)\\s*([0-9]{1,3}[Ѐ-ӿa-zA-Z]?)|([0-9]{2,3}[Ѐ-ӿa-zA-Z]?)\\s*(?:каб|ауд)", RegexOption.IGNORE_CASE).find(text)
         if (roomMatch != null) {
             room = roomMatch.groupValues[1].ifEmpty { roomMatch.groupValues[2] }
@@ -1361,14 +1210,12 @@ object MpkScheduleParser {
             }
         }
 
-        // 2. Поиск преподавателя (Фамилия И.О. или Фамилия И. О.)
         val teacherMatch = Regex("([\\u0410-\\u042F\\u0401][\\u0430-\\u044F\\u0451]+)\\s+([\\u0410-\\u042F\\u0401]\\.\\s*[\\u0410-\\u042F\\u0401]\\.)").find(subject)
         if (teacherMatch != null) {
             teacher = "${teacherMatch.groupValues[1]} ${teacherMatch.groupValues[2].replace(" ", "")}"
             subject = subject.replace(teacherMatch.value, " ")
         }
 
-        // Очистка названия предмета от префиксов номера пары и подгрупп
         subject = subject
             .replace(Regex("(?:^(?:10|[1-9])\\s*урок|^(?:10|[1-9])\\s*пара|^(?:10|[1-9])\\s*\\.|^№\\s*(?:10|[1-9]))", RegexOption.IGNORE_CASE), "")
             .replace(Regex("(?:1|2)\\s*п/?г|(?:1|2)\\s*подгруппа", RegexOption.IGNORE_CASE), "")
@@ -1378,9 +1225,6 @@ object MpkScheduleParser {
         return Triple(room, teacher, subject)
     }
 
-    /**
-     * Разделение текста пары на 2 подгруппы.
-     */
     private fun splitSubgroupContent(raw: String): Pair<String, String> {
         val p2Match = Regex("(?:/\\s*|\\s+)(?:2\\s*п/?г|2\\s*подгруппа)", RegexOption.IGNORE_CASE).find(raw)
         if (p2Match != null) {

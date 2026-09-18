@@ -26,14 +26,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Тема приложения применяется до первого кадра: все экраны берут цвета
-        // из общей палитры, поэтому достаточно поменять её здесь
         com.example.ui.theme.applyAppTheme(com.example.util.AppThemeStore.load(this))
 
-        // Создаем канал уведомлений и регистрируем периодический WorkManager
         NotificationHelper.createNotificationChannel(this)
         com.example.util.BellCountdownNotifier.createChannel(this)
-        // Если постоянная строка включена — поднимаем службу минутного отсчёта
+
         if (com.example.util.BellCountdownNotifier.isEnabled(this)) {
             com.example.util.BellTimerService.start(this)
         }
@@ -43,7 +40,6 @@ class MainActivity : ComponentActivity() {
             val appViewModel: AppViewModel = viewModel()
             val uiState by appViewModel.uiState.collectAsState()
 
-            // Обработка клика по виджету или пуш-уведомлению
             LaunchedEffect(intent) {
                 handleIntent(intent, appViewModel)
             }
@@ -64,7 +60,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // При возвращении в приложение обновляем виджеты
+
         WidgetUpdateHelper.updateAllWidgets(this)
     }
 
@@ -75,4 +71,3 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-

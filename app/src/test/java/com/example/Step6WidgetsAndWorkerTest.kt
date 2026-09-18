@@ -16,13 +16,12 @@ class Step6WidgetsAndWorkerTest {
 
     @Test
     fun testNextStudyDayTransition_1stCourse_Vs_HigherCourses() {
-        // 1 курс (шестидневка)
+
         val group1stCourse = GroupParser.parse("11Т")
         assertNotNull(group1stCourse)
         assertEquals(1, group1stCourse?.course)
         assertTrue(group1stCourse?.hasSaturdayClasses == true)
 
-        // 4 курс (пятидневка)
         val group4thCourse = GroupParser.parse("41О")
         assertNotNull(group4thCourse)
         assertEquals(4, group4thCourse?.course)
@@ -67,17 +66,15 @@ class Step6WidgetsAndWorkerTest {
 
     @Test
     fun testBellTimesForDayOfWeek() {
-        // Понедельник 1 пара (08:15 – 09:55)
+
         val (monStart, monEnd) = CollegeBellSchedule.getTimeForNumber(1, 1)
         assertEquals("08:15", monStart)
         assertEquals("09:55", monEnd)
 
-        // Четверг 4 пара после инфочаса (14:45 – 16:25)
         val (thu4Start, thu4End) = CollegeBellSchedule.getTimeForNumber(4, 4)
         assertEquals("14:45", thu4Start)
         assertEquals("16:25", thu4End)
 
-        // Суббота 1 пара (08:15 – 09:55)
         val (satStart, satEnd) = CollegeBellSchedule.getTimeForNumber(1, 6)
         assertEquals("08:15", satStart)
         assertEquals("09:55", satEnd)

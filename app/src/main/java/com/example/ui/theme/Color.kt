@@ -5,36 +5,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 
-// =========================================================================
-// МПК (Минский политехнический колледж) — Официальные токены Design System
-//
-// Архитектура: палитра (светлая/тёмная) + живые геттеры-токены.
-// Все экраны обращаются к токенам (ColorBgMain, ColorBrandBlue...), которые
-// читают текущую палитру, поэтому переключение темы в MyApplicationTheme
-// мгновенно перекрашивает весь UI без правок экранов.
-// =========================================================================
-
-/**
- * Полная палитра дизайн-системы. Каждая роль отделена:
- * - brandBlue/activeBlue — акцентные ЦВЕТА ТЕКСТА, иконок и рамок;
- * - brandFill/activeFill — заливки кнопок и бейджей с белым текстом
- *   (в тёмной теме заливка темнее акцента, чтобы белый текст читался).
- */
 data class MpkPalette(
-    // Акценты
+
     val topBar: Color,
     val brandBlue: Color,
     val activeBlue: Color,
     val brandFill: Color,
     val activeFill: Color,
-    // Меню (навигационная шторка)
+
     val menuBg: Color,
     val menuSubBg: Color,
     val menuBorder: Color,
     val menuText: Color,
     val menuSubtext: Color,
     val menuIcon: Color,
-    // Контентная область
+
     val bgMain: Color,
     val surfaceVariant: Color,
     val surfaceHighlight: Color,
@@ -45,7 +30,7 @@ data class MpkPalette(
     val textDisabled: Color,
     val borderLight: Color,
     val dividerLight: Color,
-    // Статусные
+
     val success: Color,
     val successBg: Color,
     val successBorder: Color,
@@ -54,7 +39,7 @@ data class MpkPalette(
     val error: Color,
     val errorText: Color,
     val dangerFill: Color,
-    // Бейджи типов заданий
+
     val badgeHW: Color,
     val badgeLab: Color,
     val badgePract: Color,
@@ -63,7 +48,6 @@ data class MpkPalette(
     val badgeDiploma: Color
 )
 
-/** Светлая палитра — институциональные цвета МПК. */
 val LightPalette = MpkPalette(
     topBar = Color(0xFF001737),
     brandBlue = Color(0xFF0B3564),
@@ -102,12 +86,8 @@ val LightPalette = MpkPalette(
     badgeDiploma = Color(0xFF0B3564)
 )
 
-/** Палитра приложения (только светлая — тёмная тема удалена). */
 internal var paletteState by mutableStateOf(LightPalette)
 
-// -------------------------------------------------------------------------
-// Живые токены (имена сохранены для обратной совместимости всех экранов)
-// -------------------------------------------------------------------------
 val ColorTopBar: Color get() = paletteState.topBar
 val ColorBrandBlue: Color get() = paletteState.brandBlue
 val ColorActiveBlue: Color get() = paletteState.activeBlue

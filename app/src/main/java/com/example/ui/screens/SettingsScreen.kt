@@ -64,7 +64,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.model.GroupInfo
-import com.example.data.model.SyncDiagnosticInfo
 import com.example.ui.components.GroupSelectionDialog
 import com.example.ui.theme.ColorActiveBlue
 import com.example.ui.theme.ColorBgMain
@@ -90,26 +89,15 @@ import com.example.ui.theme.ColorSuccessText
 import com.example.ui.theme.ColorSurfaceHighlight
 import com.example.ui.theme.ColorSurfaceVariantLight
 
-/**
- * Экран настроек приложения «МПК Расписание» по официальному Style Guide.
- */
 @Composable
 fun SettingsScreen(
     groupInfo: GroupInfo,
-    diagnosticInfo: SyncDiagnosticInfo = SyncDiagnosticInfo(),
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var showGroupDialog by remember { mutableStateOf(false) }
-    // Состояние берём у самих часов, а не из своей переменной: подменённое
-    // время хранится в настройках и переживает перезапуск. Иначе тумблер
-    // показывал бы «выключено», а приложение жило бы по подставленному времени,
-    // и выключить это было бы нечем.
-    var isDebugEnabled by remember {
-        mutableStateOf(com.example.util.DebugClock.isOverridden(context))
-    }
     var isNotificationEnabled by remember {
         mutableStateOf(WidgetUpdateHelper.isNotificationEnabled(context))
     }
@@ -128,14 +116,12 @@ fun SettingsScreen(
         }
     }
 
-    // Тема приложения: применяется сразу, экраны перекрашиваются без перезапуска
     var currentTheme by remember { mutableStateOf(AppThemeStore.load(context)) }
     fun onThemePicked(theme: com.example.ui.theme.AppTheme) {
         AppThemeStore.save(context, theme)
         currentTheme = theme
     }
 
-    // Резервная копия: файл выбирает пользователь, разрешения не нужны
     var backupMessage by remember { mutableStateOf("") }
     val backupScope = rememberCoroutineScope()
 
@@ -192,324 +178,13 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(ColorBgMain)
     ) {
-        // Заголовок страницы рисует вызывающий экран (CollegeScreen.SettingsPage):
-        // там он рядом со стрелкой «назад». Второй такой же заголовок здесь
-        // приводил к тому, что «Настройки» показывались дважды подряд.
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Компактный блок группы: только группа и кнопка «Сменить»
-            // (подробности специальности — во вкладке «Колледж»)
-            item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.School,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Группа ${groupInfo.canonicalName}",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = ColorTextTitle
-                                ),
-                                softWrap = false,
-                                maxLines = 1
-                            )
-                        }
 
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            border = BorderStroke(1.dp, ColorBrandBlue),
-                            color = ColorBrandFill,
-                            modifier = Modifier
-                                .bouncyClickable { showGroupDialog = true }
-                                .testTag("change_group_btn")
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "СМЕНИТЬ",
-                                    softWrap = false,
-                                    maxLines = 1,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = Color.White
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Блок «Диагностика сети» — только при включённом дебаге
-            if (isDebugEnabled) item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("network_diagnostics_card")
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.NetworkCheck,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = "Диагностика сети",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        color = ColorTextTitle
-                                    )
-                                )
-                            }
-
-                            // Бейдж статуса
-                            Surface(
-                                shape = RoundedCornerShape(2.dp),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (diagnosticInfo.isSuccess) ColorSuccess else ColorBorderLight
-                                ),
-                                color = if (diagnosticInfo.isSuccess) ColorSuccessBg else ColorSurfaceVariantLight
-                            ) {
-                                Text(
-                                    text = when {
-                                        diagnosticInfo.isSyncing -> "Проверка..."
-                                        diagnosticInfo.isSuccess -> "Успешно"
-                                        diagnosticInfo.httpStatusCode != 0 -> "Ошибка"
-                                        else -> "Ожидание"
-                                    },
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = if (diagnosticInfo.isSuccess) ColorSuccessText else ColorBrandBlue
-                                    ),
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Обычному пользователю достаточно трёх строк; подробная
-                        // телеметрия — под тумблером «Дебаг» в самом низу блока
-                        DiagnosticRow(label = "HTTP статус", value = if (diagnosticInfo.httpStatusCode > 0) "${diagnosticInfo.httpStatusCode}" else "—")
-                        Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(
-                            label = "Получено данных",
-                            value = if (diagnosticInfo.receivedBytes > 0) {
-                                String.format(java.util.Locale.ROOT, "%.1f КБ", diagnosticInfo.receivedBytes / 1024.0)
-                            } else "0 Б"
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        DiagnosticRow(label = "Версия приложения", value = "2.11")
-
-                        if (isDebugEnabled) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            DiagnosticRow(label = "Последняя синхронизация", value = diagnosticInfo.lastSyncTime)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            DiagnosticRow(label = "Адрес на сайте", value = diagnosticInfo.checkedUrl, isMonospace = true)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            DiagnosticRow(label = "Получено байт", value = "${diagnosticInfo.receivedBytes}")
-                            Spacer(modifier = Modifier.height(4.dp))
-                            DiagnosticRow(label = "Найдено уроков (${groupInfo.canonicalName})", value = "${diagnosticInfo.lessonsFound} уроков")
-                            Spacer(modifier = Modifier.height(4.dp))
-                            DiagnosticRow(label = "Состояние", value = diagnosticInfo.statusMessage)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            DiagnosticRow(
-                                label = "Начало ответа сервера",
-                                value = diagnosticInfo.responsePreview.ifBlank { "—" },
-                                isMonospace = true
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            DiagnosticRow(
-                                label = "Начало извлечённого текста",
-                                value = diagnosticInfo.textPreview.ifBlank { "—" },
-                                isMonospace = true
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            DiagnosticRow(
-                                label = "Разбор документа",
-                                value = "формат: ${diagnosticInfo.parseFormat.ifBlank { "—" }}, " +
-                                    "стратегия: ${diagnosticInfo.parseStrategy.ifBlank { "—" }}, " +
-                                    "фрагментов: ${diagnosticInfo.parseRuns}, " +
-                                    "группа найдена: ${if (diagnosticInfo.groupFound) "да" else "нет"}"
-                            )
-                            if (diagnosticInfo.parseError.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                DiagnosticRow(
-                                    label = "Ошибки разбора",
-                                    value = diagnosticInfo.parseError,
-                                    isMonospace = true
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Кнопка «Запустить тест подключения»
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            border = BorderStroke(1.dp, ColorBrandBlue),
-                            color = ColorBrandFill,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .bouncyClickable(onClick = onRunConnectionTest)
-                                .testTag("run_connection_test_btn")
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center,
-                                modifier = Modifier.padding(vertical = 10.dp)
-                            ) {
-                                if (diagnosticInfo.isSyncing) {
-                                    CircularProgressIndicator(
-                                        color = Color.White,
-                                        strokeWidth = 2.dp,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "ПРОВЕРКА...",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            color = Color.White
-                                        )
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.CloudSync,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "ТЕСТ ПОДКЛЮЧЕНИЯ К САЙТУ",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            color = Color.White
-                                        )
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                    }
-                }
-            }
-
-            // Тумблер «Дебаг» стоит ОТДЕЛЬНО от блока, который открывает.
-            // Раньше он лежал внутри него — включить было невозможно.
-            item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Дебаг",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = ColorTextBody
-                                    )
-                                )
-                                Text(
-                                    text = "Диагностика сети и подмена времени",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 11.sp,
-                                        color = ColorTextMuted
-                                    )
-                                )
-                            }
-                            Switch(
-                                checked = isDebugEnabled,
-                                onCheckedChange = { on ->
-                                    isDebugEnabled = on
-                                    // Выключили — сбрасываем подменённое время
-                                    if (!on) com.example.util.DebugClock.setOverride(context, null)
-                                },
-                                modifier = Modifier.testTag("debug_toggle")
-                            )
-                        }
-                        if (isDebugEnabled) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            DebugTimeSection()
-                        }
-                    }
-                }
-            }
-
-            // Тема всего приложения
             item {
                 SectionHeader("ТЕМА ПРИЛОЖЕНИЯ")
             }
@@ -527,7 +202,7 @@ fun SettingsScreen(
                         modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Образец: шапка и кнопка в цветах темы
+
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
@@ -567,7 +242,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Резервная копия настроек и заданий
             item {
                 SectionHeader("ДАННЫЕ")
             }
@@ -623,7 +297,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Уведомления
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -713,12 +386,10 @@ fun SettingsScreen(
                 }
             }
 
-            // Постоянная строка «До звонка» в шторке уведомлений
             item {
                 BellCountdownNotificationCard()
             }
 
-            // Официальные ресурсы колледжа
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -737,7 +408,6 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Сайт МГПК
                         LinkItem(
                             title = "Официальный сайт МГПК",
                             subtitle = "guo-mpk.by",
@@ -751,7 +421,6 @@ fun SettingsScreen(
                         HorizontalDivider(color = ColorBorderLight)
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        // Портал расписания МГПК
                         LinkItem(
                             title = "Портал расписания",
                             subtitle = "guo-mpk.by/raspisanie/",
@@ -764,7 +433,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Обратная связь: замечания, ошибки, пожелания
             item { SectionHeader("ОБРАТНАЯ СВЯЗЬ") }
             item {
                 Surface(
@@ -773,40 +441,26 @@ fun SettingsScreen(
                     border = BorderStroke(1.dp, ColorBorderLight),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = "Нашли ошибку или что-то неудобно?",
+                            text = "Telegram",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = ColorTextTitle
                             )
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Напишите в Telegram — отвечу и починю. " +
-                                "Особенно полезны замечания по расписанию: " +
-                                "если урок не тот, не там или его нет.",
-                            style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        ActionChip(
-                            text = "НАПИСАТЬ В TELEGRAM",
-                            filled = true,
-                            onClick = {
-                                val intent = Intent(
-                                    Intent.ACTION_VIEW,
-                                    Uri.parse("https://t.me/Betterthannothing12")
-                                )
-                                context.startActivity(intent)
-                            }
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "@Betterthannothing12",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
+                                fontSize = 14.sp,
                                 color = ColorBrandBlue
                             )
                         )
@@ -910,124 +564,6 @@ private fun LinkItem(
     }
 }
 
-/**
- * Секция дебаг-времени: фиксированные дата и время, которые приложение
- * (звонки, подсветка урока, виджет «До звонка») считает «сейчас».
- */
-@Composable
-private fun DebugTimeSection() {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val overridden = com.example.util.DebugClock.isOverridden(context)
-    val current = com.example.util.DebugClock.now(context)
-
-    var dateText by androidx.compose.runtime.saveable.rememberSaveable {
-        mutableStateOf(String.format(java.util.Locale.ROOT, "%02d.%02d.%04d",
-            current.get(java.util.Calendar.DAY_OF_MONTH),
-            current.get(java.util.Calendar.MONTH) + 1,
-            current.get(java.util.Calendar.YEAR)))
-    }
-    var timeText by androidx.compose.runtime.saveable.rememberSaveable {
-        mutableStateOf(String.format(java.util.Locale.ROOT, "%02d:%02d",
-            current.get(java.util.Calendar.HOUR_OF_DAY),
-            current.get(java.util.Calendar.MINUTE)))
-    }
-
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorSurfaceVariantLight,
-        border = BorderStroke(1.dp, ColorBorderLight),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = "ДЕБАГ-ВРЕМЯ" + if (overridden) " (включено)" else "",
-                style = androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    color = ColorBrandBlue
-                )
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = dateText,
-                    onValueChange = { dateText = it },
-                    label = { Text("Дата") },
-                    placeholder = { Text("ДД.ММ.ГГГГ") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(2.dp),
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedTextField(
-                    value = timeText,
-                    onValueChange = { timeText = it },
-                    label = { Text("Время") },
-                    placeholder = { Text("ЧЧ:ММ") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(2.dp),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBrandFill,
-                    modifier = Modifier
-                        .weight(1f)
-                        .bouncyClickable {
-                            val sdf = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.ROOT)
-                            val parsed = try {
-                                sdf.parse("$dateText $timeText")
-                            } catch (_: Exception) {
-                                null
-                            }
-                            if (parsed != null) {
-                                com.example.util.DebugClock.setOverride(context, parsed.time)
-                                com.example.widget.BellCountdownWidgetProvider.updateAll(context)
-                                com.example.widget.WidgetAlarm.scheduleNext(context)
-                            }
-                        }
-                ) {
-                    Text(
-                        text = "ПРИМЕНИТЬ",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    color = ColorBgMain,
-                    modifier = Modifier
-                        .weight(1f)
-                        .bouncyClickable {
-                            com.example.util.DebugClock.setOverride(context, null)
-                            com.example.widget.BellCountdownWidgetProvider.updateAll(context)
-                            com.example.widget.WidgetAlarm.scheduleNext(context)
-                        }
-                ) {
-                    Text(
-                        text = "СБРОСИТЬ",
-                        color = ColorTextBody,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Карточка настройки постоянного уведомления «До звонка»:
- * выключатель и выбор стиля оформления строки.
- */
 @Composable
 private fun BellCountdownNotificationCard() {
     val context = LocalContext.current
@@ -1224,7 +760,7 @@ private fun BellCountdownNotificationCard() {
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Кружок-образец цвета
+
                             Box(
                                 modifier = Modifier
                                     .size(18.dp)
@@ -1250,7 +786,6 @@ private fun BellCountdownNotificationCard() {
     }
 }
 
-/** Превью: как выглядит строка уведомления в выбранном стиле. */
 private fun stylePreviewTitle(style: com.example.util.BellCountdownNotifier.Style): String =
     when (style) {
         com.example.util.BellCountdownNotifier.Style.COMPACT -> "До звонка: 12 мин"
@@ -1271,7 +806,6 @@ private fun stylePreviewBody(style: com.example.util.BellCountdownNotifier.Style
             "С полосой прогресса урока"
     }
 
-/** Заголовок раздела настроек. */
 @Composable
 private fun SectionHeader(text: String) {
     Text(
@@ -1285,7 +819,6 @@ private fun SectionHeader(text: String) {
     )
 }
 
-/** Плоская кнопка-действие в стиле приложения (без скруглений и теней). */
 @Composable
 private fun ActionChip(
     text: String,

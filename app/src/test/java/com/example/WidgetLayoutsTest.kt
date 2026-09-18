@@ -4,18 +4,8 @@ import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Разметка виджетов ограничена: RemoteViews умеет инфлятить только короткий
- * список классов. Всё остальное (в частности обычный `<View>`) валит инфляцию,
- * и виджет не рисуется вообще — при этом ни ошибки сборки, ни падения теста
- * не будет, просто пустой прямоугольник на рабочем столе.
- *
- * Этот тест читает XML-файлы виджетов и проверяет, что в них нет запрещённых
- * тегов. Именно на этом уже спотыкались: разделители были сделаны через `<View>`.
- */
 class WidgetLayoutsTest {
 
-    /** Классы, которые RemoteViews умеет инфлятить. Список из документации Android. */
     private val allowedTags = setOf(
         "FrameLayout", "LinearLayout", "RelativeLayout", "GridLayout",
         "AnalogClock", "Button", "Chronometer", "ImageButton", "ImageView",
@@ -33,7 +23,7 @@ class WidgetLayoutsTest {
         val problems = mutableListOf<String>()
         widgetLayouts.forEach { file ->
             val text = file.readText()
-            // Теги без учёта закрывающих и атрибутов: <TextView ...>, </TextView>
+
             val tags = Regex("""<\s*/?\s*([A-Za-z][A-Za-z0-9_.]*)""")
                 .findAll(text)
                 .map { it.groupValues[1] }

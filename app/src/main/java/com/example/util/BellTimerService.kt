@@ -13,17 +13,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * Служба минутного обновления строки «До звонка» и виджета.
- *
- * Почему служба, а не AlarmManager: системный будильник душится режимом
- * энергосбережения (Doze) и агрессивными оболочками производителей —
- * отсчёт «застывал» на несколько минут. Служба с постоянным уведомлением
- * даёт ровный такт, привязанный к границе минуты устройства.
- *
- * Работает ТОЛЬКО пока включена постоянная строка в настройках, и живёт
- * ровно столько же — никаких фоновых процессов без ведома пользователя.
- */
 class BellTimerService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -35,13 +24,13 @@ class BellTimerService : Service() {
     override fun onCreate() {
         super.onCreate()
         BellCountdownNotifier.createChannel(this)
-        // Сразу показываем уведомление, чтобы служба не была убита
+
         startForeground(BellCountdownNotifier.NOTIFICATION_ID, BellCountdownNotifier.buildNotification(this))
         startTicking()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Перезапуск после сбоя — снова в работу
+
         if (tickJob?.isActive != true) startTicking()
         return START_STICKY
     }
@@ -50,14 +39,13 @@ class BellTimerService : Service() {
         tickJob?.cancel()
         tickJob = scope.launch {
             while (true) {
-                // Такт привязан к границе минуты устройства: в 12:34:00, 12:35:00 и т. д.
+
                 val nowMs = System.currentTimeMillis()
                 val msToNextMinute = 60_000L - (nowMs % 60_000L)
                 delay(msToNextMinute)
 
                 BellCountdownNotifier.show(this@BellTimerService)
 
-                // Виджет обновляем тем же тактом (если он есть на рабочем столе)
                 widgetRefreshCounter++
                 if (widgetRefreshCounter >= 1) {
                     widgetRefreshCounter = 0
@@ -73,7 +61,7 @@ class BellTimerService : Service() {
     }
 
     companion object {
-        /** Запустить службу (идемпотентно). */
+
         fun start(context: Context) {
             val intent = Intent(context, BellTimerService::class.java)
             try {
@@ -83,11 +71,10 @@ class BellTimerService : Service() {
                     context.startService(intent)
                 }
             } catch (_: Exception) {
-                // Фоновый запуск запрещён системой — не критично, останется AlarmManager
+
             }
         }
 
-        /** Остановить службу. */
         fun stop(context: Context) {
             try {
                 context.stopService(Intent(context, BellTimerService::class.java))

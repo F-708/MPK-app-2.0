@@ -9,12 +9,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Тесты сопоставления преподавателей расписания с официальной базой
- * и вывода производной информации (кабинеты, дисциплины, «активность»).
- *
- * Данные — реальные ФИО из документов guo-mpk.by и официальной базы колледжа.
- */
 class TeacherInsightsTest {
 
     private fun teacher(fullName: String) = Teacher(name = fullName)
@@ -55,8 +49,6 @@ class TeacherInsightsTest {
         dateString = date
     )
 
-    // ------------------------- Сопоставление ФИО -------------------------
-
     @Test
     fun `точное совпадение по фамилии и инициалам`() {
         val ti = insights()
@@ -67,14 +59,14 @@ class TeacherInsightsTest {
 
     @Test
     fun `фамилия без инициалов сопоставляется однозначно`() {
-        // В расписании инициалы иногда теряются
+
         assertEquals("Кривошей Дмитрий Александрович", insights().matchTeacher("Кривошей Д")?.name)
         assertEquals("Кривошей Дмитрий Александрович", insights().matchTeacher("Кривошей")?.name)
     }
 
     @Test
     fun `обрезанная фамилия ищется по префиксу`() {
-        // guo-mpk.by обрезает длинные ФИО: «Березовска» вместо «Березовская»
+
         assertEquals("Березовская Нелли Викторовна", insights().matchTeacher("Березовска")?.name)
         assertEquals("Березовская Нелли Викторовна", insights().matchTeacher("Березовск")?.name)
     }
@@ -84,7 +76,7 @@ class TeacherInsightsTest {
         val ti = insights()
         assertEquals("Савицкая Ольга Владимировна", ti.matchTeacher("Савицкая О.")?.name)
         assertEquals("Савицкая Татьяна Владимировна", ti.matchTeacher("Савицкая Т.В.")?.name)
-        // Без инициалов однозначно определить нельзя
+
         assertNull(ti.matchTeacher("Савицкая"))
     }
 
@@ -106,7 +98,7 @@ class TeacherInsightsTest {
 
     @Test
     fun `строки из реального расписания парсятся полностью`() {
-        // Так выглядит ячейка преподавателей в документе guo-mpk.by
+
         val raw = "Серединов А/Будай И.Н."
         val names = TeacherInsights.splitTeacherNames(raw)
         assertEquals(2, names.size)
@@ -114,8 +106,6 @@ class TeacherInsightsTest {
         assertNull("Серединова нет в базе — не должен ложно сопоставиться", ti.matchTeacher(names[0]))
         assertEquals("Будай Инесса Николаевна", ti.matchTeacher(names[1])?.name)
     }
-
-    // ---------------------- Производная информация ----------------------
 
     @Test
     fun `активные преподаватели определяются из уроков группы`() {
@@ -126,8 +116,6 @@ class TeacherInsightsTest {
         )
         val ti = insights(lessons)
 
-        // Три преподавателя из базы: Зыбин, Купрейчик (из строки через слэш) и Дубатовка.
-        // «Посторонний П.П.» в базе отсутствует и в активные не попадает.
         assertEquals(3, ti.activeNames.size)
         assertTrue(ti.isActive("Зыбин Олег Львович"))
         assertTrue(ti.isActive("Купрейчик Наталья Андреевна"))
@@ -161,7 +149,7 @@ class TeacherInsightsTest {
 
     @Test
     fun `преподаватели с историей расписания подсвечиваются как активные`() {
-        // Даже если урок был вчера — преподаватель встречается у группы
+
         val lessons = listOf(
             lesson(teacherFirst = "Мешалкина И.В.", roomFirst = "339", date = "2026-09-15")
         )
@@ -182,7 +170,7 @@ class TeacherInsightsTest {
             )
         )
         val ti = insights(lessons)
-        // Кабинеты подгрупп распределяются по обоим преподавателям
+
         assertNotNull(ti.rooms("Зыбин Олег Львович"))
         assertNotNull(ti.rooms("Купрейчик Наталья Андреевна"))
     }

@@ -84,15 +84,6 @@ import com.example.ui.theme.ColorBrandFill
 import com.example.ui.theme.ColorSurfaceHighlight
 import com.example.ui.theme.ColorSurfaceVariantLight
 
-/**
- * Экран учебных заданий студента по официальному Style Guide МПК:
- * - Заголовок страницы «Учебные задания» (32-34px Bold, Sentence case)
- * - 0-2dp геометрия карточек и чипов
- * - 0dp elevation
- * - 1px рамки #E2E8F0
- * - Бейдж строго «ДЗ» (не «ДЗ на следующий раз»)
- * - Курсовые только для 2-4 курсов, диплом — только для 4 курса
- */
 @Composable
 fun TasksScreen(
     groupInfo: GroupInfo,
@@ -126,7 +117,7 @@ fun TasksScreen(
             .background(ColorBgMain)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Заголовок страницы
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -151,7 +142,6 @@ fun TasksScreen(
                     )
                 }
 
-                // Кнопка добавления (фиксированной ширины, без переносов букв)
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     border = BorderStroke(1.dp, ColorBrandBlue),
@@ -185,7 +175,6 @@ fun TasksScreen(
                 }
             }
 
-            // Горизонтальный ряд фильтров (Все + типы заданий)
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -254,7 +243,7 @@ fun TasksScreen(
             )
 
             if (filteredTasks.isEmpty()) {
-                // Пустой список заданий
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -351,9 +340,6 @@ fun TasksScreen(
     }
 }
 
-/**
- * Карточка задания по Design System МПК.
- */
 @Composable
 fun TaskItemCard(
     task: StudentTaskEntity,
@@ -386,7 +372,7 @@ fun TaskItemCard(
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Чекбокс отметки о выполнении
+
             IconButton(
                 onClick = onToggleCompleted,
                 modifier = Modifier
@@ -407,7 +393,7 @@ fun TaskItemCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Бейдж типа задания (строго 2px radius)
+
                     Surface(
                         shape = RoundedCornerShape(2.dp),
                         border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.5f)),
@@ -503,9 +489,6 @@ fun TaskItemCard(
     }
 }
 
-/**
- * Диалог создания нового задания с выбором предмета из официального справочника MpkCurriculum.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTaskDialog(
@@ -592,7 +575,6 @@ fun AddTaskDialog(
                     }
                 }
 
-                // Выбор дисциплины из официального списка MpkCurriculum
                 ExposedDropdownMenuBox(
                     expanded = subjectExpanded,
                     onExpandedChange = { subjectExpanded = !subjectExpanded }
@@ -634,9 +616,6 @@ fun AddTaskDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Срок сдачи выбирается в календаре, а не пишется текстом:
-                // иначе в поле попадало что угодно («на следующей неделе»),
-                // и задание нельзя было отсортировать по дате.
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
@@ -670,8 +649,7 @@ fun AddTaskDialog(
                 if (showDatePicker) {
                     com.example.ui.components.SimpleDatePickerDialog(
                         initialDateIso = dueDateMillis?.let { isoDate(it) },
-                        // Годы: с текущего по год последнего курса — раньше смысла нет
-                        // (расписание пишется вперёд), дальше учёба всё равно закончится
+
                         minYear = currentYear,
                         maxYear = currentYear + 4,
                         onDismiss = { showDatePicker = false },
@@ -733,16 +711,6 @@ fun AddTaskDialog(
     )
 }
 
-
-// ---------------------------------------------------------------------------
-// Даты срока сдачи
-// ---------------------------------------------------------------------------
-
-/**
- * Миллисекунды из календаря → «ГГГГ-ММ-ДД».
- * Календарь Material 3 отдаёт UTC-полночь, поэтому и читаем его в UTC —
- * иначе в любом отрицательном поясе дата сдвинется на день назад.
- */
 internal fun isoDate(millis: Long): String {
     val c = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
         timeInMillis = millis
@@ -755,18 +723,11 @@ internal fun isoDate(millis: Long): String {
     )
 }
 
-/**
- * Дата сдачи для показа: «ГГГГ-ММ-ДД» → «ДД.ММ.ГГГГ».
- *
- * Старые задания могли содержать в этом поле произвольный текст
- * («на следующей неделе») — такое показываем как есть, чтобы ничего не потерять.
- */
 internal fun formatDateForShow(raw: String): String {
     val m = Regex("""^(\d{4})-(\d{2})-(\d{2})$""").find(raw.trim()) ?: return raw
     return "${m.groupValues[3]}.${m.groupValues[2]}.${m.groupValues[1]}"
 }
 
-/** «ГГГГ-ММ-ДД» → миллисекунды (по UTC — как и isoDate). */
 internal fun millisFromIso(iso: String): Long? {
     val m = Regex("""^(\d{4})-(\d{2})-(\d{2})$""").find(iso.trim()) ?: return null
     val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {

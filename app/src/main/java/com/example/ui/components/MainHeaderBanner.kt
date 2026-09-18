@@ -29,12 +29,6 @@ import com.example.ui.theme.TextStyleCollegeBranding
 
 private const val MPK_HEADER_BANNER_URL = "https://guo-mpk.by/wp-content/uploads/2024/11/cropped-cropped-cropped-logo-na-sajt.png"
 
-/**
- * Шапка приложения «Мой Политех»: баннер колледжа на всю ширину.
- * Плашка даты, бейдж группы и шестерёнка убраны — дата видна на экране
- * расписания, группа меняется в «Другое → Настройки», а шапка отдана
- * под баннер колледжа целиком.
- */
 @Composable
 fun MainHeaderBanner(
     modifier: Modifier = Modifier
@@ -51,7 +45,7 @@ fun MainHeaderBanner(
                 .statusBarsPadding()
                 .height(56.dp)
         ) {
-            // Баннер колледжа (на всю ширину, мгновенный фолбэк-портик до загрузки)
+
             SubcomposeAsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(MPK_HEADER_BANNER_URL)
@@ -78,7 +72,6 @@ fun MainHeaderBanner(
     }
 }
 
-/** Фолбэк шапки: портик + название (показывается мгновенно, пока грузится баннер). */
 @Composable
 private fun HeaderFallback() {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -104,9 +97,6 @@ private fun HeaderFallback() {
     }
 }
 
-/**
- * Векторная отрисовка классического портика с колоннами МПК.
- */
 @Composable
 fun CollegePorticoIcon(
     color: Color,
@@ -116,7 +106,6 @@ fun CollegePorticoIcon(
         val w = size.width
         val h = size.height
 
-        // Треугольный фронтон (крыша портика)
         val path = androidx.compose.ui.graphics.Path().apply {
             moveTo(0f, h * 0.35f)
             lineTo(w * 0.5f, 0f)
@@ -125,14 +114,12 @@ fun CollegePorticoIcon(
         }
         drawPath(path, color = color)
 
-        // Архитрав (балка под фронтоном)
         drawRect(
             color = color,
             topLeft = androidx.compose.ui.geometry.Offset(0f, h * 0.35f),
             size = androidx.compose.ui.geometry.Size(w, h * 0.08f)
         )
 
-        // 4 колонны
         val colWidth = w * 0.12f
         val colGap = (w - (4 * colWidth)) / 3f
         val colTop = h * 0.43f
@@ -147,7 +134,6 @@ fun CollegePorticoIcon(
             )
         }
 
-        // База (стилобат/основание)
         drawRect(
             color = color,
             topLeft = androidx.compose.ui.geometry.Offset(0f, h * 0.88f),

@@ -8,9 +8,6 @@ import androidx.room.Transaction
 import com.example.data.local.entity.LessonEntity
 import kotlinx.coroutines.flow.Flow
 
-/**
- * DAO для доступа к расписанию занятий.
- */
 @Dao
 interface LessonDao {
 
@@ -21,8 +18,8 @@ interface LessonDao {
     fun getLessonsForDate(groupName: String, dateString: String): Flow<List<LessonEntity>>
 
     @Query("""
-        SELECT * FROM lessons 
-        WHERE groupName = :groupName 
+        SELECT * FROM lessons
+        WHERE groupName = :groupName
           AND (
             (dateString != '' AND dateString = :dateString)
             OR (dateString = '' AND dayOfWeek = :dayOfWeek)
@@ -52,8 +49,6 @@ interface LessonDao {
     @Query("DELETE FROM lessons WHERE groupName = :groupName AND dayOfWeek = :dayOfWeek")
     suspend fun deleteLessonsForDay(groupName: String, dayOfWeek: Int)
 
-    // dateString хранится как «дд.ММ.гггг», поэтому обычная сортировка строк дала бы
-    // 31.12 < 01.01 — сортируем по частям: год, месяц, день.
     @Query("""
         SELECT DISTINCT dateString FROM lessons
         WHERE groupName = :groupName AND dateString != ''
@@ -67,15 +62,12 @@ interface LessonDao {
     @Query("SELECT COUNT(*) FROM lessons WHERE groupName = :groupName")
     suspend fun getLessonCountForGroup(groupName: String): Int
 
-    /** Все встречающиеся даты (по всем группам) — для ограничения размера архива. */
     @Query("SELECT DISTINCT dateString FROM lessons WHERE dateString != ''")
     suspend fun getAllDistinctDatesSync(): List<String>
 
-    /** Сколько уроков группы уже сохранено на конкретную дату («дд.ММ.гггг»). */
     @Query("SELECT COUNT(*) FROM lessons WHERE groupName = :groupName AND dateString = :dateString")
     suspend fun getLessonCountForDate(groupName: String, dateString: String): Int
 
-    /** Удаление уроков конкретной даты по всем группам (устаревший архив). */
     @Query("DELETE FROM lessons WHERE dateString = :dateString")
     suspend fun deleteLessonsByDate(dateString: String)
 

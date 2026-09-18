@@ -45,17 +45,6 @@ import com.example.ui.util.bouncyClickable
 import java.util.Calendar
 import java.util.Locale
 
-/**
- * Выбор одной даты: месяц сеткой, стрелки по месяцам, «готово»/«отмена».
- *
- * Раньше здесь стоял стандартный DatePicker библиотеки — у него цвет цифры
- * выбранного дня берётся из цветовой схемы и не поддаётся настройке, поэтому
- * получалась тёмная цифра на тёмном кружке. Сетка [MonthGrid] нарисована вручную
- * с явными цветами и уже работает в архиве расписания — используем её же.
- *
- * Границы лет задаются вызывающим: раньше текущего года смысла нет (расписание
- * и задания пишутся вперёд), дальше последнего курса — тоже.
- */
 @Composable
 fun SimpleDatePickerDialog(
     initialDateIso: String?,
@@ -66,7 +55,6 @@ fun SimpleDatePickerDialog(
 ) {
     val today = remember { Calendar.getInstance() }
 
-    // Разбираем начальную дату «ГГГГ-ММ-ДД»; если её нет — открываем на текущем месяце
     val startYear = remember(initialDateIso) {
         initialDateIso?.split("-")?.getOrNull(0)?.toIntOrNull()
             ?: today.get(Calendar.YEAR)
@@ -158,7 +146,6 @@ fun SimpleDatePickerDialog(
     }
 }
 
-/** Стрелка перелистывания месяца; неактивная — серая и не нажимается. */
 @Composable
 private fun ArrowButton(forward: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Box(
@@ -198,6 +185,5 @@ private fun ActionButton(text: String, filled: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Даты в ISO-строку «ГГГГ-ММ-ДД» — формат хранения в базе. */
 internal fun isoFromParts(year: Int, monthZeroBased: Int, day: Int): String =
     String.format(Locale.ROOT, "%04d-%02d-%02d", year, monthZeroBased + 1, day)

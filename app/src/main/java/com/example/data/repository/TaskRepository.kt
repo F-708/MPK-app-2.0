@@ -7,9 +7,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 
-/**
- * Репозиторий для работы со студенческими заданиями.
- */
 class TaskRepository(private val taskDao: TaskDao) {
 
     fun getTasksForGroup(groupName: String): Flow<List<StudentTaskEntity>> {

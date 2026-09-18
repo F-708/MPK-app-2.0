@@ -20,11 +20,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Дымовой рендер-тест: реально отрисовывает все экраны в Robolectric.
- * Ловит краши композиции (например, @Composable-геттеры вне композиции),
- * которые не видят логические юнит-тесты.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w360dp-h720dp")
 class UiRenderSmokeTest {
@@ -75,7 +70,6 @@ class UiRenderSmokeTest {
                 CollegeScreen(
                     groupInfo = group,
                     scheduleRepository = repo,
-                    diagnosticInfo = com.example.data.model.SyncDiagnosticInfo(),
                     onGroupChanged = {},
                     onRunConnectionTest = {},
                 )

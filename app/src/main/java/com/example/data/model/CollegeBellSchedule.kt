@@ -2,21 +2,15 @@ package com.example.data.model
 
 import java.util.Calendar
 
-/**
- * Тип расписания звонков в зависимости от дня недели.
- */
 enum class BellScheduleType(val title: String, val subtitle: String) {
     STANDARD("Основное (Пн-Ср, Пт)", "12 уроков / 6 пар"),
     THURSDAY("Четверг (Инфочас)", "С информационным часом"),
     SATURDAY("Суббота", "8 уроков / 4 пары")
 }
 
-/**
- * Элемент расписания звонков (урок или специальное событие вроде Информационного часа).
- */
 data class BellItem(
-    val lessonNumber: Int,          // 1..12 (или 0 для инфочаса)
-    val pairNumber: Int? = null,    // 1..6 если применимо
+    val lessonNumber: Int,
+    val pairNumber: Int? = null,
     val title: String,
     val start: String,
     val end: String,
@@ -37,16 +31,11 @@ data class BellItem(
     }
 }
 
-/**
- * Расписание звонков ГУО «Минский государственный политехнический колледж» (МГПК).
- * Утверждено директором колледжа на 2026 учебный год.
- */
 object CollegeBellSchedule {
 
     const val DISCLAIMER: String =
         "Справочная информация: утвержденное расписание звонков колледжа МГПК на 2026 г. Сокращённые звонки не синхронизируются автоматически."
 
-    // А) Понедельник, вторник, среда, пятница (Стандартный график)
     val STANDARD_BELLS: List<BellItem> = listOf(
         BellItem(1, 1, "1 урок", "08:15", "09:00", breakAfterMinutes = 10),
         BellItem(2, 1, "2 урок", "09:10", "09:55", breakAfterMinutes = 25, isBigBreak = true),
@@ -62,7 +51,6 @@ object CollegeBellSchedule {
         BellItem(12, 6, "12 урок", "18:50", "19:35", breakAfterMinutes = 0)
     )
 
-    // Б) Четверг (Особый график с Информационным часом)
     val THURSDAY_BELLS: List<BellItem> = listOf(
         BellItem(1, 1, "1 урок", "08:15", "09:00", breakAfterMinutes = 10),
         BellItem(2, 1, "2 урок", "09:10", "09:55", breakAfterMinutes = 25, isBigBreak = true),
@@ -79,7 +67,6 @@ object CollegeBellSchedule {
         BellItem(12, 6, "12 урок", "19:20", "20:05", breakAfterMinutes = 0)
     )
 
-    // В) Суббота
     val SATURDAY_BELLS: List<BellItem> = listOf(
         BellItem(1, 1, "1 урок", "08:15", "09:00", breakAfterMinutes = 10),
         BellItem(2, 1, "2 урок", "09:10", "09:55", breakAfterMinutes = 10),
@@ -91,12 +78,8 @@ object CollegeBellSchedule {
         BellItem(8, 4, "8 урок", "14:40", "15:25", breakAfterMinutes = 0)
     )
 
-    // Обратная совместимость для существующего кода
     val BELLS: List<BellItem> = STANDARD_BELLS
 
-    /**
-     * Возвращает тип расписания для дня недели (1 = Пн .. 6 = Сб, 7 = Вс).
-     */
     fun getTypeForDay(dayOfWeek: Int): BellScheduleType {
         return when (dayOfWeek) {
             4 -> BellScheduleType.THURSDAY
@@ -105,9 +88,6 @@ object CollegeBellSchedule {
         }
     }
 
-    /**
-     * Возвращает список элементов звонков для указанного типа.
-     */
     fun getBellsForType(type: BellScheduleType): List<BellItem> {
         return when (type) {
             BellScheduleType.STANDARD -> STANDARD_BELLS
@@ -116,16 +96,10 @@ object CollegeBellSchedule {
         }
     }
 
-    /**
-     * Возвращает список элементов звонков для дня недели (1..7).
-     */
     fun getBellsForDay(dayOfWeek: Int): List<BellItem> {
         return getBellsForType(getTypeForDay(dayOfWeek))
     }
 
-    /**
-     * Возвращает текущий активный слот (урок или инфочас) по минутам от начала суток.
-     */
     fun getCurrentSlot(currentMinutes: Int, dayOfWeek: Int = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)): BellItem? {
         val convertedDay = when (dayOfWeek) {
             Calendar.MONDAY -> 1
@@ -141,12 +115,9 @@ object CollegeBellSchedule {
         return bells.firstOrNull { currentMinutes in it.startMinutes..it.endMinutes }
     }
 
-    /**
-     * Возвращает время пары (1..6) или урока (1..12) для указанного дня недели.
-     */
     fun getTimeForNumber(number: Int, dayOfWeek: Int = 1): Pair<String, String> {
         val bells = getBellsForDay(dayOfWeek)
-        // Сначала пробуем как номер пары (1..6)
+
         if (number in 1..6) {
             val pairLessons = bells.filter { it.pairNumber == number }
             if (pairLessons.isNotEmpty()) {
@@ -155,7 +126,7 @@ object CollegeBellSchedule {
                 return Pair(start, end)
             }
         }
-        // Если как номер урока (1..12)
+
         val lesson = bells.find { it.lessonNumber == number }
         if (lesson != null) {
             return Pair(lesson.start, lesson.end)
@@ -167,11 +138,6 @@ object CollegeBellSchedule {
         return STANDARD_BELLS.firstOrNull { it.lessonNumber == number || it.pairNumber == number }
     }
 
-    /**
-     * Возвращает время начала и конца УРОКА (1..12) для указанного дня недели.
-     * Документы сайта guo-mpk.by нумеруют занятия по урокам (не по парам),
-     * поэтому парсер и виджеты используют именно этот метод.
-     */
     fun getTimeForLessonNumber(number: Int, dayOfWeek: Int = 1): Pair<String, String> {
         val lesson = getBellsForDay(dayOfWeek).find { it.lessonNumber == number }
         if (lesson != null) {

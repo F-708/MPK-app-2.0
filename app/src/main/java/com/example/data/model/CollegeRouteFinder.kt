@@ -1,26 +1,11 @@
 package com.example.data.model
 
-/**
- * Поиск пути по этажу колледжа.
- *
- * Граф собирается из двух источников, которые размечает заказчик в редакторе:
- * - **узлы** — перекрёстки коридоров, у каждого есть связи с соседними узлами;
- * - **коридоры** — ломаные линии вдоль проходов; их вершины соединяются
- *   последовательно, а концы подвязываются к ближайшим узлам.
- *
- * Кабинет подключается к ближайшей вершине графа — считается, что из двери
- * кабинета выходишь в ближайший проход. Если граф пуст или точки не связаны,
- * маршрут не строится: приложение просто подсветит кабинет.
- */
 object CollegeRouteFinder {
 
-    /** Вершина графа. */
     private data class Vertex(val x: Float, val y: Float)
 
-    /** Готовый маршрут: точки в долях от размера плана. */
     data class Route(val points: List<MapPoint>, val distance: Float)
 
-    /** Насколько далеко конец коридора может «дотянуться» до узла, чтобы с ним слиться. */
     private const val JOIN_RADIUS = 0.05f
 
     fun findRoute(
@@ -34,7 +19,7 @@ object CollegeRouteFinder {
         val adjacency = mutableListOf<MutableList<Pair<Int, Float>>>()
 
         fun addVertex(x: Float, y: Float): Int {
-            // Одинаковые точки (коридор пришёл в узел) не дублируем
+
             vertices.forEachIndexed { i, v ->
                 if (Math.abs(v.x - x) < 1e-4f && Math.abs(v.y - y) < 1e-4f) return i
             }
@@ -50,7 +35,6 @@ object CollegeRouteFinder {
             adjacency[b].add(a to d)
         }
 
-        // 1. Узлы и связи между ними
         val nodeIndex = HashMap<String, Int>()
         floor.nodes.forEach { n ->
             nodeIndex[n.id] = addVertex(n.x, n.y)
@@ -60,7 +44,6 @@ object CollegeRouteFinder {
             n.links.forEach { other -> nodeIndex[other]?.let { link(a, it) } }
         }
 
-        // 2. Коридоры: вершины подряд, концы — к ближайшим узлам
         floor.corridors.forEach { c ->
             if (c.points.size < 2) return@forEach
             val idx = c.points.map { p -> addVertex(p.x, p.y) }
@@ -85,14 +68,10 @@ object CollegeRouteFinder {
 
         val path = shortestPath(vertices, adjacency, start, finish) ?: return null
 
-        // Линия: центр кабинета отправления, ВСЕ вершины пути, центр кабинета назначения.
-        // Раньше первая и последняя вершины выбрасывались, и линия шла напрямую
-        // через стены, минуя коридор.
         val points = mutableListOf(MapPoint(from.x, from.y))
         path.forEach { points.add(MapPoint(vertices[it].x, vertices[it].y)) }
         points.add(MapPoint(to.x, to.y))
 
-        // Длину считаем по звеньям, без первого и последнего отрезка «от двери до графа»
         var total = 0f
         for (i in 1 until path.size) total += dist(vertices[path[i - 1]], vertices[path[i]])
         return Route(points, total)
@@ -111,7 +90,6 @@ object CollegeRouteFinder {
     private fun dist(a: Vertex, b: Vertex): Float =
         Math.hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble()).toFloat()
 
-    /** Дейкстра: граф маленький, простая реализация без очереди с приоритетом достаточна. */
     private fun shortestPath(
         vertices: List<Vertex>,
         adjacency: List<List<Pair<Int, Float>>>,

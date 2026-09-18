@@ -10,15 +10,6 @@ import android.widget.RemoteViews
 import com.example.R
 import com.example.data.local.entity.LessonEntity
 
-/**
- * Виджет «Расписание на сегодня» — весь день списком.
- *
- * Строка: номер, время, предмет, кабинет. Текущий урок подсвечен, прошедшие
- * приглушены. Широкий (4–5 клеток), поэтому название предмета влезает целиком.
- *
- * Строки добавляются в LinearLayout через addView: один макет строки
- * переиспользуется для любого количества уроков, без отдельного RemoteViewsService.
- */
 class TodayScheduleWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
@@ -30,7 +21,6 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
 
     companion object {
 
-        /** Больше этого числа строк виджет не покажет — дальше он бесполезен на экране. */
         private const val MAX_ROWS = 12
 
         fun updateAll(context: Context) {

@@ -31,25 +31,16 @@ data class AppUiState(
     val currentTab: AppTab = AppTab.SCHEDULE,
     val isSyncing: Boolean = false,
     val hasSyncError: Boolean = false,
-    /** Показывать обязательный диалог выбора группы (первый вход). */
+
     val showGroupSelection: Boolean = false,
-    /** ФИО преподавателя, которого нужно открыть в «Другом» (переход из расписания). */
+
     val pendingTeacherName: String? = null,
-    /** Кабинет, который нужно показать на карте (переход из расписания). */
+
     val pendingRoom: String? = null,
-    /**
-     * Кабинет текущего урока — от него строится маршрут. Пусто, если карту
-     * открыли из меню: тогда маршрута нет, кабинет просто подсвечивается.
-     */
+
     val pendingFromRoom: String? = null
 )
 
-/**
- * Главная ViewModel приложения «Мой Политех».
- *
- * Группа хранится в SharedPreferences: при первом входе приложение
- * обязательно предлагает выбрать группу, смена — из настроек.
- */
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = MpkDatabase.getInstance(application)
@@ -71,7 +62,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val toastEvent: SharedFlow<String> = _toastEvent.asSharedFlow()
 
     init {
-        // Фоновая автосинхронизация при запуске приложения
+
         if (!uiState.value.showGroupSelection) {
             syncSchedule(isAutoSync = true)
         }
@@ -98,32 +89,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Открыть карточку преподавателя из любого места приложения:
-     * переключаемся на «Другое» и передаём ФИО для открытия.
-     */
     fun openTeacher(teacherName: String) {
         _uiState.update {
             it.copy(currentTab = AppTab.COLLEGE, pendingTeacherName = teacherName)
         }
     }
 
-    /** Сброс после того, как карточка преподавателя открыта. */
     fun consumePendingTeacher() {
         _uiState.update { it.copy(pendingTeacherName = null) }
     }
 
-    /**
-     * Открыть карту на нужном кабинете (нажатие на кабинет в расписании).
-     * [fromRoom] — кабинет текущего урока: от него проложат маршрут.
-     */
     fun openMap(room: String, fromRoom: String? = null) {
         _uiState.update {
             it.copy(currentTab = AppTab.COLLEGE, pendingRoom = room, pendingFromRoom = fromRoom)
         }
     }
 
-    /** Сброс после того, как карта открыта. */
     fun consumePendingRoom() {
         _uiState.update { it.copy(pendingRoom = null, pendingFromRoom = null) }
     }
@@ -132,14 +113,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (_uiState.value.isSyncing) return
 
         val targetGroup = _uiState.value.currentGroupName
-        // Группа ещё не выбрана — синхронизировать нечего, не дёргаем сайт колледжа
+
         if (targetGroup.isBlank()) return
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true, hasSyncError = false) }
 
-            // Ручное обновление (нажатие кнопки) перекачивает оба дня,
-            // фоновая автосинхронизация — только то, чего ещё нет
             val result = scheduleRepository.syncScheduleFromWeb(targetGroup, force = !isAutoSync)
 
             result.fold(

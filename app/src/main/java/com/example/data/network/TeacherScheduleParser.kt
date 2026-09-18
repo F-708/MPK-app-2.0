@@ -5,14 +5,6 @@ import java.nio.charset.Charset
 import java.util.Locale
 import java.util.zip.ZipInputStream
 
-/**
- * Одно занятие преподавателя из расписания преподавателей.
- *
- * @param lessonNumber номер урока (1..10)
- * @param groups группы, у которых преподаватель ведёт этот урок
- * @param subject сокращённое название дисциплины из документа
- * @param room кабинет (может быть пустым)
- */
 data class TeacherSlot(
     val lessonNumber: Int,
     val groups: List<String>,
@@ -20,45 +12,21 @@ data class TeacherSlot(
     val room: String
 )
 
-/**
- * Расписание преподавателей с сайта guo-mpk.by.
- *
- * Документ `NN.MM.YYYY-raspisanie-prepodavatelej.doc` устроен как
- * транспонированная таблица: строки — преподаватели, колонки — номера уроков.
- * На каждого преподавателя идёт несколько строк:
- *
- * ```
- * │Базулина Т.Г. ║    │32Э │41П │41П │31П │31П │
- * │              ║    │ЭлСн│НалД│НалД│ЭлМа│ЭлМа│   ← дисциплины
- * │              ║    │301 │301 │301 │123 │123 │   ← кабинеты
- * ```
- *
- * Значения классифицируются по виду: код группы (`41П`) → группа,
- * число (`301`) → кабинет, остальное → дисциплина.
- */
 object TeacherScheduleParser {
 
     private val CP1251 = Charset.forName("windows-1251")
 
-    /** Код группы вида «41П», «11Э», «33Э». */
     private val GROUP_REGEX = Regex("^([1-4])([1-9])([\\u0410-\\u042F])$")
 
-    /** Кабинет: 1–3 цифры, возможно с буквой (305а) или «СТД». */
     private val ROOM_REGEX = Regex("^([0-9]{1,3}[\\u0430-\\u044Fa-zA-Z]?|СТД)$")
 
-    /**
-     * Разбирает документ расписания преподавателей.
-     * @return ФИО преподавателя → список занятий (отсортирован по номеру урока)
-     */
     fun parse(bytes: ByteArray): Map<String, List<TeacherSlot>> {
         if (bytes.isEmpty()) return emptyMap()
 
-        // 1. DOCX (ZIP) — читаем word/document.xml
         if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()) {
             parseDocx(bytes)?.let { if (it.isNotEmpty()) return it }
         }
 
-        // 2. Бинарный .doc: извлекаем текст в UTF-16LE (основной) или CP1251
         val utf16 = extractUtf16(bytes)
         if (utf16.isNotBlank()) {
             val parsed = parsePlainText(utf16)
@@ -68,13 +36,9 @@ object TeacherScheduleParser {
         return parsePlainText(cp1251)
     }
 
-    /**
-     * Разбирает уже извлечённый текст таблицы преподавателей.
-     */
     fun parsePlainText(text: String): Map<String, List<TeacherSlot>> {
         if (text.isBlank()) return emptyMap()
 
-        // Накопители: ФИО → (номер урока → набор значений по видам)
         data class Cell(
             val groups: MutableList<String> = mutableListOf(),
             val rooms: MutableList<String> = mutableListOf(),
@@ -87,7 +51,7 @@ object TeacherScheduleParser {
         text.lines().forEach { rawLine ->
             val line = rawLine.trimEnd()
             if (!line.contains('║')) return@forEach
-            // Пропускаем шапку и разделители
+
             if (line.contains('╫') || line.contains('╥')) return@forEach
 
             val parts = line.split('║')
@@ -99,9 +63,8 @@ object TeacherScheduleParser {
             }
             val teacher = currentTeacher ?: return@forEach
 
-            // Правая часть: ячейки по номерам уроков, разделитель │
             val cells = parts[1].split('│').map { it.trim() }
-            // Первая ячейка часто пустая (после ║), последняя — мусор после ║
+
             val lessonCells = cells.drop(1)
 
             val teacherCells = result.getOrPut(teacher) { mutableMapOf() }
@@ -115,28 +78,25 @@ object TeacherScheduleParser {
                 when {
                     GROUP_REGEX.matches(value) -> cell.groups.add(value)
                     ROOM_REGEX.matches(value) -> cell.rooms.add(value)
-                    // «1 КУРС» в ячейке означает занятие у всего курса
+
                     value.uppercase(Locale.ROOT).contains("КУРС") -> cell.subject = value
                     else -> cell.subject = value
                 }
             }
         }
 
-        // Преобразуем накопители в плоский список занятий
         return result.mapValues { (_, byLesson) ->
             byLesson.entries.sortedBy { it.key }.map { (lessonNumber, cell) ->
                 TeacherSlot(
                     lessonNumber = lessonNumber,
                     groups = cell.groups.distinct(),
                     subject = cell.subject,
-                    // Кабинетов может быть меньше, чем групп: берём первый как основной
+
                     room = cell.rooms.firstOrNull().orEmpty()
                 )
             }
         }.filterValues { it.isNotEmpty() }
     }
-
-    // --------------------------- Извлечение текста ---------------------------
 
     private fun extractUtf16(bytes: ByteArray): String {
         val runs = mutableListOf<String>()
@@ -195,13 +155,12 @@ object TeacherScheduleParser {
             zip.closeEntry()
             entry = zip.nextEntry
         }
-        // Для .docx строим псевдографику из ячеек таблицы: вставляем «║»/«│»
+
         xml?.let { parsePlainText(xmlToPseudoTable(it)) }
     } catch (_: Exception) {
         null
     }
 
-    /** Грубое превращение XML таблицы .docx в ту же псевдографику, что у .doc. */
     private fun xmlToPseudoTable(xml: String): String {
         val sb = StringBuilder()
         var cellIndex = 0

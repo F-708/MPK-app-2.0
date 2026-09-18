@@ -14,10 +14,6 @@ import androidx.core.app.NotificationManagerCompat
 import com.example.MainActivity
 import com.example.R
 
-/**
- * Хелпер для создания каналов уведомлений и деликатной отправки пушей
- * о выходе расписания колледжа (МГПК).
- */
 object NotificationHelper {
 
     const val CHANNEL_ID = "mpk_schedule_updates"
@@ -40,9 +36,6 @@ object NotificationHelper {
         }
     }
 
-    /**
-     * Отправляет ровно один пуш о выходе расписания при наличии системных разрешений.
-     */
     fun showScheduleReleaseNotification(
         context: Context,
         dayTitle: String,
@@ -94,7 +87,7 @@ object NotificationHelper {
         try {
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
         } catch (ignored: SecurityException) {
-            // Защита от race-condition отзывов разрешений в Android
+
         }
     }
 }

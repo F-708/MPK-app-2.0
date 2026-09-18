@@ -2,15 +2,8 @@ package com.example.util
 
 import com.example.data.model.GroupInfo
 
-/**
- * Парсер и валидатор учебных групп ГУО «МГПК».
- *
- * Формат групп: [Курс (1-4)][Номер группы (1-9)][Буква специальности (О, Н, Э, П, Т, Г, Д, А, С, М)]
- * Примеры: 41О, 11Э, 23О, 31Т, 12С, 41А, 22Д, 31Г, 11Н, 21М.
- */
 object GroupParser {
 
-    // Маппинг латинских букв в соответствующие кириллические буквы специальностей колледжа
     private val LATIN_TO_CYRILLIC: Map<Char, Char> = mapOf(
         'O' to 'О', 'o' to 'О',
         'H' to 'Н', 'h' to 'Н',
@@ -26,10 +19,6 @@ object GroupParser {
         'M' to 'М', 'm' to 'М'
     )
 
-    /**
-     * Создает регулярное выражение для поиска группы в тексте документов с учетом
-     * пробелов, дефисов и латинских/кириллических букв.
-     */
     fun createGroupSearchRegex(targetGroup: String): Regex {
         val parsed = parse(targetGroup)
         val course = parsed?.course?.toString() ?: targetGroup.filter { it.isDigit() }.take(1)
@@ -50,15 +39,9 @@ object GroupParser {
             else -> "[$letter]"
         }
 
-        // Границы группы: начало/конец строки либо не цифра и не буква. Кириллица задана явным
-        // Unicode-диапазоном (\\u0400-\\u04FF) — символьные классы вида [а-я] и \\b по-разному
-        // работают на JVM (OpenJDK) и Android (ICU), поэтому здесь только явные диапазоны.
         return Regex("(?i)(?:^|[^0-9\\u0400-\\u04FFa-z])$course\\s*$number\\s*[-_\\s]*$latinVariants(?:$|[^0-9\\u0400-\\u04FFa-z])")
     }
 
-    /**
-     * Проверяет, содержится ли группа в тексте ячейки или строки.
-     */
     fun matchesGroup(text: String, targetGroup: String): Boolean {
         val cleanTarget = cleanRawGroupName(targetGroup)
         val cleanText = text.replace("\\s+".toRegex(), "").uppercase()
@@ -67,38 +50,23 @@ object GroupParser {
         return regex.containsMatchIn(text)
     }
 
-    /**
-     * Парсит строку названия группы в объект GroupInfo.
-     * Возвращает null, если формат или специальность не соответствуют правилам колледжа.
-     *
-     * ВАЖНО: ручной разбор вместо регекса. Кириллические символьные классы
-     * (вида [а-яА-ЯёЁ]) в регексах по-разному работают на JVM (OpenJDK) и на
-     * Android (ICU) — на некоторых устройствах GROUP_REGEX не сопоставлял
-     * даже «41О», из-за чего все стратегии парсера не находили группу.
-     * Character.isLetter() работает одинаково везде.
-     */
     fun parse(rawGroupName: String): GroupInfo? {
         val s = rawGroupName.trim()
         if (s.length < 3) return null
 
-        // Курс: 1..4
         val course = s[0] - '0'
         if (course !in 1..4) return null
 
-        // Возможные пробелы между цифрами
         var i = 1
         while (i < s.length && s[i].isWhitespace()) i++
 
-        // Номер группы: 1..9
         if (i >= s.length) return null
         val groupNumber = s[i] - '0'
         if (groupNumber !in 1..9) return null
 
-        // Возможные разделители -_ и пробелы перед буквой специальности
         i++
         while (i < s.length && (s[i] == '-' || s[i] == '_' || s[i].isWhitespace())) i++
 
-        // Ровно одна буква специальности в конце
         if (i != s.length - 1) return null
         val rawChar = s[i]
         if (!Character.isLetter(rawChar)) return null
@@ -121,41 +89,27 @@ object GroupParser {
         )
     }
 
-    /**
-     * Проверяет, валидно ли название группы.
-     */
     fun isValid(rawGroupName: String): Boolean {
         return parse(rawGroupName) != null
     }
 
-    /**
-     * Очищает и нормализует сырую строку названия группы (например " 4 1 o " -> "41О").
-     */
     fun cleanRawGroupName(rawGroupName: String): String {
         return parse(rawGroupName)?.canonicalName ?: rawGroupName.trim().replace("\\s+".toRegex(), "").uppercase()
     }
 
-    /**
-     * Преобразует символ в верхний регистр кириллицы.
-     */
     fun normalizeSpecialtyChar(char: Char): Char {
         val upper = char.uppercaseChar()
         return LATIN_TO_CYRILLIC[upper] ?: LATIN_TO_CYRILLIC[char] ?: upper
     }
 
-    /**
-     * Возвращает канонический список типовых групп для быстрого выбора студентом.
-     */
     fun generateCommonGroups(): List<GroupInfo> {
         val groups = mutableListOf<GroupInfo>()
         val specialtyCodes = listOf('О', 'Н', 'Э', 'П', 'Т', 'Г', 'Д', 'А', 'С', 'М')
-        
+
         for (course in 1..4) {
             for (code in specialtyCodes) {
                 val specialty = MpkCurriculum.getSpecialty(code)
-                // Не предлагаем курс, которого у специальности нет: у ДОУ три курса,
-                // и группы 41Д быть не может. Иначе человек уходит искать группу,
-                // которой не существует.
+
                 val maxCourse = specialty?.subjectsByCourse?.keys?.maxOrNull() ?: 4
                 if (course > maxCourse) continue
                 groups.add(
@@ -168,7 +122,7 @@ object GroupParser {
                         specialtyFullName = specialty?.fullName ?: ""
                     )
                 )
-                // Для некоторых специальностей есть 2-я подгруппа/поток
+
                 if (code in listOf('О', 'Э', 'Т', 'Д', 'С')) {
                     groups.add(
                         GroupInfo(

@@ -4,16 +4,14 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Точка на плане: доли от ширины и высоты картинки (0..1). */
 data class MapPoint(val x: Float, val y: Float)
 
-/** Кабинет на плане. */
 data class MapRoom(
     val id: String,
     val number: String,
     val title: String,
     val note: String,
-    /** normal | closed | nonexistent | service */
+
     val status: String,
     val x: Float,
     val y: Float,
@@ -21,19 +19,14 @@ data class MapRoom(
     val h: Float
 )
 
-/** Проход по коридору — ломаная. */
 data class MapCorridor(val id: String, val points: List<MapPoint>, val width: Float)
 
-/** Перекрёсток коридоров; [links] — соседние узлы, с которыми есть проход. */
 data class MapNode(val id: String, val x: Float, val y: Float, val links: List<String>)
 
-/** Надпись на плане. */
 data class MapLabel(val id: String, val x: Float, val y: Float, val text: String, val size: Float)
 
-/** Выноска: текст со ссылкой на объект. */
 data class MapCallout(val id: String, val text: String, val x: Float, val y: Float, val targetId: String)
 
-/** Вход, выход или лестница. [dir] — направление стрелки в градусах. */
 data class MapEntrance(
     val id: String,
     val x: Float,
@@ -43,7 +36,6 @@ data class MapEntrance(
     val title: String
 )
 
-/** Всё, что размечено на одном этаже. */
 data class FloorMap(
     val rooms: List<MapRoom> = emptyList(),
     val corridors: List<MapCorridor> = emptyList(),
@@ -52,16 +44,13 @@ data class FloorMap(
     val callouts: List<MapCallout> = emptyList(),
     val entrances: List<MapEntrance> = emptyList()
 ) {
+
     fun room(number: String): MapRoom? =
-        rooms.firstOrNull { it.number.equals(number, ignoreCase = true) }
+        number.trim().takeIf { it.isNotEmpty() }?.let { n ->
+            rooms.firstOrNull { it.number.equals(n, ignoreCase = true) }
+        }
 }
 
-/**
- * Разметка карты колледжа: читается из `assets/college_map.json`.
- *
- * Файл готовит заказчик в редакторе `tools/editor.html`. Если файла нет
- * или он битый — карта просто останется пустой, приложение не упадёт.
- */
 class CollegeMapData(private val floors: Map<String, FloorMap>) {
 
     fun floor(id: String): FloorMap = floors[id] ?: FloorMap()
@@ -150,12 +139,6 @@ class CollegeMapData(private val floors: Map<String, FloorMap>) {
     }
 }
 
-// --- Мелкие помощники разбора: пустой список вместо падения ------------------
-
-/**
- * Одна общая функция на все списки. Раньше здесь было шесть одинаково
- * названных функций с разными типами — Kotlin не мог выбрать нужную.
- */
 private inline fun <T> JSONArray?.mapObjects(block: (JSONObject) -> T): List<T> {
     if (this == null) return emptyList()
     val out = ArrayList<T>(length())
@@ -163,7 +146,6 @@ private inline fun <T> JSONArray?.mapObjects(block: (JSONObject) -> T): List<T> 
     return out
 }
 
-/** Точки ломаной: [[x, y], ...] */
 private fun JSONArray?.mapPoints(): List<MapPoint> {
     if (this == null) return emptyList()
     val out = ArrayList<MapPoint>(length())
@@ -174,7 +156,6 @@ private fun JSONArray?.mapPoints(): List<MapPoint> {
     return out
 }
 
-/** Список строк: ["id", ...] */
 private fun JSONArray?.mapStrings(): List<String> {
     if (this == null) return emptyList()
     val out = ArrayList<String>(length())

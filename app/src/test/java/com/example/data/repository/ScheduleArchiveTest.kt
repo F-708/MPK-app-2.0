@@ -5,7 +5,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Проверка чистки архива расписания (ScheduleRepository.pruneOldLessons). */
 class ScheduleArchiveTest {
 
     private fun ms(y: Int, m: Int, d: Int): Long = Calendar.getInstance().apply {
@@ -29,7 +28,7 @@ class ScheduleArchiveTest {
 
     @Test
     fun `не-даты не удаляются`() {
-        // Уроки-шаблоны по дню недели хранятся с пустым dateString
+
         assertFalse(isStaleDate("", cutoff))
         assertFalse(isStaleDate("2025-09-01", cutoff))
         assertFalse(isStaleDate("1.9.2025", cutoff))

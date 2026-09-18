@@ -12,16 +12,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Снимает экран карты колледжа в PNG.
- *
- * Нужен, чтобы видеть вёрстку глазами: логические тесты не замечают, что
- * элемент уехал за край или налез на другой. Картинки складываются в
- * `app/build/screenshots/`.
- *
- * Время останавливаем: у подсветки кабинета бесконечная пульсация, и тест
- * иначе ждёт её вечно.
- */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w360dp-h780dp")
@@ -49,7 +39,7 @@ class MapScreenShotTest {
 
     @Test
     fun `карта из расписания — с маршрутом`() {
-        // 101 и 128 на первом этаже, между ними размечены коридоры
+
         shoot("map-route", "128", "101")
     }
 

@@ -9,20 +9,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 
-/** Формат дат в LessonEntity.dateString — «дд.ММ.гггг» (задаёт MpkScheduleParser). */
 private val DATE_DD_MM_YYYY = Regex("""\d{2}\.\d{2}\.\d{4}""")
 
-/**
- * Сколько дней архива расписания хранить. Колледж публикует документы раз в день,
- * и каждая синхронизация добавляет новую дату — без чистки БД растёт бесконечно.
- */
 private const val ARCHIVE_KEEP_DAYS = 60L
 
-/**
- * true, если дата «дд.ММ.гггг» старше [cutoffMs]. Строки, не похожие на дату,
- * НЕ считаются устаревшими: лучше оставить лишнее, чем удалить действующее расписание
- * (уроки-шаблоны по дню недели хранятся с пустым dateString).
- */
 internal fun isStaleDate(date: String, cutoffMs: Long): Boolean {
     if (!DATE_DD_MM_YYYY.matches(date)) return false
     val cal = Calendar.getInstance()
@@ -35,10 +25,6 @@ internal fun isStaleDate(date: String, cutoffMs: Long): Boolean {
     return cal.timeInMillis < cutoffMs
 }
 
-/**
- * Репозиторий для работы с расписанием занятий колледжа.
- * Поддерживает локальное хранилище Room, сетевую синхронизацию и календарный архив.
- */
 class ScheduleRepository(
     private val lessonDao: LessonDao,
     private val networkClient: MpkNetworkClient = MpkNetworkClient()
@@ -70,19 +56,6 @@ class ScheduleRepository(
         return lessonDao.searchLessonsForGroup(groupName, query).flowOn(Dispatchers.IO)
     }
 
-    /**
-     * Синхронизация с сайтом.
-     *
-     * Скачиваем ровно то, чего у нас ещё нет: расписание публикуется раз в день,
-     * и если документ на сегодня уже разобран, повторно его тянуть незачем — это
-     * лишняя нагрузка на сайт колледжа и на батарею. Завтрашний документ колледж
-     * публикует накануне, поэтому его проверяем всегда, пока он не появится.
-     *
-     * [force] = true (ручное обновление по кнопке) — перекачиваем оба дня: пользователь
-     * нажал сам, значит ждёт свежих данных.
-     *
-     * Сегодняшний запрос выполняется последним — его статус остаётся в диагностике.
-     */
     suspend fun syncScheduleFromWeb(
         groupName: String,
         force: Boolean = false
@@ -99,7 +72,7 @@ class ScheduleRepository(
         val needTomorrow = force || tomorrowCached == 0
 
         if (!needToday && !needTomorrow) {
-            // Оба дня уже на месте — в сеть не ходим вообще
+
             return@withContext Result.success(todayCached + tomorrowCached)
         }
 
@@ -131,12 +104,6 @@ class ScheduleRepository(
         }
     }
 
-    /**
-     * Ограничивает архив расписания: без этого БД растёт бесконечно — каждая
-     * синхронизация добавляет новую дату и старые никогда не удаляются.
-     * Чистит по всем группам сразу (включая те, на которые пользователь уже
-     * переключился), поэтому вызывается из синхронизации, а не из удаления группы.
-     */
     suspend fun pruneOldLessons(keepDays: Long = ARCHIVE_KEEP_DAYS) = withContext(Dispatchers.IO) {
         val cutoff = System.currentTimeMillis() - keepDays * 24L * 60L * 60L * 1000L
         for (date in lessonDao.getAllDistinctDatesSync()) {
@@ -144,7 +111,6 @@ class ScheduleRepository(
         }
     }
 
-    /** Следующий учебный день: завтра, пропуская воскресенье (в понедельник). */
     private fun nextSchoolDay(base: Calendar = Calendar.getInstance()): Calendar {
         val cal = (base.clone() as Calendar)
         do {
@@ -153,7 +119,6 @@ class ScheduleRepository(
         return cal
     }
 
-    /** Дата в том же формате, в каком её хранит LessonEntity.dateString. */
     private fun formatDate(calendar: Calendar): String =
         "%02d.%02d.%04d".format(
             calendar.get(Calendar.DAY_OF_MONTH),
@@ -161,11 +126,6 @@ class ScheduleRepository(
             calendar.get(Calendar.YEAR)
         )
 
-    /**
-     * Заменяет ранее синхронизированные уроки тех же дат (подход МПК v1: delete + insert,
-     * но с привязкой к дате, чтобы повторные синхронизации не плодили дубли карточек
-     * и не стирали архив других дат).
-     */
     suspend fun replaceSyncedLessons(groupName: String, lessons: List<LessonEntity>) = withContext(Dispatchers.IO) {
         for (dateString in lessons.map { it.dateString }.filter { it.isNotBlank() }.distinct()) {
             lessonDao.deleteLessonsForDate(groupName, dateString)
@@ -189,4 +149,3 @@ class ScheduleRepository(
         lessonDao.getLessonCountForGroup(groupName) > 0
     }
 }
-

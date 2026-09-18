@@ -13,16 +13,6 @@ import com.example.R
 import com.example.data.model.CollegeBellSchedule
 import java.util.Calendar
 
-/**
- * Единственный виджет приложения «Мой Политех» — «До звонка».
- *
- * Показывает обратный отсчёт до ближайшего звонка (конца текущего урока
- * или начала следующего) и текущее время. Размер 2x1, растягивается по
- * горизонтали до 3x1. Цвет фона настраивается при добавлении.
- *
- * Обновление — каждую минуту в учебное время (07:00–21:00) через
- * AlarmManager; ночью будильник спит.
- */
 class BellCountdownWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
@@ -53,12 +43,11 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             if (ids.isNotEmpty()) updateWidgets(context, manager, ids)
         }
 
-        /** Данные обратного отсчёта с учётом дебаг-времени и факта уроков группы. */
         fun countdownInfo(
             context: Context,
             mode: CountdownMode = CountdownMode.GROUP_LESSONS
         ): Triple<Long, String, Int>? {
-            val cal = com.example.util.DebugClock.now(context)
+            val cal = java.util.Calendar.getInstance()
             val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
                 Calendar.MONDAY -> 1
                 Calendar.TUESDAY -> 2
@@ -72,12 +61,12 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             val bells = CollegeBellSchedule.getBellsForDay(dow)
 
             bells.forEachIndexed { index, bell ->
-                // Идёт урок: считаем до звонка с урока
+
                 if (minutes in bell.startMinutes..bell.endMinutes) {
                     val left = bell.endMinutes - minutes
                     return Triple(left.toLong(), "до звонка", if (bell.isInfoHour) 0 else bell.lessonNumber)
                 }
-                // Перемена: до начала следующего урока
+
                 val breakEnd = bell.endMinutes + bell.breakAfterMinutes
                 if (bell.breakAfterMinutes > 0 && minutes in bell.endMinutes..breakEnd) {
                     val next = bells.getOrNull(index + 1) ?: return null
@@ -90,14 +79,11 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 }
             }
 
-            // До начала дня
             val first = bells.firstOrNull() ?: return null
             if (minutes < first.startMinutes) {
                 return Triple((first.startMinutes - minutes).toLong(), "до 1 урока", 0)
             }
-            // Уроки закончились — но когда именно, зависит от выбранного режима:
-            // «по своей группе» заканчиваем на последнем СВОЁМ уроке,
-            // «по звонкам» — идём до конца общего расписания звонков колледжа.
+
             if (mode == CountdownMode.GROUP_LESSONS) {
                 val group = WidgetUpdateHelper.getSelectedGroup(context)
                 val lastGroupLesson = try {
@@ -139,7 +125,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
 
             val info = countdownInfo(context, CountdownMode.load(context, appWidgetId))
             when {
-                // Уроки закончились или данных нет — одна спокойная строка без числа
+
                 info == null || info.first < 0 -> {
                     views.setTextViewText(R.id.tv_countdown_label, "Уроки")
                     views.setTextViewText(R.id.tv_countdown_value, "закончились")
@@ -151,7 +137,6 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 }
             }
 
-            // Клик — открыть приложение
             val openIntent = PendingIntent.getActivity(
                 context,
                 appWidgetId,
@@ -162,10 +147,6 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             return views
         }
 
-        /**
-         * Человекочитаемая длительность: «12 мин», «1 ч 5 мин», «2 ч».
-         * В подавляющем большинстве случаев это просто минуты.
-         */
         fun formatMinutes(totalMinutes: Long): String {
             if (totalMinutes <= 0) return "меньше минуты"
             val h = totalMinutes / 60
@@ -179,14 +160,6 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
     }
 }
 
-/**
- * До чего считать обратный отсчёт в виджете «До звонка».
- *
- * GROUP_LESSONS — до конца уроков СВОЕЙ группы: как только последний урок
- * группы закончился, виджет пишет «Уроки закончились», даже если в колледже
- * ещё идут занятия у других.
- * ALL_BELLS — до конца общего расписания звонков колледжа.
- */
 enum class CountdownMode(val title: String, val description: String) {
     GROUP_LESSONS(
         "До конца моих уроков",
@@ -218,14 +191,13 @@ enum class CountdownMode(val title: String, val description: String) {
     }
 }
 
-/** Стиль виджета: цвет фона и текста, настраивается при добавлении. */
 enum class WidgetStyle(
     val backgroundColor: Int,
     val mainColor: Int,
     val subColor: Int,
-    /** Фон подсвеченной (текущей) строки в виджетах-списках. */
+
     val highlightColor: Int,
-    /** Цвет прошедших строк — приглушённый, чтобы не отвлекал. */
+
     val pastColor: Int,
     val title: String
 ) {
@@ -267,7 +239,6 @@ enum class WidgetStyle(
     }
 }
 
-/** Минутный тик виджета в учебное время + перезапуск после перезагрузки. */
 object WidgetAlarm {
 
     private const val SCHOOL_START = 7 * 60
@@ -283,7 +254,6 @@ object WidgetAlarm {
         )
     }
 
-    /** Нужен ли минутный такт: есть ЛЮБОЙ виджет ИЛИ включена постоянная строка «До звонка». */
     private fun hasWork(context: Context): Boolean {
         if (com.example.util.BellCountdownNotifier.isEnabled(context)) return true
         val manager = AppWidgetManager.getInstance(context)
@@ -333,15 +303,13 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             ACTION_TICK -> {
-                // Обновляем ВСЕ виджеты, а не только «До звонка»: иначе
-                // «Сейчас и дальше», «Расписание» и «Звонки» не переключали
-                // текущий урок, пока не откроешь приложение
+
                 WidgetUpdateHelper.updateAllWidgets(context)
                 WidgetAlarm.scheduleNext(context)
             }
             Intent.ACTION_BOOT_COMPLETED -> {
                 WidgetAlarm.scheduleNext(context)
-                // Поднимаем службу отсчёта, если строка «До звонка» включена
+
                 if (com.example.util.BellCountdownNotifier.isEnabled(context)) {
                     com.example.util.BellTimerService.start(context)
                 }

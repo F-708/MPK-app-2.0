@@ -58,24 +58,17 @@ import com.example.ui.theme.ColorBrandFill
 import com.example.ui.theme.ColorDangerFill
 import com.example.ui.theme.ColorSurfaceHighlight
 
-/**
- * Диалог выбора и смены учебной группы студента по официальному Style Guide МПК.
- */
 @Composable
 fun GroupSelectionDialog(
     currentGroupName: String,
     onDismissRequest: () -> Unit,
-    /**
-     * Показывать крестик закрытия. При первом входе выбор группы обязателен,
-     * закрывать диалог нечем — там крестик только путал.
-     */
+
     showClose: Boolean = true,
     onGroupSelected: (String) -> Unit
 ) {
     var selectedCourse by remember {
         val currentInfo = GroupParser.parse(currentGroupName)
-        // 0 = курс ещё не выбран. Раньше по умолчанию подставлялся 4-й курс и группа 41О,
-        // из-за чего выбор выглядел так, будто разработчик сам из 41О.
+
         mutableIntStateOf(currentInfo?.course ?: 0)
     }
 
@@ -152,7 +145,6 @@ fun GroupSelectionDialog(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Вкладки курсов 1..4
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -197,8 +189,6 @@ fun GroupSelectionDialog(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Сетка групп выбранного курса. Пока курс не выбран — сетки нет,
-                // чтобы ни одна группа не выглядела «уже предложенной».
                 if (selectedCourse != 0) {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
@@ -256,7 +246,6 @@ fun GroupSelectionDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Ввод другой группы вручную
                 Text(
                     text = "Или введите свою группу:",
                     style = androidx.compose.ui.text.TextStyle(

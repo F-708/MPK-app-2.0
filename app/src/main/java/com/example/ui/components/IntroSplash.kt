@@ -38,14 +38,6 @@ import com.example.ui.theme.ColorBrandBlue
 import com.example.ui.theme.ColorTextMuted
 import kotlinx.coroutines.delay
 
-/**
- * Стильная заставка при входе в приложение «Мой Политех»:
- * эмблема-портик появляется с масштабом и постепенным проявлением,
- * снизу — фирменная полоса прогресса. Уважает отключённые анимации
- * (reduced motion) — тогда заставка показывается статично.
- *
- * Длительности — по M3-лестнице: появление medium (350мс), полоса ~1с.
- */
 @Composable
 fun IntroSplash(
     onFinished: () -> Unit,
@@ -67,7 +59,6 @@ fun IntroSplash(
     var appearing by remember { mutableStateOf(false) }
     var progressPlaying by remember { mutableStateOf(false) }
 
-    // Появление эмблемы, затем полоса, затем завершение
     LaunchedEffect(Unit) {
         if (reducedMotion) {
             delay(400)
@@ -75,9 +66,9 @@ fun IntroSplash(
             return@LaunchedEffect
         }
         appearing = true
-        delay(350)             // medium3: появление эмблемы
+        delay(350)
         progressPlaying = true
-        delay(1000)            // полоса прогресса
+        delay(1000)
         onFinished()
     }
 
@@ -136,7 +127,6 @@ fun IntroSplash(
             )
         }
 
-        // Фирменная полоса прогресса внизу
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -155,9 +145,6 @@ fun IntroSplash(
     }
 }
 
-/**
- * Оверлей-контейнер: показывает заставку поверх контента при холодном старте.
- */
 @Composable
 fun IntroSplashOverlay(modifier: Modifier = Modifier) {
     var visible by remember { mutableStateOf(true) }

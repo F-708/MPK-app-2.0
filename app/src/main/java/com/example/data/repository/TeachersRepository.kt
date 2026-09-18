@@ -3,9 +3,6 @@ package com.example.data.repository
 import android.content.Context
 import java.io.InputStream
 
-/**
- * Преподаватель колледжа из официальной базы guo-mpk.by.
- */
 data class Teacher(
     val name: String,
     val position: String = "",
@@ -19,13 +16,6 @@ data class Teacher(
     val category: String = ""
 )
 
-/**
- * Репозиторий преподавателей: официальная база из assets (teachers.csv
- * + teachers_photos/). 101 сотрудник с фотографиями.
- *
- * Формат CSV: ФИО;должность;дисциплины;кабинет;телефон;email;фото;отдел;стаж;категория
- * Избранное хранится в SharedPreferences.
- */
 class TeachersRepository(private val context: Context) {
 
     fun loadTeachers(): List<Teacher> = try {
@@ -56,8 +46,6 @@ class TeachersRepository(private val context: Context) {
             .filter { it.name.isNotBlank() }
             .sortedBy { it.name }
     }
-
-    // ------------------------------ Избранное ------------------------------
 
     private val prefs get() = context.getSharedPreferences("teachers_favorites", Context.MODE_PRIVATE)
 

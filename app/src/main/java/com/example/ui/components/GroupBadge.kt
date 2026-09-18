@@ -35,13 +35,6 @@ import com.example.ui.theme.ColorMenuBorder
 import com.example.ui.theme.ColorSurfaceHighlight
 import com.example.ui.theme.ColorTopBar
 
-/**
- * Бейдж текущей учебной группы студента по Design System МПК.
- *
- * ЖЕЛЕЗНОЕ ПРАВИЛО ВЕРСТКИ ДЛЯ УЗКИХ ЭКРАНОВ (HONOR X8D):
- * Номер группы НИКОГДА не переносится на две строки (цифры «41» и буква «О» всегда на одной строке):
- * softWrap = false, maxLines = 1, overflow = TextOverflow.Clip, modifier = Modifier.wrapContentWidth().
- */
 @Composable
 fun GroupBadge(
     groupName: String,

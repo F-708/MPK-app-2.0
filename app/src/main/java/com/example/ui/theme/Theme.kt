@@ -28,10 +28,6 @@ private val LightColorScheme = lightColorScheme(
     onError = Color.White
 )
 
-/**
- * Единая светлая тема приложения «Мой Политех».
- * Тёмная тема удалена по требованию — приложение всегда светлое.
- */
 @Composable
 fun MyApplicationTheme(
     content: @Composable () -> Unit

@@ -62,7 +62,6 @@ import com.example.ui.theme.ColorTextTitle
 import com.example.ui.theme.ColorTopBar
 import com.example.ui.theme.TextStylePageTitle
 import com.example.ui.util.bouncyClickable
-import com.example.util.DebugClock
 import java.util.Calendar
 import kotlinx.coroutines.delay
 
@@ -71,21 +70,11 @@ private val RAIL_BLUE_SOFT = Color(0xFF0072CE).copy(alpha = 0.30f)
 private val RAIL_GRAY = Color(0xFF94A3B8).copy(alpha = 0.55f)
 private val RAIL_GRAY_SOFT = Color(0xFFCBD5E1)
 
-/** Строка списка звонков: урок/инфочас либо перемена между ними. */
 private sealed interface BellRow {
     data class Lesson(val item: BellItem) : BellRow
     data class Break(val startMinutes: Int, val endMinutes: Int, val minutes: Int, val isBig: Boolean) : BellRow
 }
 
-/**
- * Экран расписания звонков «Мой Политех».
- *
- * Шкала времени рисуется ПРЯМО В КАРТОЧКАХ (drawBehind): вертикальная линия
- * и риски справа — часть самих строк, поэтому при прокрутке всё движется
- * идеально синхронно. Синяя зона — до последнего урока по факту расписания
- * группы; пульсирующая точка живёт на карточке текущего интервала.
- * При включённом дебаг-времени учитывается оно (DebugClock).
- */
 @Composable
 fun BellsScreen(
     groupInfo: com.example.data.model.GroupInfo,
@@ -93,7 +82,7 @@ fun BellsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val now = remember { DebugClock.now(context) }
+    val now = remember { Calendar.getInstance() }
     val todayDow = remember {
         when (now.get(Calendar.DAY_OF_WEEK)) {
             Calendar.MONDAY -> 1
@@ -119,11 +108,10 @@ fun BellsScreen(
         mutableIntStateOf(now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE))
     }
 
-    // Фоновое обновление времени каждые 30 секунд
     LaunchedEffect(Unit) {
         while (true) {
             delay(30_000)
-            val c = DebugClock.now(context)
+            val c = Calendar.getInstance()
             currentTimeMinutes = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE)
         }
     }
@@ -135,7 +123,6 @@ fun BellsScreen(
             .firstOrNull { currentTimeMinutes in it.startMinutes..it.endMinutes }
     }
 
-    // Последний урок по факту расписания (для синей зоны)
     val bells = CollegeBellSchedule.getBellsForType(selectedScheduleType)
     val blueEndNum = if (isTodaySelected) {
         lastLessonToday ?: bells.lastOrNull { !it.isInfoHour }?.lessonNumber
@@ -144,7 +131,6 @@ fun BellsScreen(
         bells.lastOrNull { !it.isInfoHour && it.lessonNumber <= num }?.endMinutes
     }
 
-    // Ряды: уроки с переменами
     val rows = remember(selectedScheduleType) {
         val b = CollegeBellSchedule.getBellsForType(selectedScheduleType)
         val result = mutableListOf<BellRow>()
@@ -169,7 +155,7 @@ fun BellsScreen(
             .fillMaxSize()
             .background(ColorBgMain)
     ) {
-        // Заголовок страницы
+
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text(
                 text = "Расписание звонков",
@@ -187,7 +173,6 @@ fun BellsScreen(
             )
         }
 
-        // Переключатель графиков (сегодняшний отмечен чертой снизу)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -249,7 +234,6 @@ fun BellsScreen(
                 .background(ColorDividerLight)
         )
 
-        // Индикатор текущего урока
         activeSlot?.let { currentSlot ->
             Surface(
                 shape = RoundedCornerShape(2.dp),
@@ -298,7 +282,6 @@ fun BellsScreen(
             }
         }
 
-        // Список: шкала нарисована drawBehind прямо в строках
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -329,7 +312,6 @@ private fun railColor(minutes: Int, blueEnd: Int?, isActive: Boolean): Color {
     return if (blueEnd != null && minutes <= blueEnd) RAIL_BLUE else RAIL_GRAY
 }
 
-/** Прогресс точки внутри интервала (0..1) или null, если время вне интервала. */
 private fun dotProgressIn(bell: BellItem, nowMinutes: Int, isActive: Boolean): Float? {
     if (!isActive) return null
     if (nowMinutes in bell.startMinutes..bell.endMinutes) {
@@ -339,12 +321,6 @@ private fun dotProgressIn(bell: BellItem, nowMinutes: Int, isActive: Boolean): F
     return null
 }
 
-/**
- * Карточка урока со встроенной шкалой (drawBehind):
- * - вертикальный сегмент линии справа (синий/серый по зоне);
- * - риски на верхней и нижней границах карточки;
- * - пульсирующая точка на карточке текущего интервала.
- */
 @Composable
 private fun LessonBellCard(
     item: BellItem,
@@ -381,10 +357,9 @@ private fun LessonBellCard(
         modifier = Modifier
             .fillMaxWidth()
             .drawBehind {
-                val cx = size.width + 10.dp.toPx() // линия справа за карточкой
+                val cx = size.width + 10.dp.toPx()
                 val tickLen = 5.dp.toPx()
 
-                // Вертикальный сегмент линии (градация верх→низ по зонам)
                 drawLine(
                     color = railTopColor,
                     start = Offset(cx, 0f),
@@ -400,7 +375,6 @@ private fun LessonBellCard(
                     cap = StrokeCap.Round
                 )
 
-                // Риски: верх и низ карточки
                 drawLine(
                     color = tickColor,
                     start = Offset(cx - tickLen, 0f),
@@ -414,10 +388,8 @@ private fun LessonBellCard(
                     strokeWidth = 1.5.dp.toPx()
                 )
 
-                // Точка времени на текущей карточке
                 if (dotProgress != null) {
-                    // Точка ходит не по всей высоте карточки, а с отступом:
-                    // пульсирующее кольцо (до 11dp) не должно касаться рамки урока.
+
                     val inset = 16.dp.toPx()
                     val travel = (size.height - inset * 2).coerceAtLeast(1f)
                     val y = inset + travel * dotProgress
@@ -441,8 +413,7 @@ private fun LessonBellCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Бейдж сразу называет урок: «1 УРОК», «ИНФОЧАС» —
-            // без дублирования «1» и «1 урок» рядом
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -500,10 +471,6 @@ private fun LessonBellCard(
     }
 }
 
-/**
- * Компактный подпункт «перемена» между уроками
- * (с серым сегментом линии справа).
- */
 @Composable
 private fun BreakRow(row: BellRow.Break) {
     val range = "${minutesToTime(row.startMinutes)} – ${minutesToTime(row.endMinutes)}"

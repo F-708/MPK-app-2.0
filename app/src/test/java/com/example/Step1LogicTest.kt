@@ -16,7 +16,7 @@ class Step1LogicTest {
 
     @Test
     fun testGroupParser_validGroups() {
-        // 1 курс - 11Э
+
         val group11E = GroupParser.parse("11Э")
         assertNotNull(group11E)
         assertEquals(1, group11E!!.course)
@@ -26,7 +26,6 @@ class Step1LogicTest {
         assertFalse(group11E.canHaveCourseWork)
         assertFalse(group11E.canHaveDiploma)
 
-        // 2 курс - 23О
         val group23O = GroupParser.parse("23О")
         assertNotNull(group23O)
         assertEquals(2, group23O!!.course)
@@ -36,7 +35,6 @@ class Step1LogicTest {
         assertTrue(group23O.canHaveCourseWork)
         assertFalse(group23O.canHaveDiploma)
 
-        // 3 курс - 31Т
         val group31T = GroupParser.parse("31Т")
         assertNotNull(group31T)
         assertEquals(3, group31T!!.course)
@@ -46,7 +44,6 @@ class Step1LogicTest {
         assertTrue(group31T.canHaveCourseWork)
         assertFalse(group31T.canHaveDiploma)
 
-        // 4 курс - 41О
         val group41O = GroupParser.parse("41О")
         assertNotNull(group41O)
         assertEquals(4, group41O!!.course)
@@ -59,19 +56,19 @@ class Step1LogicTest {
 
     @Test
     fun testGroupParser_latinInputNormalization() {
-        // Проверка ввода латинских букв
-        val groupWithLatin = GroupParser.parse("41O") // Латинская 'O'
+
+        val groupWithLatin = GroupParser.parse("41O")
         assertNotNull(groupWithLatin)
-        assertEquals('О', groupWithLatin!!.specialtyCode) // Должна нормализоваться в кириллическую 'О'
+        assertEquals('О', groupWithLatin!!.specialtyCode)
         assertEquals(4, groupWithLatin.course)
     }
 
     @Test
     fun testGroupParser_invalidGroups() {
-        assertNull(GroupParser.parse("51О")) // Курс 5 не существует
-        assertNull(GroupParser.parse("01О")) // Курс 0 не существует
-        assertNull(GroupParser.parse("40О")) // Номер группы 0 не существует
-        assertNull(GroupParser.parse("41Z")) // Неизвестная специальность
+        assertNull(GroupParser.parse("51О"))
+        assertNull(GroupParser.parse("01О"))
+        assertNull(GroupParser.parse("40О"))
+        assertNull(GroupParser.parse("41Z"))
         assertNull(GroupParser.parse("random"))
         assertNull(GroupParser.parse(""))
     }
@@ -86,17 +83,13 @@ class Step1LogicTest {
             assertNotNull("Специальность '$code' должна быть в справочнике", specialty)
             assertTrue(specialty!!.fullName.isNotBlank())
             assertTrue(specialty.cipher.isNotBlank())
-            
-            // Проверяем предметы всех курсов, заявленных в учебном плане специальности
-            // (ДОУ и маркетинговая деятельность — 3 года, остальные — 4)
+
             val courses = specialty.subjectsByCourse.keys
             assertTrue("У специальности '$code' должен быть хотя бы один курс", courses.isNotEmpty())
             for (course in courses) {
                 val subjects = specialty.subjectsByCourse[course]!!
                 if (course in specialty.incompleteCourses) {
-                    // Курс помечен как повреждённый (нет достоверного перечня):
-                    // список обязан быть пустым — приложение покажет пометку,
-                    // а не выдуманные предметы
+
                     assertTrue(
                         "Курс $course специальности '$code' помечен повреждённым, список должен быть пустым",
                         subjects.isEmpty()
@@ -130,7 +123,7 @@ class Step1LogicTest {
 
     @Test
     fun testSubjectFormatter_normalizationAndFuzzyMatch() {
-        // Нормализация с мусором из расписания
+
         val raw1 = "лек. Охрана труда ауд. 203"
         assertEquals("Охрана труда", SubjectFormatter.normalize(raw1))
 

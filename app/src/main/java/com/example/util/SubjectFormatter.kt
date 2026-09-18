@@ -4,13 +4,8 @@ import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
 
-/**
- * Сервис нормализации, форматирования и генерации коротких имен / акронимов
- * для предметов расписания МГПК.
- */
 object SubjectFormatter {
 
-    // Таблица специфических аббревиатур и сокращений из 1С / РАСПИСАНИЕ МГПК
     private val MPK_SCHEDULE_ABBREVIATIONS: Map<String, String> = mapOf(
         "БеЯзык" to "Белорусский язык (профессиональная лексика)",
         "БелЛит" to "Белорусская литература",
@@ -73,7 +68,7 @@ object SubjectFormatter {
         "Электротехника" to "Электротехника",
         "Материаловед" to "Материаловедение",
         "УстрАвто" to "Устройство автомобилей",
-        // === Расшифровки из документов сайта (сверено со справочником специальностей) ===
+
         "ПЦУ" to "Программируемые цифровые устройства",
         "ЭлСисте" to "Электронные системы механических транспортных средств",
         "ЭлСистемыМТС" to "Электронные системы механических транспортных средств",
@@ -128,7 +123,6 @@ object SubjectFormatter {
         "МаИсслед" to "Маркетинговые исследования",
     )
 
-    // Таблица коротких названий (до 15 символов) для красивого отображения в карточках расписания
     private val PREDEFINED_SHORT_NAMES: Map<String, String> = mapOf(
         "Охрана труда" to "Охр. труда",
         "Информационные технологии" to "Инф. технол.",
@@ -259,7 +253,6 @@ object SubjectFormatter {
         "Стратегический маркетинг" to "Стратег. маркет."
     )
 
-    // Таблица акронимов (2-4 буквы) для микро-виджетов и тегов
     private val PREDEFINED_ACRONYMS: Map<String, String> = mapOf(
         "Основы права" to "ОП",
         "Теоретические основы электротехники" to "ТОЭ",
@@ -391,15 +384,10 @@ object SubjectFormatter {
         "и", "в", "с", "на", "по", "к", "о", "об", "от", "для", "из", "со", "за", "под"
     )
 
-    /**
-     * Нормализация сырого названия предмета из расписания колледжа (DOC/DOCX файлов)
-     * с нечетким сопоставлением (Fuzzy matching / Levenshtein) к официальному названию.
-     */
     fun normalize(rawTitle: String): String {
         val cleaned = cleanRawTitle(rawTitle)
         if (cleaned.isBlank()) return rawTitle.trim()
 
-        // 0. Проверка специфических сокращений расписания МГПК (1С / РАСПИСАНИЕ)
         MPK_SCHEDULE_ABBREVIATIONS[cleaned]?.let { return it }
         for ((abbr, full) in MPK_SCHEDULE_ABBREVIATIONS) {
             if (cleaned.equals(abbr, ignoreCase = true)) {
@@ -407,20 +395,17 @@ object SubjectFormatter {
             }
         }
 
-        // 1. Точное совпадение
         MpkCurriculum.ALL_SUBJECTS.firstOrNull { it.equals(cleaned, ignoreCase = true) }?.let {
             return it
         }
 
-        // 2. Поиск прямого соответствия без скобок
         val cleanedWithoutParens = cleaned.replace(Regex("\\(.*\\)"), "").trim()
-        MpkCurriculum.ALL_SUBJECTS.firstOrNull { 
-            it.replace(Regex("\\(.*\\)"), "").trim().equals(cleanedWithoutParens, ignoreCase = true) 
+        MpkCurriculum.ALL_SUBJECTS.firstOrNull {
+            it.replace(Regex("\\(.*\\)"), "").trim().equals(cleanedWithoutParens, ignoreCase = true)
         }?.let {
             return it
         }
 
-        // 3. Нечеткий поиск (Fuzzy matching по расстоянию Левенштейна и пересечению токенов)
         var bestMatch: String? = null
         var bestScore = 0.0
 
@@ -432,7 +417,6 @@ object SubjectFormatter {
             }
         }
 
-        // Если схожесть выше 60%, используем официальное наименование
         if (bestScore >= 0.60 && bestMatch != null) {
             return bestMatch
         }
@@ -440,34 +424,23 @@ object SubjectFormatter {
         return cleaned
     }
 
-    /**
-     * Возвращает короткое название предмета (до 15 символов) для карточки расписания.
-     */
     fun getShortName(rawTitle: String): String {
         val normalized = normalize(rawTitle)
 
-        // Проверяем предопределенную таблицу
         PREDEFINED_SHORT_NAMES[normalized]?.let { return it }
 
-        // Поиск совпадений по подстрокам
         for ((key, shortVal) in PREDEFINED_SHORT_NAMES) {
             if (normalized.contains(key, ignoreCase = true) || key.contains(normalized, ignoreCase = true)) {
                 return shortVal
             }
         }
 
-        // Сокращения берём ТОЛЬКО из таблицы (документы сайта / справочник);
-        // длинные названия показываем полностью — карточка сама ограничит строки
         return normalized
     }
 
-    /**
-     * Возвращает акроним/бейдж (2-4 буквы) для микро-виджетов.
-     */
     fun getAcronym(rawTitle: String): String {
         val normalized = normalize(rawTitle)
 
-        // Проверяем предопределенную таблицу
         PREDEFINED_ACRONYMS[normalized]?.let { return it }
 
         for ((key, acronym) in PREDEFINED_ACRONYMS) {
@@ -476,7 +449,6 @@ object SubjectFormatter {
             }
         }
 
-        // Генерируем акроним по первым буквам значимых слов
         val words = normalized
             .replace(Regex("[^a-zA-Z\\u0400-\\u04FF0-9\\s]"), " ")
             .split(Regex("\\s+"))
@@ -498,29 +470,21 @@ object SubjectFormatter {
         }
     }
 
-    /**
-     * Очищает сырой текст от пометок пар («лек.», «пр.», «лаб.», «ауд.», «(п/г 1)» и т.д.).
-     *
-     * Границы слов заданы явными lookaround-проверками вместо \b: \b по-разному работает
-     * на JVM (OpenJDK: кириллица — не «словесный» символ без UNICODE-флага) и на Android
-     * (ICU: юникодный по умолчанию). Явные диапазоны дают одинаковое поведение везде.
-     */
     private fun cleanRawTitle(raw: String): String {
         var text = raw.trim()
-        // «Буквенно-цифровой» символ для границ: латиница, кириллица (U+0400..U+04FF), цифры, _
+
         val nbStart = "(?<![0-9A-Za-z_\\u0400-\\u04FF])"
         val nbEnd = "(?![0-9A-Za-z_\\u0400-\\u04FF])"
 
-        // Удаляем типичные метки аудиторий вместе с номерами (например: "ауд. 203", "каб. 101а", "ауд 203")
         text = text.replace(Regex("(?i)$nbStart(ауд|каб)$nbEnd\\.?\\s*\\d+[\\u0430-\\u044Fa-z]?"), "")
-        // Удаляем метки типов занятий (строго с границей слова на конце, чтобы не задеть "права", "приборы" и т.д.)
+
         text = text.replace(Regex("(?i)$nbStart(лек|лекц|лекция|пр|практ|практика|лаб|лабор|зач|экз|ауд|каб)$nbEnd\\.?"), "")
-        // Удаляем подгруппы
+
         text = text.replace(Regex("(?i)$nbStart(1|2)\\s*п/?г$nbEnd"), "")
         text = text.replace(Regex("(?i)\\((1|2)\\s*п/?г\\)"), "")
         text = text.replace(Regex("(?i)\\[(1|2)\\s*п/?г\\]"), "")
         text = text.replace(Regex("(?i)${nbStart}п/?г\\s*(1|2)$nbEnd"), "")
-        // Удаляем оставшиеся изолированные цифры аудиторий на концах строк
+
         text = text.replace(Regex("\\s+\\d{2,3}[\\u0430-\\u044Fa-z]?$nbEnd"), "")
         text = text.replace(Regex("\\s+"), " ")
         text = text.trim(',', '.', '-', ' ', '/', '\\')
@@ -528,9 +492,6 @@ object SubjectFormatter {
         return text
     }
 
-    /**
-     * Алгоритмическое сокращение строки до maxChars.
-     */
     private fun shortenAlgorithmic(text: String, maxLength: Int): String {
         val words = text.split(" ")
         if (words.size == 1) {
@@ -564,9 +525,6 @@ object SubjectFormatter {
         return if (result.isEmpty()) text.take(maxLength) else result.toString()
     }
 
-    /**
-     * Расчет схожести строк (0.0 .. 1.0) на основе Левенштейна и пересечения токенов.
-     */
     private fun calculateSimilarity(s1: String, s2: String): Double {
         if (s1 == s2) return 1.0
         if (s1.isEmpty() || s2.isEmpty()) return 0.0
@@ -575,7 +533,6 @@ object SubjectFormatter {
         val distance = levenshteinDistance(s1, s2)
         val levScore = 1.0 - (distance.toDouble() / maxLen)
 
-        // Токенизация для сравнения слов
         val tokens1 = s1.split(Regex("\\s+")).filter { it.length > 2 }.toSet()
         val tokens2 = s2.split(Regex("\\s+")).filter { it.length > 2 }.toSet()
 
@@ -588,9 +545,6 @@ object SubjectFormatter {
         return (levScore * 0.5) + (jaccardScore * 0.5)
     }
 
-    /**
-     * Классический алгоритм расстояния Левенштейна.
-     */
     private fun levenshteinDistance(s1: String, s2: String): Int {
         val dp = Array(s1.length + 1) { IntArray(s2.length + 1) }
 
@@ -601,10 +555,10 @@ object SubjectFormatter {
             for (j in 1..s2.length) {
                 val cost = if (s1[i - 1] == s2[j - 1]) 0 else 1
                 dp[i][j] = min(
-                    dp[i - 1][j] + 1, // deletion
+                    dp[i - 1][j] + 1,
                     min(
-                        dp[i][j - 1] + 1, // insertion
-                        dp[i - 1][j - 1] + cost // substitution
+                        dp[i][j - 1] + 1,
+                        dp[i - 1][j - 1] + cost
                     )
                 )
             }

@@ -2,15 +2,8 @@ package com.example.util
 
 import com.example.data.model.SpecialtyInfo
 
-/**
- * Официальный справочник специальностей и учебных планов
- * ГУО «Минский государственный политехнический колледж».
- * Построен из официальных данных 2026 года: полные списки предметов
- * по курсам, квалификации и рабочие профессии.
- */
 object MpkCurriculum {
 
-    // Общие общеобразовательные и социально-гуманитарные дисциплины
     val GENERAL_SUBJECTS: List<String> = listOf(
         "Белорусский язык",
         "Белорусская литература",
@@ -784,18 +777,13 @@ object MpkCurriculum {
                     "Основы экономической теории", "Маркетинговые исследования",
                     "Физическая культура и здоровье", "Коммуникационный дизайн (после 11 класса)"
                 ),
-                // 3-й курс: достоверного перечня нет — в материалах колледжа на этом
-                // слайде ошибочно лежат предметы машиностроителей. Пустой список +
-                // пометка incompleteCourses, чтобы приложение не показывало выдумку.
+
                 3 to emptyList()
             ),
             incompleteCourses = setOf(3)
         ),
     ).associateBy { it.code }
 
-    /**
-     * Полный список всех уникальных официальных предметов колледжа МПК.
-     */
     val ALL_SUBJECTS: Set<String> by lazy {
         val set = mutableSetOf<String>()
         set.addAll(GENERAL_SUBJECTS)
@@ -807,24 +795,15 @@ object MpkCurriculum {
         set
     }
 
-    /**
-     * Получить дисциплины по коду специальности и номеру курса.
-     */
     fun getSubjects(specialtyCode: Char, course: Int): List<String> {
         val specialty = SPECIALTIES[specialtyCode.uppercaseChar()] ?: return GENERAL_SUBJECTS
         return specialty.subjectsByCourse[course] ?: GENERAL_SUBJECTS
     }
 
-    /**
-     * Получить информацию о специальности по букве.
-     */
     fun getSpecialty(specialtyCode: Char): SpecialtyInfo? {
         return SPECIALTIES[specialtyCode.uppercaseChar()]
     }
 
-    /**
-     * Проверить, является ли буква допустимым кодом специальности.
-     */
     fun isValidSpecialtyCode(code: Char): Boolean {
         return SPECIALTIES.containsKey(code.uppercaseChar())
     }

@@ -7,17 +7,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// =========================================================================
-// МПК (Минский политехнический колледж) — Официальная типографика
-//
-// Все стили — @Composable-геттеры: они читают текущую палитру при каждой
-// композиции, поэтому корректно перекрашиваются при переключении темы.
-// Синтаксис на местах использования не меняется: style = TextStylePageTitle.
-// =========================================================================
-
 val Typography: Typography
     @Composable get() = Typography(
-        // Крупный заголовок страницы (например, «Расписание») — 32–34px Bold Sentence case
+
         displayLarge = TextStyle(
             fontFamily = FontFamily.Default,
             fontWeight = FontWeight.Bold,
@@ -34,7 +26,7 @@ val Typography: Typography
             letterSpacing = (-0.3).sp,
             color = ColorTextTitle
         ),
-        // Заголовки разделов
+
         titleLarge = TextStyle(
             fontFamily = FontFamily.Default,
             fontWeight = FontWeight.Bold,
@@ -57,7 +49,7 @@ val Typography: Typography
             lineHeight = 18.sp,
             letterSpacing = 0.sp
         ),
-        // Основной текст контента
+
         bodyLarge = TextStyle(
             fontFamily = FontFamily.Default,
             fontWeight = FontWeight.Normal,
@@ -82,7 +74,7 @@ val Typography: Typography
             letterSpacing = 0.2.sp,
             color = ColorTextMuted
         ),
-        // Метки, меню и кнопки
+
         labelLarge = TextStyle(
             fontFamily = FontFamily.Default,
             fontWeight = FontWeight.Bold,
@@ -106,7 +98,6 @@ val Typography: Typography
         )
     )
 
-// Специальные текстовые стили по спецификации Design System МПК
 val TextStyleTopDateBar: TextStyle
     @Composable get() = TextStyle(
         fontFamily = FontFamily.Default,

@@ -86,38 +86,25 @@ private val MONTH_NAMES_CAPS = listOf(
 
 private val WEEKDAY_HEADERS = listOf("ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС")
 
-/**
- * Диалог архивного календаря расписания ГУО «МГПК» по строгому Style Guide.
- *
- * Спецификация:
- * 1. Кнопки переключения месяцев: < ПРЕД. / СЛЕД. > в рамке 1px solid #E2E8F0, скругление 2px, цвет #0B3564 Bold.
- * 2. По центру: Месяц в формате «СЕНТЯБРЬ 2026» (#111827, Bold 15px, ALL CAPS).
- * 3. Заголовки дней: ПН ВТ СР ЧТ ПТ СБ ВС (#4B5563, Bold 13px, ALL CAPS).
- * 4. Выбранный день: фоновый круг 32px цвета #001737, белый жирный текст.
- * 5. Индикатор наличия пар: точка диаметром 3px цвета #0B3564 строго под цифрой (отступ 2px).
- * 6. Никаких теней (elevation 0dp), строгая прямоугольная геометрия 2px.
- */
 @Composable
 fun CalendarArchiveDialog(
     groupName: String,
     scheduleRepository: ScheduleRepository,
     onDismiss: () -> Unit,
-    /** Вызывается при выборе даты — кому нужно сразу загрузить этот день. */
+
     onDateSelected: ((dayOfWeek: Int, dateString: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val calendar = remember { Calendar.getInstance() }
     var displayedYear by remember { mutableIntStateOf(calendar.get(Calendar.YEAR)) }
-    var displayedMonth by remember { mutableIntStateOf(calendar.get(Calendar.MONTH)) } // 0..11
+    var displayedMonth by remember { mutableIntStateOf(calendar.get(Calendar.MONTH)) }
 
     var selectedDateString by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
 
-    // Сохраненные даты и пары
     val savedDates by scheduleRepository.getDistinctDates(groupName).collectAsState(initial = emptyList())
     val allGroupLessons by scheduleRepository.getAllLessonsForGroup(groupName).collectAsState(initial = emptyList())
 
-    // Уроки за выбранную дату
     val selectedDateLessons = remember(selectedDateString, allGroupLessons) {
         if (selectedDateString.isBlank()) {
             emptyList()
@@ -146,7 +133,6 @@ fun CalendarArchiveDialog(
         }
     }
 
-    // Результаты поиска
     val searchResults = remember(searchQuery, allGroupLessons) {
         if (searchQuery.isBlank()) {
             emptyList()
@@ -185,7 +171,7 @@ fun CalendarArchiveDialog(
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                // Шапка диалога
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -224,7 +210,6 @@ fun CalendarArchiveDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Поисковая строка
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -272,7 +257,7 @@ fun CalendarArchiveDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 if (searchQuery.isNotBlank()) {
-                    // Режим поиска
+
                     Text(
                         text = "НАЙДЕНО ЗАНЯТИЙ: ${searchResults.size}",
                         style = TextStyleCalendarWeekdays.copy(color = ColorBrandBlue),
@@ -302,24 +287,19 @@ fun CalendarArchiveDialog(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(searchResults, key = { it.id }) { lesson ->
-                                // В архиве переход в карточку не работает, поэтому имя
-                                    // преподавателя показываем обычным текстом, без шеврона
+
                                     LessonCard(lesson = lesson, isTeacherKnown = { false })
                             }
                         }
                     }
                 } else {
-                    // =========================================================================
-                    // Сетка календаря по официальной спецификации
-                    // =========================================================================
 
-                    // Кнопки переключения месяцев: [< ПРЕД.] [МЕСЯЦ ГОД] [СЛЕД. >]
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Кнопка предыдущего месяца
+
                         Surface(
                             shape = RoundedCornerShape(2.dp),
                             border = BorderStroke(1.dp, ColorBorderLight),
@@ -346,14 +326,12 @@ fun CalendarArchiveDialog(
                             )
                         }
 
-                        // Заголовок месяца
                         Text(
                             text = "${MONTH_NAMES_CAPS[displayedMonth]} $displayedYear",
                             style = TextStyleCalendarMonth,
                             textAlign = TextAlign.Center
                         )
 
-                        // Кнопка следующего месяца
                         Surface(
                             shape = RoundedCornerShape(2.dp),
                             border = BorderStroke(1.dp, ColorBorderLight),
@@ -383,7 +361,6 @@ fun CalendarArchiveDialog(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Заголовки дней недели (ПН ВТ СР ЧТ ПТ СБ ВС)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -409,15 +386,10 @@ fun CalendarArchiveDialog(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Сетка чисел месяца
                     val daysInMonth = remember(displayedYear, displayedMonth) {
                         calculateMonthDays(displayedYear, displayedMonth)
                     }
 
-                    // Высоту считаем по числу недель в месяце. Раньше стояло
-                    // жёсткое ограничение 220dp с запретом прокрутки — в месяцах
-                    // из шести недель последняя неделя не помещалась и была
-                    // недостижима вовсе.
                     val weekCount = (daysInMonth.size + 6) / 7
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(7),
@@ -445,8 +417,7 @@ fun CalendarArchiveDialog(
                                         .aspectRatio(1.1f)
                                         .clickable {
                                             selectedDateString = dateStr
-                                            // Если вызывающий ждёт выбора — сообщаем сразу,
-                                            // без отдельной кнопки подтверждения
+
                                             onDateSelected?.let { callback ->
                                                 val cal = parseDateSafely(dateStr)
                                                 val dow = when (cal?.get(Calendar.DAY_OF_WEEK)) {
@@ -465,7 +436,7 @@ fun CalendarArchiveDialog(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (isSelected) {
-                                        // Выбранный день: фоновый круг 32px цвета #001737
+
                                         Box(
                                             modifier = Modifier
                                                 .size(32.dp)
@@ -487,7 +458,6 @@ fun CalendarArchiveDialog(
                                             )
                                         )
 
-                                        // Индикатор наличия расписания: точка диаметром 3px цвета #0B3564
                                         if (hasData && !isSelected) {
                                             Spacer(modifier = Modifier.height(2.dp))
                                             Box(
@@ -514,7 +484,6 @@ fun CalendarArchiveDialog(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Панель выбранного дня
                     if (selectedDateString.isNotBlank()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -566,8 +535,7 @@ fun CalendarArchiveDialog(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 items(selectedDateLessons, key = { it.id }) { lesson ->
-                                    // В архиве переход в карточку не работает, поэтому имя
-                                    // преподавателя показываем обычным текстом, без шеврона
+
                                     LessonCard(lesson = lesson, isTeacherKnown = { false })
                                 }
                             }
@@ -594,11 +562,6 @@ fun CalendarArchiveDialog(
     }
 }
 
-// calculateMonthDays живёт в MonthGrid.kt — одна реализация на всё приложение
-
-/**
- * Безопасный парсер строк дат различных форматов.
- */
 private fun parseDateSafely(dateStr: String): Calendar? {
     val formats = listOf("yyyy-MM-dd", "dd.MM.yyyy", "dd-MM-yyyy")
     for (format in formats) {

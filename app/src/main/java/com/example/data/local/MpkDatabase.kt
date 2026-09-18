@@ -9,13 +9,6 @@ import com.example.data.local.dao.TaskDao
 import com.example.data.local.entity.LessonEntity
 import com.example.data.local.entity.StudentTaskEntity
 
-/**
- * Локальная база данных приложения «МПК Расписание».
- *
- * ЖЕЛЕЗНОЕ ПРАВИЛО ZERO CRASH:
- * Room.databaseBuilder() ВСЕГДА использует .fallbackToDestructiveMigration(),
- * чтобы предотвратить падение при любых обновлениях схемы.
- */
 @Database(
     entities = [
         LessonEntity::class,

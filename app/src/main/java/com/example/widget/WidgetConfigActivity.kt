@@ -45,16 +45,6 @@ import com.example.ui.theme.ColorTextTitle
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.util.bouncyClickable
 
-/**
- * Общий экран настройки для всех виджетов приложения.
- *
- * Раньше настройка была только у «До звонка» и только про цвет. Теперь у каждого
- * виджета при добавлении спрашивается тема, а если у виджета есть особенности —
- * ещё и они (например, до чего считать отсчёт или показывать ли кабинет).
- *
- * Какой именно виджет настраивается, определяется по его appWidgetId: система
- * сама сообщает провайдера, поэтому отдельный экран на каждый виджет не нужен.
- */
 class WidgetConfigActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -209,7 +199,6 @@ class WidgetConfigActivity : ComponentActivity() {
     }
 }
 
-/** Какой виджет настраивается — определяется по провайдеру, запустившему экран. */
 enum class WidgetKind(
     val title: String,
     val hint: String,
@@ -250,7 +239,6 @@ enum class WidgetKind(
     }
 }
 
-/** Дополнительные переключатели виджета, кроме темы. */
 object WidgetOptions {
 
     private const val PREF_SHOW_ROOM = "widget_show_room_"

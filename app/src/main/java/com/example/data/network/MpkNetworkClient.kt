@@ -25,8 +25,6 @@ class MpkNetworkClient {
         const val BROWSER_USER_AGENT = USER_AGENT
         const val BROWSER_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*;q=0.8"
 
-        // Обычный клиент с системным доверием к сертификатам: у guo-mpk.by валидный
-        // сертификат, trust-all здесь был лишним и небезопасным (MITM).
         private val client: OkHttpClient by lazy {
             OkHttpClient.Builder()
                 .connectTimeout(8000, TimeUnit.MILLISECONDS)
@@ -104,13 +102,12 @@ class MpkNetworkClient {
         var lastTextPreview = ""
 
         fun rememberResponsePreview(bytes: ByteArray) {
-            // Превью ответа: первые символы — видно, документ это или HTML-страница
+
             lastResponsePreview = String(bytes.copyOfRange(0, minOf(100, bytes.size)), Charsets.UTF_8)
                 .replace(Regex("\\s+"), " ")
                 .take(100)
         }
 
-        /** Снимает статистику парсинга ПОСЛЕ завершения parseFile (не во время!). */
         fun rememberParseStats() {
             lastParseFormat = MpkScheduleParser.lastParseStats.format
             lastParseStrategy = MpkScheduleParser.lastParseStats.strategy
@@ -122,7 +119,7 @@ class MpkNetworkClient {
 
         for (attempt in 1..maxRetries) {
             try {
-                // 1. Прямые ссылки (.doc и .docx)
+
                 val directCandidates = generateCandidateDirectUrls(targetCalendar)
                 for ((url, _) in directCandidates) {
                     if (downloadedUrls.add(url)) {
@@ -142,7 +139,6 @@ class MpkNetworkClient {
                     }
                 }
 
-                // 2. Резерв через портал /raspisanie/
                 if (allLessons.isEmpty()) {
                     lastCheckedUrl = SCHEDULE_PORTAL_URL
                     val portalResponse = executeRequest(SCHEDULE_PORTAL_URL)
@@ -152,8 +148,6 @@ class MpkNetworkClient {
                         val portalHtml = portalResponse.body?.string() ?: ""
                         totalBytesReceived += portalHtml.toByteArray().size
 
-                        // Извлекаем ссылки на документы (.doc/.docx) со страницы портала,
-                        // включая iframe view.officeapps.live.com с прямой ссылкой на файл
                         val candidateDocLinks = MpkScheduleParser.extractDocumentUrls(portalHtml, SCHEDULE_PORTAL_URL)
                         for (docLink in candidateDocLinks) {
                             if (downloadedUrls.add(docLink)) {
@@ -185,8 +179,7 @@ class MpkNetworkClient {
                     statusMessage = when {
                         distinctLessons.isNotEmpty() -> "Успешно: загружено ${distinctLessons.size} уроков" +
                             (if (lastParseError.isNotBlank()) " (с ошибкой разбора: $lastParseError)" else "")
-                        // Документ скачан, но группа в нём не найдена — показываем причину,
-                        // включая ошибки разбора, если стратегии падали
+
                         totalBytesReceived > 0L && lastParseError.isNotBlank() ->
                             "Документ получен (${totalBytesReceived / 1024} КБ), ошибка разбора: $lastParseError"
                         totalBytesReceived > 0L -> "Документ получен (${totalBytesReceived / 1024} КБ), но группа $targetGroup в нём не найдена"
@@ -237,7 +230,6 @@ class MpkNetworkClient {
         val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
         val hour = cal.get(Calendar.HOUR_OF_DAY)
 
-        // Если пятница вечер (после 15:00), суббота или воскресенье — запрашиваем понедельник
         if ((dayOfWeek == Calendar.FRIDAY && hour >= 15) || dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY) {
             val daysUntilMon = if (dayOfWeek == Calendar.SUNDAY) 1 else (Calendar.SATURDAY - dayOfWeek + 2) % 7
             cal.add(Calendar.DAY_OF_YEAR, daysUntilMon)
@@ -255,10 +247,6 @@ class MpkNetworkClient {
         null
     }
 
-    /**
-     * Скачивает и разбирает расписание преподавателей на указанную дату.
-     * Документ: /wp-content/uploads/YYYY/MM/DD.MM.YYYY-raspisanie-prepodavatelej.doc
-     */
     suspend fun fetchTeacherSchedule(
         targetCalendar: Calendar = Calendar.getInstance()
     ): Result<Map<String, List<TeacherSlot>>> = withContext(Dispatchers.IO) {

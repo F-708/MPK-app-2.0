@@ -10,17 +10,6 @@ import android.widget.RemoteViews
 import com.example.R
 import com.example.data.model.CollegeBellSchedule
 
-/**
- * Виджет «Звонки» — расписание звонков колледжа с подсветкой текущего урока.
- *
- * Строка максимально короткая: слева номер урока, справа время. Слова
- * «1 урок» рядом с цифрой «1» были лишними — номер урока и так понятен,
- * а место в виджете дорогое. Для инфочаса вместо номера — «инф».
- *
- * В отличие от виджета расписания, который зависит от выбранной группы, этот
- * показывает общее расписание звонков: по нему ориентируются, когда урока
- * в базе нет, а понять, сколько идёт пара, всё равно нужно.
- */
 class BellsWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
@@ -47,8 +36,7 @@ class BellsWidgetProvider : AppWidgetProvider() {
 
             val now = WidgetData.minuteOfDay(context)
             val dow = WidgetData.dayOfWeek(context)
-            // В воскресенье занятий нет — показываем понедельничные звонки,
-            // иначе виджет стоял бы пустым весь выходной
+
             val bells = CollegeBellSchedule.getBellsForDay(if (dow == 7) 1 else dow)
 
             views.removeAllViews(R.id.bells_rows)
@@ -70,7 +58,6 @@ class BellsWidgetProvider : AppWidgetProvider() {
                     else -> style.mainColor
                 }
 
-                // Инфочас — не урок, у него нет номера
                 row.setTextViewText(R.id.row_number, if (bell.isInfoHour) "инф" else "${bell.lessonNumber}")
                 row.setTextColor(R.id.row_number, textColor)
 
