@@ -2,98 +2,111 @@
 <!-- Виджет «Сейчас и дальше».
      Два блока делят высоту поровну (0dp + weight), поэтому пустого места
      внизу не остаётся — при любом размере виджета он заполнен целиком. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/now_next_root"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#FFFFFFFF"
-    android:paddingLeft="12dp"
-    android:paddingRight="12dp"
-    android:paddingTop="8dp"
-    android:paddingBottom="8dp">
+    android:layout_height="match_parent">
 
-    <!-- Блок «сейчас» -->
     <LinearLayout
+        android:id="@+id/now_next_root"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="match_parent"
         android:orientation="vertical"
-        android:gravity="center_vertical">
+        android:background="#FFFFFFFF"
+        android:paddingLeft="12dp"
+        android:paddingRight="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <!-- Блок «сейчас» -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tv_now_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="СЕЙЧАС"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:textColor="#6B7280"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/tv_now_subject"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="—"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#111827"
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tv_now_details"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textSize="11sp"
+                android:textColor="#0B3564"
+                android:maxLines="1" />
+        </LinearLayout>
 
         <TextView
-            android:id="@+id/tv_now_label"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="СЕЙЧАС"
-            android:textSize="9sp"
-            android:textStyle="bold"
-            android:textColor="#6B7280"
-            android:maxLines="1" />
+            android:layout_height="1dp"
+            android:background="#E2E8F0" />
 
-        <TextView
-            android:id="@+id/tv_now_subject"
+        <!-- Блок «дальше» -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="—"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:textColor="#111827"
-            android:maxLines="2"
-            android:ellipsize="end" />
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center_vertical">
 
-        <TextView
-            android:id="@+id/tv_now_details"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textSize="11sp"
-            android:textColor="#0B3564"
-            android:maxLines="1" />
+            <TextView
+                android:id="@+id/tv_next_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ДАЛЬШЕ"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:textColor="#6B7280"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/tv_next_subject"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="—"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#111827"
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tv_next_details"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textSize="11sp"
+                android:textColor="#0B3564"
+                android:maxLines="1" />
+        </LinearLayout>
     </LinearLayout>
 
-    <TextView
+    <!-- Оверлей конфетти «уроки закончились» -->
+    <ImageView
+        android:id="@+id/iv_confetti_overlay"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#E2E8F0" />
-
-    <!-- Блок «дальше» -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:gravity="center_vertical">
-
-        <TextView
-            android:id="@+id/tv_next_label"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="ДАЛЬШЕ"
-            android:textSize="9sp"
-            android:textStyle="bold"
-            android:textColor="#6B7280"
-            android:maxLines="1" />
-
-        <TextView
-            android:id="@+id/tv_next_subject"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="—"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:textColor="#111827"
-            android:maxLines="2"
-            android:ellipsize="end" />
-
-        <TextView
-            android:id="@+id/tv_next_details"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textSize="11sp"
-            android:textColor="#0B3564"
-            android:maxLines="1" />
-    </LinearLayout>
-
-</LinearLayout>
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+</FrameLayout>

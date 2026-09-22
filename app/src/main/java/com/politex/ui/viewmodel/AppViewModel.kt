@@ -1,0 +1,165 @@
+﻿package com.politex.ui.viewmodel
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.politex.data.local.MpkDatabase
+import com.politex.data.model.GroupInfo
+import com.politex.data.repository.ScheduleRepository
+import com.politex.data.repository.TaskRepository
+import com.politex.util.GroupParser
+import com.politex.widget.WidgetUpdateHelper
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+enum class AppTab(val title: String) {
+    SCHEDULE("Расписание"),
+    TASKS("Задания"),
+    BELLS("Звонки"),
+    COLLEGE("Другое")
+}
+
+data class AppUiState(
+    val currentGroupName: String,
+    val groupInfo: GroupInfo?,
+    val currentTab: AppTab = AppTab.SCHEDULE,
+    val isSyncing: Boolean = false,
+    val hasSyncError: Boolean = false,
+
+    val showGroupSelection: Boolean = false,
+
+    val pendingTeacherName: String? = null,
+
+    val pendingRoom: String? = null,
+
+    val pendingFromRoom: String? = null,
+
+    val returnTab: AppTab? = null
+)
+
+class AppViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val database = MpkDatabase.getInstance(application)
+    val scheduleRepository = ScheduleRepository(database.lessonDao())
+    val taskRepository = TaskRepository(database.taskDao())
+
+    val diagnosticInfo = scheduleRepository.diagnosticInfo
+
+    private val _uiState = MutableStateFlow(
+        AppUiState(
+            currentGroupName = WidgetUpdateHelper.getSelectedGroup(application),
+            groupInfo = GroupParser.parse(WidgetUpdateHelper.getSelectedGroup(application)),
+            showGroupSelection = !WidgetUpdateHelper.hasSelectedGroup(application)
+        )
+    )
+    val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
+
+    private val _toastEvent = MutableSharedFlow<String>()
+    val toastEvent: SharedFlow<String> = _toastEvent.asSharedFlow()
+
+    init {
+
+        if (!uiState.value.showGroupSelection) {
+            syncSchedule(isAutoSync = true)
+        }
+    }
+
+    fun selectTab(tab: AppTab) {
+        _uiState.update { it.copy(currentTab = tab, returnTab = null) }
+    }
+
+    private fun enterCollegeFrom(returnTab: AppTab): AppTab? =
+        if (returnTab == AppTab.COLLEGE) null else returnTab
+
+    fun setGroup(newGroupName: String) {
+        val parsed = GroupParser.parse(newGroupName) ?: return
+        WidgetUpdateHelper.setSelectedGroup(getApplication(), parsed.canonicalName)
+        _uiState.update {
+            it.copy(
+                currentGroupName = parsed.canonicalName,
+                groupInfo = parsed,
+                hasSyncError = false,
+                showGroupSelection = false
+            )
+        }
+        viewModelScope.launch {
+            _toastEvent.emit("Выбрана группа: ${parsed.canonicalName}")
+            syncSchedule(isAutoSync = false)
+        }
+    }
+
+    fun openTeacher(teacherName: String) {
+        _uiState.update {
+            it.copy(
+                currentTab = AppTab.COLLEGE,
+                pendingTeacherName = teacherName,
+                returnTab = enterCollegeFrom(it.currentTab) ?: it.returnTab
+            )
+        }
+    }
+
+    fun consumePendingTeacher() {
+        _uiState.update { it.copy(pendingTeacherName = null) }
+    }
+
+    fun openMap(room: String, fromRoom: String? = null) {
+        _uiState.update {
+            it.copy(
+                currentTab = AppTab.COLLEGE,
+                pendingRoom = room,
+                pendingFromRoom = fromRoom,
+                returnTab = enterCollegeFrom(it.currentTab) ?: it.returnTab
+            )
+        }
+    }
+
+    fun consumePendingRoom() {
+        _uiState.update { it.copy(pendingRoom = null, pendingFromRoom = null) }
+    }
+
+    fun restoreReturnTab() {
+        _uiState.update {
+            val target = it.returnTab
+            if (target != null) it.copy(currentTab = target, returnTab = null) else it
+        }
+    }
+
+    fun syncSchedule(isAutoSync: Boolean = false) {
+        if (_uiState.value.isSyncing) return
+
+        val targetGroup = _uiState.value.currentGroupName
+
+        if (targetGroup.isBlank()) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSyncing = true, hasSyncError = false) }
+
+            val result = scheduleRepository.syncScheduleFromWeb(targetGroup, force = !isAutoSync)
+
+            result.fold(
+                onSuccess = { count ->
+                    _uiState.update { it.copy(isSyncing = false, hasSyncError = false) }
+                    if (count > 0) {
+                        _toastEvent.emit("Расписание группы $targetGroup обновлено ($count уроков)")
+                    } else {
+                        if (!isAutoSync) {
+                            _toastEvent.emit("Расписание группы $targetGroup: новых данных на сайте пока нет")
+                        }
+                    }
+                },
+                onFailure = {
+                    _uiState.update { it.copy(isSyncing = false, hasSyncError = true) }
+                    if (!isAutoSync) {
+                        _toastEvent.emit("Сбой обновления: проверьте интернет (сайт guo-mpk.by недоступен)")
+                    }
+                }
+            )
+        }
+    }
+}

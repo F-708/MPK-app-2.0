@@ -1,4 +1,4 @@
-import java.util.Properties
+﻿import java.util.Properties
 
 plugins {
   alias(libs.plugins.android.application)
@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-  namespace = "com.example"
+  namespace = "com.politex"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {

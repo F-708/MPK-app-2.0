@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -109,7 +109,7 @@
             android:name=".widget.WidgetAlarmReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.example.widget.ACTION_BELL_COUNTDOWN_TICK" />
+                <action android:name="com.politex.widget.ACTION_BELL_COUNTDOWN_TICK" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>

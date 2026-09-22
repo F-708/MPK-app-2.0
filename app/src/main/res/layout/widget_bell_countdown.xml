@@ -1,30 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_countdown_root"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:padding="10dp">
+    android:layout_height="match_parent">
 
-    <!-- Основная надпись: «до звонка» / «до урока» / «Уроки закончились» -->
-    <TextView
-        android:id="@+id/tv_countdown_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="до звонка"
-        android:textSize="12sp"
-        android:maxLines="1"
-        android:ellipsize="end" />
+    <LinearLayout
+        android:id="@+id/widget_countdown_root"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="10dp">
 
-    <!-- Крупное значение: «12 мин», «1 ч 20 мин» -->
-    <TextView
-        android:id="@+id/tv_countdown_value"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="12 мин"
-        android:textSize="26sp"
-        android:textStyle="bold"
-        android:maxLines="1"
-        android:ellipsize="end" />
-</LinearLayout>
+        <!-- Основная надпись: «до звонка» / «до урока» / «Уроки закончились» -->
+        <TextView
+            android:id="@+id/tv_countdown_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="до звонка"
+            android:textSize="12sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <!-- Крупное значение: «12 мин», «1 ч 20 мин» -->
+        <TextView
+            android:id="@+id/tv_countdown_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="12 мин"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <!-- Оверлей конфетти «уроки закончились» -->
+    <ImageView
+        android:id="@+id/iv_confetti_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+</FrameLayout>
