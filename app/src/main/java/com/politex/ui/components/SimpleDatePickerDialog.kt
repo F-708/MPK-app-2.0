@@ -150,7 +150,8 @@ fun SimpleDatePickerDialog(
 private fun ArrowButton(forward: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(32.dp)
+            // D5: хитбокс стрелки перемотки месяцев 48dp (иконка 18dp та же)
+            .size(48.dp)
             .bouncyClickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {

@@ -58,17 +58,28 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.tv_now_subject, SubjectFormatter.getShortName(current.subjectRaw))
                 views.setTextViewText(R.id.tv_now_details, detailsOf(current, showRoom))
             } else {
-
+                // W8: пусто из-за группы не выбрана ≠ «уроков нет»
+                val groupBlank = WidgetUpdateHelper.getSelectedGroup(context).isBlank()
                 views.setTextViewText(
                     R.id.tv_now_label,
                     if (lessons.isEmpty()) "СЕГОДНЯ" else "СЕЙЧАС"
                 )
                 views.setTextViewText(
                     R.id.tv_now_subject,
-                    if (lessons.isEmpty()) "Уроков нет" else "Перемена"
+                    when {
+                        groupBlank -> "Выберите группу в приложении"
+                        lessons.isEmpty() -> "Уроков нет"
+                        else -> "Перемена"
+                    }
                 )
-                val breakInfo = WidgetData.breakInfo(context, now)
-                views.setTextViewText(R.id.tv_now_details, breakInfo ?: "")
+                // W4: причина пустой строки «Перемена» — не пустое место
+                views.setTextViewText(
+                    R.id.tv_now_details,
+                    when {
+                        groupBlank || lessons.isEmpty() -> ""
+                        else -> WidgetData.breakInfo(context, now) ?: "по расписанию звонков"
+                    }
+                )
             }
 
             if (next != null) {

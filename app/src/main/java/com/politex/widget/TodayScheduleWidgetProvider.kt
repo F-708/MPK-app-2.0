@@ -47,6 +47,12 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 if (group.isBlank()) "РАСПИСАНИЕ" else "СЕГОДНЯ • $group"
             )
 
+            // W8: без выбранной группы причина пустоты — «настрой группу», не «уроков нет»
+            views.setTextViewText(
+                R.id.tv_today_empty,
+                if (group.isBlank()) "Выберите группу в приложении" else "На сегодня уроков нет"
+            )
+
             views.removeAllViews(R.id.today_rows)
 
             if (lessons.isEmpty()) {
@@ -55,6 +61,13 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 views.setViewVisibility(R.id.tv_today_empty, android.view.View.GONE)
                 lessons.take(MAX_ROWS).forEach { lesson ->
                     views.addView(R.id.today_rows, buildRow(context, lesson, now, style, showRoom))
+                }
+                // W5: обрезка >12 строк больше не тихая — хвост виден
+                if (lessons.size > MAX_ROWS) {
+                    views.addView(
+                        R.id.today_rows,
+                        buildMoreRow(context, style, lessons.size - MAX_ROWS)
+                    )
                 }
             }
 
@@ -117,6 +130,18 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             )
             row.setTextColor(R.id.row_room, style.subColor)
 
+            return row
+        }
+
+        // W5: строка «…ещё N» тем же layout-рядом, тише основного (subColor)
+        private fun buildMoreRow(context: Context, style: WidgetStyle, hiddenCount: Int): RemoteViews {
+            val row = RemoteViews(context.packageName, R.layout.widget_row_list)
+            row.setInt(R.id.row_root, "setBackgroundColor", style.backgroundColor)
+            row.setTextViewText(R.id.row_number, "")
+            row.setTextViewText(R.id.row_time, "")
+            row.setTextViewText(R.id.row_subject, "…ещё $hiddenCount")
+            row.setTextColor(R.id.row_subject, style.subColor)
+            row.setTextViewText(R.id.row_room, "")
             return row
         }
     }

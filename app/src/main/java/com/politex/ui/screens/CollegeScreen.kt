@@ -770,10 +770,10 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Информация повреждена: достоверного перечня предметов " +
-                                    "для этого курса нет — в материалах колледжа на этом месте " +
-                                    "предметы другой специальности.\n\n" +
-                                    "Уточните список в колледже или в деканате.",
+                                // P3: нейтральная формулировка — причина в данных колледжа,
+                                // не «приложение сломалось»
+                                text = "Список предметов для этого курса неполный — " +
+                                    "уточните в деканате.",
                                 style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextBody)
                             )
                         }
@@ -1195,7 +1195,10 @@ private fun TeacherCardPage(
                     shape = RoundedCornerShape(2.dp),
                     border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
                     color = if (selected) ColorTopBar else ColorBgMain,
-                    modifier = Modifier.bouncyClickable { tab = index }
+                    modifier = Modifier
+                        // P2: хитбокс табов карточки преподавателя 44dp
+                        .heightIn(min = 44.dp)
+                        .bouncyClickable { tab = index }
                 ) {
                     Text(
                         text = title.uppercase(),

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.Icon
@@ -57,22 +59,25 @@ import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorDividerLight
+import com.politex.ui.theme.ColorSuccess
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.ColorTextDisabled
 import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
 import java.util.Calendar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
-private val RAIL_BLUE = Color(0xFF0072CE)
-private val RAIL_BLUE_SOFT = Color(0xFF0072CE).copy(alpha = 0.30f)
-private val RAIL_GRAY = Color(0xFF94A3B8).copy(alpha = 0.55f)
-private val RAIL_GRAY_SOFT = Color(0xFFCBD5E1)
+// B2: рельса таймлайна — только токены палитры, тема доходит до последнего экрана
+private val RAIL_BLUE: Color get() = ColorActiveBlue
+private val RAIL_BLUE_SOFT: Color get() = ColorActiveBlue.copy(alpha = 0.30f)
+private val RAIL_GRAY: Color get() = ColorTextMuted.copy(alpha = 0.55f)
+private val RAIL_GRAY_SOFT: Color get() = ColorTextDisabled
 
 private sealed interface BellRow {
     data class Lesson(val item: BellItem) : BellRow
@@ -226,6 +231,8 @@ fun BellsScreen(
                         color = if (isSelected) ColorTopBar else ColorBgMain,
                         modifier = Modifier
                             .fillMaxWidth()
+                            // B5: хитбокс переключателя графиков 44dp
+                            .heightIn(min = 44.dp)
                             .bouncyClickable { selectedScheduleType = type }
                     ) {
                         Text(
@@ -268,52 +275,26 @@ fun BellsScreen(
                 .background(ColorDividerLight)
         )
 
-        activeSlot?.let { currentSlot ->
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorSurfaceHighlight,
-                border = BorderStroke(1.dp, ColorActiveBlue),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(30.dp)
-                            .background(ColorActiveBlue, RoundedCornerShape(2.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (currentSlot.isInfoHour) Icons.Default.Campaign else Icons.Default.NotificationsActive,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = if (currentSlot.isInfoHour) "СЕЙЧАС: ИНФОРМАЦИОННЫЙ ЧАС" else "СЕЙЧАС: ${currentSlot.title.uppercase()}",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = ColorBrandBlue
-                            )
-                        )
-                        Text(
-                            text = currentSlot.displayRange,
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontSize = 11.sp,
-                                color = ColorTextBody
-                            )
-                        )
-                    }
-                }
+        // B3 (решение владельца): контекстная карточка «СЕЙЧАС» есть ВСЕГДА —
+        // слот не схлопывается, список не прыгает при смене урока.
+        // До 1-го звонка: «Уроки ещё не начались», после последнего: «Уроки закончились».
+        if (isTodaySelected && bells.isNotEmpty()) {
+            val breakIdx = bells.indexOfFirst { bell ->
+                val breakEnd = bell.endMinutes + bell.breakAfterMinutes
+                bell.breakAfterMinutes > 0 && currentTimeMinutes > bell.endMinutes &&
+                    currentTimeMinutes < breakEnd
             }
+            val context: NowContext = when {
+                activeSlot != null -> NowContext.Active(activeSlot)
+                currentTimeMinutes < bells.first().startMinutes ->
+                    NowContext.Inactive("Уроки ещё не начались", "первый звонок в ${bells.first().start}")
+                breakIdx >= 0 -> {
+                    val nextStart = bells.getOrNull(breakIdx + 1)?.start ?: bells[breakIdx].end
+                    NowContext.Inactive("СЕЙЧАС: ПЕРЕМЕНА", "до $nextStart")
+                }
+                else -> NowContext.Inactive("Уроки закончились", "последний звонок в ${bells.last().end}")
+            }
+            NowContextCard(context = context)
         }
 
         Column(
@@ -346,6 +327,77 @@ fun BellsScreen(
 private fun railColor(minutes: Int, blueEnd: Int?, isActive: Boolean): Color {
     if (!isActive) return RAIL_GRAY_SOFT
     return if (blueEnd != null && minutes <= blueEnd) RAIL_BLUE else RAIL_GRAY
+}
+
+/** B3: контекст карточки «СЕЙЧАС» — активный слот либо пограничное состояние. */
+private sealed interface NowContext {
+    data class Active(val slot: BellItem) : NowContext
+    data class Inactive(val title: String, val subtitle: String) : NowContext
+}
+
+@Composable
+private fun NowContextCard(context: NowContext) {
+    val isActive = context is NowContext.Active
+    val slot = (context as? NowContext.Active)?.slot
+    val title = when (context) {
+        is NowContext.Active ->
+            if (slot!!.isInfoHour) "СЕЙЧАС: ИНФОРМАЦИОННЫЙ ЧАС" else "СЕЙЧАС: ${slot.title.uppercase()}"
+        is NowContext.Inactive -> context.title
+    }
+    val subtitle = when (context) {
+        is NowContext.Active -> slot!!.displayRange
+        is NowContext.Inactive -> context.subtitle
+    }
+
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorSurfaceHighlight,
+        border = BorderStroke(1.dp, if (isActive) ColorActiveBlue else ColorBorderLight),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .background(if (isActive) ColorActiveBlue else ColorBorderLight, RoundedCornerShape(2.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = when {
+                        slot?.isInfoHour == true -> Icons.Default.Campaign
+                        isActive -> Icons.Default.NotificationsActive
+                        else -> Icons.Default.AccessTime
+                    },
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = title,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = if (isActive) ColorBrandBlue else ColorTextBody
+                    )
+                )
+                Text(
+                    text = subtitle,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontSize = 11.sp,
+                        color = ColorTextBody
+                    )
+                )
+            }
+        }
+    }
 }
 
 private fun dotProgressIn(bell: BellItem, nowMinutes: Int, isActive: Boolean): Float? {
@@ -384,7 +436,7 @@ private fun LessonBellCard(
         border = BorderStroke(
             1.dp,
             when {
-                item.isInfoHour -> Color(0xFF16A34A)
+                item.isInfoHour -> ColorSuccess
                 isActive -> ColorActiveBlue
                 else -> ColorBorderLight
             }
@@ -454,7 +506,7 @@ private fun LessonBellCard(
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = when {
-                        item.isInfoHour -> Color(0xFF16A34A)
+                        item.isInfoHour -> ColorSuccess
                         isActive -> ColorActiveBlue
                         else -> ColorBrandBlue
                     },

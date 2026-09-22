@@ -37,13 +37,20 @@ class BellsWidgetProvider : AppWidgetProvider() {
             val now = WidgetData.minuteOfDay(context)
             val dow = WidgetData.dayOfWeek(context)
 
-            val bells = CollegeBellSchedule.getBellsForDay(if (dow == 7) 1 else dow)
+            // W1: воскресенье — звонки понедельника БЕЗ подсветки «сейчас/прошло»
+            // (ложный «идёт урок» в вс обесценивает доверие к виджету)
+            val isSunday = dow == 7
+            val bells = CollegeBellSchedule.getBellsForDay(if (isSunday) 1 else dow)
+
+            if (isSunday) {
+                views.setTextViewText(R.id.tv_bells_header, "ЗВОНКИ ПН")
+            }
 
             views.removeAllViews(R.id.bells_rows)
 
             bells.forEach { bell ->
-                val isCurrent = now in bell.startMinutes..bell.endMinutes
-                val isPast = now > bell.endMinutes
+                val isCurrent = !isSunday && now in bell.startMinutes..bell.endMinutes
+                val isPast = !isSunday && now > bell.endMinutes
 
                 val row = RemoteViews(context.packageName, R.layout.widget_row_bell)
                 row.setInt(

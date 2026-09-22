@@ -140,7 +140,11 @@ fun RoomScheduleDialog(
                     }
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = onDismissRequest) {
+                IconButton(
+                    onClick = onDismissRequest,
+                    // D4: хитбокс крестика 48dp
+                    modifier = Modifier.size(48.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Закрыть",

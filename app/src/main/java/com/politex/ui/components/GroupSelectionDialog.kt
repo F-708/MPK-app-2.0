@@ -2,6 +2,8 @@
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -122,7 +124,10 @@ fun GroupSelectionDialog(
                 if (showClose) {
                     IconButton(
                         onClick = onDismissRequest,
-                        modifier = Modifier.bouncyClickable(onClick = onDismissRequest)
+                        // D4: хитбокс крестика 48dp
+                        modifier = Modifier
+                            .size(48.dp)
+                            .bouncyClickable(onClick = onDismissRequest)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -134,7 +139,13 @@ fun GroupSelectionDialog(
             }
         },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            // D2: вертикальный скролл — при font scale 1.3+ «ВЫБРАТЬ» достижим,
+            // диалог первого запуска не блокируется. Сетка остаётся с heightIn.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text(
                     text = "Выберите курс:",
                     style = androidx.compose.ui.text.TextStyle(

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,6 +37,8 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,6 +60,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import com.politex.data.local.entity.StudentTaskEntity
 import com.politex.data.model.GroupInfo
 import com.politex.data.model.TaskType
@@ -83,12 +87,15 @@ import kotlinx.coroutines.launch
 import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorSurfaceVariantLight
+import androidx.compose.material3.SnackbarDuration
 
 @Composable
 fun TasksScreen(
     groupInfo: GroupInfo,
     taskRepository: TaskRepository,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // T1: SnackbarHost из MainScreen — undo удаления задания
+    snackbarHostState: SnackbarHostState? = null
 ) {
     val coroutineScope = rememberCoroutineScope()
     var selectedFilter by remember { mutableStateOf<TaskType?>(null) }
@@ -111,6 +118,27 @@ fun TasksScreen(
         TaskType.getAvailableForCourse(groupInfo.course)
     }
 
+    /**
+     * T1: удаление с undo. Удаляем сразу; снекбар 8 с («Отменить»)
+     * возвращает задание тем же id. Без soft-delete — прямой delete + re-insert.
+     * В снекбар уходит не сама сущность, а её копия — Room мог бы дергать
+     * этот же объект при повторном удалении, копия исключает гонки.
+     */
+    fun deleteWithUndo(task: StudentTaskEntity) {
+        coroutineScope.launch {
+            taskRepository.deleteTask(task)
+            if (snackbarHostState == null) return@launch
+            val result = snackbarHostState.showSnackbar(
+                message = "Задание удалено",
+                actionLabel = "ОТМЕНИТЬ",
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                taskRepository.addTask(task.copy())
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -126,19 +154,24 @@ fun TasksScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
+                    // T3: maxLines=2 + Ellipsis — заголовок главного экрана
+                    // не режется по букве («Учебные зада»)
                     Text(
                         text = "Учебные задания",
                         style = TextStylePageTitle,
-                        maxLines = 1
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    // T5: считаем по filteredTasks — цифра не противоречит списку под ней
                     Text(
-                        text = "Группа ${groupInfo.canonicalName} • ${allTasks.count { !it.isCompleted }} активных",
+                        text = "Группа ${groupInfo.canonicalName} • ${filteredTasks.count { !it.isCompleted }} активных",
                         style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp,
                             color = ColorBrandBlue
                         ),
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -147,6 +180,8 @@ fun TasksScreen(
                     border = BorderStroke(1.dp, ColorBrandBlue),
                     color = ColorBrandFill,
                     modifier = Modifier
+                        // T8: хитбокс 48dp — видимый размер кнопки меньше
+                        .heightIn(min = 48.dp)
                         .bouncyClickable { showAddDialog = true }
                         .testTag("add_task_top_btn")
                 ) {
@@ -187,7 +222,8 @@ fun TasksScreen(
                         border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
                         color = if (isSelected) ColorTopBar else ColorBgMain,
                         modifier = Modifier
-                            .height(34.dp)
+                            // T7: хитбокс чипа 44dp (текст 11sp прежний)
+                            .heightIn(min = 44.dp)
                             .bouncyClickable { selectedFilter = null }
                     ) {
                         Box(
@@ -214,7 +250,8 @@ fun TasksScreen(
                         border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
                         color = if (isSelected) ColorTopBar else ColorBgMain,
                         modifier = Modifier
-                            .height(34.dp)
+                            // T7: хитбокс чипа 44dp
+                            .heightIn(min = 44.dp)
                             .bouncyClickable { selectedFilter = type }
                     ) {
                         Box(
@@ -243,6 +280,8 @@ fun TasksScreen(
             )
 
             if (filteredTasks.isEmpty()) {
+                // T4: пустое состояние честно различает «нет вообще» и «нет по фильтру»
+                val filterActive = selectedFilter != null
 
                 Box(
                     modifier = Modifier
@@ -271,7 +310,7 @@ fun TasksScreen(
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Нет активных заданий",
+                            text = if (filterActive) "По этому фильтру ничего нет" else "Нет активных заданий",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp,
@@ -279,15 +318,40 @@ fun TasksScreen(
                             )
                         )
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Нажмите «Добавить», чтобы зафиксировать домашнее задание, лабораторную или курсовую работу.",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontSize = 13.sp,
-                                color = ColorTextMuted
-                            ),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 24.dp)
-                        )
+                        if (filterActive) {
+                            // Сброс фильтра прямо из пустого состояния
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                color = ColorBrandFill,
+                                contentColor = Color.White,
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .bouncyClickable { selectedFilter = null }
+                                    .testTag("reset_filter_btn")
+                            ) {
+                                Text(
+                                    text = "СБРОСИТЬ ФИЛЬТР",
+                                    softWrap = false,
+                                    maxLines = 1,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = Color.White
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "Нажмите «Добавить», чтобы зафиксировать домашнее задание, лабораторную или курсовую работу.",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 13.sp,
+                                    color = ColorTextMuted
+                                ),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 24.dp)
+                            )
+                        }
                     }
                 }
             } else {
@@ -306,11 +370,7 @@ fun TasksScreen(
                                     taskRepository.toggleTaskCompleted(task.id, !task.isCompleted)
                                 }
                             },
-                            onDelete = {
-                                coroutineScope.launch {
-                                    taskRepository.deleteTask(task)
-                                }
-                            }
+                            onDelete = { deleteWithUndo(task) }
                         )
                     }
                 }
@@ -379,7 +439,8 @@ fun TaskItemCard(
             IconButton(
                 onClick = onToggleCompleted,
                 modifier = Modifier
-                    .size(32.dp)
+                    // T2: чекбокс — самое частое действие; зона 48dp, иконка та же
+                    .size(48.dp)
                     .bouncyClickable(onClick = onToggleCompleted)
             ) {
                 Icon(
@@ -478,7 +539,8 @@ fun TaskItemCard(
             IconButton(
                 onClick = onDelete,
                 modifier = Modifier
-                    .size(28.dp)
+                    // T1: 48dp-хитбокс на разрушительном действии (иконка 16dp та же)
+                    .size(48.dp)
                     .bouncyClickable(onClick = onDelete)
             ) {
                 Icon(
@@ -520,6 +582,8 @@ fun AddTaskDialog(
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
+        // D8: тап вне диалога не закрывает — набранный текст не теряется
+        properties = DialogProperties(dismissOnClickOutside = false),
         shape = RoundedCornerShape(2.dp),
         containerColor = ColorBgMain,
         title = {
@@ -536,7 +600,11 @@ fun AddTaskDialog(
                         color = ColorTextTitle
                     )
                 )
-                IconButton(onClick = onDismissRequest) {
+                IconButton(
+                    onClick = onDismissRequest,
+                    // D4: хитбокс крестика 48dp
+                    modifier = Modifier.size(48.dp)
+                ) {
                     Icon(imageVector = Icons.Default.Close, contentDescription = "Закрыть", tint = ColorTextMuted)
                 }
             }

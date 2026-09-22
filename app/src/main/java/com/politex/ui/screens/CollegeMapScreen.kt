@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -558,14 +559,20 @@ private fun SearchField(
                     )
                 }
                 if (value.isNotBlank()) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Очистить",
-                        tint = ColorTextMuted,
+                    // M6: крестик 18dp в зоне 48dp
+                    Box(
                         modifier = Modifier
-                            .size(18.dp)
-                            .bouncyClickable { onValueChange("") }
-                    )
+                            .size(48.dp)
+                            .bouncyClickable { onValueChange("") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Очистить",
+                            tint = ColorTextMuted,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
@@ -678,14 +685,20 @@ private fun GroupSearchField(
                         )
                     }
                     if (value.isNotBlank()) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Очистить",
-                            tint = ColorTextMuted,
+                        // M6: крестик 18dp в зоне 48dp
+                        Box(
                             modifier = Modifier
-                                .size(18.dp)
-                                .bouncyClickable { onValueChange("") }
-                        )
+                                .size(48.dp)
+                                .bouncyClickable { onValueChange("") },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Очистить",
+                                tint = ColorTextMuted,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                     // Быстрый выбор группы из сегодняшнего расписания
                     Box {
@@ -979,7 +992,8 @@ private fun ZoomButton(icon: androidx.compose.ui.graphics.vector.ImageVector, on
         color = ColorBgMain,
         border = BorderStroke(1.dp, ColorBorderLight),
         modifier = Modifier
-            .size(42.dp)
+            // M2: зона 48dp, видимый квадрат 42dp — кнопки-«подушки» растут наружу
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
             .bouncyClickable(onClick = onClick)
     ) {
         Box(contentAlignment = Alignment.Center) {

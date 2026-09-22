@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -190,13 +191,60 @@ fun StudentsDatabaseScreen(
             )
         }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            items(filtered) { student ->
-                StudentRow(student) { onOpenStudent(student) }
+        if (filtered.isEmpty() && (searchQuery.isNotBlank() || groupFilter.isNotBlank() || courseFilter.isNotBlank())) {
+            // A1: честное пустое состояние фильтра/поиска + сброс
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Ничего не найдено по запросу «${searchQuery.trim()}»",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = ColorTextTitle
+                        ),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorBrandFill,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .bouncyClickable {
+                                searchQuery = ""
+                                groupFilter = ""
+                                courseFilter = ""
+                            }
+                            .testTag("students_reset_filters_btn")
+                    ) {
+                        Text(
+                            text = "СБРОСИТЬ ФИЛЬТРЫ",
+                            softWrap = false,
+                            maxLines = 1,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = Color.White
+                            ),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(filtered) { student ->
+                    StudentRow(student) { onOpenStudent(student) }
+                }
             }
         }
     }
@@ -253,6 +301,8 @@ private fun StudentRow(student: Student, onClick: () -> Unit) {
         border = BorderStroke(1.dp, ColorBorderLight),
         modifier = Modifier
             .fillMaxWidth()
+            // A2: строка результата 48dp (контент тот же — паддинг добирает высоту)
+            .heightIn(min = 48.dp)
             .bouncyClickable(onClick = onClick)
     ) {
         Row(

@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.model.GroupInfo
@@ -120,9 +121,12 @@ fun MainScreen(
                             },
                             label = {
                                 Text(
-                                    text = tab.title.uppercase(),
+                                    // N1: без капса — меньше букв, влезает при +15% шрифта;
+                                    // Ellipsis вместо тихой обрезки по букве
+                                    text = tab.title,
                                     softWrap = false,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                         fontSize = 10.sp,
@@ -175,7 +179,9 @@ fun MainScreen(
                 )
                 AppTab.TASKS -> TasksScreen(
                     groupInfo = currentGroupInfo,
-                    taskRepository = viewModel.taskRepository
+                    taskRepository = viewModel.taskRepository,
+                    // T1: undo-снекбар удаления задания — хост уже висит в Scaffold
+                    snackbarHostState = snackbarHostState
                 )
                 AppTab.BELLS -> BellsScreen(
                     groupInfo = currentGroupInfo,

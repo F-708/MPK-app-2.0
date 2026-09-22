@@ -23,8 +23,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
@@ -385,7 +387,8 @@ fun ScheduleScreen(
                 Text(
                     text = "Расписание",
                     style = TextStylePageTitle,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = subtitleText,
@@ -394,7 +397,8 @@ fun ScheduleScreen(
                         fontSize = 14.sp,
                         color = ColorBrandBlue
                     ),
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
@@ -405,24 +409,30 @@ fun ScheduleScreen(
                 animationSpec = infiniteRepeatable(tween(durationMillis = 900)),
                 label = "SyncRotationAngle"
             )
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorBrandFill,
-                border = BorderStroke(1.dp, ColorBorderLight),
+            // S2: визуально кнопка 34dp, зона нажатия 48×48 (кнопка центрируется)
+            Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .bouncyClickable(onClick = onSyncRequest)
-                    .testTag("sync_button")
+                    .testTag("sync_button"),
+                contentAlignment = Alignment.Center
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Синхронизировать с сайтом",
-                        tint = Color.White,
-                        modifier = Modifier
-                            .size(18.dp)
-                            .then(if (isSyncing) Modifier.rotate(rotation) else Modifier)
-                    )
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBrandFill,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Синхронизировать с сайтом",
+                            tint = Color.White,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .then(if (isSyncing) Modifier.rotate(rotation) else Modifier)
+                        )
+                    }
                 }
             }
         }
@@ -489,11 +499,14 @@ fun ScheduleScreen(
         )
 
         AnimatedContent(
-            targetState = lessons,
+            // Ключ анимации — просматриваемый ДЕНЬ, а не данные:
+            // эмиссии Room (синхронизация, домашка, отметки) не перезапускают
+            // fade — список обновляется на месте. Fade только при смене дня/архива.
+            targetState = selectedSlot to selectedDateString,
             transitionSpec = { fadeIn() togetherWith fadeOut() },
             label = "ScheduleListAnimation",
             modifier = Modifier.weight(1f)
-        ) { currentLessons ->
+        ) { _ ->
             if (isInitialLoad) {
 
                 Box(
@@ -509,7 +522,7 @@ fun ScheduleScreen(
                         modifier = Modifier.size(28.dp)
                     )
                 }
-            } else if (currentLessons.isEmpty()) {
+            } else if (lessons.isEmpty()) {
 
                 Box(
                     modifier = Modifier
@@ -611,19 +624,19 @@ fun ScheduleScreen(
                 }
             } else {
 
-                val fromRoom = remember(currentLessons, currentLessonNumber) {
+                val fromRoom = remember(lessons, currentLessonNumber) {
                     currentLessonNumber?.let { n ->
-                        currentLessons.firstOrNull { it.lessonNumber == n }
+                        lessons.firstOrNull { it.lessonNumber == n }
                             ?.let { listOf(it.roomFirst, it.roomSecond) }
                             ?.firstOrNull { it.isNotBlank() }
                     }
                 }
 
-                val slots = remember(currentLessons) {
-                    if (currentLessons.isEmpty()) emptyList()
+                val slots = remember(lessons) {
+                    if (lessons.isEmpty()) emptyList()
                     else {
-                        val byNumber = currentLessons.associateBy { it.lessonNumber }
-                        (1..currentLessons.maxOf { it.lessonNumber })
+                        val byNumber = lessons.associateBy { it.lessonNumber }
+                        (1..lessons.maxOf { it.lessonNumber })
                             .map { number -> number to byNumber[number] }
                     }
                 }
@@ -692,8 +705,8 @@ private fun NoLessonCard(lessonNumber: Int) {
             Text(
                 text = "Урока нет",
                 style = androidx.compose.ui.text.TextStyle(
-                    fontSize = 13.sp,
-                    color = ColorTextMuted
+                    fontSize = 14.sp,
+                    color = ColorTextBody
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -846,34 +859,40 @@ fun LessonCard(
                     }
 
                     if (lesson.roomFirst.isNotBlank()) {
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            border = BorderStroke(1.dp, ColorBorderLight),
-                            color = ColorSurfaceHighlight,
+                        // S4: чип кабинета — визуал прежний, зона нажатия 44dp
+                        Box(
                             modifier = Modifier
-                                .wrapContentWidth()
-
-                                .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) }
+                                .heightIn(min = 44.dp)
+                                .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) },
+                            contentAlignment = Alignment.Center
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                border = BorderStroke(1.dp, ColorBorderLight),
+                                color = ColorSurfaceHighlight,
+                                modifier = Modifier
+                                    .wrapContentWidth()
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.LocationOn,
-                                    contentDescription = null,
-                                    tint = ColorBrandBlue,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text(
-                                    text = "каб. ${lesson.roomFirst}",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = ColorBrandBlue
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.LocationOn,
+                                        contentDescription = null,
+                                        tint = ColorBrandBlue,
+                                        modifier = Modifier.size(12.dp)
                                     )
-                                )
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text(
+                                        text = "каб. ${lesson.roomFirst}",
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = ColorBrandBlue
+                                        )
+                                    )
+                                }
                             }
                         }
                     }
@@ -904,43 +923,50 @@ private fun TeacherChip(
         return
     }
 
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, ColorBrandBlue.copy(alpha = 0.4f)),
-        color = ColorSurfaceHighlight,
-        modifier = modifier.bouncyClickable(
-            scaleDown = 0.97f,
-            onClick = onClick
-        )
+    // S4: визуальный чип прежний, зона нажатия 44dp (чип центрируется)
+    Box(
+        modifier = modifier
+            .heightIn(min = 44.dp)
+            .bouncyClickable(
+                scaleDown = 0.97f,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 5.dp, end = 2.dp, top = 2.dp, bottom = 2.dp)
+        Surface(
+            shape = RoundedCornerShape(2.dp),
+            border = BorderStroke(1.dp, ColorBrandBlue.copy(alpha = 0.4f)),
+            color = ColorSurfaceHighlight
         ) {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = null,
-                tint = ColorBrandBlue,
-                modifier = Modifier.size(12.dp)
-            )
-            Spacer(modifier = Modifier.width(3.dp))
-            Text(
-                text = name,
-                style = androidx.compose.ui.text.TextStyle(
-                    fontSize = fontSize,
-                    color = ColorBrandBlue,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = "Открыть карточку преподавателя",
-                tint = ColorBrandBlue,
-                modifier = Modifier.size(14.dp)
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 5.dp, end = 2.dp, top = 2.dp, bottom = 2.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = ColorBrandBlue,
+                    modifier = Modifier.size(12.dp)
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                    text = name,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontSize = fontSize,
+                        color = ColorBrandBlue,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Открыть карточку преподавателя",
+                    tint = ColorBrandBlue,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
         }
     }
 }
@@ -984,15 +1010,22 @@ private fun SubgroupPane(
             }
 
             if (room.isNotBlank()) {
-                Text(
-                    text = "каб. $room",
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        color = ColorBrandBlue,
-                        fontSize = 11.sp
-                    ),
-                    modifier = Modifier.bouncyClickable(scaleDown = 0.97f) { onRoomClick(room) }
-                )
+                // S5: чип кабинета в подгрупповой панели — зона нажатия 44dp
+                Box(
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .bouncyClickable(scaleDown = 0.97f) { onRoomClick(room) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "каб. $room",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            color = ColorBrandBlue,
+                            fontSize = 11.sp
+                        )
+                    )
+                }
             }
         }
 

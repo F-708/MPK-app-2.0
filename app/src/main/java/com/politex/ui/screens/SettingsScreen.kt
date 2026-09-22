@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -240,7 +241,10 @@ fun SettingsScreen(
                         Surface(
                             shape = RoundedCornerShape(2.dp),
                             color = ColorBrandFill,
-                            modifier = Modifier.bouncyClickable { showGroupDialog = true }
+                            modifier = Modifier
+                                // ST4: хитбокс «СМЕНИТЬ» 48dp — смена группы важное действие
+                                .heightIn(min = 48.dp)
+                                .bouncyClickable { showGroupDialog = true }
                         ) {
                             Text(
                                 text = "СМЕНИТЬ",
@@ -513,6 +517,40 @@ fun SettingsScreen(
 
             item { SectionHeader("ОБРАТНАЯ СВЯЗЬ") }
             item {
+                // ST1: версия сборки — всегда видима (админ/QA: «у меня 2.12»)
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Версия приложения",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = ColorTextTitle
+                            )
+                        )
+                        Text(
+                            text = com.politex.BuildConfig.VERSION_NAME,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = ColorBrandBlue
+                            )
+                        )
+                    }
+                }
+            }
+            item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
@@ -772,6 +810,8 @@ private fun BellCountdownNotificationCard() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 3.dp)
+                            // ST3: хитбокс строки-опции 44dp
+                            .heightIn(min = 44.dp)
                             .bouncyClickable {
                                 selectedStyle = style
                                 com.politex.util.BellCountdownNotifier.setStyle(context, style)
@@ -829,6 +869,8 @@ private fun BellCountdownNotificationCard() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 3.dp)
+                            // ST3: хитбокс строки-опции 44dp
+                            .heightIn(min = 44.dp)
                             .bouncyClickable {
                                 selectedTheme = theme
                                 com.politex.util.BellCountdownNotifier.setTheme(context, theme)
@@ -883,6 +925,8 @@ private fun BellCountdownNotificationCard() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 3.dp)
+                            // ST3: хитбокс строки-опции 44dp
+                            .heightIn(min = 44.dp)
                             .bouncyClickable {
                                 selectedScope = scope
                                 com.politex.util.BellCountdownNotifier.setScope(context, scope)
@@ -1009,7 +1053,10 @@ private fun ActionChip(
         shape = RoundedCornerShape(2.dp),
         color = if (filled) ColorBrandFill else ColorBgMain,
         border = BorderStroke(1.dp, if (filled) ColorBrandFill else ColorBorderLight),
-        modifier = modifier.bouncyClickable(onClick = onClick)
+        modifier = modifier
+            // ST3: хитбокс чипа 48dp
+            .heightIn(min = 48.dp)
+            .bouncyClickable(onClick = onClick)
     ) {
         Box(
             modifier = Modifier
