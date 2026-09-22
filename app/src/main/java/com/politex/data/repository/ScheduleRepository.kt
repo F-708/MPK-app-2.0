@@ -56,6 +56,11 @@ class ScheduleRepository(
         return lessonDao.searchLessonsForGroup(groupName, query).flowOn(Dispatchers.IO)
     }
 
+    /** Пары в кабинете на дату (для карты колледжа, «Подробнее» в RoomPanel). */
+    fun getLessonsForRoomOnDate(room: String, dateString: String, dayOfWeek: Int): Flow<List<LessonEntity>> {
+        return lessonDao.getLessonsForRoomOnDate(room, dateString, dayOfWeek).flowOn(Dispatchers.IO)
+    }
+
     suspend fun syncScheduleFromWeb(
         groupName: String,
         force: Boolean = false

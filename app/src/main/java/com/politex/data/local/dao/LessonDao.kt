@@ -28,6 +28,18 @@ interface LessonDao {
     """)
     fun getLessonsForDateOrDay(groupName: String, dateString: String, dayOfWeek: Int): Flow<List<LessonEntity>>
 
+    // Пары в конкретном кабинете на дату (точная дата приоритетна, пустой dateString — фолбэк по дню недели)
+    @Query("""
+        SELECT * FROM lessons
+        WHERE (roomFirst = :room OR roomSecond = :room)
+          AND (
+            (dateString != '' AND dateString = :dateString)
+            OR (dateString = '' AND dayOfWeek = :dayOfWeek)
+          )
+        ORDER BY lessonNumber ASC
+    """)
+    fun getLessonsForRoomOnDate(room: String, dateString: String, dayOfWeek: Int): Flow<List<LessonEntity>>
+
     @Query("SELECT * FROM lessons WHERE groupName = :groupName ORDER BY dayOfWeek ASC, lessonNumber ASC")
     fun getAllLessonsForGroup(groupName: String): Flow<List<LessonEntity>>
 
