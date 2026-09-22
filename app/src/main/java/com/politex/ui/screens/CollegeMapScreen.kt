@@ -620,7 +620,7 @@ private fun GroupSearchField(
                     Box {
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(46.dp)
                                 .bouncyClickable(
                                     enabled = todayGroups.isNotEmpty()
                                 ) { dropdownExpanded = true },
