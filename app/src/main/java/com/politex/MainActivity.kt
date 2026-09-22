@@ -25,7 +25,6 @@ import com.politex.util.ConfettiController
 import com.politex.util.NotificationHelper
 import com.politex.widget.WidgetUpdateHelper
 import com.politex.worker.MpkWorkManagerHelper
-import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
@@ -54,28 +53,21 @@ class MainActivity : ComponentActivity() {
                 handleIntent(intent, appViewModel)
             }
 
-            // Конфетти «уроки закончились»: реакция на событие + проверка раз в 30 сек
+            // Конфетти: только реакция на свежее событие из ConfettiController.events.
+            // Сам триггер живёт в минутных тиках (WidgetAlarmReceiver / BellTimerService):
+            // здесь нет ни запуска по открытию/резюму, ни поллинга — событие, случившееся
+            // в фоне (тик виджета при закрытом приложении), не проигрывается заново:
+            // старше CONFETTI_MAX_EVENT_AGE_MS — игнорируем.
             val confettiTick by ConfettiController.events.collectAsState()
             var confettiActive by remember { mutableStateOf(false) }
             var confettiTrigger by remember { mutableLongStateOf(0L) }
 
             LaunchedEffect(confettiTick) {
-                // Показываем только свежее событие (в течение 30 сек): не перезапускаем
-                // конфетти при пересоздании экрана или возврате в приложение спустя время.
                 if (confettiTick > 0L &&
-                    System.currentTimeMillis() - confettiTick < 30_000L
+                    System.currentTimeMillis() - confettiTick < ConfettiController.MAX_EVENT_AGE_MS
                 ) {
                     confettiTrigger = confettiTick
                     confettiActive = true
-                }
-            }
-
-            LaunchedEffect(Unit) {
-                val appContext = applicationContext
-                ConfettiController.maybeCelebrate(appContext)
-                while (true) {
-                    delay(30_000)
-                    ConfettiController.maybeCelebrate(appContext)
                 }
             }
 
@@ -104,9 +96,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-
         WidgetUpdateHelper.updateAllWidgets(this)
-        ConfettiController.maybeCelebrate(this)
     }
 
     private fun handleIntent(intent: Intent?, viewModel: AppViewModel) {

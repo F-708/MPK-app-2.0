@@ -45,6 +45,9 @@ class BellTimerService : Service() {
                 delay(msToNextMinute)
 
                 BellCountdownNotifier.show(this@BellTimerService)
+                // Той же минутой ловим «последний урок дня закончился» — на случай,
+                // когда будильник виджета не запланирован, а служба отсчёта работает.
+                com.politex.util.ConfettiController.maybeCelebrate(this@BellTimerService)
 
                 widgetRefreshCounter++
                 if (widgetRefreshCounter >= 1) {
