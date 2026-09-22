@@ -52,8 +52,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -80,10 +78,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.model.CollegeMap
 import com.politex.data.model.CollegeMapData
-import com.politex.data.model.CollegeRouteFinder
 import com.politex.data.model.FloorMap
-import com.politex.data.model.MapEntrance
-import com.politex.data.model.MapPoint
 import com.politex.data.model.MapRoom
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
@@ -97,18 +92,17 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.util.bouncyClickable
 import kotlinx.coroutines.launch
 
-private val ROUTE_COLOR = Color(0xFF0072CE)
-private val ROUTE_OUTLINE = Color(0xFFFFFFFF)
+private val HIGHLIGHT_COLOR = Color(0xFF0072CE)
 private val ROOM_FILL = Color(0x331976D2)
 private val ROOM_BORDER = Color(0xFF0057A8)
 private val DEAD_COLOR = Color(0xFFC0392B)
-private val START_COLOR = Color(0xFF16A34A)
 
 @Composable
 fun CollegeMapScreen(
     initialRoom: String?,
     onBack: () -> Unit,
 
+    // Точка входа из расписания (кабинет-«откуда»); маршруты удалены, параметр оставлен для совместимости вызовов
     fromRoom: String? = null,
     modifier: Modifier = Modifier
 ) {
@@ -128,13 +122,6 @@ fun CollegeMapScreen(
     val rooms = remember(floor) { floor.rooms.filter { it.status != "nonexistent" } }
     val targetRoom = remember(floor, target) { floor.room(target) }
 
-    val route = remember(floor, targetRoom, fromRoom) {
-        val start = fromRoom?.let { floor.room(it) }
-        if (start == null || targetRoom == null || start.id == targetRoom.id) null
-        else CollegeRouteFinder.findRoute(start, targetRoom, floor)
-    }
-    val startRoom = remember(floor, fromRoom) { fromRoom?.let { floor.room(it) } }
-
     LaunchedEffect(target) {
         CollegeMap.floorForRoom(target)?.let { floorId = it.id }
     }
@@ -146,7 +133,6 @@ fun CollegeMapScreen(
     ) {
         MapHeader(
             subtitle = when {
-                route != null && startRoom != null -> "Маршрут: ${startRoom.number} → ${targetRoom?.number}"
                 targetRoom != null -> "Кабинет ${targetRoom.number}"
                 else -> "Планы этажей"
             },
@@ -180,20 +166,13 @@ fun CollegeMapScreen(
             floorId = floorId,
             floor = floor,
             targetRoom = targetRoom,
-            routePoints = route?.points,
-            startRoom = startRoom,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
         )
 
         if (targetRoom != null) {
-            RoomPanel(
-                room = targetRoom,
-                startRoom = startRoom,
-                route = route,
-                hasRouteGraph = floor.corridors.isNotEmpty() || floor.nodes.isNotEmpty()
-            )
+            RoomPanel(room = targetRoom)
         }
     }
 }
@@ -201,9 +180,6 @@ fun CollegeMapScreen(
 @Composable
 private fun RoomPanel(
     room: MapRoom?,
-    startRoom: MapRoom?,
-    route: CollegeRouteFinder.Route?,
-    hasRouteGraph: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -247,7 +223,7 @@ private fun RoomPanel(
                         Text(
                             text = room.number,
                             style = TextStyle(
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.Normal,
                                 fontSize = 17.sp,
                                 color = Color.White
                             ),
@@ -467,8 +443,6 @@ private fun MapCanvas(
     floorId: String,
     floor: FloorMap,
     targetRoom: MapRoom?,
-    routePoints: List<MapPoint>?,
-    startRoom: MapRoom?,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -509,7 +483,7 @@ private fun MapCanvas(
                 text = r.number,
                 style = TextStyle(
                     fontSize = with(density) { baseFontPx.toSp() },
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Normal,
                     color = Color(0xFF0B3564)
                 ),
                 maxLines = 1
@@ -595,8 +569,6 @@ private fun MapCanvas(
                         imgW = imgW,
                         imgH = imgH,
                         targetRoom = targetRoom,
-                        startRoom = startRoom,
-                        routePoints = routePoints,
                         pulse = pulse,
                         zoom = k,
                         numberLayouts = numberLayouts,
@@ -671,8 +643,6 @@ private fun DrawScope.drawMap(
     imgW: Float,
     imgH: Float,
     targetRoom: MapRoom?,
-    startRoom: MapRoom?,
-    routePoints: List<MapPoint>?,
     pulse: Float,
     zoom: Float,
     numberLayouts: Map<String, TextLayoutResult>,
@@ -683,15 +653,6 @@ private fun DrawScope.drawMap(
 ) {
     val unit = 1f / zoom
 
-    if (!routePoints.isNullOrEmpty()) {
-        val path = Path().apply {
-            moveTo(routePoints[0].x * imgW, routePoints[0].y * imgH)
-            routePoints.drop(1).forEach { lineTo(it.x * imgW, it.y * imgH) }
-        }
-        drawPath(path, ROUTE_OUTLINE, style = Stroke(12f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round))
-        drawPath(path, ROUTE_COLOR, style = Stroke(6f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round))
-    }
-
     if (targetRoom != null) {
         val x = (targetRoom.x - targetRoom.w / 2f) * imgW
         val y = (targetRoom.y - targetRoom.h / 2f) * imgH
@@ -700,7 +661,7 @@ private fun DrawScope.drawMap(
         val corner = 5f * unit
 
         drawRoundRect(
-            color = ROUTE_COLOR.copy(alpha = 0.16f * pulse),
+            color = HIGHLIGHT_COLOR.copy(alpha = 0.16f * pulse),
             topLeft = Offset(x - 5f * unit, y - 5f * unit),
             size = Size(w + 10f * unit, h + 10f * unit),
             cornerRadius = androidx.compose.ui.geometry.CornerRadius(corner + 3f * unit)
@@ -765,7 +726,8 @@ private fun DrawScope.drawMap(
                 textLayoutResult = layout,
                 topLeft = topLeft,
                 color = Color.White,
-                drawStyle = Stroke(width = layout.size.height * 0.18f, join = StrokeJoin.Round)
+                // Ореол чуть шире, чтобы тонкие цифры оставались читаемыми поверх стен
+                drawStyle = Stroke(width = layout.size.height * 0.22f, join = StrokeJoin.Round)
             )
             drawText(
                 textLayoutResult = layout,
@@ -774,50 +736,6 @@ private fun DrawScope.drawMap(
             )
         }
     }
-
-    if (startRoom != null && routePoints != null) {
-        val cx = startRoom.x * imgW
-        val cy = startRoom.y * imgH
-        drawCircle(ROUTE_OUTLINE, 8f * unit, Offset(cx, cy))
-        drawCircle(START_COLOR, 5f * unit, Offset(cx, cy))
-    }
-
-    floor.entrances.forEach { e -> drawEntrance(e, imgW, imgH, unit) }
-}
-
-private fun DrawScope.drawEntrance(e: MapEntrance, imgW: Float, imgH: Float, unit: Float) {
-    val color = when (e.kind) {
-        "main" -> Color(0xFF0D9488)
-        "stairs" -> Color(0xFF7C3AED)
-        else -> Color(0xFF0EA5E9)
-    }
-    val x = e.x * imgW
-    val y = e.y * imgH
-    val a = Math.toRadians(e.dir.toDouble())
-    val c = Math.cos(a).toFloat()
-    val s = Math.sin(a).toFloat()
-
-    val len = 15f * unit
-    val headLen = 7.5f * unit
-    val headHalf = 5.2f * unit
-    val shaftHalf = 2.1f * unit
-
-    // Стрелка центрирована на своей точке: хвост позади, остриё вперёд по dir
-    val tip = Offset(x + c * len * 0.5f, y + s * len * 0.5f)
-    val tail = Offset(x - c * len * 0.5f, y - s * len * 0.5f)
-    val headBase = Offset(tip.x - c * headLen, tip.y - s * headLen)
-
-    val arrow = Path().apply {
-        moveTo(tail.x - s * shaftHalf, tail.y + c * shaftHalf)
-        lineTo(tail.x + s * shaftHalf, tail.y - c * shaftHalf)
-        lineTo(headBase.x + s * headHalf, headBase.y - c * headHalf)
-        lineTo(tip.x, tip.y)
-        lineTo(headBase.x - s * headHalf, headBase.y + c * headHalf)
-        close()
-    }
-
-    drawPath(arrow, ROUTE_OUTLINE, style = Stroke(2.4f * unit, join = StrokeJoin.Round))
-    drawPath(arrow, color)
 }
 
 private fun mapRes(floorId: String): Int = when (floorId) {
