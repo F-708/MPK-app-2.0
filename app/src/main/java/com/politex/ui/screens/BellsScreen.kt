@@ -38,6 +38,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -66,6 +67,7 @@ import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
 import java.util.Calendar
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
 private val RAIL_BLUE = Color(0xFF0072CE)
 private val RAIL_BLUE_SOFT = Color(0xFF0072CE).copy(alpha = 0.30f)
@@ -161,23 +163,25 @@ fun BellsScreen(
     var viewportPx by remember { mutableStateOf(0) }
     LaunchedEffect(scrollToCurrentRequested, activeSlot, rows) {
         if (!scrollToCurrentRequested) return@LaunchedEffect
-        onScrollToCurrentConsumed()
+        // Ждём первого лэйаута, иначе вьюпорт/maxValue ещё 0 и прокрутка невозможна
+        androidx.compose.runtime.snapshotFlow { scrollState.maxValue > 0 }.first { it }
         val target = activeSlot
             ?: rows.lastOrNull { it is BellRow.Lesson }?.let { (it as BellRow.Lesson).item }
         val idx = rows.indexOfFirst { (it as? BellRow.Lesson)?.item == target }
         if (idx >= 0) {
             with(density) {
-                // Позиция верха целевой строки: карточка урока ~76dp, перемена ~26dp + отступ 6dp
+                // Позиция верха целевой строки: карточка урока ~56dp, перемена ~26dp + отступ 6dp
                 var posPx = 0f
                 rows.take(idx).forEach { row ->
-                    posPx += (if (row is BellRow.Lesson) 76.dp else 26.dp).toPx() + 6.dp.toPx()
+                    posPx += (if (row is BellRow.Lesson) 56.dp else 26.dp).toPx() + 6.dp.toPx()
                 }
-                val cardH = 76.dp.toPx()
+                val cardH = 56.dp.toPx()
                 // Центр карточки — в середине вьюпорта
                 val scrollTo = (posPx + cardH / 2 - viewportPx / 2).toInt()
                 scrollState.animateScrollTo(scrollTo.coerceIn(0, scrollState.maxValue))
             }
         }
+        onScrollToCurrentConsumed()
     }
 
     Column(

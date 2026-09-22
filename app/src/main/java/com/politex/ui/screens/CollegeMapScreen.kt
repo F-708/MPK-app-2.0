@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
@@ -87,6 +88,10 @@ import com.politex.data.model.CollegeMapData
 import com.politex.data.model.FloorMap
 import com.politex.data.model.MapRoom
 import com.politex.data.repository.ScheduleRepository
+import com.politex.data.local.entity.LessonEntity
+import com.politex.ui.components.RoomScheduleDialog
+import com.politex.ui.components.currentRoomLessonNumber
+import com.politex.ui.components.filterRoomLessonsForDate
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -111,6 +116,9 @@ private val DEAD_COLOR = Color(0xFFC0392B)
 fun CollegeMapScreen(
     initialRoom: String?,
     onBack: () -> Unit,
+
+    // Т6: переход к карточке преподавателя из расписания кабинета
+    onOpenTeacher: (String) -> Unit = { },
 
     // Точка входа из расписания (кабинет-«откуда»); маршруты удалены, параметр оставлен для совместимости вызовов
     fromRoom: String? = null,
@@ -163,6 +171,25 @@ fun CollegeMapScreen(
     var target by remember { mutableStateOf(initialRoom?.trim().orEmpty()) }
     var floorId by remember {
         mutableStateOf(CollegeMap.floorForRoom(initialRoom.orEmpty())?.id ?: "1")
+    }
+
+    // Т6: расписание выбранного кабинета на сегодня
+    var roomScheduleFor by remember { mutableStateOf<String?>(null) }
+    val roomScheduleLessons by produceState<List<LessonEntity>>(
+        initialValue = emptyList(),
+        key1 = roomScheduleFor
+    ) {
+        val room = roomScheduleFor ?: return@produceState
+        runCatching {
+            scheduleRepository.getLessonsForRoomOnDate(room, todayDateString, todayDow)
+        }.getOrNull()?.collect { value = it }
+    }
+    val nowMinutes = remember {
+        val c = Calendar.getInstance()
+        c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE)
+    }
+    val roomScheduleCurrentLesson = remember(roomScheduleFor) {
+        currentRoomLessonNumber(nowMinutes, todayDow)
     }
 
     val floor: FloorMap = remember(floorId, mapData) { mapData.floor(floorId) }
@@ -244,14 +271,30 @@ fun CollegeMapScreen(
         )
 
         if (targetRoom != null) {
-            RoomPanel(room = targetRoom)
+            RoomPanel(
+                room = targetRoom,
+                onShowSchedule = { roomScheduleFor = targetRoom.number }
+            )
         }
+    }
+
+    // Т6: расписание кабинета на сегодня
+    roomScheduleFor?.let { roomNumber ->
+        RoomScheduleDialog(
+            roomNumber = roomNumber,
+            dateTitle = "$todayDateString",
+            lessons = filterRoomLessonsForDate(roomScheduleLessons, roomNumber, todayDateString),
+            currentLessonNumber = roomScheduleCurrentLesson,
+            onTeacherClick = onOpenTeacher,
+            onDismissRequest = { roomScheduleFor = null }
+        )
     }
 }
 
 @Composable
 private fun RoomPanel(
     room: MapRoom?,
+    onShowSchedule: (String) -> Unit = { },
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -319,6 +362,34 @@ private fun RoomPanel(
                         )
                     }
                 }
+            }
+        }
+
+        // Т6: подробнее — расписание кабинета на сегодня
+        Surface(
+            shape = RoundedCornerShape(2.dp),
+            border = BorderStroke(1.dp, ColorBrandBlue),
+            color = ColorBrandFill,
+            modifier = Modifier
+                .fillMaxWidth()
+                .bouncyClickable { onShowSchedule(room.number) }
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(vertical = 10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.EventNote,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "ПОДРОБНЕЕ — РАСПИСАНИЕ КАБИНЕТА",
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                )
             }
         }
 

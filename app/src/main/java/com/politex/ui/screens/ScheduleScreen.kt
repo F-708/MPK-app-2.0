@@ -335,16 +335,15 @@ fun ScheduleScreen(
 
     // Конфетти «завтра мало уроков»: первый просмотр завтрашней ячейки
     // (НЕ календарного архива) снимает одноразовый флаг воркера.
-    LaunchedEffect(selectedSlot, selectedDateString, rightIsTomorrow) {
-        val viewingTomorrow = selectedSlot == 1 &&
-            selectedDateString.isBlank() &&
-            rightIsTomorrow &&
-            sameDay(rightCal, tomorrow)
+    // «Завтрашняя ячейка» — та, чья дата реально завтра: обычно правая
+    // (slot 1), но в воскресенье завтрашний день — левая (slot 0).
+    LaunchedEffect(selectedSlot, selectedDateString) {
+        val viewingTomorrow = selectedDateString.isBlank() && sameDay(activeCal, tomorrow)
         if (viewingTomorrow) {
             val tomorrowDate = "%02d.%02d.%04d".format(
-                rightCal.get(Calendar.DAY_OF_MONTH),
-                rightCal.get(Calendar.MONTH) + 1,
-                rightCal.get(Calendar.YEAR)
+                tomorrow.get(Calendar.DAY_OF_MONTH),
+                tomorrow.get(Calendar.MONTH) + 1,
+                tomorrow.get(Calendar.YEAR)
             )
             if (com.politex.util.ConfettiController.consumeTomorrowPending(context, tomorrowDate)) {
                 com.politex.util.ConfettiController.triggerAppConfetti()

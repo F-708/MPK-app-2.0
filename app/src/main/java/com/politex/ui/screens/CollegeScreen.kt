@@ -47,6 +47,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -111,6 +112,7 @@ fun CollegeScreen(
     var selectedStudent by remember { mutableStateOf<Student?>(null) }
     var selectedTeacher by remember { mutableStateOf<Teacher?>(null) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     fun navigateTo(target: OtherPage) {
         pageStack = pageStack + page
@@ -215,6 +217,20 @@ fun CollegeScreen(
             OtherPage.MAP -> CollegeMapScreen(
                 initialRoom = mapRoom,
                 fromRoom = mapFromRoom,
+                onOpenTeacher = { name ->
+                    // Т6: преподаватель из расписания кабинета — тот же механизм, что из вкладки «Расписание»
+                    scope.launch {
+                        val all = TeachersRepository(context).loadTeachers()
+                        val surname = com.politex.data.repository.TeacherInsights.surnameOf(name)
+                        val found = all.firstOrNull {
+                            com.politex.data.repository.TeacherInsights.surnameOf(it.name) == surname
+                        }
+                        if (found != null) {
+                            selectedTeacher = found
+                            navigateTo(OtherPage.TEACHER_CARD)
+                        }
+                    }
+                },
                 onBack = {
                     mapRoom = null
                     mapFromRoom = null
