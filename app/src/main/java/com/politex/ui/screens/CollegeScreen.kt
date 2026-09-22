@@ -1351,6 +1351,11 @@ private fun TeacherScheduleTab(teacher: Teacher) {
         com.politex.data.repository.TeacherInsights.surnameOf(teacher.name)
     }
 
+    // День недели выбранной даты (для звонов и фильтра слотов)
+    val selectedDateDow = remember(targetCalendar) {
+        com.politex.data.network.MpkScheduleParser.dowOfCalendar(targetCalendar)
+    }
+
     LaunchedEffect(teacher.name, dayOffset, customDate) {
         val dateKey = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
             .format(targetCalendar.time)
@@ -1371,10 +1376,18 @@ private fun TeacherScheduleTab(teacher: Teacher) {
             )
         } ?: return@LaunchedEffect
 
-        slots = parsedAll.entries
+        val allSlots = parsedAll.entries
             .firstOrNull { com.politex.data.repository.TeacherInsights.surnameOf(it.key) == surname }
             ?.value
             .orEmpty()
+
+        // Слоты размечены днём недели документа: показываем только совпадающий день
+        val docDow = allSlots.firstOrNull()?.dayOfWeek ?: 0
+        slots = when {
+            docDow == 0 -> allSlots
+            docDow == selectedDateDow -> allSlots
+            else -> emptyList()
+        }
     }
 
     if (showCalendar) {
@@ -1385,14 +1398,10 @@ private fun TeacherScheduleTab(teacher: Teacher) {
             ),
             onDismiss = { showCalendar = false },
             onDateSelected = { _, dateStr ->
-                val parsed = try {
-                    val sdf = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
-                    sdf.parse(dateStr.replace("-", "."))
-                } catch (_: Exception) {
-                    null
-                }
+                // dateStr приходит в dd.MM.yyyy; парсим календарём, не строковой заменой
+                val parsed = com.politex.data.network.MpkScheduleParser.parseDotDate(dateStr)
                 parsed?.let {
-                    customDate = Calendar.getInstance().apply { time = it }
+                    customDate = (it.clone() as Calendar)
                     dayOffset = 0
                 }
                 showCalendar = false
@@ -1534,7 +1543,7 @@ private fun TeacherScheduleTab(teacher: Teacher) {
                                 Text(
                                     text = buildString {
                                         val bells = com.politex.data.model.CollegeBellSchedule
-                                            .getBellsForDay(1)
+                                            .getBellsForDay(selectedDateDow)
                                         val time = bells.firstOrNull { it.lessonNumber == slot.lessonNumber }
                                         if (time != null) append("${time.start}–${time.end}")
                                         if (slot.groups.isNotEmpty()) {

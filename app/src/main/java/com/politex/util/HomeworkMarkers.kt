@@ -18,12 +18,20 @@ object HomeworkMarkers {
 
     fun dayIsoOf(cal: Calendar): String = isoFormat.format(cal.time)
 
+    /**
+     * Строки «шаблона недели» (пустая дата) плюс строки с самой поздней датой
+     * (сравнение дат через Calendar, не по строкам). Пустая dateString — старый формат.
+     */
     fun dedupeByLatestDate(lessons: List<LessonEntity>): List<LessonEntity> {
-        val latestDated = lessons
+        val latestMillis = lessons
             .filter { it.dateString.isNotBlank() }
-            .maxOfOrNull { it.dateString.replace("-", ".") }
-        return lessons.filter { it.dateString.isBlank() || it.dateString.replace("-", ".") == latestDated }
+            .maxOfOrNull { dateToMillis(it.dateString) } ?: return lessons
+        return lessons.filter { it.dateString.isBlank() || dateToMillis(it.dateString) == latestMillis }
     }
+
+    /** dd.MM.yyyy / ISO -> epoch; некорректная дата -> 0 (считается «самой ранней»). */
+    internal fun dateToMillis(date: String): Long =
+        com.politex.data.network.MpkScheduleParser.parseDotDate(date)?.timeInMillis ?: 0L
 
     fun markerLessonNumbers(
         dayLessons: List<LessonEntity>,

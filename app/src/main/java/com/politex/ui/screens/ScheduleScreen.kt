@@ -175,11 +175,28 @@ fun ScheduleScreen(
 
     val activeDayOfWeek = if (selectedSlot == 0) calendarDayOfWeek(leftCal) else calendarDayOfWeek(rightCal)
     val activeCal = if (selectedSlot == 0) leftCal else rightCal
+    // Дата активного дня в формате БД: выбранная в архиве либо календарная ячейка «сегодня/завтра»
+    val activeDateString = remember(selectedDateString, activeCal) {
+        if (selectedDateString.isNotBlank()) {
+            com.politex.data.network.MpkScheduleParser.parseDotDate(selectedDateString)?.let {
+                "%02d.%02d.%04d".format(
+                    it.get(Calendar.DAY_OF_MONTH), it.get(Calendar.MONTH) + 1, it.get(Calendar.YEAR)
+                )
+            } ?: selectedDateString
+        } else {
+            "%02d.%02d.%04d".format(
+                activeCal.get(Calendar.DAY_OF_MONTH),
+                activeCal.get(Calendar.MONTH) + 1,
+                activeCal.get(Calendar.YEAR)
+            )
+        }
+    }
 
     val dayNamesNominative = listOf("", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье")
     val subtitleText = if (selectedDateString.isNotBlank()) {
         "${dayNamesNominative[activeDayOfWeek]} • $selectedDateString"
     } else {
+        // Календарная ячейка (сегодня/завтра) — показываем её дату
         val d = activeCal.get(Calendar.DAY_OF_MONTH)
         val m = activeCal.get(Calendar.MONTH) + 1
         val prefix = when {
@@ -190,7 +207,7 @@ fun ScheduleScreen(
         String.format(java.util.Locale.ROOT, "%s, %02d.%02d", prefix, d, m)
     }
 
-    val currentLessonNumber = remember(activeDayOfWeek, selectedSlot) {
+    val currentLessonNumber = remember(activeDayOfWeek, selectedSlot, activeDateString) {
         if (selectedSlot == 0 && leftIsToday) {
             val cal = java.util.Calendar.getInstance()
             val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
@@ -200,26 +217,17 @@ fun ScheduleScreen(
         } else null
     }
 
+    // Запрос по реальной дате (строки с датой) + фолбэк на день недели (пустая dateString)
     val lessonsFromDbState: List<com.politex.data.local.entity.LessonEntity>? by scheduleRepository
-        .getLessonsForDay(groupInfo.canonicalName, activeDayOfWeek)
+        .getLessonsForDateOrDay(groupInfo.canonicalName, activeDateString, activeDayOfWeek)
         .collectAsState(initial = null)
     val lessonsFromDb = lessonsFromDbState ?: emptyList()
     val isInitialLoad = lessonsFromDbState == null
 
-    val lessons: List<com.politex.data.local.entity.LessonEntity> = remember(lessonsFromDb, selectedDateString) {
-        if (selectedDateString.isBlank()) {
-
-            val latestDated = lessonsFromDb
-                .filter { it.dateString.isNotBlank() }
-                .maxOfOrNull { it.dateString.replace("-", ".") }
-            lessonsFromDb.filter { it.dateString.isBlank() || it.dateString.replace("-", ".") == latestDated }
-        } else {
-            val bySpecificDate = lessonsFromDb.filter {
-                it.dateString == selectedDateString ||
-                it.dateString.replace("-", ".") == selectedDateString.replace("-", ".")
-            }
-            if (bySpecificDate.isNotEmpty()) bySpecificDate else lessonsFromDb
-        }
+    // Если есть строки с точной датой — только они; шаблон дня недели лишь дополнение
+    val lessons: List<com.politex.data.local.entity.LessonEntity> = remember(lessonsFromDb, activeDateString) {
+        val exact = lessonsFromDb.filter { it.dateString == activeDateString }
+        if (exact.isNotEmpty()) exact else lessonsFromDb.filter { it.dateString.isBlank() }
     }
 
     val pendingTasks by remember(groupInfo.canonicalName) {
@@ -269,7 +277,16 @@ fun ScheduleScreen(
         CalendarArchiveDialog(
             groupName = groupInfo.canonicalName,
             scheduleRepository = scheduleRepository,
-            onDismiss = { showArchiveDialog = false }
+            onDismiss = { showArchiveDialog = false },
+            onDateSelected = { _, dateStr ->
+                // ISO из календаря нормализуем в dd.MM.yyyy на границе
+                selectedDateString = com.politex.data.network.MpkScheduleParser.parseDotDate(dateStr)
+                    ?.let { cal ->
+                        "%02d.%02d.%04d".format(
+                            cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR)
+                        )
+                    } ?: dateStr
+            }
         )
     }
 
@@ -457,7 +474,11 @@ fun ScheduleScreen(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = "Для группы ${groupInfo.canonicalName} на этот день пар пока нет в базе колледжа.",
+                            text = if (selectedDateString.isNotBlank()) {
+                                "Нет данных за $selectedDateString. Расписание за прошедшие дни хранится в архиве только после синхронизации."
+                            } else {
+                                "Для группы ${groupInfo.canonicalName} на этот день пар пока нет в базе колледжа."
+                            },
                             style = androidx.compose.ui.text.TextStyle(
                                 fontSize = 13.sp,
                                 color = ColorTextMuted

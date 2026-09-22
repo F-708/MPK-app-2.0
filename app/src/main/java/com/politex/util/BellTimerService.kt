@@ -44,7 +44,17 @@ class BellTimerService : Service() {
                 val msToNextMinute = 60_000L - (nowMs % 60_000L)
                 delay(msToNextMinute)
 
-                BellCountdownNotifier.show(this@BellTimerService)
+                // Т10: показ ИЛИ демоут в заглушку — foreground-уведомление сервиса
+                // всегда обновляется через startForeground (в скрытом состоянии это
+                // заменяет строку тихой заглушкой; сервис живёт и в 07:00 вернёт отсчёт).
+                try {
+                    startForeground(
+                        BellCountdownNotifier.NOTIFICATION_ID,
+                        BellCountdownNotifier.buildNotification(this@BellTimerService)
+                    )
+                } catch (_: Exception) {
+                    BellCountdownNotifier.show(this@BellTimerService)
+                }
                 // Той же минутой ловим «последний урок дня закончился» — на случай,
                 // когда будильник виджета не запланирован, а служба отсчёта работает.
                 com.politex.util.ConfettiController.maybeCelebrate(this@BellTimerService)

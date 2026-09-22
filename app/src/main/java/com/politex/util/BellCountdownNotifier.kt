@@ -142,6 +142,11 @@ object BellCountdownNotifier {
             Scope.COLLEGE -> com.politex.widget.CountdownMode.ALL_BELLS
         }
         val info = BellCountdownWidgetProvider.countdownInfo(context, mode)
+
+        // Т10: скрыто (выходной / до 07:00 / уроки закончились / нет уроков) —
+        // минимальная тихая заглушка вместо «Уроки закончились» круглосуточно.
+        if (info == null || info.first < 0) return buildHiddenNotification(context)
+
         val style = getStyle(context)
 
         val (title, progressPercent, hasProgress) = buildContent(info, style)
@@ -193,6 +198,30 @@ object BellCountdownNotifier {
         }
 
         return builder.build()
+    }
+
+    /**
+     * Заглушка для скрытого состояния: служба foreground обязана держать уведомление,
+     * поэтому «исчезновение» строки = замена на минимальную тихую (Т10.2).
+     */
+    private fun buildHiddenNotification(context: Context): android.app.Notification {
+        val openIntent = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_mpk_emblem)
+            .setContentIntent(openIntent)
+            .setContentTitle("Мой Политех")
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setShowWhen(false)
+            .build()
     }
 
     private fun canPost(context: Context): Boolean =

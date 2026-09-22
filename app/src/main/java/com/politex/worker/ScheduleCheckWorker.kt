@@ -90,11 +90,17 @@ class ScheduleCheckWorker(
 
                     WidgetUpdateHelper.updateAllWidgets(applicationContext)
 
+                    // Строки перештампованы реальными датами (парсер): фильтр только по дате
                     val targetLessons = allLessons.filter {
-                        it.dateString == targetDateString || it.dayOfWeek == targetDayOfWeek
+                        it.dateString == targetDateString
                     }
+                    // Фолбэк для старого формата (пустая dateString) — по дню недели
+                    val fallbackLessons = if (targetLessons.isEmpty()) {
+                        allLessons.filter { it.dateString.isBlank() && it.dayOfWeek == targetDayOfWeek }
+                    } else emptyList()
+                    val notifyLessons = targetLessons.ifEmpty { fallbackLessons }
 
-                    if (targetLessons.isNotEmpty()) {
+                    if (notifyLessons.isNotEmpty()) {
                         // Конфетти «завтра мало уроков»: флаг для первого просмотра
                         // завтрашнего дня (снимается одноразово в ScheduleScreen).
                         com.politex.util.ConfettiController.setTomorrowPending(
@@ -113,7 +119,7 @@ class ScheduleCheckWorker(
                         NotificationHelper.showScheduleReleaseNotification(
                             context = applicationContext,
                             dayTitle = titleDay,
-                            lessonCount = targetLessons.size,
+                            lessonCount = notifyLessons.size,
                             targetDayOfWeek = targetDayOfWeek,
                             targetDate = targetDateString
                         )

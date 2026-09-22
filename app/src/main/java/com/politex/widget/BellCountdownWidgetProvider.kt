@@ -10,6 +10,7 @@ import android.content.Intent
 import android.os.Build
 import android.widget.RemoteViews
 import com.politex.R
+import com.politex.data.model.BellItem
 import com.politex.data.model.CollegeBellSchedule
 import java.util.Calendar
 
@@ -29,6 +30,9 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
+
+        /** Первый показ строки/виджета — 07:00 (заказчик, Q5). */
+        const val SHOW_FROM_MINUTE = 7 * 60
 
         fun updateWidgets(context: Context, manager: AppWidgetManager, ids: IntArray) {
             ids.forEach { id ->
@@ -60,8 +64,42 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
             val bells = CollegeBellSchedule.getBellsForDay(dow)
 
-            bells.forEachIndexed { index, bell ->
+            // Режим «мои уроки»: cutoff = последний урок группы (уроки закончились → строка скрыта).
+            // Данные считаем здесь и в цикле не матчим звонки после последнего урока группы.
+            val lastGroupLesson = if (mode == CountdownMode.GROUP_LESSONS) {
+                lastGroupLessonForToday(context, cal)
+            } else null
 
+            return countdownForMinute(minutes, dow, bells, mode, lastGroupLesson)
+        }
+
+        /**
+         * Чистая логика отсчёта (Т10): null = строка скрыта
+         * (выходной / до 07:00 / уроки закончились / у группы нет уроков в этот день).
+         *
+         * Cutoff группы проверяется ДО цикла по звонкам (Т10.1) — сам цикл идёт по полному
+         * списку, чтобы не ломать смежность «перемена → инфочас → следующий урок» (четверг).
+         */
+        fun countdownForMinute(
+            minutes: Int,
+            dayOfWeek: Int,
+            bells: List<BellItem>,
+            mode: CountdownMode,
+            lastGroupLesson: Int?
+        ): Triple<Long, String, Int>? {
+            if (dayOfWeek == 7 || bells.isEmpty()) return null
+            if (minutes < SHOW_FROM_MINUTE) return null
+
+            if (mode == CountdownMode.GROUP_LESSONS) {
+                // Нет уроков группы в этот день — скрыто весь день (без fallback на все звонки).
+                if (lastGroupLesson == null) return null
+                val lastBell = bells.lastOrNull {
+                    !it.isInfoHour && it.lessonNumber <= lastGroupLesson
+                } ?: return null
+                if (minutes > lastBell.endMinutes) return null
+            }
+
+            bells.forEachIndexed { index, bell ->
                 if (minutes in bell.startMinutes..bell.endMinutes) {
                     val left = bell.endMinutes - minutes
                     return Triple(left.toLong(), "до звонка", if (bell.isInfoHour) 0 else bell.lessonNumber)
@@ -83,36 +121,39 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             if (minutes < first.startMinutes) {
                 return Triple((first.startMinutes - minutes).toLong(), "до 1 урока", 0)
             }
-
-            if (mode == CountdownMode.GROUP_LESSONS) {
-                val group = WidgetUpdateHelper.getSelectedGroup(context)
-                val lastGroupLesson = try {
-                    kotlinx.coroutines.runBlocking {
-                        val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
-                            Calendar.MONDAY -> 1; Calendar.TUESDAY -> 2; Calendar.WEDNESDAY -> 3
-                            Calendar.THURSDAY -> 4; Calendar.FRIDAY -> 5; Calendar.SATURDAY -> 6
-                            else -> 7
-                        }
-                        val lessons = com.politex.data.local.MpkDatabase.getInstance(context)
-                            .lessonDao().getLessonsForDaySync(group, dow)
-                        val latestDate = lessons.filter { it.dateString.isNotBlank() }
-                            .maxOfOrNull { it.dateString.replace("-", ".") }
-                        val today = if (latestDate != null) {
-                            lessons.filter { it.dateString.isBlank() || it.dateString.replace("-", ".") == latestDate }
-                        } else lessons
-                        today.maxOfOrNull { it.lessonNumber }
-                    }
-                } catch (_: Exception) {
-                    null
-                }
-                if (lastGroupLesson != null) {
-                    val lastBell = bells.lastOrNull { !it.isInfoHour && it.lessonNumber <= lastGroupLesson }
-                    if (lastBell != null && minutes > lastBell.endMinutes) {
-                        return Triple(-1L, "уроки закончились", 0)
-                    }
-                }
-            }
             return null
+        }
+
+        /**
+         * Последний урок группы сегодня: сначала строки с датой (dateString dd.MM.yyyy / dd-MM-yyyy),
+         * при отсутствии — регулярные по dayOfWeek (graceful degradation). Пусто → null (уроков нет).
+         */
+        fun lastGroupLessonForToday(context: Context, cal: Calendar): Int? {
+            val group = WidgetUpdateHelper.getSelectedGroup(context)
+            if (group.isBlank()) return null
+            val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
+                Calendar.MONDAY -> 1; Calendar.TUESDAY -> 2; Calendar.WEDNESDAY -> 3
+                Calendar.THURSDAY -> 4; Calendar.FRIDAY -> 5; Calendar.SATURDAY -> 6
+                else -> 7
+            }
+            val todayString = String.format(
+                "%02d.%02d.%d",
+                cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR)
+            )
+            return try {
+                kotlinx.coroutines.runBlocking {
+                    val lessons = com.politex.data.local.MpkDatabase.getInstance(context)
+                        .lessonDao().getLessonsForDaySync(group, dow)
+                    val forToday = lessons.filter {
+                        it.dateString.isNotBlank() && it.dateString.replace("-", ".") == todayString
+                    }
+                    // Дневные строки на сегодняшнюю дату имеют приоритет; иначе — регулярные по дню недели.
+                    if (forToday.isNotEmpty()) forToday.maxOf { it.lessonNumber }
+                    else lessons.filter { it.dateString.isBlank() }.maxOfOrNull { it.lessonNumber }
+                }
+            } catch (_: Exception) {
+                null
+            }
         }
 
         private fun buildViews(context: Context, appWidgetId: Int): RemoteViews {
@@ -125,10 +166,10 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
 
             val info = countdownInfo(context, CountdownMode.load(context, appWidgetId))
             when {
-
                 info == null || info.first < 0 -> {
-                    views.setTextViewText(R.id.tv_countdown_label, "Уроки")
-                    views.setTextViewText(R.id.tv_countdown_value, "закончились")
+                    // Т10: строка скрыта до 07:00 / после конца уроков / в день без уроков.
+                    views.setTextViewText(R.id.tv_countdown_label, "")
+                    views.setTextViewText(R.id.tv_countdown_value, "")
                 }
                 else -> {
                     val (minutesLeft, label, _) = info

@@ -73,7 +73,6 @@ import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStyleCalendarMonth
 import com.politex.ui.theme.TextStyleCalendarWeekdays
 import com.politex.ui.util.bouncyClickable
-import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import com.politex.ui.theme.ColorBrandFill
@@ -105,11 +104,16 @@ fun CalendarArchiveDialog(
     val savedDates by scheduleRepository.getDistinctDates(groupName).collectAsState(initial = emptyList())
     val allGroupLessons by scheduleRepository.getAllLessonsForGroup(groupName).collectAsState(initial = emptyList())
 
-    // Даты в БД хранятся в формате «дд.ММ.гггг», календарь строит ISO «гггг-ММ-дд» — приводим к ISO один раз
-    val savedDatesIso = remember(savedDates) {
+    // Все сравнения дат — через приведение к dd.MM.yyyy (формат БД), без лексикографии
+
+    // Даты в БД хранятся в формате «дд.ММ.гггг», календарь строит ISO «гггг-ММ-дд» — приводим к dd.MM.yyyy
+    val savedDatesDot = remember(savedDates) {
         savedDates.mapNotNull { d ->
-            val p = d.split(".")
-            if (p.size == 3) "${p[2]}-${p[1]}-${p[0]}" else null
+            com.politex.data.network.MpkScheduleParser.parseDotDate(d)?.let { cal ->
+                "%02d.%02d.%04d".format(
+                    cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR)
+                )
+            }
         }.toSet()
     }
 
@@ -118,30 +122,28 @@ fun CalendarArchiveDialog(
         allGroupLessons.filter { it.dateString.isBlank() }.map { it.dayOfWeek }.toSet()
     }
 
-    val selectedDateLessons = remember(selectedDateString, allGroupLessons) {
-        if (selectedDateString.isBlank()) {
+    // Выбранная дата в формате БД
+    val selectedDateDot = remember(selectedDateString) {
+        if (selectedDateString.isBlank()) ""
+        else com.politex.data.network.MpkScheduleParser.parseDotDate(selectedDateString)?.let { cal ->
+            "%02d.%02d.%04d".format(
+                cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR)
+            )
+        } ?: ""
+    }
+
+    // Строки выбранной даты: только точная дата; недельный шаблон — лишь если дат вообще нет
+    val selectedDateLessons = remember(selectedDateDot, allGroupLessons) {
+        if (selectedDateDot.isBlank()) {
             emptyList()
         } else {
-            val byDate = allGroupLessons.filter {
-                it.dateString == selectedDateString ||
-                it.dateString.replace("-", ".") == selectedDateString.replace("-", ".")
-            }
-            if (byDate.isNotEmpty()) {
-                byDate
-            } else {
-                val cal = parseDateSafely(selectedDateString)
-                if (cal != null) {
-                    val dayOfWeek = when (cal.get(Calendar.DAY_OF_WEEK)) {
-                        Calendar.MONDAY -> 1
-                        Calendar.TUESDAY -> 2
-                        Calendar.WEDNESDAY -> 3
-                        Calendar.THURSDAY -> 4
-                        Calendar.FRIDAY -> 5
-                        Calendar.SATURDAY -> 6
-                        else -> 7
-                    }
-                    allGroupLessons.filter { it.dayOfWeek == dayOfWeek }
-                } else emptyList()
+            val exact = allGroupLessons.filter { it.dateString == selectedDateDot }
+            if (exact.isNotEmpty()) exact
+            else {
+                val dow = com.politex.data.network.MpkScheduleParser.parseDotDate(selectedDateDot)
+                    ?.let { com.politex.data.network.MpkScheduleParser.dowOfCalendar(it) }
+                if (dow != null) allGroupLessons.filter { it.dateString.isBlank() && it.dayOfWeek == dow }
+                else emptyList()
             }
         }
     }
@@ -415,38 +417,30 @@ fun CalendarArchiveDialog(
                             if (calendarDay == null) {
                                 Box(modifier = Modifier.aspectRatio(1.1f))
                             } else {
-                                val dateStr = String.format(
+                                val dotStr = String.format(
                                     Locale.ROOT,
-                                    "%04d-%02d-%02d",
-                                    displayedYear,
+                                    "%02d.%02d.%04d",
+                                    calendarDay,
                                     displayedMonth + 1,
-                                    calendarDay
+                                    displayedYear
                                 )
-                                val isSelected = selectedDateString == dateStr
-                                val hasData = savedDatesIso.contains(dateStr) ||
-                                    (parseDateSafely(dateStr)?.get(Calendar.DAY_OF_WEEK)?.let { cDow ->
-                                        val dow = if (cDow == Calendar.SUNDAY) 7 else cDow - 1
-                                        dow in weeklyLessonDows
+                                val isSelected = selectedDateDot == dotStr
+                                val hasData = savedDatesDot.contains(dotStr) ||
+                                    (com.politex.data.network.MpkScheduleParser.parseDotDate(dotStr)?.let { cal ->
+                                        com.politex.data.network.MpkScheduleParser.dowOfCalendar(cal) in weeklyLessonDows
                                     } ?: false)
 
                                 Box(
                                     modifier = Modifier
                                         .aspectRatio(1.1f)
                                         .clickable {
-                                            selectedDateString = dateStr
+                                            selectedDateString = dotStr
 
                                             onDateSelected?.let { callback ->
-                                                val cal = parseDateSafely(dateStr)
-                                                val dow = when (cal?.get(Calendar.DAY_OF_WEEK)) {
-                                                    Calendar.MONDAY -> 1
-                                                    Calendar.TUESDAY -> 2
-                                                    Calendar.WEDNESDAY -> 3
-                                                    Calendar.THURSDAY -> 4
-                                                    Calendar.FRIDAY -> 5
-                                                    Calendar.SATURDAY -> 6
-                                                    else -> 1
-                                                }
-                                                callback(dow, dateStr)
+                                                val cal = com.politex.data.network.MpkScheduleParser.parseDotDate(dotStr)
+                                                val dow = com.politex.data.network.MpkScheduleParser
+                                                    .dowOfCalendar(cal ?: Calendar.getInstance())
+                                                callback(dow, dotStr)
                                             }
                                         }
                                         .testTag("calendar_day_$calendarDay"),
@@ -577,18 +571,4 @@ fun CalendarArchiveDialog(
             }
         }
     }
-}
-
-private fun parseDateSafely(dateStr: String): Calendar? {
-    val formats = listOf("yyyy-MM-dd", "dd.MM.yyyy", "dd-MM-yyyy")
-    for (format in formats) {
-        try {
-            val sdf = SimpleDateFormat(format, Locale.ROOT)
-            val d = sdf.parse(dateStr)
-            if (d != null) {
-                return Calendar.getInstance().apply { time = d }
-            }
-        } catch (_: Exception) {}
-    }
-    return null
 }

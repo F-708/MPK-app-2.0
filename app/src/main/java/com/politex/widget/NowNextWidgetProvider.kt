@@ -133,10 +133,14 @@ object WidgetData {
             kotlinx.coroutines.runBlocking {
                 val all = com.politex.data.local.MpkDatabase.getInstance(context)
                     .lessonDao().getLessonsForDaySync(group, dow)
-                val latestDate = all.filter { it.dateString.isNotBlank() }
-                    .maxOfOrNull { it.dateString }
-                val today = if (latestDate != null) {
-                    all.filter { it.dateString == latestDate || it.dateString.isBlank() }
+                // Последняя дата через Calendar, не лексикографически
+                val latestMillis = all.filter { it.dateString.isNotBlank() }
+                    .maxOfOrNull { com.politex.data.network.MpkScheduleParser.parseDotDate(it.dateString)?.timeInMillis ?: 0L }
+                val today = if (latestMillis != null) {
+                    all.filter {
+                        it.dateString.isBlank() ||
+                            (com.politex.data.network.MpkScheduleParser.parseDotDate(it.dateString)?.timeInMillis ?: 0L) == latestMillis
+                    }
                 } else all
                 today.sortedBy { it.lessonNumber }
             }

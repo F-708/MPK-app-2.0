@@ -9,7 +9,9 @@ data class TeacherSlot(
     val lessonNumber: Int,
     val groups: List<String>,
     val subject: String,
-    val room: String
+    val room: String,
+    /** День недели 1..6, извлечённый из заголовка документа; 0 = неизвестен. */
+    val dayOfWeek: Int = 0
 )
 
 object TeacherScheduleParser {
@@ -19,6 +21,28 @@ object TeacherScheduleParser {
     private val GROUP_REGEX = Regex("^([1-4])([1-9])([\\u0410-\\u042F])$")
 
     private val ROOM_REGEX = Regex("^([0-9]{1,3}[\\u0430-\\u044Fa-zA-Z]?|СТД)$")
+
+    private val HEADER_DOW_REGEX = Regex(
+        "ПОНЕДЕЛЬНИК|ВТОРНИК|СРЕД[УА]|ЧЕТВЕРГ|ПЯТНИЦ[УЕ]|СУББОТ", RegexOption.IGNORE_CASE
+    )
+
+    /** День недели из строки заголовка вида «║ СРЕДА 16.09.2026 ║». */
+    fun dowFromHeaderText(text: String): Int? {
+        val word = HEADER_DOW_REGEX.find(text)?.value?.uppercase(Locale.ROOT) ?: return null
+        return when {
+            word.startsWith("ПОНЕД") -> 1
+            word.startsWith("ВТОР") -> 2
+            word.startsWith("СРЕД") -> 3
+            word.startsWith("ЧЕТВ") -> 4
+            word.startsWith("ПЯТН") -> 5
+            word.startsWith("СУББ") -> 6
+            else -> null
+        }
+    }
+
+    /** Строка заголовка с днём недели (первая строка с «НЕДЕЛЯ»), либо null. */
+    fun findHeaderLine(text: String): String? =
+        text.lines().firstOrNull { it.contains("НЕДЕЛЯ", ignoreCase = true) }
 
     fun parse(bytes: ByteArray): Map<String, List<TeacherSlot>> {
         if (bytes.isEmpty()) return emptyMap()
@@ -44,6 +68,9 @@ object TeacherScheduleParser {
             val rooms: MutableList<String> = mutableListOf(),
             var subject: String = ""
         )
+
+        // Документ дня содержит заголовок «1 НЕДЕЛЯ ║ СРЕДА 16.09.2026»: помечаем слоты днём
+        val headerDow = findHeaderLine(text)?.let { dowFromHeaderText(it) } ?: 0
 
         val result = mutableMapOf<String, MutableMap<Int, Cell>>()
         var currentTeacher: String? = null
@@ -92,7 +119,8 @@ object TeacherScheduleParser {
                     groups = cell.groups.distinct(),
                     subject = cell.subject,
 
-                    room = cell.rooms.firstOrNull().orEmpty()
+                    room = cell.rooms.firstOrNull().orEmpty(),
+                    dayOfWeek = headerDow
                 )
             }
         }.filterValues { it.isNotEmpty() }

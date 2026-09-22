@@ -72,6 +72,54 @@ object MpkScheduleParser {
         "([0-3]?[0-9])[.\\-/]([0-1]?[0-9])[.\\-/](202[0-9])"
     )
 
+    private val DOT_FORMAT = java.text.SimpleDateFormat("dd.MM.yyyy", Locale.ROOT)
+
+    /**
+     * «15.09.2026» / «15-09-2026» / ISO «2026-09-15» -> Calendar (приведённая дата).
+     * Все сравнения дат в приложении идут через этот разбор, не по строкам.
+     */
+    fun parseDotDate(date: String): java.util.Calendar? {
+        val iso = Regex("\\s*(202[0-9])-([0-1]?[0-9])-([0-3]?[0-9])\\s*").find(date)
+        if (iso != null) {
+            val cal = java.util.Calendar.getInstance()
+            cal.clear()
+            cal.set(iso.groupValues[1].toInt(), iso.groupValues[2].toInt() - 1, iso.groupValues[3].toInt())
+            return cal
+        }
+        val m = Regex("\\s*([0-3]?[0-9])[.\\-/]([0-1]?[0-9])[.\\-/]([0-9]{4})\\s*").find(date) ?: return null
+        val cal = java.util.Calendar.getInstance()
+        cal.clear()
+        cal.set(m.groupValues[3].toInt(), m.groupValues[2].toInt() - 1, m.groupValues[1].toInt())
+        return cal
+    }
+
+    fun dowOfCalendar(cal: java.util.Calendar): Int = when (cal.get(java.util.Calendar.DAY_OF_WEEK)) {
+        java.util.Calendar.MONDAY -> 1
+        java.util.Calendar.TUESDAY -> 2
+        java.util.Calendar.WEDNESDAY -> 3
+        java.util.Calendar.THURSDAY -> 4
+        java.util.Calendar.FRIDAY -> 5
+        java.util.Calendar.SATURDAY -> 6
+        else -> 7
+    }
+
+    /**
+     * Реальная дата каждой строки: anchor + (dayOfWeek − anchorDow) дней.
+     * Документ сайта содержит заголовок «РАСПИСАНИЕ на ДД.ММ.ГГГГ <день>» — дата
+     * заголовка приоритетнее запрошенной (портал может отдать другой документ),
+     * anchorDow при этом — день из заголовка. Без даты в заголовке anchor = запрошенная
+     * дата, anchorDow = её день недели (пн = target − (targetDow−1)).
+     */
+    internal fun restampByDow(
+        lessons: List<LessonEntity>,
+        anchorCal: java.util.Calendar,
+        anchorDow: Int
+    ): List<LessonEntity> = lessons.map { lesson ->
+        val cal = (anchorCal.clone() as java.util.Calendar)
+        cal.add(java.util.Calendar.DAY_OF_YEAR, (lesson.dayOfWeek - anchorDow).coerceIn(-6, 6))
+        lesson.copy(dateString = DOT_FORMAT.format(cal.time))
+    }
+
     fun findSchedulePostLinks(html: String, baseUrl: String = "https://guo-mpk.by/"): List<SchedulePostLink> {
         val result = mutableListOf<SchedulePostLink>()
         val seenUrls = mutableSetOf<String>()
@@ -168,6 +216,16 @@ object MpkScheduleParser {
         targetGroup: String,
         targetDate: String = ""
     ): List<LessonEntity> {
+        val parsed = parseFileRaw(bytes, targetGroup, targetDate)
+        return applyHeaderDate(parsed, bytes, targetDate)
+    }
+
+    /** parseFile без перештамповки дат — для тестов стратегий по отдельности. */
+    fun parseFileRaw(
+        bytes: ByteArray,
+        targetGroup: String,
+        targetDate: String = ""
+    ): List<LessonEntity> {
         if (bytes.isEmpty()) return emptyList()
 
         val head = String(bytes.copyOfRange(0, minOf(600, bytes.size)), Charsets.UTF_8)
@@ -211,6 +269,84 @@ object MpkScheduleParser {
                 )
             }
             .getOrDefault(emptyList())
+    }
+
+    /**
+     * Захват даты заголовка («РАСПИСАНИЕ на 15.09.2026 г. ВТОРНИК») и перештамповка:
+     * строки получают дату своего дня недели относительно даты заголовка.
+     * Без даты в заголовке anchor = запрошенная дата. Если и её нет — как было.
+     */
+    private fun applyHeaderDate(
+        lessons: List<LessonEntity>,
+        bytes: ByteArray,
+        targetDate: String
+    ): List<LessonEntity> {
+        if (lessons.isEmpty()) return lessons
+
+        val headerText = extractHeaderText(bytes)
+        val headerDate = extractHeaderDate(headerText)
+        val anchor = parseDotDate(headerDate ?: targetDate) ?: return lessons
+        val anchorDow = if (headerDate != null) {
+            dowFromHeader(headerText) ?: dowOfCalendar(anchor)
+        } else {
+            dowOfCalendar(anchor)
+        }
+        val stamped = restampByDow(lessons, anchor, anchorDow)
+        // Строка могла прийти уже с корректной датой — не двигаем её, если совпала
+        if (stamped.map { it.dateString }.toSet() == lessons.map { it.dateString }.toSet()) return lessons
+        return stamped
+    }
+
+    /** Текст заголовка: первые распознанные текстовые прогоны документа. */
+    private fun extractHeaderText(bytes: ByteArray): String {
+        val fromZip = if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte() &&
+            bytes[2] == 0x03.toByte() && bytes[3] == 0x04.toByte()
+        ) {
+            try {
+                val zip = ZipInputStream(ByteArrayInputStream(bytes))
+                var entry = zip.nextEntry
+                var xml: String? = null
+                while (entry != null) {
+                    if (entry.name == "word/document.xml") {
+                        xml = zip.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                        break
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+                xml?.let { Regex("РАСПИСАНИЕ[^<]*", RegexOption.IGNORE_CASE).find(it)?.value }
+            } catch (_: Exception) { null }
+        } else null
+        if (!fromZip.isNullOrBlank()) return fromZip
+
+        val utf16Text = runCatching { extractUtf16LeRuns(bytes).joinToString("\n") }.getOrDefault("")
+        val firstU16 = Regex("РАСПИСАНИЕ[^\\n]*", RegexOption.IGNORE_CASE).find(utf16Text)?.value
+        if (firstU16 != null) return firstU16
+
+        val cp1251Text = runCatching { String(bytes, CP1251) }.getOrDefault("")
+        return Regex("РАСПИСАНИЕ[^\\n]*", RegexOption.IGNORE_CASE).find(cp1251Text)?.value ?: ""
+    }
+
+    private val HEADER_DOW_REGEX = Regex(
+        "ПОНЕДЕЛЬНИК|ВТОРНИК|СРЕД[УА]|ЧЕТВЕРГ|ПЯТНИЦ[УЕ]|СУББОТ", RegexOption.IGNORE_CASE
+    )
+
+    private fun extractHeaderDate(headerText: String): String? {
+        val m = DATE_IN_TEXT_REGEX.find(headerText) ?: return null
+        return "${m.groupValues[1].padStart(2, '0')}.${m.groupValues[2].padStart(2, '0')}.${m.groupValues[3]}"
+    }
+
+    private fun dowFromHeader(headerText: String): Int? {
+        val word = HEADER_DOW_REGEX.find(headerText)?.value?.uppercase(Locale.ROOT) ?: return null
+        return when {
+            word.startsWith("ПОНЕД") -> 1
+            word.startsWith("ВТОР") -> 2
+            word.startsWith("СРЕД") -> 3
+            word.startsWith("ЧЕТВ") -> 4
+            word.startsWith("ПЯТН") -> 5
+            word.startsWith("СУББ") -> 6
+            else -> null
+        }
     }
 
     fun parseDocBinary(

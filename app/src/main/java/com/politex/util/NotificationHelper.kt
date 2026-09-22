@@ -73,11 +73,11 @@ object NotificationHelper {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_mpk_emblem)
-            .setContentTitle("Вышло расписание на $dayTitle")
-            .setContentText("Назначено $lessonCount $lessonsWord. Нажмите, чтобы посмотреть кабинеты.")
+            .setContentTitle("Занятия на завтра: $lessonCount $lessonsWord")
+            .setContentText("Расписание опубликовано. Нажмите, чтобы посмотреть.")
             .setStyle(
                 NotificationCompat.BigTextStyle()
-                    .bigText("Назначено $lessonCount $lessonsWord. Нажмите, чтобы открыть расписание и проверить номера кабинетов.")
+                    .bigText("Расписание опубликовано. Нажмите, чтобы посмотреть.")
             )
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
