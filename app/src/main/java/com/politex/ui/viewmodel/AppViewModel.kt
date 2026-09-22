@@ -40,7 +40,10 @@ data class AppUiState(
 
     val pendingFromRoom: String? = null,
 
-    val returnTab: AppTab? = null
+    val returnTab: AppTab? = null,
+
+    /** Одноразовый запрос автопрокрутки из виджета (см. requestScrollTarget). */
+    val scrollTarget: String? = null
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -127,6 +130,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update {
             val target = it.returnTab
             if (target != null) it.copy(currentTab = target, returnTab = null) else it
+        }
+    }
+
+    /**
+     * Цель автопрокрутки из виджета («CURRENT_LESSON»/«CURRENT_BELL»).
+     * Одноразовый запрос: экран потребляет его и сбрасывает, повторный вход
+     * на вкладку из меню уже не скроллит.
+     */
+    fun requestScrollTarget(target: String) {
+        _uiState.update { it.copy(scrollTarget = target) }
+    }
+
+    fun consumeScrollTarget() {
+        if (_uiState.value.scrollTarget != null) {
+            _uiState.update { it.copy(scrollTarget = null) }
         }
     }
 

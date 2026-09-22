@@ -28,7 +28,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -51,6 +53,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,6 +82,7 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
+import kotlinx.coroutines.flow.first
 import java.util.Calendar
 import java.util.Locale
 import com.politex.ui.theme.ColorBrandFill
@@ -95,6 +99,12 @@ fun ScheduleScreen(
     onTeacherClick: (String) -> Unit = {},
 
     onRoomClick: (room: String, fromRoom: String?) -> Unit = { _, _ -> },
+
+    listState: LazyListState = rememberLazyListState(),
+
+    scrollToCurrentRequested: Boolean = false,
+    onScrollToCurrentConsumed: () -> Unit = {},
+
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -271,6 +281,75 @@ fun ScheduleScreen(
             weeklyLessonsByDow = weeklyLessonsByDow,
             pendingTasks = pendingTasks
         )
+    }
+
+    // --- Автопрокрутка списка к текущему уроку ---
+
+    val isViewingToday = selectedSlot == 0 && selectedDateString.isBlank() && leftIsToday
+    val lessonNumbers = remember(lessons) { lessons.map { it.lessonNumber } }
+    var didColdStartScroll by remember { mutableStateOf(false) }
+
+    // Ждём первого лэйаута списка — иначе вьюпорт ещё 0 и центрирование невозможно.
+    suspend fun awaitFirstLayout() {
+        androidx.compose.runtime.snapshotFlow {
+            listState.layoutInfo.totalItemsCount > 0 && listState.layoutInfo.viewportEndOffset > 0
+        }.first { it }
+    }
+
+    // 8.2: холодный старт — один раз после загрузки урока скроллим к «сейчас».
+    // Пользователь уже скроллил (позиция > 0) или возврат на вкладку — не мешаем:
+    // поднятый listState хранит позицию, а свежий заход с позиции 0 либо уже
+    // был проскроллен (индекс > 0), либо idx == 0 и скроллить не нужно.
+    LaunchedEffect(isInitialLoad, currentLessonNumber, isViewingToday) {
+        if (isInitialLoad || didColdStartScroll) return@LaunchedEffect
+        if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
+            didColdStartScroll = true
+            return@LaunchedEffect
+        }
+        val idx = autoScrollLessonIndex(lessonNumbers, currentLessonNumber, isViewingToday)
+        if (idx != null && idx > 0) {
+            awaitFirstLayout()
+            // Примерно по центру: подтягиваем карточку на треть вьюпорта выше
+            listState.animateScrollToItem(idx, -listState.layoutInfo.viewportEndOffset / 3)
+        }
+        didColdStartScroll = true
+    }
+
+    // 8.3: тап по виджету «Сейчас/дальше»/«Расписание сегодня» — одноразовый
+    // запрос прокрутки к текущему уроку (к последнему, если день закончился).
+    // Потребляем запрос ПОСЛЕ прокрутки: иначе смена ключа перезапустит эффект
+    // и отменит анимацию на полпути.
+    LaunchedEffect(scrollToCurrentRequested, isInitialLoad) {
+        if (!scrollToCurrentRequested || isInitialLoad) return@LaunchedEffect
+        if (!isViewingToday) {
+            onScrollToCurrentConsumed()
+            return@LaunchedEffect
+        }
+        awaitFirstLayout()
+        val idx = autoScrollLessonIndex(lessonNumbers, currentLessonNumber, true)
+        if (idx != null && idx > 0) {
+            listState.animateScrollToItem(idx, -listState.layoutInfo.viewportEndOffset / 3)
+        }
+        onScrollToCurrentConsumed()
+    }
+
+    // Конфетти «завтра мало уроков»: первый просмотр завтрашней ячейки
+    // (НЕ календарного архива) снимает одноразовый флаг воркера.
+    LaunchedEffect(selectedSlot, selectedDateString, rightIsTomorrow) {
+        val viewingTomorrow = selectedSlot == 1 &&
+            selectedDateString.isBlank() &&
+            rightIsTomorrow &&
+            sameDay(rightCal, tomorrow)
+        if (viewingTomorrow) {
+            val tomorrowDate = "%02d.%02d.%04d".format(
+                rightCal.get(Calendar.DAY_OF_MONTH),
+                rightCal.get(Calendar.MONTH) + 1,
+                rightCal.get(Calendar.YEAR)
+            )
+            if (com.politex.util.ConfettiController.consumeTomorrowPending(context, tomorrowDate)) {
+                com.politex.util.ConfettiController.triggerAppConfetti()
+            }
+        }
     }
 
     if (showArchiveDialog) {
@@ -551,6 +630,7 @@ fun ScheduleScreen(
                 }
 
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
@@ -984,5 +1064,24 @@ private fun DaySlotCell(
                 )
             )
         }
+    }
+}
+
+/**
+ * Индекс слота (номер урока), к которому автопрокручивается список при открытии.
+ * Идёт урок — текущий; уроки кончились — последний; не начались — первый.
+ * null → не скроллить (данных нет). Чистая функция ради юнит-тестов.
+ */
+fun autoScrollLessonIndex(
+    lessonNumbers: List<Int>,
+    currentLessonNumber: Int?,
+    isToday: Boolean
+): Int? {
+    if (lessonNumbers.isEmpty()) return null
+    if (!isToday) return null
+    return when {
+        currentLessonNumber != null && currentLessonNumber in lessonNumbers -> lessonNumbers.indexOf(currentLessonNumber)
+        (currentLessonNumber ?: 0) > (lessonNumbers.maxOrNull() ?: 0) -> lessonNumbers.lastIndex
+        else -> 0
     }
 }

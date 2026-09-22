@@ -30,11 +30,15 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ZoomOutMap
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,6 +47,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -77,9 +82,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.model.CollegeMap
+import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.model.CollegeMapData
 import com.politex.data.model.FloorMap
 import com.politex.data.model.MapRoom
+import com.politex.data.repository.ScheduleRepository
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -90,6 +97,9 @@ import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.util.bouncyClickable
+import java.util.Calendar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private val HIGHLIGHT_COLOR = Color(0xFF0072CE)
@@ -109,8 +119,45 @@ fun CollegeMapScreen(
     val context = LocalContext.current
     val mapData = remember { CollegeMapData.load(context) }
 
+    // Т5: поиск по группе — репозиторий, как на остальных экранах
+    val scheduleRepository = remember {
+        ScheduleRepository(
+            com.politex.data.local.MpkDatabase.getInstance(context).lessonDao()
+        )
+    }
+    val today = remember { Calendar.getInstance() }
+    val todayDateString = remember(today) {
+        "%02d.%02d.%04d".format(
+            today.get(Calendar.DAY_OF_MONTH),
+            today.get(Calendar.MONTH) + 1,
+            today.get(Calendar.YEAR)
+        )
+    }
+    val todayDow = remember(today) {
+        when (today.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.MONDAY -> 1
+            Calendar.TUESDAY -> 2
+            Calendar.WEDNESDAY -> 3
+            Calendar.THURSDAY -> 4
+            Calendar.FRIDAY -> 5
+            Calendar.SATURDAY -> 6
+            else -> 7
+        }
+    }
+
+    // Группы с уроками сегодня — для быстрого выбора
+    val todayGroups by produceState<List<String>>(initialValue = emptyList(), key1 = todayDateString) {
+        value = runCatching {
+            scheduleRepository.getDistinctGroupsForDateOrDay(todayDateString, todayDow)
+        }.getOrDefault(emptyList())
+    }
+
     val cameFromSchedule = !initialRoom.isNullOrBlank()
     var query by remember { mutableStateOf("") }
+    var groupQuery by remember { mutableStateOf("") }
+    // Сообщение от поиска по группе («Сейчас уроков нет — …» / ошибка)
+    var groupMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     var searchFailed by remember { mutableStateOf(false) }
     var target by remember { mutableStateOf(initialRoom?.trim().orEmpty()) }
@@ -145,10 +192,35 @@ fun CollegeMapScreen(
                 value = query,
                 onValueChange = { query = it; searchFailed = false },
                 onFound = { found ->
+                    groupMessage = null
                     target = found
                     searchFailed = found.isNotBlank() && findRoomEverywhere(mapData, found) == null
                 },
                 notFound = searchFailed
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            GroupSearchField(
+                value = groupQuery,
+                todayGroups = todayGroups,
+                onValueChange = { groupQuery = it; groupMessage = null },
+                onSearch = { group ->
+                    groupMessage = null
+                    scope.launch {
+                        val (room, msg) = searchGroupNow(
+                            group = group.trim(),
+                            scheduleRepository = scheduleRepository,
+                            todayDateString = todayDateString,
+                            todayDow = todayDow,
+                            mapData = mapData
+                        )
+                        groupMessage = msg
+                        room?.let {
+                            target = it.number
+                            searchFailed = false
+                        }
+                    }
+                },
+                message = groupMessage
             )
         }
 
@@ -308,6 +380,48 @@ private fun MapHeader(subtitle: String, onBack: () -> Unit) {
 private fun findRoomEverywhere(mapData: CollegeMapData, number: String): MapRoom? =
     listOf("1", "2", "3-4").firstNotNullOfOrNull { mapData.floor(it).room(number) }
 
+// Т5: где группа сейчас. isNow=false → следующая пара («к N уроку»)
+data class GroupRoomResult(val room: String, val lessonNumber: Int, val isNow: Boolean)
+
+fun findGroupRoomNow(
+    lessons: List<com.politex.data.local.entity.LessonEntity>,
+    currentMinutes: Int,
+    dayOfWeek: Int
+): GroupRoomResult? {
+    if (lessons.isEmpty()) return null
+    val withRoom = lessons
+        .filter { (it.roomFirst.isNotBlank() || it.roomSecond.isNotBlank()) && it.lessonNumber > 0 }
+        .sortedBy { it.lessonNumber }
+    if (withRoom.isEmpty()) return null
+
+    // Текущий слот по звонкам (dayOfWeek — 1..7, как в ScheduleScreen)
+    val slot = CollegeBellSchedule.getBellsForDay(dayOfWeek)
+        .firstOrNull { currentMinutes in it.startMinutes..it.endMinutes }
+        ?.takeIf { it.lessonNumber > 0 }
+
+    val current = slot?.let { s -> withRoom.firstOrNull { it.lessonNumber == s.lessonNumber } }
+    if (current != null) {
+        return GroupRoomResult(
+            // ponytail: подгруппу split-пары не определяем — берём roomFirst (потолок: не в 2 кабинетах сразу)
+            room = current.roomFirst.ifBlank { current.roomSecond },
+            lessonNumber = current.lessonNumber,
+            isNow = true
+        )
+    }
+
+    // Следующая пара: по звонкам, фолбэк — timeStart строки
+    val endOfCurrent = slot?.endMinutes ?: currentMinutes
+    val next = withRoom.firstOrNull { l ->
+        val lessonStart = CollegeBellSchedule.getBellsForDay(dayOfWeek)
+            .firstOrNull { it.lessonNumber == l.lessonNumber }?.startMinutes
+            ?: l.timeStart.split(":").let { p ->
+                if (p.size == 2) (p[0].toIntOrNull() ?: 0) * 60 + (p[1].toIntOrNull() ?: 0) else -1
+            }
+        lessonStart > endOfCurrent
+    }
+    return next?.let { GroupRoomResult(it.roomFirst.ifBlank { it.roomSecond }, it.lessonNumber, isNow = false) }
+}
+
 @Composable
 private fun SearchField(
     value: String,
@@ -399,6 +513,176 @@ private fun SearchField(
                 style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)
             )
+        }
+    }
+}
+
+// Т5: поиск по группе. Запрашивает сегодняшие пары, считает «где группа сейчас»
+// и открывает карту на этом кабинете; результат — либо кабинет, либо сообщение.
+private suspend fun searchGroupNow(
+    group: String,
+    scheduleRepository: ScheduleRepository,
+    todayDateString: String,
+    todayDow: Int,
+    mapData: CollegeMapData
+): Pair<MapRoom?, String?> {
+    if (group.isBlank()) return null to null
+    // Ввод «41о»/«41O» приводим к каноническому виду БД («41О»)
+    val canonical = com.politex.util.GroupParser.cleanRawGroupName(group)
+    val lessons = runCatching {
+        scheduleRepository.getLessonsForDateOrDay(canonical, todayDateString, todayDow).first()
+    }.getOrDefault(emptyList())
+    // Точная дата приоритетна, недельный шаблон — фолбэк (как в ScheduleScreen)
+    val exact = lessons.filter { it.dateString == todayDateString }
+    val effective = exact.ifEmpty { lessons.filter { it.dateString.isBlank() } }
+
+    val cal = Calendar.getInstance()
+    val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+    val result = findGroupRoomNow(effective, minutes, todayDow)
+
+    val room = result?.room?.trim().orEmpty()
+    val mapped = if (room.isBlank()) null else findRoomEverywhere(mapData, room)
+
+    return mapped to when {
+        effective.isEmpty() -> "У группы «$canonical» нет уроков сегодня"
+        result == null || room.isBlank() -> "Сейчас уроков нет"
+        mapped == null -> "Кабинет «$room» не найден на карте"
+        result.isNow -> null
+        else -> "Сейчас уроков нет — к ${result.lessonNumber} уроку"
+    }
+}
+
+@Composable
+private fun GroupSearchField(
+    value: String,
+    todayGroups: List<String>,
+    onValueChange: (String) -> Unit,
+    onSearch: (String) -> Unit,
+    message: String?
+) {
+    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            var dropdownExpanded by remember { mutableStateOf(false) }
+
+            Surface(
+                shape = RoundedCornerShape(3.dp),
+                color = ColorSurfaceVariantLight,
+                border = BorderStroke(1.dp, ColorBorderLight),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(46.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.School,
+                        contentDescription = null,
+                        tint = ColorTextMuted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                        if (value.isBlank()) {
+                            Text(
+                                text = "Группа, например 41О",
+                                style = TextStyle(fontSize = 14.sp, color = ColorTextMuted),
+                                maxLines = 1
+                            )
+                        }
+                        BasicTextField(
+                            value = value,
+                            onValueChange = { input ->
+                                onValueChange(input.filter { it.isLetter() || it.isDigit() }.take(5))
+                            },
+                            singleLine = true,
+                            textStyle = TextStyle(fontSize = 15.sp, color = ColorTextTitle),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    if (value.isNotBlank()) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Очистить",
+                            tint = ColorTextMuted,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .bouncyClickable { onValueChange("") }
+                        )
+                    }
+                    // Быстрый выбор группы из сегодняшнего расписания
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .bouncyClickable(
+                                    enabled = todayGroups.isNotEmpty()
+                                ) { dropdownExpanded = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Выбрать группу из сегодняшнего расписания",
+                                tint = if (todayGroups.isNotEmpty()) ColorBrandBlue else ColorTextMuted,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false }
+                        ) {
+                            todayGroups.forEach { g ->
+                                DropdownMenuItem(
+                                    text = { Text(g, style = TextStyle(fontSize = 14.sp)) },
+                                    onClick = {
+                                        dropdownExpanded = false
+                                        onValueChange(g)
+                                        onSearch(g)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(3.dp),
+                color = ColorBrandFill,
+                modifier = Modifier
+                    .height(46.dp)
+                    .bouncyClickable { onSearch(value.trim()) }
+            ) {
+                Text(
+                    text = "ГДЕ ГРУППА",
+                    softWrap = false,
+                    maxLines = 1,
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp)
+                )
+            }
+        }
+
+        message?.let { msg ->
+            Spacer(modifier = Modifier.height(4.dp))
+            Surface(
+                shape = RoundedCornerShape(3.dp),
+                color = ColorSurfaceVariantLight,
+                border = BorderStroke(1.dp, ColorBorderLight),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = msg,
+                    style = TextStyle(fontSize = 13.sp, color = ColorTextBody),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
         }
     }
 }

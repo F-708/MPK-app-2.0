@@ -46,6 +46,15 @@ interface LessonDao {
     @Query("SELECT * FROM lessons WHERE groupName = :groupName AND dayOfWeek = :dayOfWeek ORDER BY lessonNumber ASC")
     suspend fun getLessonsForDaySync(groupName: String, dayOfWeek: Int): List<LessonEntity>
 
+    // Т5: группы, у которых есть уроки в указанную дату (или недельный шаблон на этот день)
+    @Query("""
+        SELECT DISTINCT groupName FROM lessons
+        WHERE (dateString != '' AND dateString = :dateString)
+           OR (dateString = '' AND dayOfWeek = :dayOfWeek)
+        ORDER BY groupName ASC
+    """)
+    suspend fun getDistinctGroupsForDateOrDay(dateString: String, dayOfWeek: Int): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLessons(lessons: List<LessonEntity>)
 

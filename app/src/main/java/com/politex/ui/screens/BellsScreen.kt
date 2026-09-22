@@ -19,9 +19,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -79,6 +81,9 @@ private sealed interface BellRow {
 fun BellsScreen(
     groupInfo: com.politex.data.model.GroupInfo,
     scheduleRepository: com.politex.data.repository.ScheduleRepository,
+    scrollState: ScrollState = rememberScrollState(),
+    scrollToCurrentRequested: Boolean = false,
+    onScrollToCurrentConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -148,6 +153,31 @@ fun BellsScreen(
             }
         }
         result
+    }
+
+    // Тап по виджету «До звонка»/«Звонки»: проскроллить к текущему звонку
+    // (или к последнему, если уроки уже закончились). Одноразово.
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var viewportPx by remember { mutableStateOf(0) }
+    LaunchedEffect(scrollToCurrentRequested, activeSlot, rows) {
+        if (!scrollToCurrentRequested) return@LaunchedEffect
+        onScrollToCurrentConsumed()
+        val target = activeSlot
+            ?: rows.lastOrNull { it is BellRow.Lesson }?.let { (it as BellRow.Lesson).item }
+        val idx = rows.indexOfFirst { (it as? BellRow.Lesson)?.item == target }
+        if (idx >= 0) {
+            with(density) {
+                // Позиция верха целевой строки: карточка урока ~76dp, перемена ~26dp + отступ 6dp
+                var posPx = 0f
+                rows.take(idx).forEach { row ->
+                    posPx += (if (row is BellRow.Lesson) 76.dp else 26.dp).toPx() + 6.dp.toPx()
+                }
+                val cardH = 76.dp.toPx()
+                // Центр карточки — в середине вьюпорта
+                val scrollTo = (posPx + cardH / 2 - viewportPx / 2).toInt()
+                scrollState.animateScrollTo(scrollTo.coerceIn(0, scrollState.maxValue))
+            }
+        }
     }
 
     Column(
@@ -286,7 +316,8 @@ fun BellsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .onSizeChanged { viewportPx = it.height }
+                .verticalScroll(scrollState)
                 .padding(start = 16.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {

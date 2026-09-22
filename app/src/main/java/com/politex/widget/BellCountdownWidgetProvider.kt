@@ -182,7 +182,11 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 context,
                 appWidgetId,
                 Intent(context, com.politex.MainActivity::class.java)
-                    .putExtra("EXTRA_OPEN_TAB", "BELLS"),
+                    // CLEAR_TOP|SINGLE_TOP: тёплый тап по виджету доходит до onNewIntent,
+                    // а не плодит копии активити
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    .putExtra("EXTRA_OPEN_TAB", "BELLS")
+                    .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_BELL"),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.widget_countdown_root, openIntent)

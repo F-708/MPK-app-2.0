@@ -61,6 +61,12 @@ class ScheduleRepository(
         return lessonDao.getLessonsForRoomOnDate(room, dateString, dayOfWeek).flowOn(Dispatchers.IO)
     }
 
+    /** Т5: группы с уроками сегодня (для быстрого выбора на карте колледжа). */
+    suspend fun getDistinctGroupsForDateOrDay(dateString: String, dayOfWeek: Int): List<String> =
+        withContext(Dispatchers.IO) {
+            lessonDao.getDistinctGroupsForDateOrDay(dateString, dayOfWeek)
+        }
+
     suspend fun syncScheduleFromWeb(
         groupName: String,
         force: Boolean = false

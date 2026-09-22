@@ -100,9 +100,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?, viewModel: AppViewModel) {
+        val scrollTarget = intent?.getStringExtra("EXTRA_SCROLL_TARGET")
         when (intent?.getStringExtra("EXTRA_OPEN_TAB")) {
             "SCHEDULE" -> viewModel.selectTab(AppTab.SCHEDULE)
             "BELLS" -> viewModel.selectTab(AppTab.BELLS)
+            else -> return
+        }
+        // Виджет просит не только открыть вкладку, но и проскроллить к «сейчас»
+        if (scrollTarget != null) {
+            viewModel.requestScrollTarget(scrollTarget)
         }
     }
 }

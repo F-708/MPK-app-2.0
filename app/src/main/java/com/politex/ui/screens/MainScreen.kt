@@ -1,6 +1,7 @@
 ﻿package com.politex.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Apps
@@ -31,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -147,6 +150,17 @@ fun MainScreen(
                 .padding(innerPadding)
         ) {
 
+            // 8.1: состояния прокрутки живут НАД when() — смена вкладки не
+            // уничтожает их, возврат на вкладку восстанавливает позицию.
+            // rememberSaveable — переживает и смерть процесса.
+            val scheduleListState = rememberSaveable(saver = LazyListState.Saver) {
+                LazyListState(0, 0)
+            }
+            val bellsScrollState = rememberSaveable(saver = ScrollState.Saver) {
+                ScrollState(0)
+            }
+            val scrollTarget = uiState.scrollTarget
+
             when (uiState.currentTab) {
                 AppTab.SCHEDULE -> ScheduleScreen(
                     groupInfo = currentGroupInfo,
@@ -154,7 +168,10 @@ fun MainScreen(
                     onSyncRequest = { viewModel.syncSchedule() },
                     isSyncing = uiState.isSyncing,
                     onTeacherClick = { name -> viewModel.openTeacher(name) },
-                    onRoomClick = { room, fromRoom -> viewModel.openMap(room, fromRoom) }
+                    onRoomClick = { room, fromRoom -> viewModel.openMap(room, fromRoom) },
+                    listState = scheduleListState,
+                    scrollToCurrentRequested = scrollTarget == "CURRENT_LESSON",
+                    onScrollToCurrentConsumed = { viewModel.consumeScrollTarget() }
                 )
                 AppTab.TASKS -> TasksScreen(
                     groupInfo = currentGroupInfo,
@@ -162,7 +179,10 @@ fun MainScreen(
                 )
                 AppTab.BELLS -> BellsScreen(
                     groupInfo = currentGroupInfo,
-                    scheduleRepository = viewModel.scheduleRepository
+                    scheduleRepository = viewModel.scheduleRepository,
+                    scrollState = bellsScrollState,
+                    scrollToCurrentRequested = scrollTarget == "CURRENT_BELL",
+                    onScrollToCurrentConsumed = { viewModel.consumeScrollTarget() }
                 )
                 AppTab.COLLEGE -> CollegeTab(viewModel, currentGroupInfo)
             }

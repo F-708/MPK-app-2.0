@@ -88,7 +88,11 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 context,
                 appWidgetId,
                 Intent(context, com.politex.MainActivity::class.java)
-                    .putExtra("EXTRA_OPEN_TAB", "SCHEDULE"),
+                    // CLEAR_TOP|SINGLE_TOP: тёплый тап по виджету доходит до onNewIntent,
+                    // а не плодит копии активити
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    .putExtra("EXTRA_OPEN_TAB", "SCHEDULE")
+                    .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_LESSON"),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.now_next_root, open)

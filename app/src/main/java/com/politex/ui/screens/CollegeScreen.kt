@@ -86,7 +86,7 @@ private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
 private val ADMIN_GOLD = Color(0xFFE8C55A)
 
-private enum class OtherPage { MENU, SPECIALTY, TEACHERS, TEACHER_CARD, SETTINGS, STUDENTS, STUDENT_CARD, MAP }
+private enum class OtherPage { MENU, SPECIALTY, TEACHERS, TEACHER_CARD, SETTINGS, STUDENTS, STUDENT_CARD, MAP, GROUP_SCHEDULE }
 
 @Composable
 fun CollegeScreen(
@@ -135,11 +135,26 @@ fun CollegeScreen(
     var mapRoom by remember { mutableStateOf(pendingRoomName) }
     var mapFromRoom by remember { mutableStateOf(pendingFromRoomName) }
 
+    // 8.6: глубокий вход из глубины раздела (карточка урока → аудитория,
+    // экран группы → преподаватель) пушит ТЕКУЩУЮ страницу — «назад» вернёт
+    // пользователя туда, откуда он пришёл, а не в меню. Свежий вход снаружи
+    // (из вкладки «Расписание») стек не пушит: «назад» срабатывает через
+    // пустой стек → goBack → onReturnToOrigin → исходная вкладка.
+    // Дубликат целевой страницы из стека убираем, чтобы не ходить по кругу.
+    fun navigateDeepEntry(target: OtherPage) {
+        if (page == OtherPage.MENU && pageStack.isEmpty()) {
+            page = target
+        } else {
+            pageStack = pageStack - target
+            navigateTo(target)
+        }
+    }
+
     LaunchedEffect(pendingRoomName) {
         val room = pendingRoomName ?: return@LaunchedEffect
         mapRoom = room
         mapFromRoom = pendingFromRoomName
-        page = OtherPage.MAP
+        navigateDeepEntry(OtherPage.MAP)
         onPendingRoomConsumed()
     }
 
@@ -152,7 +167,7 @@ fun CollegeScreen(
         }
         if (found != null) {
             selectedTeacher = found
-            page = OtherPage.TEACHER_CARD
+            navigateDeepEntry(OtherPage.TEACHER_CARD)
         }
         onPendingTeacherConsumed()
     }
@@ -170,6 +185,7 @@ fun CollegeScreen(
                 onOpenTeachers = { navigateTo(OtherPage.TEACHERS) },
                 onOpenSettings = { navigateTo(OtherPage.SETTINGS) },
                 onOpenStudents = { navigateTo(OtherPage.STUDENTS) },
+                onOpenGroupSchedule = { navigateTo(OtherPage.GROUP_SCHEDULE) },
 
                 onOpenMap = { mapRoom = null; mapFromRoom = null; navigateTo(OtherPage.MAP) }
             )
@@ -203,6 +219,27 @@ fun CollegeScreen(
                     mapRoom = null
                     mapFromRoom = null
                     goBack()
+                }
+            )
+            OtherPage.GROUP_SCHEDULE -> GroupScheduleScreen(
+                scheduleRepository = scheduleRepository,
+                onBack = { goBack() },
+                ownGroupName = groupInfo.canonicalName,
+                onTeacherClick = { name ->
+                    // как в LaunchedEffect(pendingTeacherName): поиск по фамилии
+                    val surname = com.politex.data.repository.TeacherInsights.surnameOf(name)
+                    val found = TeachersRepository(context).loadTeachers().firstOrNull {
+                        com.politex.data.repository.TeacherInsights.surnameOf(it.name) == surname
+                    }
+                    if (found != null) {
+                        selectedTeacher = found
+                        navigateTo(OtherPage.TEACHER_CARD)
+                    }
+                },
+                onRoomClick = { room, fromRoom ->
+                    mapRoom = room
+                    mapFromRoom = fromRoom
+                    navigateTo(OtherPage.MAP)
                 }
             )
             OtherPage.SETTINGS -> SettingsPage(
@@ -241,6 +278,7 @@ private fun OtherMenu(
     onOpenTeachers: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenStudents: () -> Unit,
+    onOpenGroupSchedule: () -> Unit,
     onOpenMap: () -> Unit
 ) {
     val context = LocalContext.current
@@ -281,6 +319,14 @@ private fun OtherMenu(
                     title = "Моя специальность",
                     subtitle = "Группа ${groupInfo.canonicalName}: код, квалификация, предметы по курсам",
                     onClick = onOpenSpecialty
+                )
+            }
+            item {
+                MenuCard(
+                    icon = { Icon(Icons.Default.DateRange, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
+                    title = "Расписание группы",
+                    subtitle = "Найти расписание любой группы колледжа",
+                    onClick = onOpenGroupSchedule
                 )
             }
             item {
