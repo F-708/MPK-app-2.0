@@ -87,6 +87,65 @@ class TomorrowLessonWidgetTest {
     }
 
     @Test
+    fun night_at_00_24_showsFirstLessonToday() {
+        // Заказчик: «0:24, виджет пустой без текста». Ночью показываем отсчёт
+        // до первого урока сегодняшнего дня, а не пустую плашку.
+        val info = BellCountdownWidgetProvider.nightFirstLessonLabel(
+            24, 1, standard, CountdownMode.GROUP_LESSONS, 6
+        )
+        assertEquals("до 1 урока", info?.second)
+        // 08:15 (495) - 24 = 471 мин
+        assertEquals(471L, info?.first)
+    }
+
+    @Test
+    fun night_at_00_09_displayedAsMinutes() {
+        val info = BellCountdownWidgetProvider.nightFirstLessonLabel(
+            9, 1, standard, CountdownMode.GROUP_LESSONS, 6
+        )
+        assertEquals("до 1 урока", info?.second)
+    }
+
+    @Test
+    fun night_after07_null() {
+        // После 07:00 работает обычная логика, ночное окно выключается
+        assertNull(
+            BellCountdownWidgetProvider.nightFirstLessonLabel(
+                7 * 60, 1, standard, CountdownMode.GROUP_LESSONS, 6
+            )
+        )
+    }
+
+    @Test
+    fun night_sunday_null() {
+        assertNull(
+            BellCountdownWidgetProvider.nightFirstLessonLabel(
+                30, 7, CollegeBellSchedule.getBellsForDay(6),
+                CountdownMode.GROUP_LESSONS, 6
+            )
+        )
+    }
+
+    @Test
+    fun night_noGroupLessonsToday_null() {
+        // День без уроков группы — показывать «до 1 урока» было бы ложью
+        assertNull(
+            BellCountdownWidgetProvider.nightFirstLessonLabel(
+                30, 1, standard, CountdownMode.GROUP_LESSONS, null
+            )
+        )
+    }
+
+    @Test
+    fun night_collegeMode_worksWithoutGroupLessons() {
+        // Режим «уроки колледжа»: уроки группы не важны, звонки есть всегда
+        val info = BellCountdownWidgetProvider.nightFirstLessonLabel(
+            30, 1, standard, CountdownMode.ALL_BELLS, null
+        )
+        assertEquals("до 1 урока", info?.second)
+    }
+
+    @Test
     fun hoursRounding() {
         // 735 мин = 12,25 ч → 12; 759 мин = 12,65 ч → 13; 25 мин → 1 (не 0)
         assertEquals("12 ч", BellCountdownWidgetProvider.formatHoursRounded(735L))

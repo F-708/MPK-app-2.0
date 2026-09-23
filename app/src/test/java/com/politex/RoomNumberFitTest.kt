@@ -48,8 +48,11 @@ class RoomNumberFitTest {
     }
 
     @Test
-    fun `слишком мелкий кабинет — номер не рисуем`() {
-        assertNull(roomNumberFit(raw = 0.05f, median = 1.0f, minReadable = 0.2f))
+    fun `мелкий кабинет всё равно виден — ужимается до влезающего, а не пропадает`() {
+        // Регрессия: порог читаемости раньше отсекал почти все номера («цифр не видно»).
+        // Пустой кабинет хуже мелкой цифры — номер рисуем всегда.
+        val fit = roomNumberFit(raw = 0.05f, median = 1.0f, minReadable = 0.2f)
+        assertEquals(0.05f, fit!!, 0.0001f)
     }
 
     @Test
@@ -69,13 +72,44 @@ class RoomNumberFitTest {
     }
 
     @Test
-    fun `результат всегда читаем когда нарисован`() {
+    fun `почти все кабинеты получают номер`() {
+        // Регрессия «цифр почти не видно»: при типичных запасах места (0.2..1.0)
+        // номер должен рисоваться, а не отсекаться порогом читаемости
+        var raw = 0.1f
+        var drawn = 0
+        var total = 0
+        while (raw <= 1.0f) {
+            total++
+            if (roomNumberFit(raw, median = 0.8f, minReadable = 0.35f) != null) drawn++
+            raw += 0.05f
+        }
+        assertEquals("должны рисоваться все кабинеты с запасом > 0", total, drawn)
+    }
+
+    @Test
+    fun `минимальный размер не выталкивает цифру за рамку`() {
+        // Главное свойство: желаемый минимум читаемости НИКОГДА не поднимает размер
+        // выше влезающего — иначе возвращается исходный баг «цифры за рамкой».
         var raw = 0.05f
         while (raw < 3f) {
-            roomNumberFit(raw, median = 1.0f, minReadable = 0.2f)?.let {
-                assertTrue("при raw=$raw получили нечитаемый $it", it >= 0.2f)
+            roomNumberFit(raw, median = 1.0f, minReadable = 0.9f)?.let {
+                assertTrue("при raw=$raw получили $it — вылезает за рамку", it <= raw + 0.0001f)
             }
             raw += 0.01f
         }
+    }
+
+    @Test
+    fun `почти все кабинеты получают номер при разумном минимуме`() {
+        // Регрессия «цифр почти не видно»: раньше порог отсекал всё, кроме пары кабинетов
+        var raw = 0.1f
+        var drawn = 0
+        var total = 0
+        while (raw <= 1.0f) {
+            total++
+            if (roomNumberFit(raw, median = 0.8f, minReadable = 0.3f) != null) drawn++
+            raw += 0.05f
+        }
+        assertEquals(total, drawn)
     }
 }

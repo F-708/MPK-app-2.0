@@ -115,6 +115,32 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
         }
 
         /**
+         * Ночное окно (00:00 – 07:00): отсчёт до первого урока СЕГОДНЯ.
+         *
+         * Заказчик: «0:24, виджет когда звонок пустой без текста». До этого окна виджет
+         * был пуст всю ночь, а он всегда виден на экране — пустая плашка читается как поломка.
+         * Ночью «завтра» уже наступило, поэтому показываем ближайший урок сегодняшнего дня.
+         *
+         * null: воскресенье, звонков нет, у группы сегодня нет уроков, либо первый урок уже идёт.
+         */
+        fun nightFirstLessonLabel(
+            minutes: Int,
+            dayOfWeek: Int,
+            bells: List<BellItem>,
+            mode: CountdownMode,
+            lastGroupLesson: Int?
+        ): Triple<Long, String, Int>? {
+            if (dayOfWeek == 7 || bells.isEmpty()) return null
+            if (minutes >= SHOW_FROM_MINUTE) return null
+            // В режиме «мои уроки» день без уроков группы — показывать нечего
+            if (mode == CountdownMode.GROUP_LESSONS && lastGroupLesson == null) return null
+
+            val first = bells.firstOrNull { !it.isInfoHour } ?: return null
+            if (minutes >= first.startMinutes) return null
+            return Triple((first.startMinutes - minutes).toLong(), "до 1 урока", 0)
+        }
+
+        /**
          * Чистая логика отсчёта (Т10): null = строка скрыта
          * (выходной / до 07:00 / уроки закончились / у группы нет уроков в этот день).
          *
@@ -246,12 +272,24 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 // W3 (Т10+): вечер после конца уроков — «до 1 урока завтра» вместо пустоты
                 dow in 1..6 -> {
                     val tomorrow = tomorrowFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
-                    if (tomorrow != null) {
-                        views.setTextViewText(R.id.tv_countdown_label, tomorrow.second)
-                        views.setTextViewText(R.id.tv_countdown_value, formatHoursRounded(tomorrow.first))
-                    } else {
-                        views.setTextViewText(R.id.tv_countdown_label, "")
-                        views.setTextViewText(R.id.tv_countdown_value, "")
+                    // O6/C: ночь (00:00–07:00) — виджет виден на экране, пустая плашка
+                    // читается как поломка. Показываем отсчёт до первого урока сегодня.
+                    val night = if (tomorrow == null) {
+                        nightFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
+                    } else null
+                    when {
+                        tomorrow != null -> {
+                            views.setTextViewText(R.id.tv_countdown_label, tomorrow.second)
+                            views.setTextViewText(R.id.tv_countdown_value, formatHoursRounded(tomorrow.first))
+                        }
+                        night != null -> {
+                            views.setTextViewText(R.id.tv_countdown_label, night.second)
+                            views.setTextViewText(R.id.tv_countdown_value, formatMinutes(night.first))
+                        }
+                        else -> {
+                            views.setTextViewText(R.id.tv_countdown_label, "")
+                            views.setTextViewText(R.id.tv_countdown_value, "")
+                        }
                     }
                 }
                 else -> {
