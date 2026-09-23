@@ -169,6 +169,12 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
          * Последний урок группы сегодня: сначала строки с датой (dateString dd.MM.yyyy / dd-MM-yyyy),
          * при отсутствии — регулярные по dayOfWeek (graceful degradation). Пусто → null (уроков нет).
          */
+        // O1: тот же runBlocking в Room, что и в WidgetData.todayLessons; результат
+        // не зависит от appWidgetId и меняется раз в минуту → кэш по (дата+время+группа).
+        // Поля @Volatile: updateAll зовётся и из будильника, и из BellTimerService.
+        @Volatile private var cacheKey: String? = null
+        @Volatile private var cacheLastLesson: Int? = null
+
         fun lastGroupLessonForToday(context: Context, cal: Calendar): Int? {
             val group = WidgetUpdateHelper.getSelectedGroup(context)
             if (group.isBlank()) return null
@@ -181,7 +187,9 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 "%02d.%02d.%d",
                 cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR)
             )
-            return try {
+            val key = "$group|$dow|$todayString|${cal.get(Calendar.HOUR_OF_DAY)}:${cal.get(Calendar.MINUTE)}"
+            if (key == cacheKey) return cacheLastLesson
+            val result = try {
                 kotlinx.coroutines.runBlocking {
                     val lessons = com.politex.data.local.MpkDatabase.getInstance(context)
                         .lessonDao().getLessonsForDaySync(group, dow)
@@ -195,6 +203,10 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             } catch (_: Exception) {
                 null
             }
+            // Ключ пишем последним (публикация data → key), см. WidgetData.todayLessons
+            cacheLastLesson = result
+            cacheKey = key
+            return result
         }
 
         private fun buildViews(context: Context, appWidgetId: Int): RemoteViews {
@@ -377,16 +389,20 @@ object WidgetAlarm {
         )
     }
 
+    /**
+     * O1: будильник нужен, только если на экране есть хотя бы один виджет.
+     * Раньше короткое замыкание на «сервис включён» возвращало true даже без виджетов —
+     * будильник каждую минуту будил процесс ради пустого updateAll.
+     * Сам дубль с BellTimerService убран в WidgetUpdateHelper.updateMinuteWidgets (тик).
+     */
     private fun hasWork(context: Context): Boolean {
-        if (com.politex.util.BellCountdownNotifier.isEnabled(context)) return true
         val manager = AppWidgetManager.getInstance(context)
-        val anyWidget = listOf(
+        return listOf(
             BellCountdownWidgetProvider::class.java,
             NowNextWidgetProvider::class.java,
             TodayScheduleWidgetProvider::class.java,
             BellsWidgetProvider::class.java
         ).any { manager.getAppWidgetIds(ComponentName(context, it)).isNotEmpty() }
-        return anyWidget
     }
 
     fun scheduleNext(context: Context) {
@@ -426,8 +442,15 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             ACTION_TICK -> {
-
-                WidgetUpdateHelper.updateAllWidgets(context)
+                // O1: если BellTimerService включён, он уже пересобрал BellCountdown на этой же
+                // границе минуты — повторно не делаем. Будильник всё равно нужен: NowNext
+                // сервис не трогает, а сам будильник — страховка на случай остановки сервиса.
+                // TodaySchedule/Bells (меняются раз в урок) минутный тик не трогает вообще.
+                if (com.politex.util.BellCountdownNotifier.isEnabled(context)) {
+                    NowNextWidgetProvider.updateAll(context)
+                } else {
+                    WidgetUpdateHelper.updateMinuteWidgets(context)
+                }
                 WidgetAlarm.scheduleNext(context)
             }
             Intent.ACTION_BOOT_COMPLETED -> {

@@ -49,6 +49,16 @@ object WidgetUpdateHelper {
         BellsWidgetProvider.updateAll(context)
     }
 
+    /**
+     * O1: минутный тик — только виджеты с минутным отсчётом.
+     * TodaySchedule/Bells меняются раз в урок, их обновляют onUpdate/WorkManager;
+     * пересборка их каждую минуту давала лишний IPC и «мигание» виджета.
+     */
+    fun updateMinuteWidgets(context: Context) {
+        BellCountdownWidgetProvider.updateAll(context)
+        NowNextWidgetProvider.updateAll(context)
+    }
+
     fun updateOne(context: Context, appWidgetId: Int) {
         when (WidgetKind.of(context, appWidgetId)) {
             WidgetKind.COUNTDOWN -> BellCountdownWidgetProvider.updateAll(context)

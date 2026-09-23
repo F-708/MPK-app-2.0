@@ -51,9 +51,9 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -91,6 +91,18 @@ import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorSurfaceVariantLight
 
+// O1/G: CSV учителей парсился на главном потоке при каждом входе на вкладку.
+// Теперь — ленивый синглтон процесса: один разбор на всё приложение.
+private var knownTeacherSurnamesCache: Set<String>? = null
+
+private fun knownTeacherSurnames(context: android.content.Context): Set<String> =
+    knownTeacherSurnamesCache ?: java.util.Collections.synchronizedSet(
+        com.politex.data.repository.TeachersRepository(context)
+            .loadTeachers()
+            .map { com.politex.data.repository.TeacherInsights.surnameOf(it.name) }
+            .toHashSet()
+    ).also { knownTeacherSurnamesCache = it }
+
 @Composable
 fun ScheduleScreen(
     groupInfo: GroupInfo,
@@ -107,6 +119,13 @@ fun ScheduleScreen(
     scrollToCurrentRequested: Boolean = false,
     onScrollToCurrentConsumed: () -> Unit = {},
 
+    // O1/D: выбранный день живёт над when() в MainScreen (rememberSaveable), поэтому
+    // смена вкладки больше не сбрасывает состояние. Раньше — локальные remember(key).
+    selectedSlot: Int = 0,
+    onSlotChange: (Int) -> Unit = {},
+    selectedDateString: String = "",
+    onDateChange: (String) -> Unit = {},
+
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -116,10 +135,7 @@ fun ScheduleScreen(
     }
 
     val isTeacherKnown: (String) -> Boolean = remember(context) {
-        val known = com.politex.data.repository.TeachersRepository(context)
-            .loadTeachers()
-            .map { com.politex.data.repository.TeacherInsights.surnameOf(it.name) }
-            .toHashSet()
+        val known = knownTeacherSurnames(context)
         val check: (String) -> Boolean = { name ->
             com.politex.data.repository.TeacherInsights.surnameOf(name) in known
         }
@@ -139,9 +155,14 @@ fun ScheduleScreen(
         }
     }
 
-    val saturdayLessons by scheduleRepository
-        .getLessonsForDay(groupInfo.canonicalName, 6)
-        .collectAsState(initial = emptyList<com.politex.data.local.entity.LessonEntity>())
+    // O1/A+F: единственный Flow по группе — источник и для списка дня, и для weekly-разметки,
+    // и для субботы. Раньше их было 7 (день+5 дней+суббота), каждая инвалидация гнала 7 перезапросов.
+    val allGroupLessons: List<com.politex.data.local.entity.LessonEntity> by scheduleRepository
+        .getAllLessonsForGroup(groupInfo.canonicalName)
+        .collectAsState(initial = emptyList())
+
+    val saturdayLessons: List<com.politex.data.local.entity.LessonEntity> =
+        remember(allGroupLessons) { allGroupLessons.filter { it.dayOfWeek == 6 } }
     val saturdayIsSchoolDay = groupInfo.course == 1 || saturdayLessons.isNotEmpty()
 
     fun calendarDayOfWeek(cal: Calendar): Int = when (cal.get(Calendar.DAY_OF_WEEK)) {
@@ -181,8 +202,18 @@ fun ScheduleScreen(
     val leftIsToday = sameDay(leftCal, realNow)
     val rightIsTomorrow = sameDay(rightCal, tomorrow)
 
-    var selectedSlot by remember(groupInfo.canonicalName) { mutableIntStateOf(0) }
-    var selectedDateString by remember(groupInfo.canonicalName) { mutableStateOf("") }
+    // O1/D: ранее локальные remember(groupInfo.canonicalName) — смена вкладки убивала их.
+    // Смена группы по-прежнему сбрасывает слот и архивную дату. lastGroup — обычный
+    // remember: при возврате на вкладку поддерево пересоздаётся, он инициализируется
+    // ТЕКУЩЕЙ группой и сброса не происходит (иначе фикс D затирал бы восстановленный день).
+    var lastGroup by remember { mutableStateOf(groupInfo.canonicalName) }
+    LaunchedEffect(groupInfo.canonicalName) {
+        if (lastGroup != groupInfo.canonicalName) {
+            lastGroup = groupInfo.canonicalName
+            onSlotChange(0)
+            onDateChange("")
+        }
+    }
     var showArchiveDialog by remember { mutableStateOf(false) }
 
     val activeDayOfWeek = if (selectedSlot == 0) calendarDayOfWeek(leftCal) else calendarDayOfWeek(rightCal)
@@ -229,44 +260,33 @@ fun ScheduleScreen(
         } else null
     }
 
-    // Запрос по реальной дате (строки с датой) + фолбэк на день недели (пустая dateString)
-    val lessonsFromDbState: List<com.politex.data.local.entity.LessonEntity>? by scheduleRepository
-        .getLessonsForDateOrDay(groupInfo.canonicalName, activeDateString, activeDayOfWeek)
-        .collectAsState(initial = null)
-    val lessonsFromDb = lessonsFromDbState ?: emptyList()
-    val isInitialLoad = lessonsFromDbState == null
+    // O1/A: ОДИН Flow по группе вместо пересоздания на каждый тап «Сегодня/Завтра».
+    // Раньше ключ Flow включал activeDateString/activeDayOfWeek → tap = resubscribe
+    // → initial=null → спиннер → «расписание ещё не опубликовано».
+    // O1/B: спиннер только до первого эмита Room, а не пока стейт null.
+    var firstEmit by remember(groupInfo.canonicalName) { mutableStateOf(false) }
+    LaunchedEffect(allGroupLessons) { firstEmit = true }
+    val isInitialLoad = !firstEmit
 
-    // Если есть строки с точной датой — только они; шаблон дня недели лишь дополнение
-    val lessons: List<com.politex.data.local.entity.LessonEntity> = remember(lessonsFromDb, activeDateString) {
-        val exact = lessonsFromDb.filter { it.dateString == activeDateString }
-        if (exact.isNotEmpty()) exact else lessonsFromDb.filter { it.dateString.isBlank() }
-    }
+    // Строки с точной датой приоритетны; шаблон дня недели (пустой dateString) — дополнение
+    val lessons: List<com.politex.data.local.entity.LessonEntity> =
+        remember(allGroupLessons, activeDateString, activeDayOfWeek) {
+            val exact = allGroupLessons.filter { it.dateString == activeDateString }
+            if (exact.isNotEmpty()) exact
+            else allGroupLessons.filter { it.dateString.isBlank() && it.dayOfWeek == activeDayOfWeek }
+        }
 
     val pendingTasks by remember(groupInfo.canonicalName) {
         taskRepository.getPendingTasksForGroup(groupInfo.canonicalName)
     }.collectAsState(initial = emptyList())
 
-    val monLessons by scheduleRepository.getLessonsForDay(groupInfo.canonicalName, 1)
-        .collectAsState(initial = emptyList<com.politex.data.local.entity.LessonEntity>())
-    val tueLessons by scheduleRepository.getLessonsForDay(groupInfo.canonicalName, 2)
-        .collectAsState(initial = emptyList<com.politex.data.local.entity.LessonEntity>())
-    val wedLessons by scheduleRepository.getLessonsForDay(groupInfo.canonicalName, 3)
-        .collectAsState(initial = emptyList<com.politex.data.local.entity.LessonEntity>())
-    val thuLessons by scheduleRepository.getLessonsForDay(groupInfo.canonicalName, 4)
-        .collectAsState(initial = emptyList<com.politex.data.local.entity.LessonEntity>())
-    val friLessons by scheduleRepository.getLessonsForDay(groupInfo.canonicalName, 5)
-        .collectAsState(initial = emptyList<com.politex.data.local.entity.LessonEntity>())
-
+    // O1/F: 5 дневных Flow схлопнуты в один allGroupLessons + groupBy в памяти.
+    // Инвалидация таблицы lessons гнала 7 перезапросов, теперь 2 (allGroupLessons + суббота).
     val weeklyLessonsByDow: Map<Int, List<com.politex.data.local.entity.LessonEntity>> =
-        remember(monLessons, tueLessons, wedLessons, thuLessons, friLessons, saturdayLessons) {
-            mapOf(
-                1 to monLessons,
-                2 to tueLessons,
-                3 to wedLessons,
-                4 to thuLessons,
-                5 to friLessons,
-                6 to saturdayLessons
-            ).mapValues { (_, list) -> com.politex.util.HomeworkMarkers.dedupeByLatestDate(list) }
+        remember(allGroupLessons) {
+            allGroupLessons
+                .groupBy { it.dayOfWeek }
+                .mapValues { (_, list) -> com.politex.util.HomeworkMarkers.dedupeByLatestDate(list) }
         }
 
     val homeworkMarkerNumbers: Set<Int> = remember(lessons, pendingTasks, activeDayOfWeek, selectedSlot, selectedDateString) {
@@ -289,7 +309,10 @@ fun ScheduleScreen(
 
     val isViewingToday = selectedSlot == 0 && selectedDateString.isBlank() && leftIsToday
     val lessonNumbers = remember(lessons) { lessons.map { it.lessonNumber } }
-    var didColdStartScroll by remember { mutableStateOf(false) }
+    // O1/E: rememberSaveable — иначе автопрокрутка к «сейчас» повторялась при каждом
+    // возврате на вкладку (заметный «прыжок»), т.к. поддерево пересоздаётся.
+    // ponytail: индексом «пользователь уже скроллил» остаётся listState (он тоже saveable).
+    var didColdStartScroll by rememberSaveable { mutableStateOf(false) }
 
     // Ждём первого лэйаута списка — иначе вьюпорт ещё 0 и центрирование невозможно.
     suspend fun awaitFirstLayout() {
@@ -342,12 +365,14 @@ fun ScheduleScreen(
             onDismiss = { showArchiveDialog = false },
             onDateSelected = { _, dateStr ->
                 // ISO из календаря нормализуем в dd.MM.yyyy на границе
-                selectedDateString = com.politex.data.network.MpkScheduleParser.parseDotDate(dateStr)
+                onDateChange(
+                    com.politex.data.network.MpkScheduleParser.parseDotDate(dateStr)
                     ?.let { cal ->
                         "%02d.%02d.%04d".format(
                             cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR)
                         )
                     } ?: dateStr
+                )
             }
         )
     }
@@ -433,8 +458,8 @@ fun ScheduleScreen(
                 ),
                 selected = selectedSlot == 0 && selectedDateString.isBlank(),
                 onClick = {
-                    selectedSlot = 0
-                    selectedDateString = ""
+                    onSlotChange(0)
+                    onDateChange("")
                 },
                 modifier = Modifier.weight(1f)
             )
@@ -446,8 +471,8 @@ fun ScheduleScreen(
                 ),
                 selected = selectedSlot == 1 && selectedDateString.isBlank(),
                 onClick = {
-                    selectedSlot = 1
-                    selectedDateString = ""
+                    onSlotChange(1)
+                    onDateChange("")
                 },
                 modifier = Modifier.weight(1f)
             )

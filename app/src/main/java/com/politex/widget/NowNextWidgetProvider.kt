@@ -139,11 +139,20 @@ object WidgetData {
             else -> 7
         }
 
+    // O1: результат не зависит от appWidgetId и меняется раз в минуту, а runBlocking в Room
+    // на каждом пересборе виджета = «виджет пропал». Кэш по (минута + группа).
+    // Вызывается из разных потоков (будильник, BellTimerService, WorkManager) — поля @Volatile.
+    @Volatile private var cacheMinute = -1
+    @Volatile private var cacheGroup = ""
+    @Volatile private var cacheLessons: List<LessonEntity> = emptyList()
+
     fun todayLessons(context: Context): List<LessonEntity> {
         val group = WidgetUpdateHelper.getSelectedGroup(context)
         if (group.isBlank()) return emptyList()
+        val minute = minuteOfDay(context)
+        if (minute == cacheMinute && group == cacheGroup) return cacheLessons
         val dow = dayOfWeek(context)
-        return try {
+        val result = try {
             kotlinx.coroutines.runBlocking {
                 val all = com.politex.data.local.MpkDatabase.getInstance(context)
                     .lessonDao().getLessonsForDaySync(group, dow)
@@ -161,6 +170,11 @@ object WidgetData {
         } catch (_: Exception) {
             emptyList()
         }
+        // Ключ (cacheMinute) пишем последним: читатель, увидевший новую минуту, видит и свежие данные
+        cacheLessons = result
+        cacheGroup = group
+        cacheMinute = minute
+        return result
     }
 
     fun breakInfo(context: Context, minute: Int): String? {

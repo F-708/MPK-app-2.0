@@ -26,6 +26,7 @@ class BellTimerService : Service() {
         BellCountdownNotifier.createChannel(this)
 
         startForeground(BellCountdownNotifier.NOTIFICATION_ID, BellCountdownNotifier.buildNotification(this))
+        isRunning = true
         startTicking()
     }
 
@@ -67,10 +68,16 @@ class BellTimerService : Service() {
 
     override fun onDestroy() {
         tickJob?.cancel()
+        isRunning = false
         super.onDestroy()
     }
 
     companion object {
+
+        /** O6: сервис держит foreground-уведомление — нотификатор по этому флагу понимает,
+         *  что снимать строку нельзя, можно только заменить её тихой заглушкой. */
+        @Volatile
+        var isRunning: Boolean = false
 
         fun start(context: Context) {
             val intent = Intent(context, BellTimerService::class.java)

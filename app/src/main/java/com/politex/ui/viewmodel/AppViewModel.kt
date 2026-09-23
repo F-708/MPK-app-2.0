@@ -69,7 +69,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     init {
 
         if (!uiState.value.showGroupSelection) {
-            syncSchedule(isAutoSync = true)
+            // O1/C: при наличии кэша в БД не ходим в сеть на старте — иначе холодный
+            // старт ждал сеть и расписание появлялось только через ~1 секунду.
+            viewModelScope.launch {
+                if (!scheduleRepository.hasSchedule(uiState.value.currentGroupName)) {
+                    syncSchedule(isAutoSync = true)
+                }
+            }
         }
     }
 

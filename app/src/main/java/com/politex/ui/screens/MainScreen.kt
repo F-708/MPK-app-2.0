@@ -32,8 +32,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -163,6 +166,10 @@ fun MainScreen(
             val bellsScrollState = rememberSaveable(saver = ScrollState.Saver) {
                 ScrollState(0)
             }
+            // O1/D: выбранный день («Сегодня/Завтра» + архивная дата) тоже живёт НАД when().
+            // Иначе возврат с «Заданий»/«Звонков» пересоздавал ScheduleScreen и терял день.
+            var scheduleSlot by rememberSaveable { mutableIntStateOf(0) }
+            var scheduleDate by rememberSaveable { mutableStateOf("") }
             val scrollTarget = uiState.scrollTarget
 
             when (uiState.currentTab) {
@@ -175,7 +182,11 @@ fun MainScreen(
                     onRoomClick = { room, fromRoom -> viewModel.openMap(room, fromRoom) },
                     listState = scheduleListState,
                     scrollToCurrentRequested = scrollTarget == "CURRENT_LESSON",
-                    onScrollToCurrentConsumed = { viewModel.consumeScrollTarget() }
+                    onScrollToCurrentConsumed = { viewModel.consumeScrollTarget() },
+                    selectedSlot = scheduleSlot,
+                    onSlotChange = { scheduleSlot = it },
+                    selectedDateString = scheduleDate,
+                    onDateChange = { scheduleDate = it }
                 )
                 AppTab.TASKS -> TasksScreen(
                     groupInfo = currentGroupInfo,

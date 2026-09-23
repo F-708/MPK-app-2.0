@@ -16,7 +16,6 @@ import com.politex.ui.theme.MyApplicationTheme
 import com.politex.ui.viewmodel.AppTab
 import com.politex.ui.viewmodel.AppViewModel
 import com.politex.util.NotificationHelper
-import com.politex.widget.WidgetUpdateHelper
 import com.politex.worker.MpkWorkManagerHelper
 
 class MainActivity : ComponentActivity() {
@@ -63,7 +62,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        WidgetUpdateHelper.updateAllWidgets(this)
+        // O1: updateAllWidgets отсюда убран — на каждый резюм (в т.ч. возврат из фона/диалогов)
+        // это была пересборка 4 провайдеров × все инстансы × runBlocking в Room.
+        // Виджеты обновляются минутным тиком (WidgetAlarm) и BellTimerService.
     }
 
     private fun handleIntent(intent: Intent?, viewModel: AppViewModel) {
