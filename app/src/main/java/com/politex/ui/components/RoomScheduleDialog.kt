@@ -27,6 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -67,6 +68,14 @@ fun filterRoomLessonsForDate(
     return (if (exact.isNotEmpty()) exact else inRoom.filter { it.dateString.isBlank() })
         .sortedBy { it.lessonNumber }
 }
+
+/**
+ * O3-b: пары кабинета, сгруппированные по номеру урока (порядок — по номеру).
+ * В одной паре кабинета обычно несколько групп (31-я 1-2 урок, 22-я 3-4 и т.д.) —
+ * диалог рисует на каждую пару заголовок и блок карточек.
+ */
+fun groupRoomLessonsByNumber(lessons: List<LessonEntity>): List<Pair<Int, List<LessonEntity>>> =
+    lessons.groupBy { it.lessonNumber }.toSortedMap().map { (n, l) -> n to l }
 
 /**
  * Номер текущей (идущей прямо сейчас) пары, null — если сейчас перемена/вне занятий.
@@ -157,6 +166,7 @@ fun RoomScheduleDialog(
             if (lessons.isEmpty()) {
                 RoomScheduleEmptyState()
             } else {
+                val groupedLessons = remember(lessons) { groupRoomLessonsByNumber(lessons) }
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -164,12 +174,26 @@ fun RoomScheduleDialog(
                     contentPadding = PaddingValues(bottom = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(lessons, key = { "${it.groupName}_${it.lessonNumber}_${it.id}" }) { lesson ->
-                        RoomLessonCard(
-                            lesson = lesson,
-                            isCurrent = lesson.lessonNumber == currentLessonNumber,
-                            onTeacherClick = onTeacherClick
-                        )
+                    // O3-b: заголовок на каждую пару — при нескольких группах в кабинете карточки
+                    // разных групп в одной паре разделены явно
+                    groupedLessons.forEach { (lessonNumber, pairLessons) ->
+                        item(key = "header_$lessonNumber") {
+                            RoomLessonHeader(
+                                lessonNumber = lessonNumber,
+                                groupCount = pairLessons.size,
+                                isCurrent = lessonNumber == currentLessonNumber
+                            )
+                        }
+                        items(
+                            pairLessons,
+                            key = { "${it.groupName}_${it.lessonNumber}_${it.id}" }
+                        ) { lesson ->
+                            RoomLessonCard(
+                                lesson = lesson,
+                                isCurrent = lesson.lessonNumber == currentLessonNumber,
+                                onTeacherClick = onTeacherClick
+                            )
+                        }
                     }
                 }
             }
@@ -204,6 +228,43 @@ private fun RoomScheduleEmptyState() {
             text = "Нет занятий в этом кабинете сегодня",
             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
+}
+
+/**
+ * O3-b: заголовок пары в диалоге — «1–2 урок» + сколько групп занимает кабинет в этот слот.
+ * Текущая пара подписана синим (как метка «СЕЙЧАС» на карточке).
+ */
+@Composable
+private fun RoomLessonHeader(
+    lessonNumber: Int,
+    groupCount: Int,
+    isCurrent: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("room_lesson_header_$lessonNumber"),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "$lessonNumber урок",
+            style = TextStyle(
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                color = if (isCurrent) ColorActiveBlue else ColorTextMuted
+            )
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = when {
+                groupCount % 10 == 1 && groupCount % 100 != 11 -> "$groupCount группа"
+                groupCount % 10 in 2..4 && groupCount % 100 !in 12..14 -> "$groupCount группы"
+                else -> "$groupCount групп"
+            },
+            style = TextStyle(fontSize = 11.sp, color = ColorTextMuted)
         )
     }
 }

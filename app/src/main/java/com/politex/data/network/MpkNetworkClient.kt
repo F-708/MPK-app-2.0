@@ -260,6 +260,23 @@ class MpkNetworkClient {
             if (bytes == null || bytes.isEmpty()) {
                 return@withContext Result.failure(IOException("Документ не найден: $url"))
             }
+
+            // O7: показываем только документ, реально относящийся к запрошенной дате.
+            // Если файл подменён/битый (дата в заголовке не совпала с именем файла),
+            // это ошибка, а не повод показать чужой день.
+            val text = TeacherScheduleParser.extractText(bytes)
+            if (text.isNotBlank() && !TeacherScheduleParser.matchesRequestedDate(text, targetCalendar)) {
+                val inDoc = TeacherScheduleParser.dateFromHeaderText(
+                    TeacherScheduleParser.findHeaderLine(text).orEmpty()
+                )
+                return@withContext Result.failure(
+                    IOException(
+                        if (inDoc == null) "Дата не найдена в документе: $url"
+                        else "Документ за $inDoc вместо $ddMmYyyy: $url"
+                    )
+                )
+            }
+
             val parsed = TeacherScheduleParser.parse(bytes)
             if (parsed.isEmpty()) {
                 Result.failure(IOException("Не удалось разобрать расписание преподавателей"))

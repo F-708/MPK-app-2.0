@@ -97,4 +97,12 @@ interface LessonDao {
         clearLessonsForGroup(groupName)
         insertLessons(newLessons)
     }
+
+    // O7/O1: DELETE + INSERT одной транзакцией — иначе между ними Room эмитит пустой
+    // список и в UI на миг мелькает «расписание не опубликовано».
+    @Transaction
+    suspend fun replaceForDate(groupName: String, dateString: String, lessons: List<LessonEntity>) {
+        deleteLessonsForDate(groupName, dateString)
+        insertLessons(lessons)
+    }
 }

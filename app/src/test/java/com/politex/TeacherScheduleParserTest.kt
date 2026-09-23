@@ -95,4 +95,51 @@ class TeacherScheduleParserTest {
         assertTrue("Бирюк ведёт у 41О", groups.contains("41О"))
         assertTrue("Бирюк ведёт у 31П", groups.contains("31П"))
     }
+
+    // O7: слоты документа обязаны нести день недели из заголовка (0 = «неизвестен» →
+    // UI покажет пустое состояние, а не пары другого дня под произвольной датой).
+    @Test
+    fun `слоты размечены днём недели документа`() {
+        val slots = parsed().values.flatten()
+        assertTrue(slots.isNotEmpty())
+        assertTrue("День недели должен быть взят из заголовка (СРЕДА)", slots.all { it.dayOfWeek == 3 })
+    }
+
+    @Test
+    fun `ПЯТНИЦА в заголовке распознаётся как 5`() {
+        assertEquals(
+            5,
+            TeacherScheduleParser.dowFromHeaderText(
+                "│ 1 НЕДЕЛЯ     ║ ПЯТНИЦА                 18.09.2026                        ║"
+            )
+        )
+    }
+
+    @Test
+    fun `заголовок без слова НЕДЕЛЯ всё равно находится`() {
+        val text = "│              ║ ЧЕТВЕРГ                                                    ║\r\n" +
+            "│Автушко Н.А.  ║    │    │41П │\r\n"
+        assertEquals(4, TeacherScheduleParser.dowFromHeaderText(TeacherScheduleParser.findHeaderLine(text)!!))
+    }
+
+    // O7: документ, скачанный под дату, обязан совпасть с запрошенной датой.
+    @Test
+    fun `документ проверяется на соответствие запрошенной дате`() {
+        val bytes = realDocBytes()
+        val text = TeacherScheduleParser.extractText(bytes)
+        assertTrue("Текст документа должен извлекаться", text.isNotBlank())
+
+        val match = java.util.Calendar.getInstance().apply {
+            clear(); set(2026, java.util.Calendar.SEPTEMBER, 16)
+        }
+        val mismatch = java.util.Calendar.getInstance().apply {
+            clear(); set(2026, java.util.Calendar.SEPTEMBER, 17)
+        }
+        assertTrue("17.09.2026 не совпадает с запрошенным 16.09.2026",
+            !TeacherScheduleParser.matchesRequestedDate("ЧЕТВЕРГ 17.09.2026", match))
+        assertTrue("16.09.2026 совпадает с запрошенным 16.09.2026",
+            TeacherScheduleParser.matchesRequestedDate(text, match))
+        assertTrue("16.09.2026 не совпадает с запрошенным 17.09.2026",
+            !TeacherScheduleParser.matchesRequestedDate(text, mismatch))
+    }
 }

@@ -138,10 +138,16 @@ class ScheduleRepository(
         )
 
     suspend fun replaceSyncedLessons(groupName: String, lessons: List<LessonEntity>) = withContext(Dispatchers.IO) {
-        for (dateString in lessons.map { it.dateString }.filter { it.isNotBlank() }.distinct()) {
-            lessonDao.deleteLessonsForDate(groupName, dateString)
+        // O7: замена одной транзакцией на дату — DELETE и INSERT неразделимы, иначе Flow
+        // эмитит пустой список и в UI мелькает «расписание не опубликовано».
+        lessons.groupBy { it.dateString }.forEach { (dateString, dayLessons) ->
+            if (dateString.isBlank()) {
+                // Недельный шаблон: удалять нечего (нет привязки к дате), только вставка
+                lessonDao.insertLessons(dayLessons)
+            } else {
+                lessonDao.replaceForDate(groupName, dateString, dayLessons)
+            }
         }
-        lessonDao.insertLessons(lessons)
     }
 
     suspend fun saveLessons(lessons: List<LessonEntity>) = withContext(Dispatchers.IO) {

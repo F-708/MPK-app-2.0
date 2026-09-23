@@ -2,6 +2,7 @@
 
 import java.io.ByteArrayInputStream
 import java.nio.charset.Charset
+import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.zip.ZipInputStream
 
@@ -20,10 +21,20 @@ object TeacherScheduleParser {
 
     private val GROUP_REGEX = Regex("^([1-4])([1-9])([\\u0410-\\u042F])$")
 
+    // O7: дата «дд.ММ.гггг» в заголовке документа преподавателей
+    private val DATE_DOT_REGEX = Regex("\\d{2}\\.\\d{2}\\.\\d{4}")
+
+    // Сколько верхних строк просматривать в поиске заголовка (шапка + шапка таблицы)
+    private const val HEADER_SCAN_LINES = 6
+
     private val ROOM_REGEX = Regex("^([0-9]{1,3}[\\u0430-\\u044Fa-zA-Z]?|СТД)$")
 
+    // O7: было «ПЯТНИЦ[УЕ]» — слово «ПЯТНИЦА» из заголовка документа не распознавалось,
+    // dowFromHeaderText возвращал null, dayOfWeek у слотов оставался 0, и UI (CollegeScreen)
+    // по ветке «docDow == 0 → показать все» показывал пары под ЛЮБОЙ выбранной датой.
+    // Покрываем все падежные формы (ПЯТНИЦА/ПЯТНИЦУ/ПЯТНИЦЕ и т.п.).
     private val HEADER_DOW_REGEX = Regex(
-        "ПОНЕДЕЛЬНИК|ВТОРНИК|СРЕД[УА]|ЧЕТВЕРГ|ПЯТНИЦ[УЕ]|СУББОТ", RegexOption.IGNORE_CASE
+        "ПОНЕДЕЛЬНИК|ВТОРНИК|СРЕД[АУЕ]|ЧЕТВЕРГ|ПЯТНИЦ[АУЕ]|СУББОТ", RegexOption.IGNORE_CASE
     )
 
     /** День недели из строки заголовка вида «║ СРЕДА 16.09.2026 ║». */
@@ -40,9 +51,49 @@ object TeacherScheduleParser {
         }
     }
 
-    /** Строка заголовка с днём недели (первая строка с «НЕДЕЛЯ»), либо null. */
-    fun findHeaderLine(text: String): String? =
-        text.lines().firstOrNull { it.contains("НЕДЕЛЯ", ignoreCase = true) }
+    /**
+     * Строка заголовка документа: сначала строка с «НЕДЕЛЯ»,
+     * иначе — первая из верхних строк, где есть день недели,
+     * иначе — первая из верхних строк с датой «дд.ММ.гггг».
+     *
+     * O7: часть документов приходит без слова «НЕДЕЛЯ» (напр. 03.09.2026 — только «ЧЕТВЕРГ»),
+     * а иногда и вовсе без дня недели, но с датой. День определяем только по самому документу,
+     * никаких догадок о «текущей неделе».
+     */
+    fun findHeaderLine(text: String): String? {
+        val lines = text.lines()
+        lines.firstOrNull { it.contains("НЕДЕЛЯ", ignoreCase = true) }?.let { return it }
+        val head = lines.take(HEADER_SCAN_LINES)
+        head.firstOrNull { HEADER_DOW_REGEX.containsMatchIn(it) }?.let { return it }
+        return head.firstOrNull { DATE_DOT_REGEX.containsMatchIn(it) }
+    }
+
+    /** Дата «дд.ММ.гггг» из строки, либо null. */
+    fun dateFromHeaderText(text: String): String? =
+        DATE_DOT_REGEX.find(text)?.value
+
+    /** Дата в формате БД «дд.ММ.гггг» по календарю — для сравнения с датой запрошенного файла. */
+    fun dotDate(cal: java.util.Calendar): String =
+        SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(cal.time)
+
+    /**
+     * O7: проверка, что скачанный документ — действительно за запрошенную дату.
+     * Документ дня содержит дату в заголовке; если она не совпадает с запрошенной,
+     * показывать его нельзя (иначе под выбранной датой окажутся пары другого дня).
+     */
+    fun matchesRequestedDate(text: String, requested: java.util.Calendar): Boolean {
+        val header = findHeaderLine(text) ?: return false
+        val inDocDate = dateFromHeaderText(header)
+        // Точная дата в документе — сверяем по ней (сравнение календарём, не строкой)
+        if (inDocDate != null) {
+            val inDocCal = MpkScheduleParser.parseDotDate(inDocDate) ?: return false
+            return inDocCal.get(java.util.Calendar.YEAR) == requested.get(java.util.Calendar.YEAR) &&
+                inDocCal.get(java.util.Calendar.DAY_OF_YEAR) == requested.get(java.util.Calendar.DAY_OF_YEAR)
+        }
+        // Даты нет (напр. 03.09.2026) — сверяем хотя бы день недели
+        val dow = dowFromHeaderText(header) ?: return false
+        return dow == MpkScheduleParser.dowOfCalendar(requested)
+    }
 
     fun parse(bytes: ByteArray): Map<String, List<TeacherSlot>> {
         if (bytes.isEmpty()) return emptyMap()
@@ -69,11 +120,24 @@ object TeacherScheduleParser {
             var subject: String = ""
         )
 
-        // Документ дня содержит заголовок «1 НЕДЕЛЯ ║ СРЕДА 16.09.2026»: помечаем слоты днём
-        val headerDow = findHeaderLine(text)?.let { dowFromHeaderText(it) } ?: 0
+        // Документ дня содержит заголовок «1 НЕДЕЛЯ ║ СРЕДА 16.09.2026»: помечаем слоты днём.
+        // O7: если день недели в заголовке не распознан (иные падежи/опечатки), берём его из
+        // даты самого документа. Если и даты нет — 0 («неизвестен»), и UI обязан показать
+        // честное пустое состояние, а не пары под произвольной датой.
+        val headerLine = findHeaderLine(text)
+        val headerDow = headerLine?.let { line ->
+            dowFromHeaderText(line)
+                ?: dateFromHeaderText(line)
+                    ?.let { dot -> MpkScheduleParser.parseDotDate(dot) }
+                    ?.let { cal -> MpkScheduleParser.dowOfCalendar(cal) }
+        } ?: 0
 
         val result = mutableMapOf<String, MutableMap<Int, Cell>>()
         var currentTeacher: String? = null
+        // O7: «строка заголовка пройдена». У этих .doc после таблицы есть дублирующий
+        // блок «║ название таблицы ║» — без отсечки он приклеивался к последнему
+        // преподавателю как лишние пары. Если заголовка в тексте нет вовсе — парсим как раньше.
+        var headerSeen = headerLine == null
 
         text.lines().forEach { rawLine ->
             val line = rawLine.trimEnd()
@@ -83,6 +147,14 @@ object TeacherScheduleParser {
 
             val parts = line.split('║')
             if (parts.size < 2) return@forEach
+
+            if (!headerSeen) {
+                if (line.contains("НЕДЕЛЯ", ignoreCase = true) ||
+                    HEADER_DOW_REGEX.containsMatchIn(line) ||
+                    DATE_DOT_REGEX.containsMatchIn(line)
+                ) headerSeen = true
+                return@forEach
+            }
 
             val nameCell = parts[0].replace("│", "").trim()
             if (nameCell.isNotEmpty() && !nameCell.startsWith("1 НЕДЕЛЯ")) {
@@ -124,6 +196,37 @@ object TeacherScheduleParser {
                 )
             }
         }.filterValues { it.isNotEmpty() }
+    }
+
+    /**
+     * O7: текстовая проекция байтов документа (docx → pseudo-таблица, иначе UTF-16/CP1251).
+     * Нужна вызывающему, чтобы проверить дату заголовка до разбора.
+     */
+    fun extractText(bytes: ByteArray): String {
+        if (bytes.isEmpty()) return ""
+        if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()) {
+            parseDocxText(bytes)?.let { if (it.isNotBlank()) return it }
+        }
+        val utf16 = extractUtf16(bytes)
+        if (utf16.isNotBlank()) return utf16
+        return extractCp1251(bytes)
+    }
+
+    private fun parseDocxText(bytes: ByteArray): String? = try {
+        val zip = ZipInputStream(ByteArrayInputStream(bytes))
+        var entry = zip.nextEntry
+        var xml: String? = null
+        while (entry != null) {
+            if (entry.name == "word/document.xml") {
+                xml = zip.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                break
+            }
+            zip.closeEntry()
+            entry = zip.nextEntry
+        }
+        xml?.let { xmlToPseudoTable(it) }
+    } catch (_: Exception) {
+        null
     }
 
     private fun extractUtf16(bytes: ByteArray): String {
@@ -171,23 +274,8 @@ object TeacherScheduleParser {
         return runs.joinToString("\n")
     }
 
-    private fun parseDocx(bytes: ByteArray): Map<String, List<TeacherSlot>>? = try {
-        val zip = ZipInputStream(ByteArrayInputStream(bytes))
-        var entry = zip.nextEntry
-        var xml: String? = null
-        while (entry != null) {
-            if (entry.name == "word/document.xml") {
-                xml = zip.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                break
-            }
-            zip.closeEntry()
-            entry = zip.nextEntry
-        }
-
-        xml?.let { parsePlainText(xmlToPseudoTable(it)) }
-    } catch (_: Exception) {
-        null
-    }
+    private fun parseDocx(bytes: ByteArray): Map<String, List<TeacherSlot>>? =
+        parseDocxText(bytes)?.let { parsePlainText(it) }
 
     private fun xmlToPseudoTable(xml: String): String {
         val sb = StringBuilder()

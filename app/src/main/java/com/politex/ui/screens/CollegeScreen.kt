@@ -1446,10 +1446,12 @@ private fun TeacherScheduleTab(teacher: Teacher) {
             ?.value
             .orEmpty()
 
-        // Слоты размечены днём недели документа: показываем только совпадающий день
+        // Слоты размечены днём недели документа: показываем только совпадающий день.
+        // O7: при нераспознанном дне (docDow == 0) НЕ показываем весь документ —
+        // иначе под любой прошлой датой возникало расписание (жалоба заказчика).
         val docDow = allSlots.firstOrNull()?.dayOfWeek ?: 0
         slots = when {
-            docDow == 0 -> allSlots
+            docDow == 0 -> emptyList()
             docDow == selectedDateDow -> allSlots
             else -> emptyList()
         }

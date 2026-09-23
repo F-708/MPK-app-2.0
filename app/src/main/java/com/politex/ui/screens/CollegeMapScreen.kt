@@ -12,6 +12,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
@@ -31,7 +33,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.EventNote
@@ -39,8 +40,6 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ZoomOutMap
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -102,6 +101,7 @@ import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
+import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.util.bouncyClickable
 import java.util.Calendar
 import kotlinx.coroutines.Dispatchers
@@ -154,11 +154,23 @@ fun CollegeMapScreen(
         }
     }
 
-    // Группы с уроками сегодня — для быстрого выбора
-    val todayGroups by produceState<List<String>>(initialValue = emptyList(), key1 = todayDateString) {
-        value = runCatching {
-            scheduleRepository.getDistinctGroupsForDateOrDay(todayDateString, todayDow)
-        }.getOrDefault(emptyList())
+    // O3-c: группы для подсказок поиска — полный список кодов из ассета (если он уже есть)
+    // + всё, что известно из расписания (сегодняшние пары и недельный шаблон по всем дням).
+    val catalogCodes = remember(context) { loadGroupCodes(context) }
+    val knownGroups by produceState<List<String>>(
+        initialValue = catalogCodes,
+        key1 = todayDateString,
+        key2 = catalogCodes
+    ) {
+        val fromDb = runCatching {
+            val all = linkedSetOf<String>()
+            all += scheduleRepository.getDistinctGroupsForDateOrDay(todayDateString, todayDow)
+            for (dow in 1..6) {
+                if (dow != todayDow) all += scheduleRepository.getDistinctGroupsForDateOrDay("", dow)
+            }
+            all
+        }.getOrDefault(emptySet())
+        value = (catalogCodes + fromDb).distinct().sorted()
     }
 
     val cameFromSchedule = !initialRoom.isNullOrBlank()
@@ -185,11 +197,20 @@ fun CollegeMapScreen(
             scheduleRepository.getLessonsForRoomOnDate(room, todayDateString, todayDow)
         }.getOrNull()?.collect { value = it }
     }
-    val nowMinutes = remember {
-        val c = Calendar.getInstance()
-        c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE)
+    // O3-b2: текущая минута тикает раз в минуту — метка «СЕЙЧАС» переезжает на новую пару без переоткрытия диалога
+    var nowMinutes by remember {
+        mutableStateOf(
+            Calendar.getInstance().let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) }
+        )
     }
-    val roomScheduleCurrentLesson = remember(roomScheduleFor) {
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(60_000)
+            nowMinutes = Calendar.getInstance()
+                .let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) }
+        }
+    }
+    val roomScheduleCurrentLesson = remember(nowMinutes, todayDow) {
         currentRoomLessonNumber(nowMinutes, todayDow)
     }
 
@@ -229,7 +250,6 @@ fun CollegeMapScreen(
             Spacer(modifier = Modifier.height(6.dp))
             GroupSearchField(
                 value = groupQuery,
-                todayGroups = todayGroups,
                 onValueChange = { groupQuery = it; groupMessage = null },
                 onSearch = { group ->
                     groupMessage = null
@@ -248,7 +268,48 @@ fun CollegeMapScreen(
                         }
                     }
                 },
-                message = groupMessage
+                message = groupMessage,
+                // O3-c: подсказки из полного списка групп колледжа (GroupCatalog), без выпадающего списка
+                suggestionsWidget = {
+                    val hints = remember(groupQuery, knownGroups) {
+                        groupSuggestions(groupQuery, knownGroups)
+                    }
+                    if (hints.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            hints.forEach { g ->
+                                Surface(
+                                    shape = RoundedCornerShape(2.dp),
+                                    color = ColorBgMain,
+                                    border = BorderStroke(1.dp, ColorBorderLight),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 44.dp)
+                                        .bouncyClickable {
+                                            groupQuery = g
+                                            groupMessage = null
+                                        }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = g,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            style = TextStyle(
+                                                fontWeight = FontWeight.Medium,
+                                                fontSize = 13.sp,
+                                                color = ColorBrandBlue
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             )
         }
 
@@ -266,6 +327,12 @@ fun CollegeMapScreen(
             floorId = floorId,
             floor = floor,
             targetRoom = targetRoom,
+            // O3-d: тап по кабинету — тот же путь, что ввод номера в поиск
+            onRoomTap = { room ->
+                groupMessage = null
+                searchFailed = false
+                target = room.number
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
@@ -283,7 +350,8 @@ fun CollegeMapScreen(
     roomScheduleFor?.let { roomNumber ->
         RoomScheduleDialog(
             roomNumber = roomNumber,
-            dateTitle = "$todayDateString",
+            // O3-b: в заголовке — сама дата и день недели (без версии APK из строкового ресурса)
+            dateTitle = "$todayDateString, ${roomDayTitle(todayDow)}",
             lessons = filterRoomLessonsForDate(roomScheduleLessons, roomNumber, todayDateString),
             currentLessonNumber = roomScheduleCurrentLesson,
             onTeacherClick = onOpenTeacher,
@@ -451,6 +519,43 @@ private fun MapHeader(subtitle: String, onBack: () -> Unit) {
 
 private fun findRoomEverywhere(mapData: CollegeMapData, number: String): MapRoom? =
     listOf("1", "2", "3-4").firstNotNullOfOrNull { mapData.floor(it).room(number) }
+
+// День недели подписью — в заголовок диалога кабинета (dayOfWeek 1=Пн..7=Вс)
+private fun roomDayTitle(dayOfWeek: Int): String = when (dayOfWeek) {
+    1 -> "понедельник"
+    2 -> "вторник"
+    3 -> "среда"
+    4 -> "четверг"
+    5 -> "пятница"
+    6 -> "суббота"
+    else -> "воскресенье"
+}
+
+// O3-d: тап по карте. Координаты нормализованы (0..1, как MapRoom.x/y) — на экране их
+// получаем обратным преобразованием graphicsLayer: (screen - offset) / scale / размер картинки.
+private const val TAP_SLOP_PX = 24f
+
+/**
+ * O3-d: кабинет под точкой тапа. Сначала точное попадание в прямоугольник, затем — ближайший
+ * кабинет в радиусе допуска (тап пальцем редко попадает в мелкий прямоугольник).
+ */
+fun hitTestRoom(floor: FloorMap, xNorm: Float, yNorm: Float, slopNorm: Float): MapRoom? {
+    val rooms = floor.rooms.filter { it.number.isNotBlank() && it.w > 0f && it.h > 0f }
+    if (rooms.isEmpty()) return null
+    fun inside(r: MapRoom, slop: Float): Boolean {
+        val l = r.x - r.w / 2f - slop
+        val t = r.y - r.h / 2f - slop
+        return xNorm >= l && xNorm <= l + r.w + slop * 2f &&
+            yNorm >= t && yNorm <= t + r.h + slop * 2f
+    }
+    // точное попадание (если прямоугольников несколько — берём меньший, он «сверху»)
+    rooms.filter { inside(it, 0f) }
+        .minByOrNull { it.w * it.h }
+        ?.let { return it }
+    // промах пальцем: ближайший кабинет в радиусе допуска
+    return rooms.filter { inside(it, slopNorm) }
+        .minByOrNull { r -> (xNorm - r.x) * (xNorm - r.x) + (yNorm - r.y) * (yNorm - r.y) }
+}
 
 // Т5: где группа сейчас. isNow=false → следующая пара («к N уроку»)
 data class GroupRoomResult(val room: String, val lessonNumber: Int, val isNow: Boolean)
@@ -622,6 +727,9 @@ private suspend fun searchGroupNow(
     val mapped = if (room.isBlank()) null else findRoomEverywhere(mapData, room)
 
     return mapped to when {
+        // O3-c: код не разбирается как группа колледжа (курс 1-4 + номер + код специальности)
+        com.politex.util.GroupParser.parse(canonical) == null ->
+            "Группа «$group» не найдена — проверьте код"
         effective.isEmpty() -> "У группы «$canonical» нет уроков сегодня"
         result == null || room.isBlank() -> "Сейчас уроков нет"
         mapped == null -> "Кабинет «$room» не найден на карте"
@@ -630,13 +738,42 @@ private suspend fun searchGroupNow(
     }
 }
 
+/**
+ * O3-c.1: полный список кодов групп колледжа (ассет `group_codes.csv`, готовит агент O8).
+ * Ассета может ещё не быть или он может быть собран не в этом флейворе — тогда пусто,
+ * и подсказки работают на группах, известных из расписания.
+ */
+private fun loadGroupCodes(context: android.content.Context): List<String> = runCatching {
+    context.assets.open("group_codes.csv").bufferedReader(Charsets.UTF_8).useLines { lines ->
+        lines.map { it.trim().trim('"') }
+            .filter { it.isNotBlank() && !it.equals("group", ignoreCase = true) }
+            .toList()
+    }
+}.getOrDefault(emptyList())
+
+/**
+ * O3-c: подсказки для поиска группы — по группам, известным приложению (коды из ассета +
+ * уроки сегодня + недельный шаблон). Совпадения по подстроке, регистр/латиница не важны.
+ * Максимум [limit] штук, выпадающего списка нет — это компактные inline-чипы.
+ */
+fun groupSuggestions(query: String, groups: List<String>, limit: Int = 6): List<String> {
+    val q = query.trim()
+    if (q.length < 2) return emptyList()
+    val canonical = com.politex.util.GroupParser.cleanRawGroupName(q)
+    return groups
+        .filter { it.equals(canonical, ignoreCase = true) || com.politex.util.GroupParser.matchesGroup(it, q) }
+        .sorted()
+        .take(limit)
+}
+
 @Composable
 private fun GroupSearchField(
     value: String,
-    todayGroups: List<String>,
     onValueChange: (String) -> Unit,
     onSearch: (String) -> Unit,
-    message: String?
+    message: String?,
+    // O3-c: подсказки по мере ввода — без выпадающего списка, максимум 6
+    suggestionsWidget: @Composable () -> Unit = {}
 ) {
     Column(modifier = Modifier.padding(horizontal = 12.dp)) {
         Row(
@@ -644,8 +781,6 @@ private fun GroupSearchField(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            var dropdownExpanded by remember { mutableStateOf(false) }
-
             Surface(
                 shape = RoundedCornerShape(3.dp),
                 color = ColorSurfaceVariantLight,
@@ -700,39 +835,6 @@ private fun GroupSearchField(
                             )
                         }
                     }
-                    // Быстрый выбор группы из сегодняшнего расписания
-                    Box {
-                        Box(
-                            modifier = Modifier
-                                .size(46.dp)
-                                .bouncyClickable(
-                                    enabled = todayGroups.isNotEmpty()
-                                ) { dropdownExpanded = true },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = "Выбрать группу из сегодняшнего расписания",
-                                tint = if (todayGroups.isNotEmpty()) ColorBrandBlue else ColorTextMuted,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = dropdownExpanded,
-                            onDismissRequest = { dropdownExpanded = false }
-                        ) {
-                            todayGroups.forEach { g ->
-                                DropdownMenuItem(
-                                    text = { Text(g, style = TextStyle(fontSize = 14.sp)) },
-                                    onClick = {
-                                        dropdownExpanded = false
-                                        onValueChange(g)
-                                        onSearch(g)
-                                    }
-                                )
-                            }
-                        }
-                    }
                 }
             }
 
@@ -752,6 +854,8 @@ private fun GroupSearchField(
                 )
             }
         }
+
+        suggestionsWidget()
 
         message?.let { msg ->
             Spacer(modifier = Modifier.height(4.dp))
@@ -811,6 +915,8 @@ private fun MapCanvas(
     floorId: String,
     floor: FloorMap,
     targetRoom: MapRoom?,
+    // O3-d: тап по кабинету = тот же выбор, что ввод в поиск
+    onRoomTap: (MapRoom) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -896,6 +1002,17 @@ private fun MapCanvas(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                // O3-d: тап рядом с жестами (не взамен) — иначе сломается зум/пан.
+                // detectTapGestures ждёт проигрыша соседних детекторов, поэтому пан/зум не страдают.
+                .pointerInput(floorId, viewW, viewH) {
+                    detectTapGestures { pos ->
+                        val s = scale.value
+                        val xNorm = ((pos.x - offsetX.value) / s) / imgW
+                        val yNorm = ((pos.y - offsetY.value) / s) / imgH
+                        val slop = TAP_SLOP_PX / s / imgW
+                        hitTestRoom(floor, xNorm, yNorm, slop)?.let(onRoomTap)
+                    }
+                }
                 .pointerInput(viewW, viewH) {
                     detectTransformGestures { centroid, pan, zoom, _ ->
                         scope.launch {
@@ -1071,6 +1188,10 @@ private fun DrawScope.drawMap(
     val sortedFits = rawFits.values.toFloatArray().also { it.sort() }
     val medianFit = if (sortedFits.isEmpty()) 1f else sortedFits[sortedFits.size / 2]
 
+    // O3-a: абсолютный минимум высоты цифры (в экранных px изображения) — мелкие кабинеты больше не «сливаются».
+    // Низкий кламп по медиане давал ~7-9 px, где просветы штрихов забивал белый ореол.
+    val minNumberPx = minScreenPxPerDp * 15f
+
     floor.rooms.forEach { r ->
         val layout = numberLayouts[r.id] ?: return@forEach
         if (r.number.isBlank()) return@forEach
@@ -1078,7 +1199,10 @@ private fun DrawScope.drawMap(
 
         // сглаживание разброса: похожие кабинеты получают близкий размер шрифта
         val damped = medianFit + (raw - medianFit) * 0.45f
-        val fit = damped.coerceIn(medianFit * 0.70f, medianFit * 1.35f)
+        val minFit = minNumberPx / layout.size.height.toFloat()
+        val loFit = maxOf(medianFit * 0.70f, minFit)
+        val hiFit = maxOf(medianFit * 1.35f, loFit)
+        val fit = damped.coerceIn(loFit, hiFit)
         if (fit <= 0f) return@forEach
 
         val cx = r.x * imgW
@@ -1091,13 +1215,16 @@ private fun DrawScope.drawMap(
             scale(fit, fit, Offset(cx, cy))
         }) {
             val topLeft = Offset(cx - layout.size.width / 2f, cy - layout.size.height / 2f)
-            drawText(
-                textLayoutResult = layout,
-                topLeft = topLeft,
-                color = Color.White,
-                // Ореол чуть шире, чтобы тонкие цифры оставались читаемыми поверх стен
-                drawStyle = Stroke(width = layout.size.height * 0.22f, join = StrokeJoin.Round)
-            )
+            // O3-a: ореол тонкий (0.14 вместо 0.22) и совсем отключается у самых мелких цифр —
+            // иначе он съедает просветы между штрихами, и номер выглядит «жирным курсивом»
+            if (layout.size.height * fit >= minNumberPx * 1.25f) {
+                drawText(
+                    textLayoutResult = layout,
+                    topLeft = topLeft,
+                    color = Color.White,
+                    drawStyle = Stroke(width = layout.size.height * 0.14f, join = StrokeJoin.Round)
+                )
+            }
             drawText(
                 textLayoutResult = layout,
                 topLeft = topLeft,
