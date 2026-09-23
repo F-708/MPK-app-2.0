@@ -510,46 +510,7 @@ fun SettingsScreen(
                 }
             }
 
-            if (com.politex.BuildConfig.FLAVOR == "admin") {
-                item { SectionHeader("DEBUG: КОНФЕТТИ") }
-                item { DebugConfettiCard() }
-            }
-
             item { SectionHeader("ОБРАТНАЯ СВЯЗЬ") }
-            item {
-                // ST1: версия сборки — всегда видима (админ/QA: «у меня 2.12»)
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Версия приложения",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = ColorTextTitle
-                            )
-                        )
-                        Text(
-                            text = com.politex.BuildConfig.VERSION_NAME,
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = ColorBrandBlue
-                            )
-                        )
-                    }
-                }
-            }
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -963,47 +924,6 @@ private fun BellCountdownNotificationCard() {
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                var isPinned by remember {
-                    mutableStateOf(com.politex.util.BellCountdownNotifier.isPinned(context))
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Закрепить в шторке",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = ColorTextTitle
-                            )
-                        )
-                        Text(
-                            text = "Как в навигаторе: строку нельзя убрать, пока она активна. Выключите — станет обычным уведомлением.",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontSize = 11.sp,
-                                color = ColorTextMuted
-                            )
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Switch(
-                        checked = isPinned,
-                        onCheckedChange = { pinned ->
-                            isPinned = pinned
-                            com.politex.util.BellCountdownNotifier.setPinned(context, pinned)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = ColorBrandBlue
-                        ),
-                        modifier = Modifier.testTag("bell_notification_pinned_switch")
-                    )
-                }
             }
         }
     }
@@ -1078,60 +998,3 @@ private fun ActionChip(
     }
 }
 
-@Composable
-private fun DebugConfettiCard() {
-    val context = LocalContext.current
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorBgMain,
-        border = BorderStroke(1.dp, ColorBorderLight),
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("debug_confetti_card")
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                text = "Запуск конфетти по таймеру (приложение + виджеты)",
-                style = androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = ColorTextTitle
-                )
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                listOf(1, 5, 10).forEach { seconds ->
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBrandFill,
-                        modifier = Modifier
-                            .weight(1f)
-                            .bouncyClickable {
-                                com.politex.util.ConfettiController.scheduleDebug(context, seconds)
-                            }
-                            .testTag("debug_confetti_${seconds}s")
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "$seconds сек",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    color = Color.White
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}

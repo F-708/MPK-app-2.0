@@ -86,7 +86,6 @@ class BellsWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.bells_root, open)
-            WidgetConfetti.applyFrame(views)
             return views
         }
     }

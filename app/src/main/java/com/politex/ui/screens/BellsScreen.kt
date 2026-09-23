@@ -235,23 +235,31 @@ fun BellsScreen(
                             .heightIn(min = 44.dp)
                             .bouncyClickable { selectedScheduleType = type }
                     ) {
-                        Text(
-                            text = when (type) {
-                                BellScheduleType.STANDARD -> "ПН - ПТ"
-                                BellScheduleType.THURSDAY -> "ЧЕТВЕРГ"
-                                BellScheduleType.SATURDAY -> "СУББОТА"
-                            },
-                            softWrap = false,
-                            maxLines = 1,
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 12.sp,
-                                color = if (isSelected) Color.White else ColorTextBody
-                            ),
-                            modifier = Modifier
-                                .padding(vertical = 8.dp)
-                                .wrapContentWidth(Alignment.CenterHorizontally)
-                        )
+                        // O2: у material3 Surface нет contentAlignment (внутри Box с TopStart),
+                        // а propagateMinConstraints=true растягивает Text на 44dp — глифы прижаты
+                        // к верху. Центрируем через Box (как в TasksScreen/GroupSelectionDialog).
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = when (type) {
+                                    BellScheduleType.STANDARD -> "ПН - ПТ"
+                                    BellScheduleType.THURSDAY -> "ЧЕТВЕРГ"
+                                    BellScheduleType.SATURDAY -> "СУББОТА"
+                                },
+                                softWrap = false,
+                                maxLines = 1,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 12.sp,
+                                    color = if (isSelected) Color.White else ColorTextBody
+                                ),
+                                modifier = Modifier
+                                    .padding(vertical = 8.dp)
+                                    .wrapContentWidth(Alignment.CenterHorizontally)
+                            )
+                        }
                     }
                     Box(
                         modifier = Modifier

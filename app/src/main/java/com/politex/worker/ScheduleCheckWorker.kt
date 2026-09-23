@@ -101,11 +101,6 @@ class ScheduleCheckWorker(
                     val notifyLessons = targetLessons.ifEmpty { fallbackLessons }
 
                     if (notifyLessons.isNotEmpty()) {
-                        // Конфетти «завтра мало уроков»: флаг для первого просмотра
-                        // завтрашнего дня (снимается одноразово в ScheduleScreen).
-                        com.politex.util.ConfettiController.setTomorrowPending(
-                            applicationContext, targetDateString, targetLessons.size
-                        )
                         val dayTitles = mapOf(
                             1 to "понедельник",
                             2 to "вторник",

@@ -35,12 +35,4 @@
             android:orientation="vertical" />
     </LinearLayout>
 
-    <!-- Оверлей конфетти «уроки закончились» -->
-    <ImageView
-        android:id="@+id/iv_confetti_overlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="fitXY"
-        android:importantForAccessibility="no"
-        android:visibility="gone" />
-</FrameLayout>
+    </FrameLayout>

@@ -1,21 +1,33 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# O9: правила для R8 (isMinifyEnabled = true в release).
+# Компоненты, инстанцируемые системой по имени из манифеста — без -keep R8 их удалит/переименует.
+-keep public class * extends android.appwidget.AppWidgetProvider
+-keep public class * extends android.content.BroadcastReceiver
+-keep public class * extends android.app.Service
+-keep public class * extends android.app.Activity
+-keep public class * extends android.content.ContentProvider
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# O9 (важно): имена enum-констант сохраняются в SharedPreferences как строки
+# (CountdownMode / WidgetStyle / BellCountdownNotifier.Scope|Theme|Style — .load() ищет по it.name).
+# Без -keep R8 переименует константы и сохранённые настройки пользователей перестанут читаться.
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+    public static ** entries();
+    <fields>;
+}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Room: DAO-интерфейсы и entity — кодоген, но имена таблиц/колонок должны уцелеть
+-keep class * extends androidx.room.RoomDatabase
+-keep @androidx.room.Entity class *
+-dontwarn androidx.room.paging.**
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# OkHttp (consumer-rules обычно есть, дублируем ключевое)
+-dontwarn okhttp3.**
+-dontwarn okio.**
+
+# Kotlin coroutines
+-dontwarn kotlinx.coroutines.**
+
+# Сохранить информацию о строках для читаемых стектрейсов в релизе
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

@@ -261,7 +261,6 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.widget_countdown_root, openIntent)
-            WidgetConfetti.applyFrame(views)
             return views
         }
 
@@ -429,7 +428,6 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
             ACTION_TICK -> {
 
                 WidgetUpdateHelper.updateAllWidgets(context)
-                com.politex.util.ConfettiController.maybeCelebrate(context)
                 WidgetAlarm.scheduleNext(context)
             }
             Intent.ACTION_BOOT_COMPLETED -> {
