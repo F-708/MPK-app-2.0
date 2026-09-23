@@ -173,21 +173,31 @@ fun MainScreen(
             val scrollTarget = uiState.scrollTarget
 
             when (uiState.currentTab) {
-                AppTab.SCHEDULE -> ScheduleScreen(
-                    groupInfo = currentGroupInfo,
-                    scheduleRepository = viewModel.scheduleRepository,
-                    onSyncRequest = { viewModel.syncSchedule() },
-                    isSyncing = uiState.isSyncing,
-                    onTeacherClick = { name -> viewModel.openTeacher(name) },
-                    onRoomClick = { room, fromRoom -> viewModel.openMap(room, fromRoom) },
-                    listState = scheduleListState,
-                    scrollToCurrentRequested = scrollTarget == "CURRENT_LESSON",
-                    onScrollToCurrentConsumed = { viewModel.consumeScrollTarget() },
-                    selectedSlot = scheduleSlot,
-                    onSlotChange = { scheduleSlot = it },
-                    selectedDateString = scheduleDate,
-                    onDateChange = { scheduleDate = it }
-                )
+                // C3: расписание и домашка читаются из VM, а не подписываются внутри ScheduleScreen.
+                // when() уничтожает поддерево вкладки, поэтому collectAsState там умирал и на возврат
+                // отдавал emptyList до нового запроса к Room → спиннер → «ещё не опубликовано».
+                // Чтение внутри ветки, чтобы эмиссии Room не рекомпозировали поддеревья других вкладок.
+                AppTab.SCHEDULE -> {
+                    val groupLessons by viewModel.groupLessons.collectAsState()
+                    val pendingTasks by viewModel.pendingTasks.collectAsState()
+                    ScheduleScreen(
+                        groupInfo = currentGroupInfo,
+                        groupLessonsFromVm = groupLessons,
+                        pendingTasksFromVm = pendingTasks,
+                        scheduleRepository = viewModel.scheduleRepository,
+                        onSyncRequest = { viewModel.syncSchedule() },
+                        isSyncing = uiState.isSyncing,
+                        onTeacherClick = { name -> viewModel.openTeacher(name) },
+                        onRoomClick = { room, fromRoom -> viewModel.openMap(room, fromRoom) },
+                        listState = scheduleListState,
+                        scrollToCurrentRequested = scrollTarget == "CURRENT_LESSON",
+                        onScrollToCurrentConsumed = { viewModel.consumeScrollTarget() },
+                        selectedSlot = scheduleSlot,
+                        onSlotChange = { scheduleSlot = it },
+                        selectedDateString = scheduleDate,
+                        onDateChange = { scheduleDate = it }
+                    )
+                }
                 AppTab.TASKS -> TasksScreen(
                     groupInfo = currentGroupInfo,
                     taskRepository = viewModel.taskRepository,

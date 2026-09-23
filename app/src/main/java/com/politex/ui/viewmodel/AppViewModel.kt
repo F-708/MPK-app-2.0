@@ -4,17 +4,26 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.politex.data.local.MpkDatabase
+import com.politex.data.local.entity.LessonEntity
+import com.politex.data.local.entity.StudentTaskEntity
 import com.politex.data.model.GroupInfo
 import com.politex.data.repository.ScheduleRepository
 import com.politex.data.repository.TaskRepository
 import com.politex.util.GroupParser
 import com.politex.widget.WidgetUpdateHelper
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -65,6 +74,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _toastEvent = MutableSharedFlow<String>()
     val toastEvent: SharedFlow<String> = _toastEvent.asSharedFlow()
+
+    private val currentGroup: Flow<String> =
+        _uiState.map { it.currentGroupName }.distinctUntilChanged()
+
+    /**
+     * C3: расписание группы живёт в VM, а не в композиции ScheduleScreen.
+     * Раньше collectAsState подписывался внутри экрана: при смене вкладки (when в
+     * MainScreen уничтожает поддерево) подписка умирала, и на возврате первый эмит
+     * Room приходил только после нового запроса к БД → спиннер → «ещё не опубликовано».
+     * stateIn держит последнее значение в любом случае, поэтому возврат на вкладку
+     * получает кэш синхронно, без обращения к БД.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val groupLessons: StateFlow<List<LessonEntity>> = currentGroup
+        .flatMapLatest { name -> scheduleRepository.getAllLessonsForGroup(name) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** C3: то же для домашки — Flow тоже переживает пересоздание поддерева вкладки. */
+    val pendingTasks: StateFlow<List<StudentTaskEntity>> = currentGroup
+        .flatMapLatest { name -> taskRepository.getPendingTasksForGroup(name) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
 

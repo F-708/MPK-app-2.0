@@ -220,6 +220,37 @@ object MpkScheduleParser {
         return applyHeaderDate(parsed, bytes, targetDate)
     }
 
+    /**
+     * O3b: разбор того же документа по ВСЕМ группам — для «Подробнее — расписание кабинета»
+     * (в БД иначе лежат уроки только выбранной группы, и показать кабинет по всем группам нечем).
+     *
+     * Реализация намеренно НЕ трогает ядро разбора: для каждой известной группы вызывается
+     * проверенный [parseFileRaw], результат складывается и дедуплицируется. Так основной путь
+     * синка (одна группа) остаётся бит-в-бит прежним — это критично, он кормит всё приложение.
+     *
+     * [candidateGroups] — группы для перебора (обычно каталог колледжа). Перебор ограничен,
+     * поэтому лишних обращений к тяжёлому разбору нет: пустой результат по группе отсекается.
+     */
+    fun parseFileAllGroups(
+        bytes: ByteArray,
+        targetDate: String = "",
+        candidateGroups: List<String> = emptyList()
+    ): List<LessonEntity> {
+        if (bytes.isEmpty() || candidateGroups.isEmpty()) return emptyList()
+
+        val out = LinkedHashMap<String, LessonEntity>()
+        for (group in candidateGroups) {
+            val lessons = runCatching { parseFileRaw(bytes, group, targetDate) }.getOrDefault(emptyList())
+            for (lesson in lessons) {
+                if (lesson.groupName.isBlank()) continue
+                // Ключ — то, что делает строку уникальной в БД: группа + день + пара + дата
+                val key = "${lesson.groupName}_${lesson.dayOfWeek}_${lesson.lessonNumber}_${lesson.dateString}"
+                out.putIfAbsent(key, lesson)
+            }
+        }
+        return applyHeaderDate(out.values.toList(), bytes, targetDate)
+    }
+
     /** parseFile без перештамповки дат — для тестов стратегий по отдельности. */
     fun parseFileRaw(
         bytes: ByteArray,

@@ -126,13 +126,14 @@ fun ScheduleScreen(
     selectedDateString: String = "",
     onDateChange: (String) -> Unit = {},
 
+    // C3: данные группы приходят из AppViewModel (переживают пересоздание поддерева вкладки).
+    // Фолбэк на null — для тестов и вызовов без VM: тогда экран подписывается сам, как раньше.
+    groupLessonsFromVm: List<LessonEntity>? = null,
+    pendingTasksFromVm: List<com.politex.data.local.entity.StudentTaskEntity>? = null,
+
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val taskRepository = remember(context) {
-        com.politex.data.local.MpkDatabase.getInstance(context).taskDao()
-            .let { com.politex.data.repository.TaskRepository(it) }
-    }
 
     val isTeacherKnown: (String) -> Boolean = remember(context) {
         val known = knownTeacherSurnames(context)
@@ -157,9 +158,14 @@ fun ScheduleScreen(
 
     // O1/A+F: единственный Flow по группе — источник и для списка дня, и для weekly-разметки,
     // и для субботы. Раньше их было 7 (день+5 дней+суббота), каждая инвалидация гнала 7 перезапросов.
-    val allGroupLessons: List<com.politex.data.local.entity.LessonEntity> by scheduleRepository
-        .getAllLessonsForGroup(groupInfo.canonicalName)
-        .collectAsState(initial = emptyList())
+    // C3: когда данные приходят из VM — подписки здесь нет вообще. Она умирала вместе с
+    // поддеревом при смене вкладки, и на возврате первый эмит Room приходил только после
+    // нового запроса к БД → спиннер → «расписание ещё не опубликовано» на ~секунду.
+    val allGroupLessons: List<com.politex.data.local.entity.LessonEntity> =
+        groupLessonsFromVm ?: scheduleRepository
+            .getAllLessonsForGroup(groupInfo.canonicalName)
+            .collectAsState(initial = emptyList())
+            .value
 
     val saturdayLessons: List<com.politex.data.local.entity.LessonEntity> =
         remember(allGroupLessons) { allGroupLessons.filter { it.dayOfWeek == 6 } }
@@ -264,21 +270,29 @@ fun ScheduleScreen(
     // Раньше ключ Flow включал activeDateString/activeDayOfWeek → tap = resubscribe
     // → initial=null → спиннер → «расписание ещё не опубликовано».
     // O1/B: спиннер только до первого эмита Room, а не пока стейт null.
-    var firstEmit by remember(groupInfo.canonicalName) { mutableStateOf(false) }
+    // C3: при данных из VM прогревать нечего — VM уже отдала последнее значение,
+    // поэтому спиннер при возврате на вкладку не мигает.
+    var firstEmit by remember(groupInfo.canonicalName) {
+        mutableStateOf(groupLessonsFromVm != null)
+    }
     LaunchedEffect(allGroupLessons) { firstEmit = true }
     val isInitialLoad = !firstEmit
 
     // Строки с точной датой приоритетны; шаблон дня недели (пустой dateString) — дополнение
     val lessons: List<com.politex.data.local.entity.LessonEntity> =
         remember(allGroupLessons, activeDateString, activeDayOfWeek) {
-            val exact = allGroupLessons.filter { it.dateString == activeDateString }
-            if (exact.isNotEmpty()) exact
-            else allGroupLessons.filter { it.dateString.isBlank() && it.dayOfWeek == activeDayOfWeek }
+            lessonsForDay(allGroupLessons, activeDateString, activeDayOfWeek)
         }
 
-    val pendingTasks by remember(groupInfo.canonicalName) {
-        taskRepository.getPendingTasksForGroup(groupInfo.canonicalName)
-    }.collectAsState(initial = emptyList())
+    // C3: как и allGroupLessons — подписка внутри экрана умирает со сменой вкладки.
+    // Если VM передала значение, берём его; иначе (тесты) — старый путь через репозиторий.
+    // Репозиторий создаётся лениво: в проде эта ветка не исполняется.
+    val pendingTasks: List<com.politex.data.local.entity.StudentTaskEntity> =
+        pendingTasksFromVm ?: remember(context, groupInfo.canonicalName) {
+            com.politex.data.local.MpkDatabase.getInstance(context).taskDao()
+                .let { com.politex.data.repository.TaskRepository(it) }
+                .getPendingTasksForGroup(groupInfo.canonicalName)
+        }.collectAsState(initial = emptyList()).value
 
     // O1/F: 5 дневных Flow схлопнуты в один allGroupLessons + groupBy в памяти.
     // Инвалидация таблицы lessons гнала 7 перезапросов, теперь 2 (allGroupLessons + суббота).
@@ -1123,4 +1137,19 @@ fun autoScrollLessonIndex(
         (currentLessonNumber ?: 0) > (lessonNumbers.maxOrNull() ?: 0) -> lessonNumbers.lastIndex
         else -> 0
     }
+}
+
+/**
+ * C3: уроки просматриваемого дня. Строки с точной датой приоритетны; шаблон недели
+ * (пустая dateString) — дополнение. Вынесено из remember ради юнит-теста: раньше логику
+ * нельзя было зафиксировать, не поднимая весь экран.
+ */
+fun lessonsForDay(
+    allGroupLessons: List<LessonEntity>,
+    activeDateString: String,
+    activeDayOfWeek: Int
+): List<LessonEntity> {
+    val exact = allGroupLessons.filter { it.dateString == activeDateString }
+    return if (exact.isNotEmpty()) exact
+    else allGroupLessons.filter { it.dateString.isBlank() && it.dayOfWeek == activeDayOfWeek }
 }

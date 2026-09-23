@@ -1200,16 +1200,22 @@ private fun TeacherCardPage(
                         .heightIn(min = 44.dp)
                         .bouncyClickable { tab = index }
                 ) {
-                    Text(
-                        text = title.uppercase(),
-                        softWrap = false,
-                        style = androidx.compose.ui.text.TextStyle(
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                            fontSize = 10.sp,
-                            color = if (selected) Color.White else ColorTextBody
-                        ),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
-                    )
+                    // C2: у material3 Surface нет contentAlignment — без Box текст прижат к верху
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = title.uppercase(),
+                            softWrap = false,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 10.sp,
+                                color = if (selected) Color.White else ColorTextBody
+                            ),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                        )
+                    }
                 }
             }
         }

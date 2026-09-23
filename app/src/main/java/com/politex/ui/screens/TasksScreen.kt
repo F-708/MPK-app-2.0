@@ -226,6 +226,9 @@ fun TasksScreen(
                             .heightIn(min = 44.dp)
                             .bouncyClickable { selectedFilter = null }
                     ) {
+                        // C2: Box(contentAlignment=Center) здесь и так центрирует:
+                        // Surface пропускает min-высоту внутрь, Box берёт её как свою
+                        // и центрирует Text внутри (проверено по исходникам Box.kt).
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier.padding(horizontal = 12.dp)
@@ -329,17 +332,23 @@ fun TasksScreen(
                                     .bouncyClickable { selectedFilter = null }
                                     .testTag("reset_filter_btn")
                             ) {
-                                Text(
-                                    text = "СБРОСИТЬ ФИЛЬТР",
-                                    softWrap = false,
-                                    maxLines = 1,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = Color.White
-                                    ),
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                                )
+                                // C2: у Surface внутри Box(propagateMinConstraints=true)
+                                // без contentAlignment — голый Text вставал к верху
+                                // 48dp-слота. Box берёт min-высоту как свою и центрирует.
+                                // fillMaxWidth НЕ добавляем: кнопка wrap-content.
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = "СБРОСИТЬ ФИЛЬТР",
+                                        softWrap = false,
+                                        maxLines = 1,
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = Color.White
+                                        ),
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                                    )
+                                }
                             }
                         } else {
                             Text(

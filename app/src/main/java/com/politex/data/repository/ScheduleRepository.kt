@@ -3,6 +3,8 @@
 import com.politex.data.local.dao.LessonDao
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.network.MpkNetworkClient
+import com.politex.data.network.MpkScheduleParser
+import java.io.IOException
 import java.util.Calendar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -113,6 +115,88 @@ class ScheduleRepository(
             pruneOldLessons()
             Result.success(distinct.size + todayCached)
         }
+    }
+
+    /**
+     * O3b: догрузка уроков ВСЕХ групп колледжа на одну дату — из того же документа, что
+     * обычный синк. Нужна для «Подробнее — расписание кабинета»: в БД иначе лежат уроки только
+     * выбранной группы. Выбранную группу пользователя (currentGroupName в настройках) не трогает.
+     * Возвращает число записанных строк (0 — документ не найден/не разобран).
+     */
+    suspend fun syncDayAllGroups(
+        date: String,
+        dow: Int,
+        candidateGroups: List<String> = emptyList()
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        if (candidateGroups.isEmpty()) return@withContext Result.success(0)
+        val calendar = parseCalendarDate(date) ?: return@withContext Result.success(0)
+
+        val fetched = mutableListOf<LessonEntity>()
+        val triedUrls = mutableSetOf<String>()
+        var documentFound = false
+
+        try {
+            for ((url, _) in networkClient.generateCandidateDirectUrls(calendar)) {
+                if (!triedUrls.add(url)) continue
+                val bytes = networkClient.downloadFileBytes(url) ?: continue
+                if (bytes.isEmpty()) continue
+                documentFound = true
+                val parsed = MpkScheduleParser.parseFileAllGroups(bytes, date, candidateGroups)
+                if (parsed.isNotEmpty()) {
+                    fetched += parsed
+                    break
+                }
+            }
+
+            // Фолбэк на портал: тот же путь, что в fetchScheduleForGroup
+            if (fetched.isEmpty()) {
+                val documentUrls = MpkScheduleParser.extractDocumentUrls(portalHtml())
+                for (url in documentUrls) {
+                    if (!triedUrls.add(url)) continue
+                    val bytes = networkClient.downloadFileBytes(url) ?: continue
+                    if (bytes.isEmpty()) continue
+                    documentFound = true
+                    val parsed = MpkScheduleParser.parseFileAllGroups(bytes, date, candidateGroups)
+                    if (parsed.isNotEmpty()) fetched += parsed
+                }
+            }
+        } catch (e: Exception) {
+            return@withContext Result.failure(e)
+        }
+
+        if (fetched.isEmpty()) {
+            return@withContext if (documentFound) Result.success(0)
+            else Result.failure(IOException("Расписание на $date не опубликовано"))
+        }
+
+        // Ключ перезаписи — группа + дата (replaceForDate внутри replaceSyncedLessons)
+        val forDate = fetched
+            .filter { it.dateString == date }
+            .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
+            .groupBy { it.groupName }
+
+        var written = 0
+        for ((group, lessons) in forDate) {
+            replaceSyncedLessons(group, lessons)
+            written += lessons.size
+        }
+
+        pruneOldLessons()
+        Result.success(written)
+    }
+
+    private suspend fun portalHtml(): String {
+        val bytes = networkClient.downloadFileBytes(MpkNetworkClient.SCHEDULE_PORTAL_URL) ?: return ""
+        return String(bytes, Charsets.UTF_8)
+    }
+
+    /** Calendar из «dd.MM.yyyy» (день недели из строки не берём — в БД сравнения по epoch). */
+    private fun parseCalendarDate(date: String): Calendar? {
+        if (!DATE_DD_MM_YYYY.matches(date)) return null
+        val cal = Calendar.getInstance()
+        cal.clear()
+        cal.set(date.substring(6, 10).toInt(), date.substring(3, 5).toInt() - 1, date.substring(0, 2).toInt())
+        return cal
     }
 
     suspend fun pruneOldLessons(keepDays: Long = ARCHIVE_KEEP_DAYS) = withContext(Dispatchers.IO) {

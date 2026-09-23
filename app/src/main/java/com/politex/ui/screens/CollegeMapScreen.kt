@@ -47,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -188,9 +189,29 @@ fun CollegeMapScreen(
 
     // Т6: расписание выбранного кабинета на сегодня
     var roomScheduleFor by remember { mutableStateOf<String?>(null) }
+    // O3b: в БД лежат уроки только выбранной группы, поэтому расписание кабинета по всем
+    // группам появится лишь после догрузки дня целиком. Делаем это один раз на сессию
+    // экрана, не блокируя открытие диалога: сначала показываем что есть, потом дополняем.
+    var allGroupsSynced by remember { mutableStateOf(false) }
+    var roomReloadTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(roomScheduleFor, allGroupsSynced) {
+        if (roomScheduleFor != null && !allGroupsSynced && catalogCodes.isNotEmpty()) {
+            // Догружаем только если по дню пока мало данных (иначе сеть не трогаем)
+            val existing = runCatching {
+                scheduleRepository.getDistinctGroupsForDateOrDay(todayDateString, todayDow)
+            }.getOrDefault(emptyList())
+            if (existing.size < 2) {
+                runCatching { scheduleRepository.syncDayAllGroups(todayDateString, todayDow, catalogCodes) }
+                roomReloadTick++ // перечитать Flow кабинета с догруженными группами
+            }
+            allGroupsSynced = true
+        }
+    }
+
     val roomScheduleLessons by produceState<List<LessonEntity>>(
         initialValue = emptyList(),
-        key1 = roomScheduleFor
+        key1 = roomScheduleFor,
+        key2 = roomReloadTick
     ) {
         val room = roomScheduleFor ?: return@produceState
         runCatching {
@@ -1188,22 +1209,23 @@ private fun DrawScope.drawMap(
     val sortedFits = rawFits.values.toFloatArray().also { it.sort() }
     val medianFit = if (sortedFits.isEmpty()) 1f else sortedFits[sortedFits.size / 2]
 
-    // O3-a: абсолютный минимум высоты цифры (в экранных px изображения) — мелкие кабинеты больше не «сливаются».
-    // Низкий кламп по медиане давал ~7-9 px, где просветы штрихов забивал белый ореол.
-    val minNumberPx = minScreenPxPerDp * 15f
+    // C1: минимум читаемости цифры (в экранных px изображения). Ниже — номер не рисуем
+    // вовсе: лучше пусто, чем каша за рамкой. Раньше этот порог наоборот РАЗДУВАЛ цифру.
+    val minNumberPx = minScreenPxPerDp * 10f
 
     floor.rooms.forEach { r ->
         val layout = numberLayouts[r.id] ?: return@forEach
         if (r.number.isBlank()) return@forEach
         val raw = rawFits[r.id] ?: return@forEach
 
-        // сглаживание разброса: похожие кабинеты получают близкий размер шрифта
-        val damped = medianFit + (raw - medianFit) * 0.45f
-        val minFit = minNumberPx / layout.size.height.toFloat()
-        val loFit = maxOf(medianFit * 0.70f, minFit)
-        val hiFit = maxOf(medianFit * 1.35f, loFit)
-        val fit = damped.coerceIn(loFit, hiFit)
-        if (fit <= 0f) return@forEach
+        // C1: единый размер по этажу, никогда не больше влезающего (raw).
+        // Раньше loFit = maxOf(median*0.70, minFit) мог превышать raw, и coerceIn
+        // принудительно раздувал цифру — она вылезала за рамку кабинета.
+        val fit = roomNumberFit(
+            raw = raw,
+            median = medianFit,
+            minReadable = minNumberPx / layout.size.height.toFloat()
+        ) ?: return@forEach
 
         val cx = r.x * imgW
         val cy = r.y * imgH
@@ -1232,6 +1254,27 @@ private fun DrawScope.drawMap(
             )
         }
     }
+}
+
+/**
+ * C1: размер номера кабинета.
+ *
+ * Заказчик: цифры были разнокалиберные и вылезали за рамки кабинетов.
+ * Правила:
+ *  - [raw] — максимальный размер, при котором цифра ВЛЕЗАЕТ в кабинет (жёсткий потолок);
+ *  - база — [median] (единый размер по этажу), но не больше [raw];
+ *  - крупные кабинеты получают «немножечко больше» (до 115% медианы, всё ещё в пределах raw);
+ *  - мелкие — только уменьшаются, чтобы влезть;
+ *  - если даже [minReadable] не влезает — return null (номер не рисуем).
+ *
+ * Возвращает множитель масштаба или null, если номер рисовать не нужно.
+ */
+internal fun roomNumberFit(raw: Float, median: Float, minReadable: Float): Float? {
+    if (raw <= 0f || raw < minReadable) return null
+    val base = minOf(median, raw)
+    // Крупным кабинетам — небольшой запас, но строго не выше влезающего размера
+    val grown = minOf(base * 1.15f, raw)
+    return grown.coerceAtLeast(minReadable).coerceAtMost(raw)
 }
 
 private fun mapRes(floorId: String): Int = when (floorId) {
