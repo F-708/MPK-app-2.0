@@ -9,6 +9,7 @@ import com.politex.data.local.entity.StudentTaskEntity
 import com.politex.data.model.GroupInfo
 import com.politex.data.repository.ScheduleRepository
 import com.politex.data.repository.TaskRepository
+import com.politex.util.GroupCatalog
 import com.politex.util.GroupParser
 import com.politex.widget.WidgetUpdateHelper
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -58,7 +59,11 @@ data class AppUiState(
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = MpkDatabase.getInstance(application)
-    val scheduleRepository = ScheduleRepository(database.lessonDao())
+    val scheduleRepository = ScheduleRepository(
+        lessonDao = database.lessonDao(),
+        // Б3: каталог групп — чтобы один документ разбирался сразу по всем группам
+        catalogProvider = { GroupCatalog.load(application).all() }
+    )
     val taskRepository = TaskRepository(database.taskDao())
 
     val diagnosticInfo = scheduleRepository.diagnosticInfo
@@ -129,7 +134,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             _toastEvent.emit("Выбрана группа: ${parsed.canonicalName}")
-            syncSchedule(isAutoSync = false)
+            // Б3: после синка всех групп день обычно уже в Room — принудительный поход в
+            // сеть при каждой смене группы больше не нужен (заказчик жаловался на
+            // повторные скачивания при недоступном сайте).
+            if (!scheduleRepository.hasSchedule(parsed.canonicalName)) {
+                syncSchedule(isAutoSync = false)
+            }
         }
     }
 

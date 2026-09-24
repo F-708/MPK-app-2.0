@@ -15,6 +15,14 @@ private val DATE_DD_MM_YYYY = Regex("""\d{2}\.\d{2}\.\d{4}""")
 
 private const val ARCHIVE_KEEP_DAYS = 60L
 
+/**
+ * Б3: нужен ли поход на сайт за днём целиком. Уже разобранные 2+ группы — эвристика
+ * «день распарсен»: после обычного синка (он разбирает весь документ по каталогу)
+ * повторный запрос был бы лишним, а при недоступном сайте — просто ошибкой.
+ */
+internal fun shouldFetchDay(alreadyParsedGroups: Int, catalogSize: Int, force: Boolean): Boolean =
+    catalogSize > 0 && (force || alreadyParsedGroups < 2)
+
 internal fun isStaleDate(date: String, cutoffMs: Long): Boolean {
     if (!DATE_DD_MM_YYYY.matches(date)) return false
     val cal = Calendar.getInstance()
@@ -29,10 +37,66 @@ internal fun isStaleDate(date: String, cutoffMs: Long): Boolean {
 
 class ScheduleRepository(
     private val lessonDao: LessonDao,
-    private val networkClient: MpkNetworkClient = MpkNetworkClient()
+    private val networkClient: MpkNetworkClient = MpkNetworkClient(),
+
+    /**
+     * O3-b/Б3: каталог кодов групп колледжа для разбора документа по ВСЕМ группам за один
+     * проход. Пустой список (тесты, вызовы без контекста) — перебор не выполняется,
+     * синк работает ровно как раньше, по одной группе.
+     *
+     * ponytail: лямбда, а не Context — репозиторий создаётся в 6 местах (VM, карта,
+     * студенты), тащить в них контекст ради кэша расписания не стоит. Когда кэш
+     * понадобится вне Android — заменить на источник из assets-парсера.
+     */
+    private val catalogProvider: () -> List<String> = { emptyList() },
+
+    /** Предупреждаем перезапись, если каталог заметно устарел (см. syncScheduleFromWeb). */
+    private val nowProvider: () -> Long = { System.currentTimeMillis() }
 ) {
 
     val diagnosticInfo = networkClient.diagnosticInfo
+
+    // Кэш кодов групп: ассет читается один раз на процесс, а не на каждый синк.
+    @Volatile
+    private var cachedCatalog: List<String>? = null
+
+    private fun catalog(): List<String> =
+        cachedCatalog ?: catalogProvider().takeIf { it.isNotEmpty() }?.also { cachedCatalog = it } ?: emptyList()
+
+    /**
+     * Б3: один документ на дату разбирается сразу по всем группам колледжа и пишется в Room.
+     * После этого чужое расписание, расписание преподавателя и кабинет открываются офлайн —
+     * повторный поход на сайт не нужен (в т.ч. когда сайт недоступен из-за VPN).
+     *
+     * @param force false — не трогаем сайт, если по дате уже есть строки у 2+ групп
+     *              (эвристика «день уже распарсен целиком»).
+     */
+    suspend fun syncDayAllGroupsCached(
+        date: String,
+        dow: Int,
+        force: Boolean = false
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        val groups = catalog()
+        if (groups.isEmpty()) return@withContext Result.failure(IOException("Каталог групп пуст"))
+
+        val already = lessonDao.getDistinctGroupsForDateOrDay(date, dow).size
+        if (!shouldFetchDay(already, groups.size, force)) {
+            return@withContext Result.success(already)
+        }
+        syncDayAllGroups(date, dow, groups)
+    }
+
+    /**
+     * Б3: сколько групп уже разобрано на дату. Вызывающий код сравнивает с размером каталога,
+     * чтобы понять, нужна ли догрузка дня: >60% — «день распарсен», хвост добирается
+     * при открытии конкретного кабинета.
+     */
+    suspend fun parsedGroupsForDate(date: String, dow: Int): Int = withContext(Dispatchers.IO) {
+        lessonDao.getDistinctGroupsForDateOrDay(date, dow).size
+    }
+
+    /** Размер каталога групп — для эвристики «день распарсен целиком». */
+    fun catalogSize(): Int = catalog().size
 
     fun getLessonsForDay(groupName: String, dayOfWeek: Int): Flow<List<LessonEntity>> {
         return lessonDao.getLessonsForDay(groupName, dayOfWeek).flowOn(Dispatchers.IO)
@@ -90,30 +154,73 @@ class ScheduleRepository(
         }
 
         val fetched = mutableListOf<LessonEntity>()
+        var fetchFailed = false
         if (needTomorrow) {
-            fetched += networkClient
-                .fetchScheduleForGroup(groupName, tomorrow)
-                .getOrDefault(emptyList())
+            networkClient.fetchScheduleForGroup(groupName, tomorrow)
+                .onSuccess { fetched += it }
+                .onFailure { fetchFailed = true }
+        }
+        if (needToday) {
+            networkClient.fetchScheduleForGroup(groupName)
+                .onSuccess { fetched += it }
+                .onFailure { fetchFailed = true }
         }
 
-        return@withContext if (needToday) {
-            networkClient.fetchScheduleForGroup(groupName).mapCatching { todayLessons ->
-                val distinct = (fetched + todayLessons)
-                    .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
-                if (distinct.isNotEmpty()) {
-                    replaceSyncedLessons(groupName, distinct)
-                }
+        // Б3: помимо своей группы разбираем документ по всем группам колледжа из того же
+        // файла (parseFileAllGroups) и пишем в Room. Тогда чужое расписание, преподаватели
+        // и кабинеты открываются офлайн: сайт больше не нужен там, где раньше был обязателен
+        // (у заказчика VPN без доступа к сайту колледжа ломал именно эти экраны).
+        val allGroups = catalog()
+        if (allGroups.isNotEmpty()) {
+            for (day in listOf(tomorrow to needTomorrow, today to needToday)) {
+                val (calendar, needed) = day
+                if (!needed) continue
+                val date = formatDate(calendar)
+                fetched += runCatching {
+                    fetchAllGroupsForDate(calendar, date, allGroups)
+                }.getOrDefault(emptyList())
+            }
+        }
+
+        val distinct = fetched
+            .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
+        return@withContext when {
+            distinct.isNotEmpty() -> {
+                writeByGroup(distinct)
                 pruneOldLessons()
-                distinct.size
+                Result.success(distinct.size)
             }
-        } else {
-            val distinct = fetched
-                .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
-            if (distinct.isNotEmpty()) {
-                replaceSyncedLessons(groupName, distinct)
-            }
-            pruneOldLessons()
-            Result.success(distinct.size + todayCached)
+            // Сеть отвалилась — честная ошибка (тост «проверьте интернет»).
+            // Пустая успешная загрузка («расписание ещё не опубликовано») ошибкой не
+            // считается: success(0) → тост «новых данных пока нет», как и раньше.
+            fetchFailed -> Result.failure(IOException("Не удалось получить расписание"))
+            else -> Result.success(0)
+        }
+    }
+
+    /**
+     * Б3: разбор одного документа на дату по всем группам каталога. Отдельно от
+     * [syncDayAllGroups] (у того есть фолбэк на портал), потому что здесь вызывающий уже
+     * ходил в сеть за своей группой — второй проход по порталу был бы лишним запросом.
+     */
+    private suspend fun fetchAllGroupsForDate(
+        calendar: Calendar,
+        date: String,
+        candidateGroups: List<String>
+    ): List<LessonEntity> {
+        for ((url, _) in networkClient.generateCandidateDirectUrls(calendar)) {
+            val bytes = networkClient.downloadFileBytes(url) ?: continue
+            if (bytes.isEmpty()) continue
+            val parsed = MpkScheduleParser.parseFileAllGroups(bytes, date, candidateGroups)
+            if (parsed.isNotEmpty()) return parsed
+        }
+        return emptyList()
+    }
+
+    /** Запись разобранного дня, сгруппированного по группам (одна транзакция на группу). */
+    private suspend fun writeByGroup(lessons: List<LessonEntity>) {
+        lessons.groupBy { it.groupName }.forEach { (group, groupLessons) ->
+            if (group.isNotBlank()) replaceSyncedLessons(group, groupLessons)
         }
     }
 

@@ -134,10 +134,12 @@ fun CollegeMapScreen(
     val context = LocalContext.current
     val mapData = remember { CollegeMapData.load(context) }
 
-    // Т5: поиск по группе — репозиторий, как на остальных экранах
+    // Т5: поиск по группе — репозиторий, как на остальных экранах.
+    // Б3: каталог групп подключён, иначе разбор «кабинет по всем группам» не перебирает группы.
     val scheduleRepository = remember {
         ScheduleRepository(
-            com.politex.data.local.MpkDatabase.getInstance(context).lessonDao()
+            lessonDao = com.politex.data.local.MpkDatabase.getInstance(context).lessonDao(),
+            catalogProvider = { com.politex.util.GroupCatalog.load(context).all() }
         )
     }
     val today = remember { Calendar.getInstance() }
@@ -237,14 +239,10 @@ fun CollegeMapScreen(
         if (roomScheduleFor == null || catalogCodes.isEmpty()) return@LaunchedEffect
         val alreadySynced = if (roomDialogTomorrow) syncedTomorrow else syncedToday
         if (alreadySynced) return@LaunchedEffect
-        // Догружаем только если по дню пока мало данных (иначе сеть не трогаем)
-        val existing = runCatching {
-            scheduleRepository.getDistinctGroupsForDateOrDay(dialogDateString, dialogDow)
-        }.getOrDefault(emptyList())
-        if (existing.size < 2) {
-            runCatching { scheduleRepository.syncDayAllGroups(dialogDateString, dialogDow, catalogCodes) }
-            roomReloadTick++ // перечитать Flow кабинета с догруженными группами
-        }
+        // Б3: syncDayAllGroupsCached сам решает, нужен ли сайт — если день уже разобран
+        // по большинству групп (после обычного синка это норма), сети не будет вовсе.
+        runCatching { scheduleRepository.syncDayAllGroupsCached(dialogDateString, dialogDow) }
+        roomReloadTick++ // перечитать Flow кабинета с догруженными группами
         if (roomDialogTomorrow) syncedTomorrow = true else syncedToday = true
     }
 
