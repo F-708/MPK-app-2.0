@@ -155,30 +155,30 @@ class ScheduleRepository(
 
         val fetched = mutableListOf<LessonEntity>()
         var fetchFailed = false
-        if (needTomorrow) {
-            networkClient.fetchScheduleForGroup(groupName, tomorrow)
-                .onSuccess { fetched += it }
-                .onFailure { fetchFailed = true }
-        }
-        if (needToday) {
-            networkClient.fetchScheduleForGroup(groupName)
-                .onSuccess { fetched += it }
-                .onFailure { fetchFailed = true }
-        }
 
-        // Б3: помимо своей группы разбираем документ по всем группам колледжа из того же
-        // файла (parseFileAllGroups) и пишем в Room. Тогда чужое расписание, преподаватели
-        // и кабинеты открываются офлайн: сайт больше не нужен там, где раньше был обязателен
-        // (у заказчика VPN без доступа к сайту колледжа ломал именно эти экраны).
+        // Б3: каталог есть → день качается ОДИН раз и разбирается сразу по всем группам
+        // (parseFileAllGroups). Двойной заход (своя группа + все группы) означал бы
+        // дважды скачанный и дважды разобранный один и тот же документ на дату.
+        // Каталога нет (тесты, вызов без контекста) → прежний путь по одной группе.
         val allGroups = catalog()
+        val days = listOf(tomorrow to needTomorrow, today to needToday).filter { it.second }
         if (allGroups.isNotEmpty()) {
-            for (day in listOf(tomorrow to needTomorrow, today to needToday)) {
-                val (calendar, needed) = day
-                if (!needed) continue
+            for ((calendar, _) in days) {
                 val date = formatDate(calendar)
-                fetched += runCatching {
-                    fetchAllGroupsForDate(calendar, date, allGroups)
-                }.getOrDefault(emptyList())
+                runCatching { fetchAllGroupsForDate(calendar, date, allGroups) }
+                    .onSuccess { fetched += it }
+                    .onFailure { fetchFailed = true }
+            }
+        } else {
+            if (needTomorrow) {
+                networkClient.fetchScheduleForGroup(groupName, tomorrow)
+                    .onSuccess { fetched += it }
+                    .onFailure { fetchFailed = true }
+            }
+            if (needToday) {
+                networkClient.fetchScheduleForGroup(groupName)
+                    .onSuccess { fetched += it }
+                    .onFailure { fetchFailed = true }
             }
         }
 
@@ -196,6 +196,30 @@ class ScheduleRepository(
             fetchFailed -> Result.failure(IOException("Не удалось получить расписание"))
             else -> Result.success(0)
         }
+    }
+
+    /**
+     * Б3: синк конкретной даты (воркер уведомлений: «вышло расписание на завтра»).
+     * Качает один документ и разбирает его по всем группам каталога, пишет в Room.
+     * Возвращает уроки ТОЛЬКО запрошенной группы — их воркер показывает в уведомлении.
+     * Без каталога (тесты) откатывается к разбору одной группы.
+     */
+    suspend fun syncScheduleForDate(
+        groupName: String,
+        targetCalendar: Calendar
+    ): Result<List<LessonEntity>> = withContext(Dispatchers.IO) {
+        val allGroups = catalog()
+        if (allGroups.isEmpty()) return@withContext networkClient.fetchScheduleForGroup(groupName, targetCalendar)
+
+        val date = formatDate(targetCalendar)
+        val forGroup = runCatching { fetchAllGroupsForDate(targetCalendar, date, allGroups) }
+        if (forGroup.isFailure) return@withContext Result.failure(forGroup.exceptionOrNull()!!)
+        val all = forGroup.getOrDefault(emptyList())
+        if (all.isNotEmpty()) {
+            writeByGroup(all)
+            pruneOldLessons()
+        }
+        Result.success(all.filter { it.groupName == groupName })
     }
 
     /**

@@ -18,10 +18,22 @@ data class Teacher(
 
 class TeachersRepository(private val context: Context) {
 
-    fun loadTeachers(): List<Teacher> = try {
+    /**
+     * Б13: CSV преподавателей — неизменяемый ассет, а читался и парсился при каждом
+     * вызове, в том числе прямо из тел композаблов и на каждой рекомпозиции-реминдере
+     * (6 мест). Кэш один на процесс: тот же приём, что в ScheduleScreen для фамилий.
+     */
+    fun loadTeachers(): List<Teacher> = cached ?: parseTeachers().also { cached = it }
+
+    private fun parseTeachers(): List<Teacher> = try {
         parseCsv(context.assets.open("teachers.csv"))
     } catch (_: Exception) {
         emptyList()
+    }
+
+    private companion object {
+        @Volatile
+        private var cached: List<Teacher>? = null
     }
 
     private fun parseCsv(stream: InputStream): List<Teacher> {

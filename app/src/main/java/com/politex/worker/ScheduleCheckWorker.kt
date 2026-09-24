@@ -6,6 +6,7 @@ import androidx.work.WorkerParameters
 import com.politex.data.local.MpkDatabase
 import com.politex.data.network.MpkNetworkClient
 import com.politex.data.repository.ScheduleRepository
+import com.politex.util.GroupCatalog
 import com.politex.util.GroupParser
 import com.politex.util.NotificationHelper
 import com.politex.widget.WidgetUpdateHelper
@@ -80,14 +81,20 @@ class ScheduleCheckWorker(
         }
 
         val networkClient = MpkNetworkClient()
-        val result = networkClient.fetchScheduleForGroup(groupName, targetCalendar)
+        val db = MpkDatabase.getInstance(applicationContext)
+        // Б3: тот же репозиторий, что у приложения — документ разбирается сразу по всем
+        // группам каталога и пишется в Room. Раньше воркер качал день одной группы,
+        // поэтому фоновая догрузка не помогала открыть чужую группу без сети.
+        val repository = ScheduleRepository(
+            lessonDao = db.lessonDao(),
+            networkClient = networkClient,
+            catalogProvider = { GroupCatalog.load(applicationContext).all() }
+        )
+        val result = repository.syncScheduleForDate(groupName, targetCalendar)
 
         result.fold(
             onSuccess = { allLessons ->
                 if (allLessons.isNotEmpty()) {
-                    val db = MpkDatabase.getInstance(applicationContext)
-                    ScheduleRepository(db.lessonDao()).replaceSyncedLessons(groupName, allLessons)
-
                     WidgetUpdateHelper.updateAllWidgets(applicationContext)
 
                     // Строки перештампованы реальными датами (парсер): фильтр только по дате
