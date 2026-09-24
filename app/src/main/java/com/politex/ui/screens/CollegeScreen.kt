@@ -224,6 +224,9 @@ fun CollegeScreen(
             OtherPage.MAP -> CollegeMapScreen(
                 initialRoom = mapRoom,
                 fromRoom = mapFromRoom,
+                // Б8: запоминаем выбранный кабинет на уровне CollegeScreen — иначе переход
+                // в карточку преподавателя и назад открывал карту со старым кабинетом
+                onRoomChanged = { mapRoom = it },
                 onOpenTeacher = { name ->
                     // Т6: преподаватель из расписания кабинета — тот же механизм, что из вкладки «Расписание»
                     scope.launch {

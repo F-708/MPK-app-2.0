@@ -124,6 +124,11 @@ fun CollegeMapScreen(
 
     // Точка входа из расписания (кабинет-«откуда»); маршруты удалены, параметр оставлен для совместимости вызовов
     fromRoom: String? = null,
+
+    // Выбранный кабинет поднимаем наверх (CollegeScreen.mapRoom): переход в карточку
+    // преподавателя уничтожает этот экран вместе с его remember-состоянием, и без
+    // синхронизации возврат «назад» открывал карту со СТАРЫМ кабинетом.
+    onRoomChanged: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -181,40 +186,77 @@ fun CollegeMapScreen(
     val scope = rememberCoroutineScope()
 
     var searchFailed by remember { mutableStateOf(false) }
-    var target by remember { mutableStateOf(initialRoom?.trim().orEmpty()) }
+    val initialTarget = remember(initialRoom) { initialRoom?.trim().orEmpty() }
+    // Переоткрытие экрана с тем же кабинетом (возврат с карточки преподавателя) не должно
+    // возвращать пользователя к кабинету, который он уже сменил тапом по карте.
+    var target by remember(initialTarget) { mutableStateOf(initialTarget) }
+    LaunchedEffect(target) { onRoomChanged(target) }
     var floorId by remember {
         mutableStateOf(CollegeMap.floorForRoom(initialRoom.orEmpty())?.id ?: "1")
     }
 
-    // Т6: расписание выбранного кабинета на сегодня
+    // Т6: расписание выбранного кабинета
     var roomScheduleFor by remember { mutableStateOf<String?>(null) }
+    // Б8: диалог кабинета показывает сегодня или завтра — по умолчанию сегодня
+    var roomDialogTomorrow by remember { mutableStateOf(false) }
     // O3b: в БД лежат уроки только выбранной группы, поэтому расписание кабинета по всем
     // группам появится лишь после догрузки дня целиком. Делаем это один раз на сессию
     // экрана, не блокируя открытие диалога: сначала показываем что есть, потом дополняем.
-    var allGroupsSynced by remember { mutableStateOf(false) }
+    // Б8: догрузка дня по всем группам — отдельно для сегодня и для завтра
+    var syncedToday by remember { mutableStateOf(false) }
+    var syncedTomorrow by remember { mutableStateOf(false) }
     var roomReloadTick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(roomScheduleFor, allGroupsSynced) {
-        if (roomScheduleFor != null && !allGroupsSynced && catalogCodes.isNotEmpty()) {
-            // Догружаем только если по дню пока мало данных (иначе сеть не трогаем)
-            val existing = runCatching {
-                scheduleRepository.getDistinctGroupsForDateOrDay(todayDateString, todayDow)
-            }.getOrDefault(emptyList())
-            if (existing.size < 2) {
-                runCatching { scheduleRepository.syncDayAllGroups(todayDateString, todayDow, catalogCodes) }
-                roomReloadTick++ // перечитать Flow кабинета с догруженными группами
-            }
-            allGroupsSynced = true
+
+    val tomorrowCal = remember(today) {
+        (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
+    }
+    val tomorrowDateString = remember(tomorrowCal) {
+        "%02d.%02d.%04d".format(
+            tomorrowCal.get(Calendar.DAY_OF_MONTH),
+            tomorrowCal.get(Calendar.MONTH) + 1,
+            tomorrowCal.get(Calendar.YEAR)
+        )
+    }
+    val tomorrowDow = remember(tomorrowCal) {
+        when (tomorrowCal.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.MONDAY -> 1
+            Calendar.TUESDAY -> 2
+            Calendar.WEDNESDAY -> 3
+            Calendar.THURSDAY -> 4
+            Calendar.FRIDAY -> 5
+            Calendar.SATURDAY -> 6
+            else -> 7
         }
+    }
+
+    // Активная дата диалога: завтра — когда переключатель в положении «Завтра»
+    val dialogDateString = if (roomDialogTomorrow) tomorrowDateString else todayDateString
+    val dialogDow = if (roomDialogTomorrow) tomorrowDow else todayDow
+
+    LaunchedEffect(roomScheduleFor, roomDialogTomorrow, syncedToday, syncedTomorrow) {
+        if (roomScheduleFor == null || catalogCodes.isEmpty()) return@LaunchedEffect
+        val alreadySynced = if (roomDialogTomorrow) syncedTomorrow else syncedToday
+        if (alreadySynced) return@LaunchedEffect
+        // Догружаем только если по дню пока мало данных (иначе сеть не трогаем)
+        val existing = runCatching {
+            scheduleRepository.getDistinctGroupsForDateOrDay(dialogDateString, dialogDow)
+        }.getOrDefault(emptyList())
+        if (existing.size < 2) {
+            runCatching { scheduleRepository.syncDayAllGroups(dialogDateString, dialogDow, catalogCodes) }
+            roomReloadTick++ // перечитать Flow кабинета с догруженными группами
+        }
+        if (roomDialogTomorrow) syncedTomorrow = true else syncedToday = true
     }
 
     val roomScheduleLessons by produceState<List<LessonEntity>>(
         initialValue = emptyList(),
         key1 = roomScheduleFor,
-        key2 = roomReloadTick
+        key2 = roomReloadTick,
+        key3 = dialogDateString
     ) {
         val room = roomScheduleFor ?: return@produceState
         runCatching {
-            scheduleRepository.getLessonsForRoomOnDate(room, todayDateString, todayDow)
+            scheduleRepository.getLessonsForRoomOnDate(room, dialogDateString, dialogDow)
         }.getOrNull()?.collect { value = it }
     }
     // O3-b2: текущая минута тикает раз в минуту — метка «СЕЙЧАС» переезжает на новую пару без переоткрытия диалога
@@ -230,8 +272,9 @@ fun CollegeMapScreen(
                 .let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) }
         }
     }
-    val roomScheduleCurrentLesson = remember(nowMinutes, todayDow) {
-        currentRoomLessonNumber(nowMinutes, todayDow)
+    // «СЕЙЧАС» — только для сегодняшнего дня: у завтра идущего урока быть не может
+    val roomScheduleCurrentLesson = remember(nowMinutes, dialogDow, roomDialogTomorrow) {
+        if (roomDialogTomorrow) null else currentRoomLessonNumber(nowMinutes, dialogDow)
     }
 
     val floor: FloorMap = remember(floorId, mapData) { mapData.floor(floorId) }
@@ -371,9 +414,12 @@ fun CollegeMapScreen(
         RoomScheduleDialog(
             roomNumber = roomNumber,
             // O3-b: в заголовке — сама дата и день недели (без версии APK из строкового ресурса)
-            dateTitle = "$todayDateString, ${roomDayTitle(todayDow)}",
-            lessons = filterRoomLessonsForDate(roomScheduleLessons, roomNumber, todayDateString),
+            dateTitle = "$dialogDateString, ${roomDayTitle(dialogDow)}",
+            lessons = filterRoomLessonsForDate(roomScheduleLessons, roomNumber, dialogDateString),
             currentLessonNumber = roomScheduleCurrentLesson,
+            // Б8: заказчик — «нужно посмотреть на сегодня, так и на завтра»
+            tomorrowSelected = roomDialogTomorrow,
+            onDayChange = { roomDialogTomorrow = it },
             onTeacherClick = onOpenTeacher,
             onDismissRequest = { roomScheduleFor = null }
         )

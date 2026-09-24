@@ -107,6 +107,9 @@ fun RoomScheduleDialog(
     currentLessonNumber: Int?,
     onTeacherClick: (String) -> Unit,
     onDismissRequest: () -> Unit,
+    // Б8: «сегодня»/«завтра» — заказчик просил смотреть кабинет на оба дня
+    tomorrowSelected: Boolean = false,
+    onDayChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     AlertDialog(
@@ -136,9 +139,9 @@ fun RoomScheduleDialog(
                     }
                 }
                 Spacer(modifier = Modifier.width(10.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Кабинет $roomNumber — сегодня",
+                        text = "Кабинет $roomNumber",
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = ColorTextTitle)
                     )
                     if (dateTitle.isNotBlank()) {
@@ -148,7 +151,11 @@ fun RoomScheduleDialog(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.width(8.dp))
+                DayToggle(
+                    tomorrowSelected = tomorrowSelected,
+                    onDayChange = onDayChange
+                )
                 IconButton(
                     onClick = onDismissRequest,
                     // D4: хитбокс крестика 48dp
@@ -164,7 +171,7 @@ fun RoomScheduleDialog(
         },
         text = {
             if (lessons.isEmpty()) {
-                RoomScheduleEmptyState()
+                RoomScheduleEmptyState(tomorrow = tomorrowSelected)
             } else {
                 val groupedLessons = remember(lessons) { groupRoomLessonsByNumber(lessons) }
                 LazyColumn(
@@ -202,11 +209,66 @@ fun RoomScheduleDialog(
 }
 
 @Composable
-private fun RoomScheduleEmptyState() {
+private fun RoomScheduleEmptyState(tomorrow: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        RoomScheduleEmptyContent(tomorrow = tomorrow)
+    }
+}
+
+/**
+ * Б8: переключатель «Сегодня/Завтра» в шапке диалога кабинета — тот же визуальный
+ * язык, что у ячеек дня в расписании (выбранная ячейка залита акцентом).
+ */
+@Composable
+private fun DayToggle(
+    tomorrowSelected: Boolean,
+    onDayChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.testTag("room_day_toggle"),
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        listOf(false to "СЕГОДНЯ", true to "ЗАВТРА").forEach { (isTomorrow, title) ->
+            val selected = tomorrowSelected == isTomorrow
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = if (selected) ColorBrandFill else ColorBgMain,
+                border = BorderStroke(1.dp, if (selected) ColorBrandFill else ColorBorderLight),
+                modifier = Modifier
+                    .heightIn(min = 40.dp)
+                    .bouncyClickable(scaleDown = 0.97f) { onDayChange(isTomorrow) }
+                    .testTag(if (isTomorrow) "room_day_tomorrow" else "room_day_today")
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                ) {
+                    Text(
+                        text = title,
+                        softWrap = false,
+                        maxLines = 1,
+                        style = TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = if (selected) androidx.compose.ui.graphics.Color.White else ColorTextMuted
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoomScheduleEmptyContent(tomorrow: Boolean) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Surface(
@@ -225,7 +287,11 @@ private fun RoomScheduleEmptyState() {
         }
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "Нет занятий в этом кабинете сегодня",
+            text = if (tomorrow) {
+                "Нет занятий в этом кабинете завтра"
+            } else {
+                "Нет занятий в этом кабинете сегодня"
+            },
             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
