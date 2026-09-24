@@ -62,7 +62,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val scheduleRepository = ScheduleRepository(
         lessonDao = database.lessonDao(),
         // Б3: каталог групп — чтобы один документ разбирался сразу по всем группам
-        catalogProvider = { GroupCatalog.load(application).all() }
+        catalogProvider = { GroupCatalog.load(application).all() },
+        // Офлайн-расписание преподавателей (своя таблица, см. TeacherLessonEntity)
+        teacherLessonDao = database.teacherLessonDao()
     )
     val taskRepository = TaskRepository(database.taskDao())
 

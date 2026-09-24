@@ -1,7 +1,9 @@
 ﻿package com.politex.data.repository
 
 import com.politex.data.local.dao.LessonDao
+import com.politex.data.local.dao.TeacherLessonDao
 import com.politex.data.local.entity.LessonEntity
+import com.politex.data.local.entity.TeacherLessonEntity
 import com.politex.data.network.MpkNetworkClient
 import com.politex.data.network.MpkScheduleParser
 import java.io.IOException
@@ -60,7 +62,13 @@ class ScheduleRepository(
      * студенты), тащить в них контекст ради кэша расписания не стоит. Когда кэш
      * понадобится вне Android — заменить на источник из assets-парсера.
      */
-    private val catalogProvider: () -> List<String> = { emptyList() }
+    private val catalogProvider: () -> List<String> = { emptyList() },
+
+    /**
+     * Расписание преподавателей живёт в своей таблице. DAO необязателен: тесты и вызовы
+     * без контекста не имеют базы, и тогда офлайн-путь просто не используется.
+     */
+    private val teacherLessonDao: TeacherLessonDao? = null
 ) {
 
     val diagnosticInfo = networkClient.diagnosticInfo
@@ -212,6 +220,12 @@ class ScheduleRepository(
         return@withContext when {
             finalLessons.isNotEmpty() -> {
                 writeByGroup(finalLessons)
+                // Б3: заодно кэшируем расписание преподавателей тех же дней — тогда карточка
+                // преподавателя открывается офлайн, как группа и кабинет. Ошибка этой
+                // догрузки не должна портить основной результат: она вспомогательная.
+                days.forEach { (calendar, _) ->
+                    runCatching { syncTeacherScheduleForDate(calendar) }
+                }
                 pruneOldLessons()
                 Result.success(finalLessons.size)
             }
@@ -303,6 +317,82 @@ class ScheduleRepository(
         lessons.groupBy { it.groupName }.forEach { (group, groupLessons) ->
             if (group.isNotBlank()) replaceSyncedLessons(group, groupLessons)
         }
+    }
+
+    // --- Расписание преподавателей: офлайн-кэш ---
+
+    /**
+     * Один документ «расписание преподавателей» качается и разбирается в базу.
+     *
+     * Раньше карточка преподавателя качала документ при каждом открытии (кэш жил
+     * только в памяти экрана), поэтому при недоступном сайте — например, включён VPN —
+     * расписание преподавателя не открывалось вовсе. Теперь документ дня лежит в
+     * `teacher_lessons` и читается оттуда.
+     *
+     * @param force true — перечитать даже если день уже в базе
+     */
+    suspend fun syncTeacherScheduleForDate(
+        targetCalendar: Calendar,
+        force: Boolean = false
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        val dao = teacherLessonDao ?: return@withContext Result.success(0)
+        val date = formatDate(targetCalendar)
+
+        if (!force && dao.getPresentDates(listOf(date)).contains(date)) {
+            return@withContext Result.success(
+                dao.getTeachersOnDate(date).size
+            )
+        }
+
+        val fetched = networkClient.fetchTeacherSchedule(targetCalendar)
+        val parsedAll = fetched.getOrElse { return@withContext Result.failure(it) }
+        if (parsedAll.isEmpty()) return@withContext Result.success(0)
+
+        // День документов не всегда распознаётся по заголовку; тогда берём день недели
+        // запрошенной даты — иначе строки легли бы под dayOfWeek = 0 и вкладка
+        // «Расписание» показывала бы их под любой датой (это чинил O7).
+        val requestedDow = MpkScheduleParser.dowOfCalendar(targetCalendar)
+        val docDow = parsedAll.values.firstOrNull()?.firstOrNull()?.dayOfWeek ?: 0
+        // Документ другого дня в базу не пишем: иначе под запрошенной датой окажется
+        // расписание чужого дня
+        if (docDow != 0 && docDow != requestedDow) {
+            return@withContext Result.failure(IOException("Документ за другой день"))
+        }
+
+        val rows = parsedAll.flatMap { (rawName, slots) ->
+            val surname = TeacherInsights.surnameOf(rawName)
+            if (surname.isBlank()) emptyList()
+            else slots.map { slot ->
+                TeacherLessonEntity(
+                    teacherName = rawName.trim(),
+                    surnameKey = surname,
+                    dateString = date,
+                    dayOfWeek = if (slot.dayOfWeek != 0) slot.dayOfWeek else requestedDow,
+                    lessonNumber = slot.lessonNumber,
+                    groups = slot.groups.joinToString(", "),
+                    subject = slot.subject,
+                    room = slot.room
+                )
+            }
+        }.distinctBy { "${it.surnameKey}_${it.lessonNumber}_${it.room}_${it.subject}" }
+
+        if (rows.isNotEmpty()) dao.replaceForDate(date, rows)
+        Result.success(rows.size)
+    }
+
+    /** Занятия преподавателя на дату из офлайн-кэша (пусто — нет данных этого дня). */
+    suspend fun getTeacherLessonsForDate(
+        teacherSurname: String,
+        dateString: String
+    ): List<TeacherLessonEntity> = withContext(Dispatchers.IO) {
+        val dao = teacherLessonDao ?: return@withContext emptyList()
+        dao.getForSurnameOnDate(teacherSurname, dateString)
+    }
+
+    /** Есть ли в базе расписание преподавателей на дату (чтобы не ходить в сеть). */
+    suspend fun hasTeacherScheduleForDate(dateString: String): Boolean = withContext(Dispatchers.IO) {
+        val dao = teacherLessonDao ?: return@withContext false
+        dao.getPresentDates(listOf(dateString)).isNotEmpty()
     }
 
     /**

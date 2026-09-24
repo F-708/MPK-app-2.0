@@ -208,6 +208,8 @@ fun CollegeScreen(
                         teacher = teacher,
                         groupInfo = groupInfo,
                         scheduleRepository = scheduleRepository,
+                        teacherLessonDao = com.politex.data.local.MpkDatabase
+                            .getInstance(context).teacherLessonDao(),
                         // Б3: кабинет в расписании преподавателя ведёт на ту же карту,
                         // что и кабинет из своего расписания (раньше надпись была мёртвой)
                         onOpenRoom = { room ->
@@ -1108,6 +1110,7 @@ private fun TeacherCardPageWrapper(
     teacher: Teacher,
     groupInfo: GroupInfo,
     scheduleRepository: ScheduleRepository,
+    teacherLessonDao: com.politex.data.local.dao.TeacherLessonDao,
     onOpenRoom: (String) -> Unit,
     onBack: () -> Unit
 ) {
@@ -1126,6 +1129,7 @@ private fun TeacherCardPageWrapper(
         subjectsFromSchedule = insights.subjects(teacher.name),
         isActive = insights.isActive(teacher.name),
         lessonsWithGroup = insights.lessonCount(teacher.name),
+        teacherLessonDao = teacherLessonDao,
         onOpenRoom = onOpenRoom,
         onBack = onBack
     )
@@ -1138,6 +1142,7 @@ private fun TeacherCardPage(
     subjectsFromSchedule: List<String>,
     isActive: Boolean,
     lessonsWithGroup: Int,
+    teacherLessonDao: com.politex.data.local.dao.TeacherLessonDao? = null,
     onOpenRoom: (String) -> Unit = {},
     onBack: () -> Unit
 ) {
@@ -1244,7 +1249,7 @@ private fun TeacherCardPage(
             0 -> AboutTeacherTab(
                 teacher, isActive, lessonsWithGroup, roomsFromSchedule, subjectsFromSchedule, onOpenRoom
             )
-            1 -> TeacherScheduleTab(teacher, onOpenRoom)
+            1 -> TeacherScheduleTab(teacher, teacherLessonDao, onOpenRoom)
         }
     }
 }
@@ -1420,10 +1425,23 @@ private fun AboutTeacherTab(
 }
 
 @Composable
-private fun TeacherScheduleTab(teacher: Teacher, onOpenRoom: (String) -> Unit = {}) {
+private fun TeacherScheduleTab(
+    teacher: Teacher,
+    teacherLessonDao: com.politex.data.local.dao.TeacherLessonDao? = null,
+    onOpenRoom: (String) -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val client = remember { com.politex.data.network.MpkNetworkClient() }
+    // Офлайн-путь: тот же репозиторий, что у приложения, — читает из teacher_lessons
+    val offlineRepository = remember(teacherLessonDao) {
+        teacherLessonDao?.let {
+            com.politex.data.repository.ScheduleRepository(
+                lessonDao = com.politex.data.local.MpkDatabase.getInstance(context).lessonDao(),
+                teacherLessonDao = it
+            )
+        }
+    }
 
     var dayOffset by rememberSaveable { mutableIntStateOf(0) }
     var showCalendar by remember { mutableStateOf(false) }
@@ -1452,12 +1470,51 @@ private fun TeacherScheduleTab(teacher: Teacher, onOpenRoom: (String) -> Unit = 
     LaunchedEffect(teacher.name, dayOffset, customDate) {
         val dateKey = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
             .format(targetCalendar.time)
+
+        /** Занятия из базы → слоты для UI. Пустой список означает «этого дня в базе нет». */
+        suspend fun fromDatabase() = offlineRepository
+            ?.getTeacherLessonsForDate(surname, dateKey)
+            .orEmpty()
+            .filter { it.dayOfWeek == selectedDateDow || it.dayOfWeek == 0 }
+            .map {
+                com.politex.data.network.TeacherSlot(
+                    lessonNumber = it.lessonNumber,
+                    groups = it.groups.split(", ").filter { g -> g.isNotBlank() },
+                    subject = it.subject,
+                    room = it.room,
+                    dayOfWeek = it.dayOfWeek
+                )
+            }
+
+        if (offlineRepository != null) {
+            // Офлайн-режим: источник истины — база. День уже разобран синком → сети нет.
+            errorMessage = ""
+            var result = fromDatabase()
+            if (result.isEmpty()) {
+                loading = true
+                offlineRepository.syncTeacherScheduleForDate(targetCalendar).fold(
+                    onSuccess = { result = fromDatabase() },
+                    onFailure = { e ->
+                        errorMessage = when {
+                            e.message?.contains("не найден") == true ->
+                                "Расписание на $dateKey ещё не опубликовано"
+                            else -> "Не удалось загрузить расписание (проверьте интернет)"
+                        }
+                    }
+                )
+                loading = false
+            }
+            slots = result
+            return@LaunchedEffect
+        }
+
+        // Без базы (тесты, вызов без DAO) — прежний путь через сетевой кэш экрана
         val parsedAll = cache[dateKey] ?: run {
             loading = true
             errorMessage = ""
-            val result = client.fetchTeacherSchedule(targetCalendar)
+            val fetched = client.fetchTeacherSchedule(targetCalendar)
             loading = false
-            result.fold(
+            fetched.fold(
                 onSuccess = { parsed -> cache[dateKey] = parsed; parsed },
                 onFailure = { e ->
                     errorMessage = when {
@@ -1490,7 +1547,8 @@ private fun TeacherScheduleTab(teacher: Teacher, onOpenRoom: (String) -> Unit = 
             groupName = "",
             scheduleRepository = com.politex.data.repository.ScheduleRepository(
                 lessonDao = com.politex.data.local.MpkDatabase.getInstance(context).lessonDao(),
-                catalogProvider = { com.politex.util.GroupCatalog.load(context).all() }
+                catalogProvider = { com.politex.util.GroupCatalog.load(context).all() },
+                teacherLessonDao = com.politex.data.local.MpkDatabase.getInstance(context).teacherLessonDao()
             ),
             onDismiss = { showCalendar = false },
             onDateSelected = { _, dateStr ->
