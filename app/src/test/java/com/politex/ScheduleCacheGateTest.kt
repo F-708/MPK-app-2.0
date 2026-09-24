@@ -1,40 +1,78 @@
 package com.politex
 
+import com.politex.data.repository.isFullDayDocument
 import com.politex.data.repository.shouldFetchDay
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Б3: гейт «нужен ли сайт за днём целиком».
+ * Б3: два порога — «нужен ли сайт за днём» и «похож ли документ на дневное
+ * расписание всего колледжа».
  *
- * Смысл: дневной документ парсится сразу по всем группам колледжа за один проход,
- * поэтому если по дате уже есть строки у 2+ групп — день распарсен и повторный
- * поход на сайт не нужен. У заказчика это ровно тот случай, когда сайт недоступен
- * (VPN), а расписание чужой группы/кабинета всё равно должно открываться.
+ * Оба нужны, чтобы при недоступном сайте (VPN) приложение жило на том, что уже
+ * разобрано, но при этом частичный документ не принимался за полный.
  */
 class ScheduleCacheGateTest {
 
+    private val catalog = 64
+
+    // --- нужен ли поход в сеть ---
+
     @Test
-    fun `день с двумя и более разобранными группами сайт не трогает`() {
-        assertFalse(shouldFetchDay(alreadyParsedGroups = 2, catalogSize = 64, force = false))
-        assertFalse(shouldFetchDay(alreadyParsedGroups = 40, catalogSize = 64, force = false))
+    fun `день, разобранный по большинству групп, сайт не трогает`() {
+        assertFalse(shouldFetchDay(alreadyParsedGroups = 40, catalogSize = catalog, force = false))
+        assertFalse(shouldFetchDay(alreadyParsedGroups = 64, catalogSize = catalog, force = false))
     }
 
     @Test
-    fun `день с нулём или одной группой требует загрузки`() {
-        assertTrue(shouldFetchDay(alreadyParsedGroups = 0, catalogSize = 64, force = false))
-        assertTrue(shouldFetchDay(alreadyParsedGroups = 1, catalogSize = 64, force = false))
+    fun `пара групп из каталога — это ещё не разобранный день`() {
+        // Регрессия: порог был «2 группы», и после ручного теста соединения
+        // (2 группы из 64) кабинет навсегда показывал неполное расписание
+        assertTrue(shouldFetchDay(alreadyParsedGroups = 2, catalogSize = catalog, force = false))
+        assertTrue(shouldFetchDay(alreadyParsedGroups = 31, catalogSize = catalog, force = false))
+    }
+
+    @Test
+    fun `пустой день требует загрузки`() {
+        assertTrue(shouldFetchDay(alreadyParsedGroups = 0, catalogSize = catalog, force = false))
     }
 
     @Test
     fun `force обходит гейт даже при полном кэше`() {
-        assertTrue(shouldFetchDay(alreadyParsedGroups = 64, catalogSize = 64, force = true))
+        assertTrue(shouldFetchDay(alreadyParsedGroups = 64, catalogSize = catalog, force = true))
     }
 
     @Test
     fun `без каталога групп загрузка невозможна`() {
         assertFalse(shouldFetchDay(alreadyParsedGroups = 0, catalogSize = 0, force = false))
         assertFalse(shouldFetchDay(alreadyParsedGroups = 0, catalogSize = 0, force = true))
+    }
+
+    // --- можно ли принимать документ за «дневной» ---
+
+    @Test
+    fun `документ с большинством групп каталога принимается`() {
+        assertTrue(isFullDayDocument(groupCount = 44, catalogSize = catalog))
+        assertTrue(isFullDayDocument(groupCount = 32, catalogSize = catalog))
+    }
+
+    @Test
+    fun `частичный документ не принимается — он затёр бы полные данные`() {
+        // replaceForDate = DELETE(группа, дата) + INSERT: приняв такой документ,
+        // мы бы стёрли уже лежащее полное расписание этих групп
+        assertFalse(isFullDayDocument(groupCount = 1, catalogSize = catalog))
+        assertFalse(isFullDayDocument(groupCount = 2, catalogSize = catalog))
+        assertFalse(isFullDayDocument(groupCount = 31, catalogSize = catalog))
+    }
+
+    @Test
+    fun `пустой документ не принимается`() {
+        assertFalse(isFullDayDocument(groupCount = 0, catalogSize = catalog))
+    }
+
+    @Test
+    fun `без каталога ничего не принимается`() {
+        assertFalse(isFullDayDocument(groupCount = 44, catalogSize = 0))
     }
 }

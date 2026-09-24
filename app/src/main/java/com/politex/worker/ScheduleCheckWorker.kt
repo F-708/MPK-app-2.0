@@ -75,8 +75,12 @@ class ScheduleCheckWorker(
         val targetDateString = dateFormat.format(targetCalendar.time)
 
         val prefKey = "notified_${groupName}_$targetDateString"
+        // F4: документ уже скачан и разобран, но уроков по группе на эту дату в нём нет
+        // (суббота/праздник/пустой день). Без этой отметки воркер качал и разбирал бы
+        // весь документ по всем группам каждые 15 минут до 21:00 без всякого эффекта.
+        val checkedKey = "checked_${groupName}_$targetDateString"
         val prefs = WidgetUpdateHelper.getPrefs(applicationContext)
-        if (prefs.getBoolean(prefKey, false)) {
+        if (prefs.getBoolean(prefKey, false) || prefs.getBoolean(checkedKey, false)) {
             return@withContext Result.success()
         }
 
@@ -127,7 +131,13 @@ class ScheduleCheckWorker(
                         )
 
                         prefs.edit().putBoolean(prefKey, true).apply()
+                    } else {
+                        // День прочитан и разобран, уроков для группы нет — второй раз не ходим
+                        prefs.edit().putBoolean(checkedKey, true).apply()
                     }
+                } else {
+                    // Документ получен, но группа в нём не нашлась — тоже не долбим сайт дальше
+                    prefs.edit().putBoolean(checkedKey, true).apply()
                 }
                 Result.success()
             },

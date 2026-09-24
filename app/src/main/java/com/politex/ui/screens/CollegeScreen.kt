@@ -1489,7 +1489,8 @@ private fun TeacherScheduleTab(teacher: Teacher, onOpenRoom: (String) -> Unit = 
         com.politex.ui.components.CalendarArchiveDialog(
             groupName = "",
             scheduleRepository = com.politex.data.repository.ScheduleRepository(
-                com.politex.data.local.MpkDatabase.getInstance(context).lessonDao()
+                lessonDao = com.politex.data.local.MpkDatabase.getInstance(context).lessonDao(),
+                catalogProvider = { com.politex.util.GroupCatalog.load(context).all() }
             ),
             onDismiss = { showCalendar = false },
             onDateSelected = { _, dateStr ->

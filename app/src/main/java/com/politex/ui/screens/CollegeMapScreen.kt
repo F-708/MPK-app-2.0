@@ -139,6 +139,8 @@ fun CollegeMapScreen(
     val scheduleRepository = remember {
         ScheduleRepository(
             lessonDao = com.politex.data.local.MpkDatabase.getInstance(context).lessonDao(),
+            // F6: без каталога разбор по всем группам молча деградирует до одной —
+            // кабинет показывал бы пары одного потока
             catalogProvider = { com.politex.util.GroupCatalog.load(context).all() }
         )
     }
@@ -239,9 +241,10 @@ fun CollegeMapScreen(
         if (roomScheduleFor == null || catalogCodes.isEmpty()) return@LaunchedEffect
         val alreadySynced = if (roomDialogTomorrow) syncedTomorrow else syncedToday
         if (alreadySynced) return@LaunchedEffect
-        // Б3: syncDayAllGroupsCached сам решает, нужен ли сайт — если день уже разобран
-        // по большинству групп (после обычного синка это норма), сети не будет вовсе.
-        runCatching { scheduleRepository.syncDayAllGroupsCached(dialogDateString, dialogDow) }
+        // Б3: force=true — кабинет открывают вручную, и пользователь ждёт ПОЛНОЕ
+        // расписание кабинета, а не «что успело попасть в базу». Если день уже разобран
+        // по большинству групп, сеть не понадобится.
+        runCatching { scheduleRepository.syncDayAllGroupsCached(dialogDateString, dialogDow, force = true) }
         roomReloadTick++ // перечитать Flow кабинета с догруженными группами
         if (roomDialogTomorrow) syncedTomorrow = true else syncedToday = true
     }

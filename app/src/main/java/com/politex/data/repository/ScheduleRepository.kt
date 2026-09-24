@@ -21,7 +21,19 @@ private const val ARCHIVE_KEEP_DAYS = 60L
  * повторный запрос был бы лишним, а при недоступном сайте — просто ошибкой.
  */
 internal fun shouldFetchDay(alreadyParsedGroups: Int, catalogSize: Int, force: Boolean): Boolean =
-    catalogSize > 0 && (force || alreadyParsedGroups < 2)
+    catalogSize > 0 && (force || alreadyParsedGroups < (catalogSize + 1) / 2)
+
+/**
+ * Б3: документ признаётся «дневным расписанием всего колледжа», только если в нём
+ * набралось не меньше половины каталога групп.
+ *
+ * Зачем: запись идёт через `replaceForDate` = DELETE(группа, дата) + INSERT, поэтому
+ * частичный или чужой документ, отданный сайтом под тем же предсказуемым именем,
+ * стёр бы уже лежащее полное расписание этих групп. Не приняли документ — откатываемся
+ * на прежний путь по одной группе: своя обновится, чужие останутся нетронутыми.
+ */
+internal fun isFullDayDocument(groupCount: Int, catalogSize: Int): Boolean =
+    catalogSize > 0 && groupCount >= (catalogSize + 1) / 2
 
 internal fun isStaleDate(date: String, cutoffMs: Long): Boolean {
     if (!DATE_DD_MM_YYYY.matches(date)) return false
@@ -48,10 +60,7 @@ class ScheduleRepository(
      * студенты), тащить в них контекст ради кэша расписания не стоит. Когда кэш
      * понадобится вне Android — заменить на источник из assets-парсера.
      */
-    private val catalogProvider: () -> List<String> = { emptyList() },
-
-    /** Предупреждаем перезапись, если каталог заметно устарел (см. syncScheduleFromWeb). */
-    private val nowProvider: () -> Long = { System.currentTimeMillis() }
+    private val catalogProvider: () -> List<String> = { emptyList() }
 ) {
 
     val diagnosticInfo = networkClient.diagnosticInfo
@@ -68,8 +77,8 @@ class ScheduleRepository(
      * После этого чужое расписание, расписание преподавателя и кабинет открываются офлайн —
      * повторный поход на сайт не нужен (в т.ч. когда сайт недоступен из-за VPN).
      *
-     * @param force false — не трогаем сайт, если по дате уже есть строки у 2+ групп
-     *              (эвристика «день уже распарсен целиком»).
+     * @param force true — качать даже если день уже выглядит распарсенным (ручное
+     *              открытие кабинета: пользователь ждёт полные данные).
      */
     suspend fun syncDayAllGroupsCached(
         date: String,
@@ -86,18 +95,7 @@ class ScheduleRepository(
         syncDayAllGroups(date, dow, groups)
     }
 
-    /**
-     * Б3: сколько групп уже разобрано на дату. Вызывающий код сравнивает с размером каталога,
-     * чтобы понять, нужна ли догрузка дня: >60% — «день распарсен», хвост добирается
-     * при открытии конкретного кабинета.
-     */
-    suspend fun parsedGroupsForDate(date: String, dow: Int): Int = withContext(Dispatchers.IO) {
-        lessonDao.getDistinctGroupsForDateOrDay(date, dow).size
-    }
-
-    /** Размер каталога групп — для эвристики «день распарсен целиком». */
-    fun catalogSize(): Int = catalog().size
-
+    
     fun getLessonsForDay(groupName: String, dayOfWeek: Int): Flow<List<LessonEntity>> {
         return lessonDao.getLessonsForDay(groupName, dayOfWeek).flowOn(Dispatchers.IO)
     }
@@ -155,18 +153,26 @@ class ScheduleRepository(
 
         val fetched = mutableListOf<LessonEntity>()
         var fetchFailed = false
+        var documentFound = false
 
-        // Б3: каталог есть → день качается ОДИН раз и разбирается сразу по всем группам
+        // Б3/F2: каталог есть → день качается ОДИН раз и разбирается сразу по всем группам
         // (parseFileAllGroups). Двойной заход (своя группа + все группы) означал бы
         // дважды скачанный и дважды разобранный один и тот же документ на дату.
+        // Запрошенная группа добавляется к каталогу: её может ещё не быть в ассете.
         // Каталога нет (тесты, вызов без контекста) → прежний путь по одной группе.
-        val allGroups = catalog()
+        val allGroups = (catalog() + groupName).distinct()
+        val useCatalog = catalog().isNotEmpty()
         val days = listOf(tomorrow to needTomorrow, today to needToday).filter { it.second }
-        if (allGroups.isNotEmpty()) {
+        if (useCatalog) {
             for ((calendar, _) in days) {
                 val date = formatDate(calendar)
-                runCatching { fetchAllGroupsForDate(calendar, date, allGroups) }
-                    .onSuccess { fetched += it }
+                runCatching { fetchAllGroupsForDate(calendar, date, allGroups) { documentFound = documentFound || it } }
+                    .onSuccess { dayLessons ->
+                        // F1: частичный/чужой документ под тем же именем не принимаем —
+                        // replaceForDate затрёт полные данные других групп
+                        val dayGroups = dayLessons.map { it.groupName }.distinct().size
+                        if (isFullDayDocument(dayGroups, allGroups.size)) fetched += dayLessons
+                    }
                     .onFailure { fetchFailed = true }
             }
         } else {
@@ -184,11 +190,30 @@ class ScheduleRepository(
 
         val distinct = fetched
             .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
+
+        // F5: документ получен, но по своей группе в нём ничего не нашлось — откат на
+        // прежний путь с диагностикой (группа может стоять под другим написанием, либо
+        // URL отдал не тот файл). Без этого своя группа молча оставалась без расписания.
+        if (distinct.none { it.groupName == groupName } && documentFound) {
+            if (needTomorrow) {
+                networkClient.fetchScheduleForGroup(groupName, tomorrow)
+                    .onSuccess { fetched += it }
+                    .onFailure { fetchFailed = true }
+            }
+            if (needToday) {
+                networkClient.fetchScheduleForGroup(groupName)
+                    .onSuccess { fetched += it }
+                    .onFailure { fetchFailed = true }
+            }
+        }
+
+        val finalLessons = fetched
+            .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
         return@withContext when {
-            distinct.isNotEmpty() -> {
-                writeByGroup(distinct)
+            finalLessons.isNotEmpty() -> {
+                writeByGroup(finalLessons)
                 pruneOldLessons()
-                Result.success(distinct.size)
+                Result.success(finalLessons.size)
             }
             // Сеть отвалилась — честная ошибка (тост «проверьте интернет»).
             // Пустая успешная загрузка («расписание ещё не опубликовано») ошибкой не
@@ -208,33 +233,65 @@ class ScheduleRepository(
         groupName: String,
         targetCalendar: Calendar
     ): Result<List<LessonEntity>> = withContext(Dispatchers.IO) {
-        val allGroups = catalog()
+        // Б3/F2: запрошенная группа добавляется к каталогу — иначе новая группа, которой
+        // ещё нет в ассете group_codes.csv, не попадёт в разбор, и воркер молча не уведомит
+        val allGroups = (catalog() + groupName).distinct()
         if (allGroups.isEmpty()) return@withContext networkClient.fetchScheduleForGroup(groupName, targetCalendar)
 
         val date = formatDate(targetCalendar)
-        val forGroup = runCatching { fetchAllGroupsForDate(targetCalendar, date, allGroups) }
+        var documentFound = false
+        val forGroup = runCatching {
+            fetchAllGroupsForDate(targetCalendar, date, allGroups) { documentFound = it }
+        }
         if (forGroup.isFailure) return@withContext Result.failure(forGroup.exceptionOrNull()!!)
         val all = forGroup.getOrDefault(emptyList())
         if (all.isNotEmpty()) {
             writeByGroup(all)
             pruneOldLessons()
         }
-        Result.success(all.filter { it.groupName == groupName })
+
+        val mine = all.filter { it.groupName == groupName }
+        // F5: документ найден, но по запрошенной группе пусто (группа под другим написанием,
+        // документ отдан не тем файлом) — откат на прежний путь по одной группе с диагностикой,
+        // иначе уведомление перестало бы приходить там, где приходило.
+        if (mine.isEmpty() && documentFound) {
+            return@withContext networkClient.fetchScheduleForGroup(groupName, targetCalendar)
+        }
+        Result.success(mine)
     }
 
     /**
-     * Б3: разбор одного документа на дату по всем группам каталога. Отдельно от
-     * [syncDayAllGroups] (у того есть фолбэк на портал), потому что здесь вызывающий уже
-     * ходил в сеть за своей группой — второй проход по порталу был бы лишним запросом.
+     * Б3: разбор одного документа на дату по всем группам каталога — прямыми именами,
+     * затем через портал. Фолбэк на портал обязателен: сайт публикует документы и под
+     * нестандартными именами (`raspisanie_03_03_2025.docx`, `izmeneniya_04_03.doc` —
+     * такие есть в фикстурах проекта), а предсказуемые URL в этом случае дают 404.
+     * Без фолбэка синк молча решил бы, что расписание не опубликовано.
+     *
+     * @param documentFound отличает «документа нет на сайте» от «документ есть, но не разобрался»
      */
     private suspend fun fetchAllGroupsForDate(
         calendar: Calendar,
         date: String,
-        candidateGroups: List<String>
+        candidateGroups: List<String>,
+        documentFound: (Boolean) -> Unit = {}
     ): List<LessonEntity> {
+        val triedUrls = mutableSetOf<String>()
+
         for ((url, _) in networkClient.generateCandidateDirectUrls(calendar)) {
+            if (!triedUrls.add(url)) continue
             val bytes = networkClient.downloadFileBytes(url) ?: continue
             if (bytes.isEmpty()) continue
+            documentFound(true)
+            val parsed = MpkScheduleParser.parseFileAllGroups(bytes, date, candidateGroups)
+            if (parsed.isNotEmpty()) return parsed
+        }
+
+        // Фолбэк на портал — тот же путь, что в syncDayAllGroups и fetchScheduleForGroup
+        for (url in MpkScheduleParser.extractDocumentUrls(portalHtml())) {
+            if (!triedUrls.add(url)) continue
+            val bytes = networkClient.downloadFileBytes(url) ?: continue
+            if (bytes.isEmpty()) continue
+            documentFound(true)
             val parsed = MpkScheduleParser.parseFileAllGroups(bytes, date, candidateGroups)
             if (parsed.isNotEmpty()) return parsed
         }
