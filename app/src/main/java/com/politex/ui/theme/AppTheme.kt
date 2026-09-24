@@ -38,6 +38,42 @@ enum class AppTheme(val id: String, val title: String, val hint: String, val pal
             brand = Color(0xFF37474F),
             active = Color(0xFF546E7A)
         )
+    ),
+
+    // Б12: добавлены по выбору заказчика (2026-09-24). Все три — светлые, как и
+    // предыдущие: в приложении палитра целиком светлая (белый фон, тёмный текст),
+    // поэтому тёмная тема потребовала бы второго набора цветов во всей MpkPalette.
+    INDIGO(
+        "indigo",
+        "Индиго",
+        "Насыщенный сине-фиолетовый акцент",
+        paletteWithAccents(
+            topBar = Color(0xFF1E1B4B),
+            // brand заливает кнопки под белым текстом — тёмный, чтобы текст читался;
+            // active — только рамки и подписи, ему хватает среднего тона
+            brand = Color(0xFF3730A3),
+            active = Color(0xFF4F46E5)
+        )
+    ),
+    AMBER(
+        "amber",
+        "Янтарная",
+        "Тёплая коричнево-золотая гамма",
+        paletteWithAccents(
+            topBar = Color(0xFF3E2723),
+            brand = Color(0xFF92400E),
+            active = Color(0xFFB45309)
+        )
+    ),
+    STEEL(
+        "steel",
+        "Стальная",
+        "Светло-голубая, легче фирменной",
+        paletteWithAccents(
+            topBar = Color(0xFF0C4A6E),
+            brand = Color(0xFF075985),
+            active = Color(0xFF0369A1)
+        )
     );
 
     companion object {
