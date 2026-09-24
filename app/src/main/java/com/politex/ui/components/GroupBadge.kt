@@ -73,7 +73,7 @@ fun GroupBadge(
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = groupName.ifBlank { "41О" },
+                text = groupName.ifBlank { "—" },
                 style = androidx.compose.ui.text.TextStyle(
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,

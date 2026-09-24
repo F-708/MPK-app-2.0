@@ -246,17 +246,24 @@ fun SettingsScreen(
                                 .heightIn(min = 48.dp)
                                 .bouncyClickable { showGroupDialog = true }
                         ) {
-                            Text(
-                                text = "СМЕНИТЬ",
-                                softWrap = false,
-                                maxLines = 1,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    color = Color.White
-                                ),
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                            )
+                            // Surface — это Box с выравниванием TopStart: без обёртки текст 11sp
+                            // прилипал к верху 48dp-кнопки, снизу оставалась пустая полоса.
+                            // Тот же приём, что в GroupScheduleScreen («СМЕНИТЬ» там по центру).
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            ) {
+                                Text(
+                                    text = "СМЕНИТЬ",
+                                    softWrap = false,
+                                    maxLines = 1,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = Color.White
+                                    )
+                                )
+                            }
                         }
                     }
                 }

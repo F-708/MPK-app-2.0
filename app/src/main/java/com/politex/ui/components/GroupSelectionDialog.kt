@@ -275,7 +275,9 @@ fun GroupSelectionDialog(
                             manualInput = it
                             inputError = null
                         },
-                        placeholder = { Text("Например: 41О, 11Э", fontSize = 12.sp) },
+                        // Пример — несуществующий код: реальные группы колледжа (41О, 11Э) в подсказке
+                        // выглядят как «тебе уже назначили чужую группу» (жалоба заказчика)
+                        placeholder = { Text("Например: 11А", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(2.dp),
                         isError = inputError != null,

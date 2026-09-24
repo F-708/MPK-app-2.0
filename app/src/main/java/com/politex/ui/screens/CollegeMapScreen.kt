@@ -824,7 +824,7 @@ private fun GroupSearchField(
                     Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                         if (value.isBlank()) {
                             Text(
-                                text = "Группа, например 41О",
+                                text = "Группа, например 11А",
                                 style = TextStyle(fontSize = 14.sp, color = ColorTextMuted),
                                 maxLines = 1
                             )

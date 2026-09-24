@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -354,8 +355,37 @@ fun ScheduleScreen(
         didColdStartScroll = true
     }
 
+    // Уроки просматриваемого дня уже закончились (сейчас позже конца последнего урока).
+    // Считаем по звонкам: конец последнего урока, который есть у группы в этот день.
+    val schoolDayEnded: Boolean = remember(activeDayOfWeek, selectedSlot, activeDateString, lessons) {
+        if (selectedSlot != 0 || !leftIsToday) false
+        else {
+            val cal = Calendar.getInstance()
+            val nowMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+            val bells = CollegeBellSchedule.getBellsForDay(activeDayOfWeek)
+            val lastEnd = lessons
+                .mapNotNull { l -> bells.firstOrNull { it.lessonNumber == l.lessonNumber }?.endMinutes }
+                .maxOrNull()
+                ?: bells.lastOrNull()?.endMinutes
+            lastEnd != null && nowMinutes > lastEnd
+        }
+    }
+
+    // Одноразовая подсветка «где я» при входе с виджета: вспыхивает и гаснет.
+    var highlightLesson by remember { mutableStateOf<Int?>(null) }
+    val highlightAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(highlightLesson) {
+        val target = highlightLesson ?: return@LaunchedEffect
+        highlightAlpha.snapTo(0f)
+        highlightAlpha.animateTo(0.85f, tween(220))
+        highlightAlpha.animateTo(0f, tween(1100))
+        // Гасим только если за время анимации не запросили другой урок
+        if (highlightLesson == target) highlightLesson = null
+    }
+
     // 8.3: тап по виджету «Сейчас/дальше»/«Расписание сегодня» — одноразовый
-    // запрос прокрутки к текущему уроку (к последнему, если день закончился).
+    // запрос прокрутки к текущему уроку. Уроки кончились → листаем на «завтра»
+    // в начало списка (заказчик: «веди в начало списка на завтрашний день»).
     // Потребляем запрос ПОСЛЕ прокрутки: иначе смена ключа перезапустит эффект
     // и отменит анимацию на полпути.
     LaunchedEffect(scrollToCurrentRequested, isInitialLoad) {
@@ -365,10 +395,19 @@ fun ScheduleScreen(
             return@LaunchedEffect
         }
         awaitFirstLayout()
+        if (schoolDayEnded) {
+            onSlotChange(1)
+            onDateChange("")
+            listState.scrollToItem(0)
+            onScrollToCurrentConsumed()
+            return@LaunchedEffect
+        }
         val idx = autoScrollLessonIndex(lessonNumbers, currentLessonNumber, true)
         if (idx != null && idx > 0) {
             listState.animateScrollToItem(idx, -listState.layoutInfo.viewportEndOffset / 3)
         }
+        // Урок уже виден (idx == 0 либо скроллить некуда) — подсветка всё равно нужна
+        highlightLesson = currentLessonNumber
         onScrollToCurrentConsumed()
     }
 
@@ -681,7 +720,11 @@ fun ScheduleScreen(
                                 hasHomework = lesson.lessonNumber in homeworkMarkerNumbers,
                                 onTeacherClick = onTeacherClick,
                                 isTeacherKnown = isTeacherKnown,
-                                onRoomClick = { room -> onRoomClick(room, fromRoom) }
+                                onRoomClick = { room -> onRoomClick(room, fromRoom) },
+                                // Б8: волна-подсветка «вы здесь» — только при входе с виджета
+                                focusAlpha = if (highlightLesson == lesson.lessonNumber) {
+                                    highlightAlpha.value
+                                } else 0f
                             )
                         } else {
                             NoLessonCard(number)
@@ -748,6 +791,8 @@ fun LessonCard(
 
     isTeacherKnown: (String) -> Boolean = { true },
     onRoomClick: (String) -> Unit = {},
+    // Б8: 0..1 — одноразовая «волна» подсветки при входе с виджета (не активна в обычном открытии)
+    focusAlpha: Float = 0f,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -759,7 +804,14 @@ fun LessonCard(
             .fillMaxWidth()
             .testTag("lesson_card_${lesson.lessonNumber}")
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        // drawBehind на Surface оказался бы ПОД его же фоном — рисуем на внутреннем Column
+        Column(modifier = Modifier
+            .drawBehind {
+                if (focusAlpha > 0f) {
+                    drawRect(ColorBrandBlue.copy(alpha = focusAlpha * 0.18f))
+                }
+            }
+            .padding(12.dp)) {
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
