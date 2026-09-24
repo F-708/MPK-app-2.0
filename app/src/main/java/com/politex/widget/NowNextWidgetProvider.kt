@@ -42,6 +42,9 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.tv_next_subject, style.mainColor)
             views.setTextColor(R.id.tv_now_details, style.subColor)
             views.setTextColor(R.id.tv_next_details, style.subColor)
+            // Б7: кабинет — отдельная кнопка, красится в акцент темы виджета
+            views.setTextColor(R.id.tv_now_room, style.mainColor)
+            views.setTextColor(R.id.tv_next_room, style.mainColor)
 
             val now = WidgetData.minuteOfDay(context)
             val lessons = WidgetData.todayLessons(context)
@@ -57,6 +60,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.tv_now_label, "СЕЙЧАС")
                 views.setTextViewText(R.id.tv_now_subject, SubjectFormatter.getShortName(current.subjectRaw))
                 views.setTextViewText(R.id.tv_now_details, detailsOf(current, showRoom))
+                applyRoomChip(context, views, R.id.tv_now_room, current, showRoom, appWidgetId, "now")
             } else {
                 // W8: пусто из-за группы не выбрана ≠ «уроков нет»
                 val groupBlank = WidgetUpdateHelper.getSelectedGroup(context).isBlank()
@@ -80,12 +84,14 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                         else -> WidgetData.breakInfo(context, now) ?: "по расписанию звонков"
                     }
                 )
+                views.setViewVisibility(R.id.tv_now_room, android.view.View.GONE)
             }
 
             if (next != null) {
                 views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                 views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next.subjectRaw))
                 views.setTextViewText(R.id.tv_next_details, detailsOf(next, showRoom))
+                applyRoomChip(context, views, R.id.tv_next_room, next, showRoom, appWidgetId, "next")
             } else {
                 views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                 views.setTextViewText(
@@ -93,6 +99,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                     if (lessons.isEmpty()) "—" else "Уроков больше нет"
                 )
                 views.setTextViewText(R.id.tv_next_details, "")
+                views.setViewVisibility(R.id.tv_next_room, android.view.View.GONE)
             }
 
             val open = PendingIntent.getActivity(
@@ -110,13 +117,50 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             return views
         }
 
-        private fun detailsOf(lesson: LessonEntity, showRoom: Boolean): String {
-            val time = "${lesson.timeStart}–${lesson.timeEnd}"
-            if (!showRoom) return time
+        private fun detailsOf(lesson: LessonEntity, showRoom: Boolean): String =
+            "${lesson.timeStart}–${lesson.timeEnd}"
+
+        /**
+         * Б7: кабинет в виджете — отдельная кликабельная кнопка, а не хвост строки со
+         * временем. Тап открывает приложение сразу на карте с этим кабинетом.
+         * Пустой/скрытый кабинет прячем (showRoom выключен или у пары его нет).
+         *
+         * PendingIntent — по (appWidgetId + слот), иначе «сейчас» и «дальше» делят
+         * один requestCode и второй тап открывает кабинет первого.
+         */
+        private fun applyRoomChip(
+            context: Context,
+            views: RemoteViews,
+            viewId: Int,
+            lesson: LessonEntity,
+            showRoom: Boolean,
+            appWidgetId: Int,
+            slot: String
+        ) {
             val rooms = listOf(lesson.roomFirst, lesson.roomSecond)
                 .filter { it.isNotBlank() }
                 .distinct()
-            return if (rooms.isEmpty()) time else "$time • каб. ${rooms.joinToString("/")}"
+            if (!showRoom || rooms.isEmpty()) {
+                views.setViewVisibility(viewId, android.view.View.GONE)
+                return
+            }
+            val room = rooms.first()
+            views.setTextViewText(viewId, "каб. $room")
+            views.setViewVisibility(viewId, android.view.View.VISIBLE)
+
+            val intent = Intent(context, com.politex.MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra("EXTRA_OPEN_TAB", "SCHEDULE")
+                .putExtra("EXTRA_ROOM", room)
+            views.setOnClickPendingIntent(
+                viewId,
+                PendingIntent.getActivity(
+                    context,
+                    appWidgetId * 10 + if (slot == "now") 1 else 2,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
         }
     }
 }

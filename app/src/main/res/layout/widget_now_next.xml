@@ -54,6 +54,26 @@
                 android:textSize="11sp"
                 android:textColor="#0B3564"
                 android:maxLines="1" />
+
+            <!-- Б7: кабинет — отдельная кнопка, а не хвост строки с временем:
+                 на неё вешается свой PendingIntent (карта с этим кабинетом).
+                 Пунктирная рамка = «нажимается», при showRoom=false прячется. -->
+            <TextView
+                android:id="@+id/tv_now_room"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_widget_room_chip"
+                android:paddingLeft="7dp"
+                android:paddingRight="7dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:layout_marginTop="3dp"
+                android:text=""
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="#0B3564"
+                android:maxLines="1"
+                android:visibility="gone" />
         </LinearLayout>
 
         <TextView
@@ -98,6 +118,24 @@
                 android:textSize="11sp"
                 android:textColor="#0B3564"
                 android:maxLines="1" />
+
+            <!-- Б7: кабинет следующего урока — такая же кнопка -->
+            <TextView
+                android:id="@+id/tv_next_room"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_widget_room_chip"
+                android:paddingLeft="7dp"
+                android:paddingRight="7dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:layout_marginTop="3dp"
+                android:text=""
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="#0B3564"
+                android:maxLines="1"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 

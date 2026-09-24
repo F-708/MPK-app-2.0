@@ -68,6 +68,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?, viewModel: AppViewModel) {
+        // Б7: тап по кнопке кабинета в виджете — сразу на карту с этим кабинетом
+        val room = intent?.getStringExtra("EXTRA_ROOM")
+        if (!room.isNullOrBlank()) {
+            viewModel.openMap(room, null)
+            return
+        }
         val scrollTarget = intent?.getStringExtra("EXTRA_SCROLL_TARGET")
         when (intent?.getStringExtra("EXTRA_OPEN_TAB")) {
             "SCHEDULE" -> viewModel.selectTab(AppTab.SCHEDULE)
