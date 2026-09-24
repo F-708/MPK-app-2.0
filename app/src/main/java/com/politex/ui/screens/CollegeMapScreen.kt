@@ -174,8 +174,7 @@ fun CollegeMapScreen(
         value = (catalogCodes + fromDb).distinct().sorted()
     }
 
-    val cameFromSchedule = !initialRoom.isNullOrBlank()
-    var query by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf(initialRoom?.trim().orEmpty()) }
     var groupQuery by remember { mutableStateOf("") }
     // Сообщение от поиска по группе («Сейчас уроков нет — …» / ошибка)
     var groupMessage by remember { mutableStateOf<String?>(null) }
@@ -256,83 +255,83 @@ fun CollegeMapScreen(
             onBack = onBack
         )
 
-        if (!cameFromSchedule) {
-            Spacer(modifier = Modifier.height(4.dp))
-            SearchField(
-                value = query,
-                onValueChange = { query = it; searchFailed = false },
-                onFound = { found ->
-                    groupMessage = null
-                    target = found
-                    searchFailed = found.isNotBlank() && findRoomEverywhere(mapData, found) == null
-                },
-                notFound = searchFailed
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            GroupSearchField(
-                value = groupQuery,
-                onValueChange = { groupQuery = it; groupMessage = null },
-                onSearch = { group ->
-                    groupMessage = null
-                    scope.launch {
-                        val (room, msg) = searchGroupNow(
-                            group = group.trim(),
-                            scheduleRepository = scheduleRepository,
-                            todayDateString = todayDateString,
-                            todayDow = todayDow,
-                            mapData = mapData
-                        )
-                        groupMessage = msg
-                        room?.let {
-                            target = it.number
-                            searchFailed = false
-                        }
+        Spacer(modifier = Modifier.height(4.dp))
+        SearchField(
+            value = query,
+            onValueChange = { query = it; searchFailed = false },
+            onFound = { found ->
+                groupMessage = null
+                target = found
+                searchFailed = found.isNotBlank() && findRoomEverywhere(mapData, found) == null
+            },
+            notFound = searchFailed
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        GroupSearchField(
+            value = groupQuery,
+            onValueChange = { groupQuery = it; groupMessage = null },
+            onSearch = { group ->
+                groupMessage = null
+                scope.launch {
+                    val (room, msg) = searchGroupNow(
+                        group = group.trim(),
+                        scheduleRepository = scheduleRepository,
+                        todayDateString = todayDateString,
+                        todayDow = todayDow,
+                        mapData = mapData
+                    )
+                    groupMessage = msg
+                    room?.let {
+                        target = it.number
+                        searchFailed = false
+                        // Поле поиска комнат показывает то, что нашлось по группе
+                        query = it.number
                     }
-                },
-                message = groupMessage,
-                // O3-c: подсказки из полного списка групп колледжа (GroupCatalog), без выпадающего списка
-                suggestionsWidget = {
-                    val hints = remember(groupQuery, knownGroups) {
-                        groupSuggestions(groupQuery, knownGroups)
-                    }
-                    if (hints.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            hints.forEach { g ->
-                                Surface(
-                                    shape = RoundedCornerShape(2.dp),
-                                    color = ColorBgMain,
-                                    border = BorderStroke(1.dp, ColorBorderLight),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(min = 44.dp)
-                                        .bouncyClickable {
-                                            groupQuery = g
-                                            groupMessage = null
-                                        }
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = g,
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 1,
-                                            style = TextStyle(
-                                                fontWeight = FontWeight.Medium,
-                                                fontSize = 13.sp,
-                                                color = ColorBrandBlue
-                                            )
-                                        )
+                }
+            },
+            message = groupMessage,
+            // O3-c: подсказки из полного списка групп колледжа (GroupCatalog), без выпадающего списка
+            suggestionsWidget = {
+                val hints = remember(groupQuery, knownGroups) {
+                    groupSuggestions(groupQuery, knownGroups)
+                }
+                if (hints.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        hints.forEach { g ->
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                color = ColorBgMain,
+                                border = BorderStroke(1.dp, ColorBorderLight),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 44.dp)
+                                    .bouncyClickable {
+                                        groupQuery = g
+                                        groupMessage = null
                                     }
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = g,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        style = TextStyle(
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 13.sp,
+                                            color = ColorBrandBlue
+                                        )
+                                    )
                                 }
                             }
                         }
                     }
                 }
-            )
-        }
+            }
+        )
 
         Spacer(modifier = Modifier.height(10.dp))
 

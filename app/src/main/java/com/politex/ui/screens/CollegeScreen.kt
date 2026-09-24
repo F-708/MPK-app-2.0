@@ -208,6 +208,13 @@ fun CollegeScreen(
                         teacher = teacher,
                         groupInfo = groupInfo,
                         scheduleRepository = scheduleRepository,
+                        // Б3: кабинет в расписании преподавателя ведёт на ту же карту,
+                        // что и кабинет из своего расписания (раньше надпись была мёртвой)
+                        onOpenRoom = { room ->
+                            mapRoom = room
+                            mapFromRoom = null
+                            navigateTo(OtherPage.MAP)
+                        },
                         onBack = { goBack() }
                     )
                 } else {
@@ -1098,6 +1105,7 @@ private fun TeacherCardPageWrapper(
     teacher: Teacher,
     groupInfo: GroupInfo,
     scheduleRepository: ScheduleRepository,
+    onOpenRoom: (String) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -1115,6 +1123,7 @@ private fun TeacherCardPageWrapper(
         subjectsFromSchedule = insights.subjects(teacher.name),
         isActive = insights.isActive(teacher.name),
         lessonsWithGroup = insights.lessonCount(teacher.name),
+        onOpenRoom = onOpenRoom,
         onBack = onBack
     )
 }
@@ -1126,6 +1135,7 @@ private fun TeacherCardPage(
     subjectsFromSchedule: List<String>,
     isActive: Boolean,
     lessonsWithGroup: Int,
+    onOpenRoom: (String) -> Unit = {},
     onBack: () -> Unit
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -1228,8 +1238,10 @@ private fun TeacherCardPage(
         )
 
         when (tab) {
-            0 -> AboutTeacherTab(teacher, isActive, lessonsWithGroup, roomsFromSchedule, subjectsFromSchedule)
-            1 -> TeacherScheduleTab(teacher)
+            0 -> AboutTeacherTab(
+                teacher, isActive, lessonsWithGroup, roomsFromSchedule, subjectsFromSchedule, onOpenRoom
+            )
+            1 -> TeacherScheduleTab(teacher, onOpenRoom)
         }
     }
 }
@@ -1240,7 +1252,8 @@ private fun AboutTeacherTab(
     isActive: Boolean,
     lessonsWithGroup: Int,
     roomsFromSchedule: List<String>,
-    subjectsFromSchedule: List<String>
+    subjectsFromSchedule: List<String>,
+    onOpenRoom: (String) -> Unit = {}
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1357,7 +1370,13 @@ private fun AboutTeacherTab(
                     Column(modifier = Modifier.padding(14.dp)) {
                         SectionLabel("КОНТАКТЫ")
                         Spacer(modifier = Modifier.height(6.dp))
-                        if (teacher.room.isNotBlank()) InfoRow("Кабинет", teacher.room)
+                        if (teacher.room.isNotBlank()) {
+                            InfoRow(
+                                label = "Кабинет",
+                                value = teacher.room,
+                                onClick = { onOpenRoom(teacher.room) }
+                            )
+                        }
                         if (teacher.phone.isNotBlank()) InfoRow("Телефон", teacher.phone)
                         if (teacher.email.isNotBlank()) InfoRow("E-mail", teacher.email)
                     }
@@ -1398,7 +1417,7 @@ private fun AboutTeacherTab(
 }
 
 @Composable
-private fun TeacherScheduleTab(teacher: Teacher) {
+private fun TeacherScheduleTab(teacher: Teacher, onOpenRoom: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val client = remember { com.politex.data.network.MpkNetworkClient() }
@@ -1632,20 +1651,29 @@ private fun TeacherScheduleTab(teacher: Teacher) {
                                 )
                             }
                             if (slot.room.isNotBlank()) {
+                                // Б3: тот же стиль и то же поведение, что у кабинета в своём
+                                // расписании (ScheduleScreen.SubgroupPane) — тап открывает карту
                                 Surface(
                                     shape = RoundedCornerShape(2.dp),
                                     color = ColorSurfaceHighlight,
-                                    border = BorderStroke(1.dp, ColorBorderLight)
+                                    border = BorderStroke(1.dp, ColorBorderLight),
+                                    modifier = Modifier
+                                        .heightIn(min = 44.dp)
+                                        .bouncyClickable(scaleDown = 0.97f) { onOpenRoom(slot.room) }
                                 ) {
-                                    Text(
-                                        text = "каб. ${slot.room}",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 10.sp,
-                                            color = ColorBrandBlue
-                                        ),
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.padding(horizontal = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = "каб. ${slot.room}",
+                                            style = androidx.compose.ui.text.TextStyle(
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = ColorBrandBlue
+                                            )
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1757,7 +1785,17 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
+private fun InfoRow(label: String, value: String, onClick: (() -> Unit)? = null) {
+    // Б3: значение-кабинет (onClick != null) выглядит и ведёт себя как остальные
+    // кликабельные кабинеты приложения — синим, с зоной нажатия не меньше 48dp.
+    val clickModifier = if (onClick != null) {
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .bouncyClickable(scaleDown = 0.97f, onClick = onClick)
+    } else {
+        Modifier
+    }
     Column(modifier = Modifier.padding(vertical = 3.dp)) {
         Text(
             text = label.uppercase(),
@@ -1767,13 +1805,16 @@ private fun InfoRow(label: String, value: String) {
                 color = ColorTextMuted
             )
         )
-        Text(
-            text = value,
-            style = androidx.compose.ui.text.TextStyle(
-                fontSize = 13.sp,
-                color = ColorTextBody
+        Box(modifier = clickModifier, contentAlignment = Alignment.CenterStart) {
+            Text(
+                text = value,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontSize = 13.sp,
+                    fontWeight = if (onClick != null) FontWeight.Bold else FontWeight.Normal,
+                    color = if (onClick != null) ColorBrandBlue else ColorTextBody
+                )
             )
-        )
+        }
     }
 }
 
