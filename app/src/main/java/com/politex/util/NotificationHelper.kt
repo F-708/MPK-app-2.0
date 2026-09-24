@@ -65,15 +65,23 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Уроки, не пары: в колледже занятие называют уроком (1 пара = 2 урока, но в расписании — «урок»)
         val lessonsWord = when {
-            lessonCount % 10 == 1 && lessonCount % 100 != 11 -> "пара"
-            lessonCount % 10 in 2..4 && lessonCount % 100 !in 12..14 -> "пары"
-            else -> "пар"
+            lessonCount % 10 == 1 && lessonCount % 100 != 11 -> "урок"
+            lessonCount % 10 in 2..4 && lessonCount % 100 !in 12..14 -> "урока"
+            else -> "уроков"
+        }
+
+        // dayTitle приходит в винительном падеже («в среду»); пустая строка — день неизвестен
+        val title = if (dayTitle.isNotBlank()) {
+            "Занятия в $dayTitle: $lessonCount $lessonsWord"
+        } else {
+            "Занятия на завтра: $lessonCount $lessonsWord"
         }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_mpk_emblem)
-            .setContentTitle("Занятия на завтра: $lessonCount $lessonsWord")
+            .setContentTitle(title)
             .setContentText("Расписание опубликовано. Нажмите, чтобы посмотреть.")
             .setStyle(
                 NotificationCompat.BigTextStyle()

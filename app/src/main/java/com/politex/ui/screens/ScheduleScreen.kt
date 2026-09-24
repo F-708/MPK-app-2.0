@@ -524,7 +524,10 @@ fun ScheduleScreen(
             // эмиссии Room (синхронизация, домашка, отметки) не перезапускают
             // fade — список обновляется на месте. Fade только при смене дня/архива.
             targetState = selectedSlot to selectedDateString,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            // Данные обоих дней уже в памяти (один Flow группы), поэтому дни
+            // переключаются мгновенно — дефолтные 220 мс кроссфейда читались как
+            // «зависание»: список появлялся через долю секунды после тапа.
+            transitionSpec = { fadeIn(tween(110)) togetherWith fadeOut(tween(90)) },
             label = "ScheduleListAnimation",
             modifier = Modifier.weight(1f)
         ) { _ ->
