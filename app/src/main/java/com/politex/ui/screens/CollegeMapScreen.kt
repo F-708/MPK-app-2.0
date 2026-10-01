@@ -52,6 +52,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -144,7 +145,12 @@ fun CollegeMapScreen(
             catalogProvider = { com.politex.util.GroupCatalog.load(context).all() }
         )
     }
-    val today = remember { Calendar.getInstance() }
+    // MAP-05: ключ по номеру дня — если экран пережил полночь, следующая recomposition
+    // перечитает «сегодня» (раньше remember{Calendar.getInstance()} навсегда застревал на дне
+    // открытия экрана). Calendar вместо java.time — minSdk 24 без desugaring.
+    // ponytail: перечёт по recomposition, не по таймеру; ON_RESUME-обсервер — если карта будет висеть через полночь
+    val dayKey = Calendar.getInstance().let { it.get(Calendar.YEAR) * 1000 + it.get(Calendar.DAY_OF_YEAR) }
+    val today = remember(dayKey) { Calendar.getInstance() }
     val todayDateString = remember(today) {
         "%02d.%02d.%04d".format(
             today.get(Calendar.DAY_OF_MONTH),
@@ -190,10 +196,13 @@ fun CollegeMapScreen(
     val scope = rememberCoroutineScope()
 
     var searchFailed by remember { mutableStateOf(false) }
-    val initialTarget = remember(initialRoom) { initialRoom?.trim().orEmpty() }
-    // Переоткрытие экрана с тем же кабинетом (возврат с карточки преподавателя) не должно
-    // возвращать пользователя к кабинету, который он уже сменил тапом по карте.
-    var target by remember(initialTarget) { mutableStateOf(initialTarget) }
+    // MAP-01: target — ЕДИНСТВЕННЫЙ источник истины на экране. Раньше remember(initialTarget)
+    // пересоздавал state на каждое эхо родителя (onRoomChanged → mapRoom → initialRoom), и тап
+    // мог перезаписаться старым значением («третий клик не нажимается»). initialRoom читаем
+    // только в инициализаторе: возврат с карточки преподавателя ПЕРЕСОЗДАЁТ экран (when() в
+    // CollegeScreen), и remember{} стартует с mapRoom — сценарий «преподаватель → назад → тот
+    // же кабинет» сохраняется, а локальные тапы эхом больше не сбрасываются.
+    var target by remember { mutableStateOf(initialRoom?.trim().orEmpty()) }
     LaunchedEffect(target) { onRoomChanged(target) }
     var floorId by remember {
         mutableStateOf(CollegeMap.floorForRoom(initialRoom.orEmpty())?.id ?: "1")
@@ -602,6 +611,10 @@ private fun roomDayTitle(dayOfWeek: Int): String = when (dayOfWeek) {
 // получаем обратным преобразованием graphicsLayer: (screen - offset) / scale / размер картинки.
 private const val TAP_SLOP_PX = 24f
 
+// N11: запас панорамирования — по 25% размера вида с каждой стороны (~1.5× свободы),
+// чтобы крайние кабинеты не упирались в край экрана и их не закрывали иконки зума.
+private const val PAN_MARGIN = 0.25f
+
 /**
  * O3-d: кабинет под точкой тапа. Сначала точное попадание в прямоугольник, затем — ближайший
  * кабинет в радиусе допуска (тап пальцем редко попадает в мелкий прямоугольник).
@@ -622,6 +635,27 @@ fun hitTestRoom(floor: FloorMap, xNorm: Float, yNorm: Float, slopNorm: Float): M
     // промах пальцем: ближайший кабинет в радиусе допуска
     return rooms.filter { inside(it, slopNorm) }
         .minByOrNull { r -> (xNorm - r.x) * (xNorm - r.x) + (yNorm - r.y) * (yNorm - r.y) }
+}
+
+/**
+ * MAP-02: чистая функция hit-test тапа. Принимает ЦЕЛЕВЫЕ (покойные) значения зума/смещения,
+ * а не анимируемые `.value`, — поэтому клик попадает даже во время зум-анимации. Нормализованные
+ * координаты: (pos - offset) / scale / размер_картинки, как в обратном преобразовании graphicsLayer.
+ */
+fun mapTapToRoom(
+    pos: Offset,
+    targetScale: Float,
+    targetOffsetX: Float,
+    targetOffsetY: Float,
+    imgW: Float,
+    imgH: Float,
+    floor: FloorMap
+): MapRoom? {
+    if (imgW <= 0f || imgH <= 0f || targetScale == 0f) return null
+    val xNorm = ((pos.x - targetOffsetX) / targetScale) / imgW
+    val yNorm = ((pos.y - targetOffsetY) / targetScale) / imgH
+    val slop = TAP_SLOP_PX / targetScale / imgW
+    return hitTestRoom(floor, xNorm, yNorm, slop)
 }
 
 // Т5: где группа сейчас. isNow=false → следующая пара («к N уроку»)
@@ -1007,13 +1041,21 @@ private fun MapCanvas(
 
     BoxWithConstraints(
         modifier = modifier
+            // N9: фон карты однороден с фоном вкладки (раньше Color(0xFFEDF2F7) отличался от ColorBgMain)
             .clipToBounds()
-            .background(Color(0xFFEDF2F7))
+            .background(ColorBgMain)
     ) {
         val viewW = with(density) { maxWidth.toPx() }
         val viewH = with(density) { maxHeight.toPx() }
         val imgW = viewW
         val imgH = imgW / aspect
+
+        // MAP-03: свежие размеры — через State, чтобы детекторы жестов НЕ держали их в ключах
+        // pointerInput (иначе смена высоты при показе RoomPanel перезапускала детектор и тап терялся).
+        val viewWState = rememberUpdatedState(viewW)
+        val viewHState = rememberUpdatedState(viewH)
+        val imgWState = rememberUpdatedState(imgW)
+        val imgHState = rememberUpdatedState(imgH)
 
     val measurer = rememberTextMeasurer()
 
@@ -1032,17 +1074,26 @@ private fun MapCanvas(
         }
     }
 
+        // MAP-03/N11: читаем размеры через State — функции захватываются детекторами жестов,
+        // которые больше не перезапускаются при смене размера (значит замыкание должно быть свежим).
+        // N11: pannable-область расширена на margin с каждой стороны (~1.5× свободы).
         fun clampX(v: Float, s: Float): Float {
-            val c = imgW * s
-            return if (c <= viewW) (viewW - c) / 2f else v.coerceIn(viewW - c, 0f)
+            val vw = viewWState.value
+            val c = imgWState.value * s
+            if (c <= vw) return (vw - c) / 2f
+            val margin = vw * PAN_MARGIN
+            return v.coerceIn(vw - c - margin, margin)
         }
         fun clampY(v: Float, s: Float): Float {
-            val c = imgH * s
-            return if (c <= viewH) (viewH - c) / 2f else v.coerceIn(viewH - c, 0f)
+            val vh = viewHState.value
+            val c = imgHState.value * s
+            if (c <= vh) return (vh - c) / 2f
+            val margin = vh * PAN_MARGIN
+            return v.coerceIn(vh - c - margin, margin)
         }
 
         fun restZoom(): Float =
-            (viewH / imgH * 0.72f).coerceIn(1f, 2.2f)
+            (viewHState.value / imgHState.value * 0.72f).coerceIn(1f, 2.2f)
 
         LaunchedEffect(floorId, targetRoom?.id, viewW, viewH) {
             if (viewW <= 0f || viewH <= 0f) return@LaunchedEffect
@@ -1057,13 +1108,10 @@ private fun MapCanvas(
             val px = room.x * imgW
             val py = room.y * imgH
             val zoom = 2.6f
+            // N10: тап по кабинету приближает к нему и ОСТАЁТСЯ приближённым (убран отъезд обратно)
             scope.launch { scale.animateTo(zoom, tween(420, easing = LinearOutSlowInEasing)) }
             scope.launch { offsetX.animateTo(clampX(viewW / 2f - px * zoom, zoom), tween(420, easing = LinearOutSlowInEasing)) }
             scope.launch { offsetY.animateTo(clampY(viewH / 2f - py * zoom, zoom), tween(420, easing = LinearOutSlowInEasing)) }
-            kotlinx.coroutines.delay(600)
-            scope.launch { scale.animateTo(rest, tween(540)) }
-            scope.launch { offsetX.animateTo(clampX(viewW / 2f - imgW * rest / 2f, rest), tween(540)) }
-            scope.launch { offsetY.animateTo(clampY(viewH / 2f - imgH * rest / 2f, rest), tween(540)) }
         }
 
         Box(
@@ -1071,16 +1119,24 @@ private fun MapCanvas(
                 .fillMaxSize()
                 // O3-d: тап рядом с жестами (не взамен) — иначе сломается зум/пан.
                 // detectTapGestures ждёт проигрыша соседних детекторов, поэтому пан/зум не страдают.
-                .pointerInput(floorId, viewW, viewH) {
+                // MAP-03: viewW/viewH убраны из ключей — детектор НЕ перезапускается при показе
+                // RoomPanel (смена высоты), тап больше не теряется. Размеры читаем через State внутри.
+                .pointerInput(floorId) {
                     detectTapGestures { pos ->
-                        val s = scale.value
-                        val xNorm = ((pos.x - offsetX.value) / s) / imgW
-                        val yNorm = ((pos.y - offsetY.value) / s) / imgH
-                        val slop = TAP_SLOP_PX / s / imgW
-                        hitTestRoom(floor, xNorm, yNorm, slop)?.let(onRoomTap)
+                        // MAP-02: hit-test по ЦЕЛЕВЫМ (покойным) значениям зума/смещения, а не
+                        // анимируемым `.value` — клик попадает даже во время зум-анимации.
+                        mapTapToRoom(
+                            pos = pos,
+                            targetScale = scale.targetValue,
+                            targetOffsetX = offsetX.targetValue,
+                            targetOffsetY = offsetY.targetValue,
+                            imgW = imgWState.value,
+                            imgH = imgHState.value,
+                            floor = floor
+                        )?.let(onRoomTap)
                     }
                 }
-                .pointerInput(viewW, viewH) {
+                .pointerInput(floorId) {
                     detectTransformGestures { centroid, pan, zoom, _ ->
                         scope.launch {
                             val next = (scale.value * zoom).coerceIn(0.8f, 8f)
