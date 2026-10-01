@@ -38,4 +38,21 @@ object MpkWorkManagerHelper {
             workManager.cancelUniqueWork(ScheduleCheckWorker.WORK_NAME)
         }
     }
+
+    /**
+     * WID-02/BEL-03: периодическая страховка BellTimerService (OEM убивают FGS, START_STICKY
+     * не гарантирует перезапуск, точный будильник на 14+ не выдан). Сеть не нужна — воркер
+     * только поднимает сервис и обновляет минутные виджеты. Работает всегда, гейтится внутри
+     * по isEnabled строки отсчёта.
+     */
+    fun setupBellServiceWatchdog(context: Context) {
+        val request = PeriodicWorkRequestBuilder<BellServiceWatchdogWorker>(
+            CHECK_INTERVAL_MINUTES, TimeUnit.MINUTES
+        ).build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            BellServiceWatchdogWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
+    }
 }

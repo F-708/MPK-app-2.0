@@ -35,6 +35,8 @@ class MainActivity : ComponentActivity() {
             com.politex.util.BellTimerService.start(this)
         }
         MpkWorkManagerHelper.setupPeriodicScheduleCheck(this)
+        // WID-02/BEL-03: страховка FGS-сервиса отсчёта — OEM убивают его, воркер поднимает обратно
+        MpkWorkManagerHelper.setupBellServiceWatchdog(this)
 
         setContent {
             val appViewModel: AppViewModel = viewModel()

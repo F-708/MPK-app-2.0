@@ -213,7 +213,10 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 "%02d.%02d.%d",
                 cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR)
             )
-            val key = "$group|$dow|$todayString|${cal.get(Calendar.HOUR_OF_DAY)}:${cal.get(Calendar.MINUTE)}"
+            // BEL-04/WID-04: «последний урок группы сегодня» не меняется в течение дня —
+            // ключ БЕЗ минут. Раньше ключ включал HH:mm и кэш промахивался каждую минуту:
+            // runBlocking+Room 1440 раз в день при живом сервисе вместо одного запроса.
+            val key = "$group|$dow|$todayString"
             if (key == cacheKey) return cacheLastLesson
             val result = try {
                 kotlinx.coroutines.runBlocking {
@@ -480,11 +483,14 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             ACTION_TICK -> {
-                // O1: если BellTimerService включён, он уже пересобрал BellCountdown на этой же
-                // границе минуты — повторно не делаем. Будильник всё равно нужен: NowNext
-                // сервис не трогает, а сам будильник — страховка на случай остановки сервиса.
-                // TodaySchedule/Bells (меняются раз в урок) минутный тик не трогает вообще.
-                if (com.politex.util.BellCountdownNotifier.isEnabled(context)) {
+                // O1: если BellTimerService ЖИВ, он уже пересобрал BellCountdown на этой же
+                // границе минуты — повторно не делаем, обновляем только NowNext (сервис его не трогает).
+                // WID-02: но сервис убивается OEM (battery saver на Xiaomi/Samsung) даже как FGS —
+                // тогда countdown встал бы до следующего неточного будильника. Поэтому если сервис
+                // НЕ запущен, пересобираем ОБА минутных виджета сами (будильник = страховка).
+                val serviceAlive = com.politex.util.BellCountdownNotifier.isEnabled(context) &&
+                    com.politex.util.BellTimerService.isRunning
+                if (serviceAlive) {
                     NowNextWidgetProvider.updateAll(context)
                 } else {
                     WidgetUpdateHelper.updateMinuteWidgets(context)

@@ -5,7 +5,7 @@
     android:minHeight="180dp"
     android:targetCellWidth="4"
     android:targetCellHeight="3"
-    android:updatePeriodMillis="0"
+    android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/widget_today_schedule"
     android:previewImage="@drawable/widget_preview_countdown"
     android:resizeMode="horizontal|vertical"
