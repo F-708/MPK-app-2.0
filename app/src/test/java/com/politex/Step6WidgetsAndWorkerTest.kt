@@ -91,4 +91,46 @@ class Step6WidgetsAndWorkerTest {
     fun testWorkManagerConstants() {
         assertEquals("mpk_schedule_check_worker", ScheduleCheckWorker.WORK_NAME)
     }
+
+    // WID-01: виджет «СЕГОДНЯ» не должен показывать чужой день
+
+    private fun lesson(number: Int, date: String) = LessonEntity(
+        groupName = "41О",
+        dayOfWeek = 1,
+        lessonNumber = number,
+        timeStart = "08:15",
+        timeEnd = "09:55",
+        subjectRaw = "Математика",
+        roomFirst = "215",
+        teacherFirst = "Иванова А.А.",
+        dateString = date
+    )
+
+    @Test
+    fun testFilterTodayLessons_prefersExactToday() {
+        val all = listOf(
+            lesson(1, "21.09.2026"),
+            lesson(2, ""),          // недельный шаблон
+            lesson(3, "28.09.2026") // сегодня
+        )
+        val result = com.politex.widget.WidgetData.filterTodayLessons(all, "28.09.2026")
+        assertEquals(listOf(3), result.map { it.lessonNumber })
+    }
+
+    @Test
+    fun testFilterTodayLessons_fallsBackToWeeklyTemplate() {
+        val all = listOf(
+            lesson(2, "21.09.2026"), // только прошлая дата
+            lesson(1, "")            // недельный шаблон
+        )
+        val result = com.politex.widget.WidgetData.filterTodayLessons(all, "28.09.2026")
+        assertEquals(listOf(1), result.map { it.lessonNumber })
+    }
+
+    @Test
+    fun testFilterTodayLessons_onlyPastDate_noTemplate_returnsEmpty() {
+        val all = listOf(lesson(1, "21.09.2026"), lesson(2, "22.09.2026"))
+        val result = com.politex.widget.WidgetData.filterTodayLessons(all, "28.09.2026")
+        assertTrue(result.isEmpty())
+    }
 }

@@ -196,20 +196,17 @@ object WidgetData {
         val minute = minuteOfDay(context)
         if (minute == cacheMinute && group == cacheGroup) return cacheLessons
         val dow = dayOfWeek(context)
+        val cal = java.util.Calendar.getInstance()
+        val todayString = "%02d.%02d.%04d".format(
+            cal.get(java.util.Calendar.DAY_OF_MONTH),
+            cal.get(java.util.Calendar.MONTH) + 1,
+            cal.get(java.util.Calendar.YEAR)
+        )
         val result = try {
             kotlinx.coroutines.runBlocking {
                 val all = com.politex.data.local.MpkDatabase.getInstance(context)
                     .lessonDao().getLessonsForDaySync(group, dow)
-                // Последняя дата через Calendar, не лексикографически
-                val latestMillis = all.filter { it.dateString.isNotBlank() }
-                    .maxOfOrNull { com.politex.data.network.MpkScheduleParser.parseDotDate(it.dateString)?.timeInMillis ?: 0L }
-                val today = if (latestMillis != null) {
-                    all.filter {
-                        it.dateString.isBlank() ||
-                            (com.politex.data.network.MpkScheduleParser.parseDotDate(it.dateString)?.timeInMillis ?: 0L) == latestMillis
-                    }
-                } else all
-                today.sortedBy { it.lessonNumber }
+                filterTodayLessons(all, todayString)
             }
         } catch (_: Exception) {
             emptyList()
@@ -219,6 +216,18 @@ object WidgetData {
         cacheGroup = group
         cacheMinute = minute
         return result
+    }
+
+    /**
+     * WID-01: только СЕГОДНЯШНИЕ строки (dateString == todayString, формат dd.MM.yyyy —
+     * фиксированная ширина, сравнение через == корректно). Если сегодняшней синхронизации
+     * не было — фолбэк на недельный шаблон (dateString.isBlank()). Чужие даты не показываем
+     * никогда: нет ни того, ни другого — пустой список.
+     */
+    fun filterTodayLessons(all: List<LessonEntity>, todayString: String): List<LessonEntity> {
+        val today = all.filter { it.dateString == todayString }
+        val source = if (today.isNotEmpty()) today else all.filter { it.dateString.isBlank() }
+        return source.sortedBy { it.lessonNumber }
     }
 
     fun breakInfo(context: Context, minute: Int): String? {

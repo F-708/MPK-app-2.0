@@ -136,13 +136,16 @@ class ScheduleCheckWorker(
                         prefs.edit().putBoolean(checkedKey, true).apply()
                     }
                 } else {
-                    // Документ получен, но группа в нём не нашлась — тоже не долбим сайт дальше
+                    // WID-03: success+пусто теперь бывает только когда документ найден
+                    // (syncScheduleForDate при ненайденном документе возвращает failure) —
+                    // день действительно пустой, второй раз не долбим сайт
                     prefs.edit().putBoolean(checkedKey, true).apply()
                 }
                 Result.success()
             },
             onFailure = {
-
+                // Документ не найден/сеть отвалилась — checkedKey НЕ ставим,
+                // воркер повторит попытку через 15 минут
                 Result.success()
             }
         )

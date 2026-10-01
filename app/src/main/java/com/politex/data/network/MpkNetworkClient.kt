@@ -47,29 +47,139 @@ class MpkNetworkClient {
     private val _diagnosticInfo = MutableStateFlow(SyncDiagnosticInfo())
     val diagnosticInfo: StateFlow<SyncDiagnosticInfo> = _diagnosticInfo.asStateFlow()
 
-    fun generateCandidateDirectUrls(calendar: Calendar): List<Pair<String, String>> {
-        val yyyy = SimpleDateFormat("yyyy", Locale.ROOT).format(calendar.time)
-        val mm = SimpleDateFormat("MM", Locale.ROOT).format(calendar.time)
+    /**
+     * SCH-01: сайт публикует документ в папке месяца ЗАГРУЗКИ (документ на 01.10
+     * доказанно лежал в /2026/09/ с суффиксом коллизии «-1»), поэтому перебираются
+     * месяц целевой даты И предыдущий, суффиксы "", "-1", "-2" и имена dd.MM.yyyy /
+     * dd_MM_yyyy. Первые два кандидата — быстрый путь (точный месяц, без суффикса).
+     *
+     * @param nameBase «raspisanie-uchashhihsya» (учащиеся) или «raspisanie-prepodavatelej»
+     */
+    fun generateCandidateDirectUrls(
+        calendar: Calendar,
+        nameBase: String = "raspisanie-uchashhihsya"
+    ): List<Pair<String, String>> {
         val ddMmYyyy = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(calendar.time)
         val dd = SimpleDateFormat("dd", Locale.ROOT).format(calendar.time)
+        val prevMonth = (calendar.clone() as Calendar).apply { add(Calendar.MONTH, -1) }
 
-        return listOf(
-            Pair("https://guo-mpk.by/wp-content/uploads/$yyyy/$mm/$ddMmYyyy-raspisanie-uchashhihsya.doc", ddMmYyyy),
-            Pair("https://guo-mpk.by/wp-content/uploads/$yyyy/$mm/$ddMmYyyy-raspisanie-uchashhihsya.docx", ddMmYyyy),
-            Pair("https://guo-mpk.by/wp-content/uploads/$yyyy/$mm/${dd}_${mm}_$yyyy-raspisanie-uchashhihsya.doc", ddMmYyyy)
+        val folders = listOf(
+            SimpleDateFormat("yyyy", Locale.ROOT).format(calendar.time) to
+                SimpleDateFormat("MM", Locale.ROOT).format(calendar.time),
+            SimpleDateFormat("yyyy", Locale.ROOT).format(prevMonth.time) to
+                SimpleDateFormat("MM", Locale.ROOT).format(prevMonth.time)
         )
+
+        val result = mutableListOf<Pair<String, String>>()
+        fun add(yyyy: String, mm: String, name: String, suffix: String, ext: String) {
+            val url = "https://guo-mpk.by/wp-content/uploads/$yyyy/$mm/$name-$nameBase$suffix.$ext"
+            if (result.none { it.first == url }) result.add(Pair(url, ddMmYyyy))
+        }
+
+        // Быстрый путь: точный месяц, точечное имя, без суффикса
+        val (ty, tm) = folders[0]
+        add(ty, tm, ddMmYyyy, "", "doc")
+        add(ty, tm, ddMmYyyy, "", "docx")
+
+        for ((yyyy, mm) in folders) {
+            for (name in listOf(ddMmYyyy, "${dd}_${mm}_$yyyy")) {
+                for (suffix in listOf("", "-1", "-2")) {
+                    for (ext in listOf("doc", "docx")) {
+                        add(yyyy, mm, name, suffix, ext)
+                    }
+                }
+            }
+        }
+        return result
     }
 
-    fun generateCandidateEventUrls(calendar: Calendar): List<Pair<String, String>> {
+    /**
+     * Event-страницы даты (внутри них документ в iframe officeapps). У преподавателей
+     * страница может иметь суффикс коллизии «-2».
+     */
+    fun generateCandidateEventUrls(
+        calendar: Calendar,
+        nameBase: String = "raspisanie-uchashhihsya"
+    ): List<Pair<String, String>> {
         val yyyy = SimpleDateFormat("yyyy", Locale.ROOT).format(calendar.time)
         val mm = SimpleDateFormat("MM", Locale.ROOT).format(calendar.time)
         val dd = SimpleDateFormat("dd", Locale.ROOT).format(calendar.time)
         val dateStr = "$dd-$mm-$yyyy"
         val occStr = "$yyyy-$mm-$dd"
-        return listOf(
-            Pair("https://guo-mpk.by/raspisanie/$dateStr-raspisanie-uchashhihsya/?occurrence=$occStr", "$dd.$mm.$yyyy"),
-            Pair("https://guo-mpk.by/$dateStr-raspisanie-uchashhihsya/", "$dd.$mm.$yyyy")
-        )
+        val slugs = if (nameBase.endsWith("prepodavatelej")) listOf("", "-2") else listOf("")
+        return slugs.flatMap { slugSuffix ->
+            listOf(
+                Pair("https://guo-mpk.by/raspisanie/$dateStr-$nameBase$slugSuffix/?occurrence=$occStr", "$dd.$mm.$yyyy"),
+                Pair("https://guo-mpk.by/$dateStr-$nameBase$slugSuffix/", "$dd.$mm.$yyyy")
+            )
+        }
+    }
+
+    /** Ссылки event-страниц конкретной даты из HTML портала. */
+    fun extractEventPageUrls(html: String, dateStr: String): List<String> =
+        Regex("(?i)https?://guo-mpk\\.by/(?:raspisanie/)?" + Regex.escape(dateStr) +
+            "-raspisanie-(?:uchashhihsya|prepodavatelej)[a-z0-9-]*/?")
+            .findAll(html)
+            .map { it.value }
+            .distinct()
+            .toList()
+
+    /**
+     * SCH-01, общий резолвер документов расписания. Порядок:
+     * (а) прямые имена (месяц даты и предыдущий, суффиксы коллизий);
+     * (б) event-страницы даты — документ внутри в iframe officeapps;
+     * (в) портал — event-страницы нужной даты из него, затем прямые .doc-ссылки портала.
+     *
+     * [visit] получает каждый URL документа по приоритету; true от него — «документ
+     * принят», дальше не идём (остальные фазы и их запросы не выполняются).
+     */
+    suspend fun forEachDocumentUrl(
+        calendar: Calendar,
+        nameBase: String = "raspisanie-uchashhihsya",
+        visit: suspend (String) -> Boolean
+    ) = withContext(Dispatchers.IO) {
+        val tried = LinkedHashSet<String>()
+
+        suspend fun phaseUrls(urls: List<String>): Boolean {
+            for (url in urls) {
+                if (!tried.add(url)) continue
+                if (visit(url)) return true
+            }
+            return false
+        }
+
+        suspend fun phaseEventPages(pages: List<String>): Boolean {
+            for (page in pages) {
+                if (!tried.add(page)) continue
+                val html = downloadFileBytes(page) ?: continue
+                if (phaseUrls(MpkScheduleParser.extractDocumentUrls(String(html, Charsets.UTF_8), page))) return true
+            }
+            return false
+        }
+
+        // (а) быстрый путь: предсказуемые имена
+        if (phaseUrls(generateCandidateDirectUrls(calendar, nameBase).map { it.first })) return@withContext
+
+        // Портал нужен и для event-страниц нужной даты, и для прямых .doc-ссылок
+        val dd = SimpleDateFormat("dd", Locale.ROOT).format(calendar.time)
+        val mm = SimpleDateFormat("MM", Locale.ROOT).format(calendar.time)
+        val yyyy = SimpleDateFormat("yyyy", Locale.ROOT).format(calendar.time)
+        val portalDocs = mutableListOf<String>()
+        val portalEventPages = mutableListOf<String>()
+        downloadFileBytes(SCHEDULE_PORTAL_URL)?.let { bytes ->
+            val html = String(bytes, Charsets.UTF_8)
+            portalDocs += MpkScheduleParser.extractDocumentUrls(html, SCHEDULE_PORTAL_URL)
+            portalEventPages += extractEventPageUrls(html, "$dd-$mm-$yyyy")
+        }
+
+        // (б) event-страницы даты — сгенерированные и найденные на портале
+        if (phaseEventPages(
+                generateCandidateEventUrls(calendar, nameBase).map { it.first } + portalEventPages
+            )
+        ) return@withContext
+
+        // (в) прямые .doc-ссылки портала (нестандартные имена документов)
+        phaseUrls(portalDocs)
     }
 
     suspend fun fetchScheduleForGroup(
@@ -92,7 +202,6 @@ class MpkNetworkClient {
         var lastException: Throwable? = null
 
         val allLessons = mutableListOf<LessonEntity>()
-        val downloadedUrls = mutableSetOf<String>()
         var lastResponsePreview = ""
         var lastParseFormat = ""
         var lastParseStrategy = ""
@@ -119,51 +228,25 @@ class MpkNetworkClient {
 
         for (attempt in 1..maxRetries) {
             try {
-
-                val directCandidates = generateCandidateDirectUrls(targetCalendar)
-                for ((url, _) in directCandidates) {
-                    if (downloadedUrls.add(url)) {
-                        lastCheckedUrl = url
-                        val directBytes = downloadFileBytes(url)
-                        if (directBytes != null && directBytes.isNotEmpty()) {
-                            totalBytesReceived += directBytes.size
-                            lastHttpCode = 200
-                            rememberResponsePreview(directBytes)
-                            val parsed = MpkScheduleParser.parseFile(directBytes, targetGroup, dateDotStr)
-                            rememberParseStats()
-                            if (parsed.isNotEmpty()) {
-                                allLessons.addAll(parsed)
-                                break
-                            }
-                        }
-                    }
-                }
-
-                if (allLessons.isEmpty()) {
-                    lastCheckedUrl = SCHEDULE_PORTAL_URL
-                    val portalResponse = executeRequest(SCHEDULE_PORTAL_URL)
-                    lastHttpCode = portalResponse.code
-
-                    if (portalResponse.isSuccessful) {
-                        val portalHtml = portalResponse.body?.string() ?: ""
-                        totalBytesReceived += portalHtml.toByteArray().size
-
-                        val candidateDocLinks = MpkScheduleParser.extractDocumentUrls(portalHtml, SCHEDULE_PORTAL_URL)
-                        for (docLink in candidateDocLinks) {
-                            if (downloadedUrls.add(docLink)) {
-                                lastCheckedUrl = docLink
-                                val docBytes = downloadFileBytes(docLink)
-                                if (docBytes != null && docBytes.isNotEmpty()) {
-                                    totalBytesReceived += docBytes.size
-                                    rememberResponsePreview(docBytes)
-                                    val parsed = MpkScheduleParser.parseFile(docBytes, targetGroup, dateDotStr)
-                                    rememberParseStats()
-                                    if (parsed.isNotEmpty()) {
-                                        allLessons.addAll(parsed)
-                                    }
-                                }
-                            }
-                        }
+                // SCH-01: единый резолвер — прямые имена (текущий+предыдущий месяц,
+                // суффиксы коллизий), затем event-страницы даты (документ в iframe
+                // officeapps), затем прямые ссылки портала. Остановка — на первом
+                // документе, где группа нашлась.
+                forEachDocumentUrl(targetCalendar) { url ->
+                    lastCheckedUrl = url
+                    val docBytes = downloadFileBytes(url)
+                    if (docBytes == null || docBytes.isEmpty()) {
+                        false
+                    } else {
+                        totalBytesReceived += docBytes.size
+                        lastHttpCode = 200
+                        rememberResponsePreview(docBytes)
+                        val parsed = MpkScheduleParser.parseFile(docBytes, targetGroup, dateDotStr)
+                        rememberParseStats()
+                        if (parsed.isNotEmpty()) {
+                            allLessons += parsed
+                            true
+                        } else false
                     }
                 }
 
@@ -250,38 +333,46 @@ class MpkNetworkClient {
     suspend fun fetchTeacherSchedule(
         targetCalendar: Calendar = Calendar.getInstance()
     ): Result<Map<String, List<TeacherSlot>>> = withContext(Dispatchers.IO) {
-        val yyyy = SimpleDateFormat("yyyy", Locale.ROOT).format(targetCalendar.time)
-        val mm = SimpleDateFormat("MM", Locale.ROOT).format(targetCalendar.time)
         val ddMmYyyy = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(targetCalendar.time)
-        val url = "https://guo-mpk.by/wp-content/uploads/$yyyy/$mm/$ddMmYyyy-raspisanie-prepodavatelej.doc"
+        var lastUrl = ""
+        var lastMismatch: String? = null
 
         try {
-            val bytes = downloadFileBytes(url)
-            if (bytes == null || bytes.isEmpty()) {
-                return@withContext Result.failure(IOException("Документ не найден: $url"))
-            }
+            var accepted: Map<String, List<TeacherSlot>>? = null
+            // SCH-01: тот же резолвер, что у учащихся — прямые имена (в т.ч. прошлый
+            // месяц и суффиксы), event-страницы преподавателей (могут иметь «-2»), портал
+            forEachDocumentUrl(targetCalendar, "raspisanie-prepodavatelej") { url ->
+                lastUrl = url
+                val bytes = downloadFileBytes(url)
+                if (bytes == null || bytes.isEmpty()) return@forEachDocumentUrl false
 
-            // O7: показываем только документ, реально относящийся к запрошенной дате.
-            // Если файл подменён/битый (дата в заголовке не совпала с именем файла),
-            // это ошибка, а не повод показать чужой день.
-            val text = TeacherScheduleParser.extractText(bytes)
-            if (text.isNotBlank() && !TeacherScheduleParser.matchesRequestedDate(text, targetCalendar)) {
-                val inDoc = TeacherScheduleParser.dateFromHeaderText(
-                    TeacherScheduleParser.findHeaderLine(text).orEmpty()
-                )
-                return@withContext Result.failure(
-                    IOException(
-                        if (inDoc == null) "Дата не найдена в документе: $url"
-                        else "Документ за $inDoc вместо $ddMmYyyy: $url"
+                // O7: показываем только документ, реально относящийся к запрошенной дате.
+                // Если файл подменён/битый (дата в заголовке не совпала с именем файла),
+                // это ошибка, а не повод показать чужой день.
+                val text = TeacherScheduleParser.extractText(bytes)
+                if (text.isNotBlank() && !TeacherScheduleParser.matchesRequestedDate(text, targetCalendar)) {
+                    val inDoc = TeacherScheduleParser.dateFromHeaderText(
+                        TeacherScheduleParser.findHeaderLine(text).orEmpty()
                     )
-                )
+                    lastMismatch = if (inDoc == null) "Дата не найдена в документе: $url"
+                    else "Документ за $inDoc вместо $ddMmYyyy: $url"
+                    return@forEachDocumentUrl false
+                }
+
+                val parsed = TeacherScheduleParser.parse(bytes)
+                if (parsed.isEmpty()) {
+                    lastMismatch = "Не удалось разобрать расписание преподавателей"
+                    false
+                } else {
+                    accepted = parsed
+                    true
+                }
             }
 
-            val parsed = TeacherScheduleParser.parse(bytes)
-            if (parsed.isEmpty()) {
-                Result.failure(IOException("Не удалось разобрать расписание преподавателей"))
-            } else {
-                Result.success(parsed)
+            when {
+                accepted != null -> Result.success(accepted!!)
+                lastMismatch != null -> Result.failure(IOException(lastMismatch!!))
+                else -> Result.failure(IOException("Документ не найден: ${lastUrl.ifBlank { ddMmYyyy }}"))
             }
         } catch (e: Exception) {
             Result.failure(e)

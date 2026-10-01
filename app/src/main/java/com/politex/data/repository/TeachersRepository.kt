@@ -43,20 +43,31 @@ class TeachersRepository(private val context: Context) {
             .map { line ->
                 val p = line.split(';')
                 Teacher(
-                    name = p.getOrElse(0) { "" },
-                    position = p.getOrElse(1) { "" },
-                    subjects = p.getOrElse(2) { "" },
-                    room = p.getOrElse(3) { "" },
-                    phone = p.getOrElse(4) { "" },
-                    email = p.getOrElse(5) { "" },
-                    photo = p.getOrElse(6) { "" },
-                    department = p.getOrElse(7) { "" },
-                    experience = p.getOrElse(8) { "" },
-                    category = p.getOrElse(9) { "" }
+                    name = cell(p, 0),
+                    position = cell(p, 1),
+                    subjects = cell(p, 2),
+                    room = cell(p, 3),
+                    phone = cell(p, 4),
+                    email = cell(p, 5),
+                    photo = cell(p, 6),
+                    department = cell(p, 7),
+                    experience = cell(p, 8),
+                    category = cell(p, 9)
                 )
             }
             .filter { it.name.isNotBlank() }
             .sortedBy { it.name }
+    }
+
+    /**
+     * TEA-01: в CSV прочерк «—» (U+2014) буквально стоит в room/phone/email у ~89 строк.
+     * isNotBlank() его не ловит → UI рисует секцию «КОНТАКТЫ» с прочерками. Нормализуем
+     * ячейку ЦЕЛИКОМ: trim, и если результат — один из прочерков, вернуть "". Дефисы
+     * внутри значений не трогаем (телефон «338-33-42» остаётся как есть).
+     */
+    private fun cell(p: List<String>, i: Int): String {
+        val v = p.getOrElse(i) { "" }.trim()
+        return if (v.isEmpty() || v == "—" || v == "–" || v == "-") "" else v
     }
 
     private val prefs get() = context.getSharedPreferences("teachers_favorites", Context.MODE_PRIVATE)

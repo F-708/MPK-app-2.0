@@ -271,6 +271,11 @@ class ScheduleRepository(
         if (mine.isEmpty() && documentFound) {
             return@withContext networkClient.fetchScheduleForGroup(groupName, targetCalendar)
         }
+        // WID-03: документа на сайте нет вовсе — это ошибка, а не «пустой день».
+        // Иначе воркер отметил бы день проверенным и больше не пытался до вечера.
+        if (mine.isEmpty() && !documentFound) {
+            return@withContext Result.failure(IOException("Документ на $date не найден"))
+        }
         Result.success(mine)
     }
 
@@ -289,27 +294,21 @@ class ScheduleRepository(
         candidateGroups: List<String>,
         documentFound: (Boolean) -> Unit = {}
     ): List<LessonEntity> {
-        val triedUrls = mutableSetOf<String>()
-
-        for ((url, _) in networkClient.generateCandidateDirectUrls(calendar)) {
-            if (!triedUrls.add(url)) continue
-            val bytes = networkClient.downloadFileBytes(url) ?: continue
-            if (bytes.isEmpty()) continue
+        // SCH-01: единый резолвер — прямые имена (месяц даты и предыдущий, суффиксы
+        // коллизий «-1»/«-2»), event-страницы даты (документ в iframe officeapps),
+        // затем ссылки портала. Остановка на первом документе, который разобрался.
+        var found: List<LessonEntity> = emptyList()
+        networkClient.forEachDocumentUrl(calendar) { url ->
+            val bytes = networkClient.downloadFileBytes(url)
+            if (bytes == null || bytes.isEmpty()) return@forEachDocumentUrl false
             documentFound(true)
             val parsed = MpkScheduleParser.parseFileAllGroups(bytes, date, candidateGroups)
-            if (parsed.isNotEmpty()) return parsed
+            if (parsed.isNotEmpty()) {
+                found = parsed
+                true
+            } else false
         }
-
-        // Фолбэк на портал — тот же путь, что в syncDayAllGroups и fetchScheduleForGroup
-        for (url in MpkScheduleParser.extractDocumentUrls(portalHtml())) {
-            if (!triedUrls.add(url)) continue
-            val bytes = networkClient.downloadFileBytes(url) ?: continue
-            if (bytes.isEmpty()) continue
-            documentFound(true)
-            val parsed = MpkScheduleParser.parseFileAllGroups(bytes, date, candidateGroups)
-            if (parsed.isNotEmpty()) return parsed
-        }
-        return emptyList()
+        return found
     }
 
     /** Запись разобранного дня, сгруппированного по группам (одна транзакция на группу). */
@@ -409,35 +408,9 @@ class ScheduleRepository(
         if (candidateGroups.isEmpty()) return@withContext Result.success(0)
         val calendar = parseCalendarDate(date) ?: return@withContext Result.success(0)
 
-        val fetched = mutableListOf<LessonEntity>()
-        val triedUrls = mutableSetOf<String>()
         var documentFound = false
-
-        try {
-            for ((url, _) in networkClient.generateCandidateDirectUrls(calendar)) {
-                if (!triedUrls.add(url)) continue
-                val bytes = networkClient.downloadFileBytes(url) ?: continue
-                if (bytes.isEmpty()) continue
-                documentFound = true
-                val parsed = MpkScheduleParser.parseFileAllGroups(bytes, date, candidateGroups)
-                if (parsed.isNotEmpty()) {
-                    fetched += parsed
-                    break
-                }
-            }
-
-            // Фолбэк на портал: тот же путь, что в fetchScheduleForGroup
-            if (fetched.isEmpty()) {
-                val documentUrls = MpkScheduleParser.extractDocumentUrls(portalHtml())
-                for (url in documentUrls) {
-                    if (!triedUrls.add(url)) continue
-                    val bytes = networkClient.downloadFileBytes(url) ?: continue
-                    if (bytes.isEmpty()) continue
-                    documentFound = true
-                    val parsed = MpkScheduleParser.parseFileAllGroups(bytes, date, candidateGroups)
-                    if (parsed.isNotEmpty()) fetched += parsed
-                }
-            }
+        val fetched = try {
+            fetchAllGroupsForDate(calendar, date, candidateGroups) { documentFound = it }
         } catch (e: Exception) {
             return@withContext Result.failure(e)
         }
@@ -461,11 +434,6 @@ class ScheduleRepository(
 
         pruneOldLessons()
         Result.success(written)
-    }
-
-    private suspend fun portalHtml(): String {
-        val bytes = networkClient.downloadFileBytes(MpkNetworkClient.SCHEDULE_PORTAL_URL) ?: return ""
-        return String(bytes, Charsets.UTF_8)
     }
 
     /** Calendar из «dd.MM.yyyy» (день недели из строки не берём — в БД сравнения по epoch). */
