@@ -55,4 +55,21 @@ object MpkWorkManagerHelper {
             request
         )
     }
+
+    /**
+     * H1: периодическая доставка напоминаний о заданиях (ReminderCheckWorker, 15 мин).
+     * Не гейтится по isNotificationEnabled — это отдельная от «расписание на завтра» фича,
+     * пользователь сам добавляет напоминания; POST_NOTIFICATIONS проверит NotificationHelper.
+     * Сеть не нужна, поэтому без Constraints. KEEP — не перезапускать уже идущее расписание.
+     */
+    fun setupPeriodicReminderCheck(context: Context) {
+        val request = PeriodicWorkRequestBuilder<ReminderCheckWorker>(
+            CHECK_INTERVAL_MINUTES, TimeUnit.MINUTES
+        ).build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            ReminderCheckWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
+    }
 }

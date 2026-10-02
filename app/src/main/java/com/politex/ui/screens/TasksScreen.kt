@@ -2,6 +2,9 @@
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -53,15 +57,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import com.politex.data.local.MpkDatabase
 import com.politex.data.local.entity.StudentTaskEntity
+import com.politex.data.local.entity.TaskReminderEntity
 import com.politex.data.model.GroupInfo
 import com.politex.data.model.TaskType
 import com.politex.data.repository.TaskRepository
@@ -100,6 +108,15 @@ fun TasksScreen(
     val coroutineScope = rememberCoroutineScope()
     var selectedFilter by remember { mutableStateOf<TaskType?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
+
+    // H1: редактирование по тапу + напоминания. Напоминания живут в отдельной таблице,
+    // DAO берём из той же боевой БД (паттерн как в ScheduleScreen) — репозиторий заданий
+    // конструируется в нескольких местах (в т.ч. в запрещённом к правке ScheduleScreen),
+    // поэтому не меняем его конструктор, а работаем с reminderDao напрямую.
+    val context = LocalContext.current
+    val reminderDao = remember { MpkDatabase.getInstance(context).taskReminderDao() }
+    var editingTask by remember { mutableStateOf<StudentTaskEntity?>(null) }
+    var editingReminders by remember { mutableStateOf<List<Long>>(emptyList()) }
 
     val allTasksFlow = remember(groupInfo.canonicalName) {
         taskRepository.getTasksForGroup(groupInfo.canonicalName)
@@ -379,6 +396,13 @@ fun TasksScreen(
                                     taskRepository.toggleTaskCompleted(task.id, !task.isCompleted)
                                 }
                             },
+                            // H1: тап по карточке — редактирование (не «выполнено»)
+                            onEdit = {
+                                coroutineScope.launch {
+                                    editingReminders = reminderDao.getForTask(task.id).map { it.triggerAtMillis }
+                                    editingTask = task
+                                }
+                            },
                             onDelete = { deleteWithUndo(task) }
                         )
                     }
@@ -387,26 +411,41 @@ fun TasksScreen(
         }
     }
 
+    // H1: общий путь сохранения — upsert задания (REPLACE по id) + атомарная замена напоминаний.
+    // Один и тот же для «добавить» (id=0) и «сохранить правку» (id=N).
+    fun saveTaskAndReminders(entity: StudentTaskEntity, reminderMillis: List<Long>, onDone: () -> Unit) {
+        coroutineScope.launch {
+            val id = taskRepository.saveTask(entity)
+            reminderDao.replaceForTask(
+                id,
+                reminderMillis.map { TaskReminderEntity(taskId = id, triggerAtMillis = it) }
+            )
+            onDone()
+        }
+    }
+
     if (showAddDialog) {
-        AddTaskDialog(
+        TaskEditDialog(
             groupInfo = groupInfo,
             availableTypes = availableTypes,
+            task = null,
+            initialReminders = emptyList(),
             onDismissRequest = { showAddDialog = false },
-            onTaskAdded = { title, description, subject, type, dueDate ->
-                coroutineScope.launch {
-                    val entity = StudentTaskEntity(
-                        groupName = groupInfo.canonicalName,
-                        course = groupInfo.course,
-                        subjectName = subject,
-                        taskType = type.displayName,
-                        title = title,
-                        description = description,
-                        deadlineDate = dueDate,
-                        createdAt = System.currentTimeMillis()
-                    )
-                    taskRepository.addTask(entity)
-                    showAddDialog = false
-                }
+            onTaskSaved = { entity, reminders ->
+                saveTaskAndReminders(entity, reminders) { showAddDialog = false }
+            }
+        )
+    }
+
+    editingTask?.let { task ->
+        TaskEditDialog(
+            groupInfo = groupInfo,
+            availableTypes = availableTypes,
+            task = task,
+            initialReminders = editingReminders,
+            onDismissRequest = { editingTask = null },
+            onTaskSaved = { entity, reminders ->
+                saveTaskAndReminders(entity, reminders) { editingTask = null }
             }
         )
     }
@@ -416,6 +455,7 @@ fun TasksScreen(
 fun TaskItemCard(
     task: StudentTaskEntity,
     onToggleCompleted: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -435,7 +475,8 @@ fun TaskItemCard(
         shadowElevation = 0.dp,
         modifier = modifier
             .fillMaxWidth()
-            .bouncyClickable(onClick = onToggleCompleted)
+            // H1: тап по карточке открывает редактирование; «выполнено» — только на чекбоксе слева
+            .bouncyClickable(onClick = onEdit)
             .testTag("task_item_${task.id}")
     ) {
         Row(
@@ -565,29 +606,42 @@ fun TaskItemCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddTaskDialog(
+fun TaskEditDialog(
     groupInfo: GroupInfo,
     availableTypes: List<TaskType>,
+    // H1: null = новое задание; не-null = редактирование (поля предзаполняются)
+    task: StudentTaskEntity? = null,
+    initialReminders: List<Long> = emptyList(),
     onDismissRequest: () -> Unit,
-    onTaskAdded: (title: String, description: String, subject: String, type: TaskType, dueDate: String) -> Unit
+    onTaskSaved: (entity: StudentTaskEntity, reminderMillis: List<Long>) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var dueDateMillis by remember { mutableStateOf<Long?>(null) }
+    val isEdit = task != null
+    var title by remember { mutableStateOf(task?.title ?: "") }
+    var description by remember { mutableStateOf(task?.description ?: "") }
+    var dueDateMillis by remember { mutableStateOf(task?.deadlineDate?.let { millisFromIso(it) }) }
     var showDatePicker by remember { mutableStateOf(false) }
     val currentYear = remember { java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) }
-    var selectedType by remember { mutableStateOf(TaskType.HOMEWORK) }
+    var selectedType by remember { mutableStateOf(task?.taskTypeEnum ?: TaskType.HOMEWORK) }
 
     val officialSubjects = remember(groupInfo.specialtyCode, groupInfo.course) {
         MpkCurriculum.getSubjects(groupInfo.specialtyCode, groupInfo.course)
     }
+    val defaultSubject = officialSubjects.firstOrNull() ?: "Охрана труда"
+    // H1: предмет из официального списка → dropdown; иначе → «своё название»
+    val subjectIsOfficial = task != null && officialSubjects.contains(task.subjectName)
     var selectedSubject by remember {
-        mutableStateOf(officialSubjects.firstOrNull() ?: "Охрана труда")
+        mutableStateOf(if (subjectIsOfficial) (task?.subjectName ?: defaultSubject) else defaultSubject)
     }
     var subjectExpanded by remember { mutableStateOf(false) }
-    var isCustomSubject by remember { mutableStateOf(false) }
-    var customSubject by remember { mutableStateOf("") }
+    var isCustomSubject by remember { mutableStateOf(task != null && !subjectIsOfficial) }
+    var customSubject by remember {
+        mutableStateOf(if (task != null && !subjectIsOfficial) task.subjectName else "")
+    }
     val effectiveSubject = if (isCustomSubject) customSubject.trim() else selectedSubject
+
+    // H1: напоминания (epoch millis, локальное время). Чипы-список + компактный композер.
+    var reminders by remember { mutableStateOf(initialReminders) }
+    var showReminderComposer by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
@@ -602,7 +656,7 @@ fun AddTaskDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Новое задание",
+                    text = if (isEdit) "Редактировать задание" else "Новое задание",
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
@@ -620,7 +674,10 @@ fun AddTaskDialog(
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // H1: форма стала выше (блок напоминаний) — прокрутка, чтобы не резалось
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
@@ -800,6 +857,55 @@ fun AddTaskDialog(
                         }
                     )
                 }
+
+                // H1: блок «Напоминания» — рядом со «Сроком сдачи»
+                Text(
+                    text = "Напоминания:",
+                    style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted)
+                )
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // быстрые чипы от срока сдачи: «+1 день», «+2 дня» (время по умолчанию 18:00)
+                    dueDateMillis?.let { due ->
+                        val dueIso = isoDate(due)
+                        item {
+                            ReminderQuickChip(text = "+1 день") {
+                                reminderMillisFrom(dueIso, 18, 0, 1)?.let { m -> reminders = reminders + m }
+                            }
+                        }
+                        item {
+                            ReminderQuickChip(text = "+2 дня") {
+                                reminderMillisFrom(dueIso, 18, 0, 2)?.let { m -> reminders = reminders + m }
+                            }
+                        }
+                    }
+                    item {
+                        ReminderQuickChip(text = "+ напоминание") { showReminderComposer = !showReminderComposer }
+                    }
+                }
+
+                // добавленные напоминания чипами «12.10 18:00 ×» (удаление по крестику)
+                reminders.forEachIndexed { index, millis ->
+                    ReminderChip(
+                        label = formatReminderChip(millis),
+                        onRemove = { reminders = reminders.filterIndexed { i, _ -> i != index } }
+                    )
+                }
+
+                if (showReminderComposer) {
+                    ReminderComposer(
+                        initialDateIso = dueDateMillis?.let { isoDate(it) } ?: todayIso(),
+                        currentYear = currentYear,
+                        onDismiss = { showReminderComposer = false },
+                        onAdd = { millis ->
+                            reminders = reminders + millis
+                            showReminderComposer = false
+                        }
+                    )
+                }
             }
         },
         confirmButton = {
@@ -808,18 +914,34 @@ fun AddTaskDialog(
                 color = ColorBrandFill,
                 modifier = Modifier.bouncyClickable {
                     if (title.isNotBlank() && effectiveSubject.isNotBlank()) {
-                        onTaskAdded(
-                            title.trim(),
-                            description.trim(),
-                            effectiveSubject,
-                            selectedType,
-                            dueDateMillis?.let { isoDate(it) } ?: ""
-                        )
+                        val dueIso = dueDateMillis?.let { isoDate(it) } ?: ""
+                        // H1: новое → собираем сущность; правка → copy (id/group/completed/createdAt сохраняются)
+                        val entity = if (task == null) {
+                            StudentTaskEntity(
+                                groupName = groupInfo.canonicalName,
+                                course = groupInfo.course,
+                                subjectName = effectiveSubject,
+                                taskType = selectedType.displayName,
+                                title = title.trim(),
+                                description = description.trim(),
+                                deadlineDate = dueIso,
+                                createdAt = System.currentTimeMillis()
+                            )
+                        } else {
+                            task.copy(
+                                subjectName = effectiveSubject,
+                                taskType = selectedType.displayName,
+                                title = title.trim(),
+                                description = description.trim(),
+                                deadlineDate = dueIso
+                            )
+                        }
+                        onTaskSaved(entity, reminders)
                     }
                 }
             ) {
                 Text(
-                    text = "ДОБАВИТЬ",
+                    text = if (isEdit) "СОХРАНИТЬ" else "ДОБАВИТЬ",
                     softWrap = false,
                     maxLines = 1,
                     style = androidx.compose.ui.text.TextStyle(
@@ -876,4 +998,301 @@ internal fun millisFromIso(iso: String): Long? {
         set(m.groupValues[1].toInt(), m.groupValues[2].toInt() - 1, m.groupValues[3].toInt())
     }
     return cal.timeInMillis
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// H1: напоминания — хелперы времени и компактный выбор даты/времени
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * H1: epoch millis из ISO-даты (yyyy-MM-dd) + время, в ЛОКАЛЬНОМ часовом поясе устройства
+ * (напоминание должно срабатывать по местному настенному времени, в отличие от deadlineDate,
+ * который хранится как дата без TZ). plusDays — для быстрых чипов «+1 день», «+2 дня».
+ */
+internal fun reminderMillisFrom(iso: String, hour: Int, minute: Int, plusDays: Int): Long? {
+    val m = Regex("""^(\d{4})-(\d{2})-(\d{2})$""").find(iso.trim()) ?: return null
+    val cal = java.util.Calendar.getInstance().apply {
+        clear()
+        set(m.groupValues[1].toInt(), m.groupValues[2].toInt() - 1, m.groupValues[3].toInt(), hour, minute, 0)
+        if (plusDays != 0) add(java.util.Calendar.DAY_OF_YEAR, plusDays)
+    }
+    return cal.timeInMillis
+}
+
+/** H1: подпись чипа напоминания «12.10 18:00» (локальный TZ). */
+internal fun formatReminderChip(millis: Long): String {
+    val c = java.util.Calendar.getInstance().apply { timeInMillis = millis }
+    return String.format(
+        java.util.Locale.ROOT, "%02d.%02d %02d:%02d",
+        c.get(java.util.Calendar.DAY_OF_MONTH),
+        c.get(java.util.Calendar.MONTH) + 1,
+        c.get(java.util.Calendar.HOUR_OF_DAY),
+        c.get(java.util.Calendar.MINUTE)
+    )
+}
+
+/** H1: сегодняшняя дата в ISO (локальный TZ) — старт композера, когда срок сдачи не задан. */
+internal fun todayIso(): String {
+    val c = java.util.Calendar.getInstance()
+    return String.format(
+        java.util.Locale.ROOT, "%04d-%02d-%02d",
+        c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH)
+    )
+}
+
+@Composable
+private fun ReminderQuickChip(text: String, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        border = BorderStroke(1.dp, ColorBorderLight),
+        color = ColorBgMain,
+        contentColor = ColorTextBody,
+        modifier = Modifier
+            .height(30.dp)
+            .bouncyClickable(onClick = onClick)
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
+            Text(
+                text = text,
+                softWrap = false,
+                maxLines = 1,
+                style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReminderChip(label: String, onRemove: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        border = BorderStroke(1.dp, ColorBrandBlue.copy(alpha = 0.5f)),
+        color = ColorBrandBlue.copy(alpha = 0.12f),
+        contentColor = ColorBrandBlue,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 10.dp)
+        ) {
+            Text(
+                text = label,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    color = ColorBrandBlue
+                ),
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Удалить напоминание",
+                    tint = ColorBrandBlue,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        border = BorderStroke(1.dp, if (selected) ColorBrandBlue else ColorBorderLight),
+        color = if (selected) ColorBrandBlue else ColorBgMain,
+        contentColor = if (selected) Color.White else ColorTextBody,
+        modifier = Modifier
+            .height(30.dp)
+            .bouncyClickable(onClick = onClick)
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
+            Text(
+                text = label,
+                softWrap = false,
+                maxLines = 1,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 11.sp
+                )
+            )
+        }
+    }
+}
+
+/**
+ * H1: компактный выбор напоминания — дата (SimpleDatePickerDialog) + время
+ * (быстрые чипы 08:00/12:00/18:00/21:00 или «своё» ЧЧ:ММ). Покрывает сценарии заказчика:
+ * несколько дат с одним временем, одна дата с разными временами, «следующий день — другое время».
+ */
+@Composable
+private fun ReminderComposer(
+    initialDateIso: String,
+    currentYear: Int,
+    onDismiss: () -> Unit,
+    onAdd: (Long) -> Unit
+) {
+    var dateIso by remember { mutableStateOf(initialDateIso) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var customTime by remember { mutableStateOf(false) }
+    var presetHour by remember { mutableIntStateOf(18) }
+    var presetMinute by remember { mutableIntStateOf(0) }
+    var hourInput by remember { mutableStateOf("18") }
+    var minuteInput by remember { mutableStateOf("00") }
+    val presets = remember { listOf(8 to 0, 12 to 0, 18 to 0, 21 to 0) }
+
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        border = BorderStroke(1.dp, ColorBrandBlue.copy(alpha = 0.4f)),
+        color = ColorSurfaceHighlight,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBgMain,
+                border = BorderStroke(1.dp, ColorBorderLight),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bouncyClickable { showDatePicker = true }
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = null,
+                        tint = ColorBrandBlue,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Дата: ${formatDateForShow(dateIso)}",
+                        style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextTitle)
+                    )
+                }
+            }
+
+            Text(
+                text = "Время:",
+                style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted)
+            )
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(presets) { preset ->
+                    val (h, m) = preset
+                    val selected = !customTime && presetHour == h && presetMinute == m
+                    TimeChip(
+                        label = String.format(java.util.Locale.ROOT, "%02d:%02d", h, m),
+                        selected = selected,
+                        onClick = { customTime = false; presetHour = h; presetMinute = m }
+                    )
+                }
+                item {
+                    TimeChip(label = "Своё", selected = customTime, onClick = { customTime = true })
+                }
+            }
+
+            if (customTime) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    OutlinedTextField(
+                        value = hourInput,
+                        onValueChange = { hourInput = it.filter(Char::isDigit).take(2) },
+                        label = { Text("ЧЧ", fontSize = 11.sp) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(2.dp),
+                        modifier = Modifier.width(72.dp)
+                    )
+                    Text(
+                        text = ":",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = ColorTextTitle
+                        )
+                    )
+                    OutlinedTextField(
+                        value = minuteInput,
+                        onValueChange = { minuteInput = it.filter(Char::isDigit).take(2) },
+                        label = { Text("ММ", fontSize = 11.sp) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(2.dp),
+                        modifier = Modifier.width(72.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    color = Color.Transparent,
+                    modifier = Modifier.bouncyClickable(onClick = onDismiss)
+                ) {
+                    Text(
+                        text = "ОТМЕНА",
+                        softWrap = false,
+                        maxLines = 1,
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = ColorTextBody
+                        ),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBrandFill,
+                    modifier = Modifier.bouncyClickable {
+                        val h = if (customTime) hourInput.toIntOrNull() ?: -1 else presetHour
+                        val m = if (customTime) minuteInput.toIntOrNull() ?: -1 else presetMinute
+                        if (h in 0..23 && m in 0..59) {
+                            reminderMillisFrom(dateIso, h, m, 0)?.let(onAdd)
+                        }
+                    }
+                ) {
+                    Text(
+                        text = "ДОБАВИТЬ",
+                        softWrap = false,
+                        maxLines = 1,
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color.White
+                        ),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    if (showDatePicker) {
+        com.politex.ui.components.SimpleDatePickerDialog(
+            initialDateIso = dateIso,
+            minYear = currentYear,
+            maxYear = currentYear + 4,
+            onDismiss = { showDatePicker = false },
+            onConfirm = { dateIso = it; showDatePicker = false }
+        )
+    }
 }

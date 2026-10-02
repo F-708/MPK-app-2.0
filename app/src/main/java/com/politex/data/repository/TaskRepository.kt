@@ -29,6 +29,16 @@ class TaskRepository(private val taskDao: TaskDao) {
         taskDao.insertTask(task)
     }
 
+    /**
+     * H1: upsert для формы редактирования — `insertTask` использует OnConflictStrategy.REPLACE,
+     * поэтому id=0 вставляет новую запись (и возвращает сгенерированный id), а id=N замещает
+     * существующую строку N. Один и тот же путь для «добавить» и «сохранить правку»:
+     * в списке остаётся ОДНА запись с обновлёнными полями, дублей не появляется.
+     */
+    suspend fun saveTask(task: StudentTaskEntity): Long = withContext(Dispatchers.IO) {
+        taskDao.insertTask(task)
+    }
+
     suspend fun updateTask(task: StudentTaskEntity) = withContext(Dispatchers.IO) {
         taskDao.updateTask(task)
     }

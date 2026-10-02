@@ -37,6 +37,8 @@ class MainActivity : ComponentActivity() {
         MpkWorkManagerHelper.setupPeriodicScheduleCheck(this)
         // WID-02/BEL-03: страховка FGS-сервиса отсчёта — OEM убивают его, воркер поднимает обратно
         MpkWorkManagerHelper.setupBellServiceWatchdog(this)
+        // H1: доставка напоминаний о заданиях (периодический воркер, 15 мин)
+        MpkWorkManagerHelper.setupPeriodicReminderCheck(this)
 
         setContent {
             val appViewModel: AppViewModel = viewModel()
@@ -71,15 +73,22 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?, viewModel: AppViewModel) {
         // Б7: тап по кнопке кабинета в виджете — сразу на карту с этим кабинетом
+        // N8: EXTRA_SHOW_ROUTE (виджет NowNext) — открыть карту С маршрутом от главного входа
         val room = intent?.getStringExtra("EXTRA_ROOM")
         if (!room.isNullOrBlank()) {
-            viewModel.openMap(room, null)
+            viewModel.openMap(
+                room,
+                fromRoom = null,
+                showRoute = intent.getBooleanExtra("EXTRA_SHOW_ROUTE", false)
+            )
             return
         }
         val scrollTarget = intent?.getStringExtra("EXTRA_SCROLL_TARGET")
         when (intent?.getStringExtra("EXTRA_OPEN_TAB")) {
             "SCHEDULE" -> viewModel.selectTab(AppTab.SCHEDULE)
             "BELLS" -> viewModel.selectTab(AppTab.BELLS)
+            // H1: тап по уведомлению-напоминанию открывает вкладку заданий
+            "TASKS" -> viewModel.selectTab(AppTab.TASKS)
             else -> return
         }
         // Виджет просит не только открыть вкладку, но и проскроллить к «сейчас»

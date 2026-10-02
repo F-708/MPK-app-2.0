@@ -8,18 +8,21 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.politex.data.local.dao.LessonDao
 import com.politex.data.local.dao.TaskDao
+import com.politex.data.local.dao.TaskReminderDao
 import com.politex.data.local.dao.TeacherLessonDao
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.local.entity.StudentTaskEntity
+import com.politex.data.local.entity.TaskReminderEntity
 import com.politex.data.local.entity.TeacherLessonEntity
 
 @Database(
     entities = [
         LessonEntity::class,
         StudentTaskEntity::class,
-        TeacherLessonEntity::class
+        TeacherLessonEntity::class,
+        TaskReminderEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class MpkDatabase : RoomDatabase() {
@@ -27,6 +30,7 @@ abstract class MpkDatabase : RoomDatabase() {
     abstract fun lessonDao(): LessonDao
     abstract fun taskDao(): TaskDao
     abstract fun teacherLessonDao(): TeacherLessonDao
+    abstract fun taskReminderDao(): TaskReminderDao
 
     companion object {
         // internal, а не private: тест миграции создаёт базу v1 «на диске» под тем же именем
@@ -81,6 +85,31 @@ abstract class MpkDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v3 → v4 (H1): таблица напоминаний о заданиях `task_reminders`. Добавляется только
+         * НОВАЯ таблица + индекс — `student_tasks`/`lessons`/`teacher_lessons` не трогаются,
+         * ДЗ студента переживает миграцию. Имена таблицы/индекса Room-генерируемые
+         * (index_task_reminders_taskId) — должны совпасть побайтово с @Entity(indices=...),
+         * иначе Room упадёт на валидации схемы при открытии (см. MigrationV3ToV4Test).
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `task_reminders` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `taskId` INTEGER NOT NULL,
+                        `triggerAtMillis` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_task_reminders_taskId` " +
+                        "ON `task_reminders` (`taskId`)"
+                )
+            }
+        }
+
         @Volatile
         private var INSTANCE: MpkDatabase? = null
 
@@ -91,7 +120,7 @@ abstract class MpkDatabase : RoomDatabase() {
                     MpkDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     // ponytail: оставлено как страховка от будущих незапланированных схем —
                     // для объявленных версий выше путь всегда идёт через MIGRATION_1_2
                     .fallbackToDestructiveMigration()
