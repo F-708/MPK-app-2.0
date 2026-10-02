@@ -231,7 +231,10 @@ function fitView(){
 function toWorld(e){
   const r = cv.getBoundingClientRect();
   const mx = e.clientX - r.left, my = e.clientY - r.top;
-  return {x:(mx-cam.ox)/cam.s, y:(my-cam.oy)/cam.s, mx, my};
+  // W4d: ФИКС рассинхрона единиц — hitTest/drag/snap ждут НОРМАЛИЗОВАННЫЕ координаты
+  // (0..1), а раньше возвращались пиксели плана (0..W): клик в комнату не выбирал её,
+  // перетаскивание не работало. Делим на W/H — вся страница сразу становится «живой».
+  return {x:((mx-cam.ox)/cam.s)/W, y:((my-cam.oy)/cam.s)/H, mx, my};
 }
 const wx = x => x*W, wy = y => y*H;
 
