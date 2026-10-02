@@ -1,4 +1,4 @@
-﻿package com.politex.widget
+package com.politex.widget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -11,8 +11,11 @@ import com.politex.R
 import com.politex.data.local.entity.LessonEntity
 
 class TodayScheduleWidgetProvider : AppWidgetProvider() {
-
-    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+    override fun onUpdate(
+        context: Context,
+        manager: AppWidgetManager,
+        ids: IntArray,
+    ) {
         ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
         WidgetAlarm.scheduleNext(context)
     }
@@ -20,7 +23,6 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
     override fun onEnabled(context: Context) = WidgetAlarm.scheduleNext(context)
 
     companion object {
-
         private const val MAX_ROWS = 12
 
         fun updateAll(context: Context) {
@@ -29,7 +31,10 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
         }
 
-        private fun buildViews(context: Context, appWidgetId: Int): RemoteViews {
+        private fun buildViews(
+            context: Context,
+            appWidgetId: Int,
+        ): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_today_schedule)
             val style = WidgetStyle.load(context, appWidgetId)
             val showRoom = WidgetOptions.showRoom(context, appWidgetId)
@@ -44,13 +49,13 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
 
             views.setTextViewText(
                 R.id.tv_today_header,
-                if (group.isBlank()) "РАСПИСАНИЕ" else "СЕГОДНЯ • $group"
+                if (group.isBlank()) "РАСПИСАНИЕ" else "СЕГОДНЯ • $group",
             )
 
             // W8: без выбранной группы причина пустоты — «настрой группу», не «уроков нет»
             views.setTextViewText(
                 R.id.tv_today_empty,
-                if (group.isBlank()) "Выберите группу в приложении" else "На сегодня уроков нет"
+                if (group.isBlank()) "Выберите группу в приложении" else "На сегодня уроков нет",
             )
 
             views.removeAllViews(R.id.today_rows)
@@ -62,29 +67,30 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 lessons.take(MAX_ROWS).forEach { lesson ->
                     views.addView(
                         R.id.today_rows,
-                        buildRow(context, lesson, now, style, showRoom, appWidgetId)
+                        buildRow(context, lesson, now, style, showRoom, appWidgetId),
                     )
                 }
                 // W5: обрезка >12 строк больше не тихая — хвост виден
                 if (lessons.size > MAX_ROWS) {
                     views.addView(
                         R.id.today_rows,
-                        buildMoreRow(context, style, lessons.size - MAX_ROWS)
+                        buildMoreRow(context, style, lessons.size - MAX_ROWS),
                     )
                 }
             }
 
-            val open = PendingIntent.getActivity(
-                context,
-                appWidgetId,
-                Intent(context, com.politex.MainActivity::class.java)
-                    // CLEAR_TOP|SINGLE_TOP: тёплый тап по виджету доходит до onNewIntent,
-                    // а не плодит копии активити
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra("EXTRA_OPEN_TAB", "SCHEDULE")
-                    .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_LESSON"),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+            val open =
+                PendingIntent.getActivity(
+                    context,
+                    appWidgetId,
+                    Intent(context, com.politex.MainActivity::class.java)
+                        // CLEAR_TOP|SINGLE_TOP: тёплый тап по виджету доходит до onNewIntent,
+                        // а не плодит копии активити
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        .putExtra("EXTRA_OPEN_TAB", "SCHEDULE")
+                        .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_LESSON"),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
             views.setOnClickPendingIntent(R.id.today_root, open)
             return views
         }
@@ -95,23 +101,24 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             now: Int,
             style: WidgetStyle,
             showRoom: Boolean,
-            appWidgetId: Int
+            appWidgetId: Int,
         ): RemoteViews {
             val row = RemoteViews(context.packageName, R.layout.widget_row_list)
 
             val isCurrent = now in lesson.startMinutes()..lesson.endMinutes()
             val isPast = now > lesson.endMinutes()
 
-            val textColor = when {
-                isCurrent -> style.mainColor
-                isPast -> style.pastColor
-                else -> style.mainColor
-            }
+            val textColor =
+                when {
+                    isCurrent -> style.mainColor
+                    isPast -> style.pastColor
+                    else -> style.mainColor
+                }
 
             row.setInt(
                 R.id.row_root,
                 "setBackgroundColor",
-                if (isCurrent) style.highlightColor else style.backgroundColor
+                if (isCurrent) style.highlightColor else style.backgroundColor,
             )
 
             row.setTextViewText(R.id.row_number, "${lesson.lessonNumber}")
@@ -122,7 +129,8 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
 
             row.setTextViewText(
                 R.id.row_subject,
-                com.politex.util.SubjectFormatter.getShortName(lesson.subjectRaw)
+                com.politex.util.SubjectFormatter
+                    .getShortName(lesson.subjectRaw),
             )
             row.setTextColor(R.id.row_subject, textColor)
 
@@ -137,18 +145,19 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 val ph = (7 * d + 0.5f).toInt()
                 val pv = (2 * d + 0.5f).toInt()
                 row.setViewPadding(R.id.row_room, ph, pv, ph, pv)
-                val intent = Intent(context, com.politex.MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra("EXTRA_OPEN_TAB", "MAP")
-                    .putExtra("EXTRA_ROOM", room)
+                val intent =
+                    Intent(context, com.politex.MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        .putExtra("EXTRA_OPEN_TAB", "MAP")
+                        .putExtra("EXTRA_ROOM", room)
                 row.setOnClickPendingIntent(
                     R.id.row_room,
                     PendingIntent.getActivity(
                         context,
                         appWidgetId * 100 + lesson.lessonNumber,
                         intent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    )
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                    ),
                 )
             } else {
                 row.setTextViewText(R.id.row_room, "")
@@ -159,7 +168,11 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
         }
 
         // W5: строка «…ещё N» тем же layout-рядом, тише основного (subColor)
-        private fun buildMoreRow(context: Context, style: WidgetStyle, hiddenCount: Int): RemoteViews {
+        private fun buildMoreRow(
+            context: Context,
+            style: WidgetStyle,
+            hiddenCount: Int,
+        ): RemoteViews {
             val row = RemoteViews(context.packageName, R.layout.widget_row_list)
             row.setInt(R.id.row_root, "setBackgroundColor", style.backgroundColor)
             row.setTextViewText(R.id.row_number, "")

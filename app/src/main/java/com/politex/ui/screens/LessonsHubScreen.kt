@@ -19,9 +19,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,10 +44,12 @@ import com.politex.ui.util.bouncyClickable
  * большие хитбоксы 44dp, выбранный залит ColorTopBar, порядок стабилен и подсознателен
  * (материалы → задания → оценки: от «взять» к «сделать» к «проверить»).
  */
-enum class LessonsSection(val title: String) {
+enum class LessonsSection(
+    val title: String,
+) {
     MATERIALS("Материалы"),
     TASKS("Задания"),
-    GRADES("Оценки")
+    GRADES("Оценки"),
 }
 
 @Composable
@@ -55,64 +57,68 @@ fun LessonsHubScreen(
     groupInfo: GroupInfo,
     taskRepository: TaskRepository,
     modifier: Modifier = Modifier,
-    snackbarHostState: SnackbarHostState? = null
+    snackbarHostState: SnackbarHostState? = null,
 ) {
     // Задания — привычное место пользователя: стартуем с них, выбор переживает смерть вкладки
     var section by rememberSaveable { mutableStateOf(LessonsSection.TASKS) }
 
     Column(
-        modifier = modifier
+        modifier =
+        modifier
             .fillMaxSize()
-            .background(ColorBgMain)
+            .background(ColorBgMain),
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text(text = "Уроки", style = TextStylePageTitle, maxLines = 1)
             Spacer(modifier = Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 LessonsSection.entries.forEach { s ->
                     val isSelected = section == s
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     ) {
                         Surface(
                             shape = RoundedCornerShape(2.dp),
                             border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
                             color = if (isSelected) ColorTopBar else ColorBgMain,
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 44.dp)
-                                .bouncyClickable { section = s }
+                                .bouncyClickable { section = s },
                         ) {
                             Box(
                                 modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.Center
+                                contentAlignment = Alignment.Center,
                             ) {
                                 Text(
                                     text = s.title,
                                     softWrap = false,
                                     maxLines = 1,
-                                    style = androidx.compose.ui.text.TextStyle(
+                                    style =
+                                    androidx.compose.ui.text.TextStyle(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                         fontSize = 12.sp,
-                                        color = if (isSelected) Color.White else ColorTextBody
+                                        color = if (isSelected) Color.White else ColorTextBody,
                                     ),
-                                    modifier = Modifier.padding(vertical = 8.dp)
+                                    modifier = Modifier.padding(vertical = 8.dp),
                                 )
                             }
                         }
                         Spacer(modifier = Modifier.height(3.dp))
                         Box(
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .width(28.dp)
                                 .height(3.dp)
                                 .background(
                                     if (isSelected) ColorBrandBlue else Color.Transparent,
-                                    RoundedCornerShape(2.dp)
-                                )
+                                    RoundedCornerShape(2.dp),
+                                ),
                         )
                     }
                 }
@@ -120,20 +126,23 @@ fun LessonsHubScreen(
         }
 
         when (section) {
-            LessonsSection.TASKS -> TasksScreen(
-                groupInfo = groupInfo,
-                taskRepository = taskRepository,
-                modifier = Modifier.fillMaxSize(),
-                snackbarHostState = snackbarHostState
-            )
-            LessonsSection.MATERIALS -> MaterialBaseScreen(
-                groupInfo = groupInfo,
-                modifier = Modifier.fillMaxSize()
-            )
-            LessonsSection.GRADES -> GradesScreen(
-                groupInfo = groupInfo,
-                modifier = Modifier.fillMaxSize()
-            )
+            LessonsSection.TASKS ->
+                TasksScreen(
+                    groupInfo = groupInfo,
+                    taskRepository = taskRepository,
+                    modifier = Modifier.fillMaxSize(),
+                    snackbarHostState = snackbarHostState,
+                )
+            LessonsSection.MATERIALS ->
+                MaterialBaseScreen(
+                    groupInfo = groupInfo,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            LessonsSection.GRADES ->
+                GradesScreen(
+                    groupInfo = groupInfo,
+                    modifier = Modifier.fillMaxSize(),
+                )
         }
     }
 }

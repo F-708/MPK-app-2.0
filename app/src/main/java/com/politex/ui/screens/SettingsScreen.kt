@@ -1,4 +1,4 @@
-﻿package com.politex.ui.screens
+package com.politex.ui.screens
 
 import android.Manifest
 import android.app.AlarmManager
@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -34,19 +33,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Widgets
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -78,33 +71,27 @@ import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
-import com.politex.ui.theme.ColorDividerLight
+import com.politex.ui.theme.ColorBrandFill
+import com.politex.ui.theme.ColorSurfaceHighlight
+import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
-import com.politex.ui.theme.ColorTopBar
-import com.politex.ui.theme.TextStylePageTitle
+import com.politex.ui.theme.ColorWarning
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.AppThemeStore
 import com.politex.util.MpkCurriculum
 import com.politex.util.defaultBackupFileName
-import kotlinx.coroutines.launch
 import com.politex.widget.WidgetUpdateHelper
 import com.politex.worker.MpkWorkManagerHelper
-import com.politex.ui.theme.ColorBrandFill
-import com.politex.ui.theme.ColorSuccess
-import com.politex.ui.theme.ColorSuccessBg
-import com.politex.ui.theme.ColorSuccessText
-import com.politex.ui.theme.ColorSurfaceHighlight
-import com.politex.ui.theme.ColorSurfaceVariantLight
-import com.politex.ui.theme.ColorWarning
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
     groupInfo: GroupInfo,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var showGroupDialog by remember { mutableStateOf(false) }
@@ -113,7 +100,7 @@ fun SettingsScreen(
     }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
+        contract = ActivityResultContracts.RequestPermission(),
     ) { isGranted ->
         if (isGranted) {
             isNotificationEnabled = true
@@ -136,7 +123,7 @@ fun SettingsScreen(
     val backupScope = rememberCoroutineScope()
 
     val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
+        contract = ActivityResultContracts.CreateDocument("application/json"),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         backupScope.launch {
@@ -153,7 +140,7 @@ fun SettingsScreen(
     }
 
     val importLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         backupScope.launch {
@@ -170,7 +157,7 @@ fun SettingsScreen(
                             if (result.warnings.isNotEmpty()) parts += result.warnings.joinToString("; ")
                             parts.joinToString(". ")
                         },
-                        onFailure = { "Не удалось прочитать файл: ${it.message}" }
+                        onFailure = { "Не удалось прочитать файл: ${it.message}" },
                     )
                 }
             } catch (e: Exception) {
@@ -186,42 +173,40 @@ fun SettingsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ColorBgMain)
+            .background(ColorBgMain),
     ) {
-
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-
             item { SectionHeader("МОЯ ГРУППА") }
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
                     border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(14.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                                contentAlignment = Alignment.Center
+                                contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.School,
                                     contentDescription = null,
                                     tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                             Spacer(modifier = Modifier.width(10.dp))
@@ -231,8 +216,8 @@ fun SettingsScreen(
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp,
-                                        color = ColorTextTitle
-                                    )
+                                        color = ColorTextTitle,
+                                    ),
                                 )
                                 val spec = specialty?.shortName
                                 if (!spec.isNullOrBlank()) {
@@ -240,9 +225,9 @@ fun SettingsScreen(
                                         text = spec,
                                         style = androidx.compose.ui.text.TextStyle(
                                             fontSize = 11.sp,
-                                            color = ColorTextMuted
+                                            color = ColorTextMuted,
                                         ),
-                                        maxLines = 1
+                                        maxLines = 1,
                                     )
                                 }
                             }
@@ -253,14 +238,14 @@ fun SettingsScreen(
                             modifier = Modifier
                                 // ST4: хитбокс «СМЕНИТЬ» 48dp — смена группы важное действие
                                 .heightIn(min = 48.dp)
-                                .bouncyClickable { showGroupDialog = true }
+                                .bouncyClickable { showGroupDialog = true },
                         ) {
                             // Surface — это Box с выравниванием TopStart: без обёртки текст 11sp
                             // прилипал к верху 48dp-кнопки, снизу оставалась пустая полоса.
                             // Тот же приём, что в GroupScheduleScreen («СМЕНИТЬ» там по центру).
                             Box(
                                 contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 12.dp)
+                                modifier = Modifier.padding(horizontal = 12.dp),
                             ) {
                                 Text(
                                     text = "СМЕНИТЬ",
@@ -269,8 +254,8 @@ fun SettingsScreen(
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp,
-                                        color = Color.White
-                                    )
+                                        color = Color.White,
+                                    ),
                                 )
                             }
                         }
@@ -285,29 +270,29 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
                     border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .size(32.dp)
                                         .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                                    contentAlignment = Alignment.Center
+                                    contentAlignment = Alignment.Center,
                                 ) {
                                     Icon(
                                         imageVector = if (isNotificationEnabled) Icons.Default.NotificationsActive else Icons.Default.Notifications,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(18.dp),
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(10.dp))
@@ -317,15 +302,15 @@ fun SettingsScreen(
                                         style = androidx.compose.ui.text.TextStyle(
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 14.sp,
-                                            color = ColorTextTitle
-                                        )
+                                            color = ColorTextTitle,
+                                        ),
                                     )
                                     Text(
                                         text = if (isNotificationEnabled) "Включены (10:00 – 21:00)" else "Отключены",
                                         style = androidx.compose.ui.text.TextStyle(
                                             fontSize = 11.sp,
-                                            color = ColorTextMuted
-                                        )
+                                            color = ColorTextMuted,
+                                        ),
                                     )
                                 }
                             }
@@ -351,9 +336,9 @@ fun SettingsScreen(
                                 },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
-                                    checkedTrackColor = ColorBrandBlue
+                                    checkedTrackColor = ColorBrandBlue,
                                 ),
-                                modifier = Modifier.testTag("notifications_switch")
+                                modifier = Modifier.testTag("notifications_switch"),
                             )
                         }
 
@@ -362,8 +347,8 @@ fun SettingsScreen(
                             text = "Приходит один раз, когда на сайте появляется расписание на следующий день.",
                             style = androidx.compose.ui.text.TextStyle(
                                 color = ColorTextMuted,
-                                fontSize = 11.sp
-                            )
+                                fontSize = 11.sp,
+                            ),
                         )
                     }
                 }
@@ -383,7 +368,7 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("theme_swatches"),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(com.politex.ui.theme.AppTheme.entries.toList()) { theme ->
                         val isSelected = currentTheme == theme
@@ -392,27 +377,27 @@ fun SettingsScreen(
                             color = ColorBgMain,
                             border = BorderStroke(
                                 if (isSelected) 2.dp else 1.dp,
-                                if (isSelected) ColorBrandBlue else ColorBorderLight
+                                if (isSelected) ColorBrandBlue else ColorBorderLight,
                             ),
-                            modifier = Modifier.bouncyClickable { onThemePicked(theme) }
+                            modifier = Modifier.bouncyClickable { onThemePicked(theme) },
                         ) {
                             Column(
                                 modifier = Modifier
                                     .width(92.dp)
                                     .padding(horizontal = 8.dp, vertical = 10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
                                 // превью темы: верхняя панель + брендовая полоса
                                 Box(
                                     modifier = Modifier
                                         .size(36.dp)
                                         .background(theme.palette.topBar, RoundedCornerShape(2.dp)),
-                                    contentAlignment = Alignment.Center
+                                    contentAlignment = Alignment.Center,
                                 ) {
                                     Box(
                                         modifier = Modifier
                                             .size(width = 20.dp, height = 7.dp)
-                                            .background(theme.palette.brandBlue, RoundedCornerShape(1.dp))
+                                            .background(theme.palette.brandBlue, RoundedCornerShape(1.dp)),
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
@@ -423,15 +408,15 @@ fun SettingsScreen(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                         fontSize = 11.sp,
                                         color = ColorTextTitle,
-                                        textAlign = TextAlign.Center
-                                    )
+                                        textAlign = TextAlign.Center,
+                                    ),
                                 )
                                 if (isSelected) {
                                     Icon(
                                         imageVector = Icons.Default.Check,
                                         contentDescription = null,
                                         tint = ColorBrandBlue,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(16.dp),
                                     )
                                 }
                             }
@@ -446,30 +431,30 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
                     border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(14.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
                             text = "Telegram",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
-                                color = ColorTextTitle
-                            )
+                                color = ColorTextTitle,
+                            ),
                         )
                         Text(
                             text = "@Betterthannothing12",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
-                                color = ColorBrandBlue
-                            )
+                                color = ColorBrandBlue,
+                            ),
                         )
                     }
                 }
@@ -481,7 +466,7 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
                     border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
@@ -489,8 +474,8 @@ fun SettingsScreen(
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
-                                color = ColorTextTitle
-                            )
+                                color = ColorTextTitle,
+                            ),
                         )
                         Spacer(modifier = Modifier.height(8.dp))
 
@@ -503,12 +488,12 @@ fun SettingsScreen(
                                     context.startActivity(
                                         Intent(
                                             Intent.ACTION_VIEW,
-                                            Uri.parse("https://guo-mpk.by/")
-                                        )
+                                            Uri.parse("https://guo-mpk.by/"),
+                                        ),
                                     )
                                 } catch (_: Exception) {
                                 }
-                            }
+                            },
                         )
 
                         Spacer(modifier = Modifier.height(6.dp))
@@ -521,7 +506,7 @@ fun SettingsScreen(
                             onClick = {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://guo-mpk.by/raspisanie/"))
                                 context.startActivity(intent)
-                            }
+                            },
                         )
                     }
                 }
@@ -534,7 +519,7 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
                     border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
@@ -542,39 +527,39 @@ fun SettingsScreen(
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
-                                color = ColorTextTitle
-                            )
+                                color = ColorTextTitle,
+                            ),
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Настройки и все учебные задания сохраняются в файл. " +
                                 "Файл можно перекинуть на другой телефон " +
                                 "или использовать как запасную копию.",
-                            style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted)
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             ActionChip(
                                 text = "СОХРАНИТЬ В ФАЙЛ",
                                 filled = true,
                                 modifier = Modifier.weight(1f),
-                                onClick = { exportLauncher.launch(defaultBackupFileName(context)) }
+                                onClick = { exportLauncher.launch(defaultBackupFileName(context)) },
                             )
                             ActionChip(
                                 text = "ВОССТАНОВИТЬ",
                                 filled = false,
                                 modifier = Modifier.weight(1f),
-                                onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }
+                                onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
                             )
                         }
                         if (backupMessage.isNotBlank()) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = backupMessage,
-                                style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorBrandBlue)
+                                style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorBrandBlue),
                             )
                         }
                     }
@@ -590,7 +575,7 @@ fun SettingsScreen(
             onGroupSelected = { newGroup ->
                 showGroupDialog = false
                 onGroupChanged(newGroup)
-            }
+            },
         )
     }
 }
@@ -599,20 +584,20 @@ fun SettingsScreen(
 private fun DiagnosticRow(
     label: String,
     value: String,
-    isMonospace: Boolean = false
+    isMonospace: Boolean = false,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = label,
             style = androidx.compose.ui.text.TextStyle(
                 fontSize = 11.sp,
-                color = ColorTextMuted
+                color = ColorTextMuted,
             ),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
         Text(
             text = value,
@@ -620,9 +605,9 @@ private fun DiagnosticRow(
                 fontWeight = FontWeight.Medium,
                 color = ColorTextBody,
                 fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
-                fontSize = if (isMonospace) 10.sp else 11.sp
+                fontSize = if (isMonospace) 10.sp else 11.sp,
             ),
-            modifier = Modifier.weight(1.3f)
+            modifier = Modifier.weight(1.3f),
         )
     }
 }
@@ -631,7 +616,7 @@ private fun DiagnosticRow(
 private fun LinkItem(
     title: String,
     subtitle: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -639,14 +624,14 @@ private fun LinkItem(
             .bouncyClickable(onClick = onClick)
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = Icons.Default.Language,
                 contentDescription = null,
                 tint = ColorBrandBlue,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(18.dp),
             )
             Spacer(modifier = Modifier.width(10.dp))
             Column {
@@ -655,15 +640,15 @@ private fun LinkItem(
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Medium,
                         fontSize = 13.sp,
-                        color = ColorTextTitle
-                    )
+                        color = ColorTextTitle,
+                    ),
                 )
                 Text(
                     text = subtitle,
                     style = androidx.compose.ui.text.TextStyle(
                         fontSize = 11.sp,
-                        color = ColorActiveBlue
-                    )
+                        color = ColorActiveBlue,
+                    ),
                 )
             }
         }
@@ -672,7 +657,7 @@ private fun LinkItem(
             imageVector = Icons.Default.ChevronRight,
             contentDescription = null,
             tint = ColorTextMuted,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(18.dp),
         )
     }
 }
@@ -701,7 +686,7 @@ private fun BellCountdownNotificationCard() {
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
+        contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) {
             isOngoingEnabled = true
@@ -718,26 +703,26 @@ private fun BellCountdownNotificationCard() {
         border = BorderStroke(1.dp, ColorBorderLight),
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("bell_notification_card")
+            .testTag("bell_notification_card"),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     Box(
                         modifier = Modifier
                             .size(32.dp)
                             .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp)),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = Icons.Default.NotificationsActive,
                             contentDescription = null,
                             tint = ColorBrandBlue,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
@@ -747,15 +732,15 @@ private fun BellCountdownNotificationCard() {
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
-                                color = ColorTextTitle
-                            )
+                                color = ColorTextTitle,
+                            ),
                         )
                         Text(
                             text = if (isOngoingEnabled) "Показывается в шторке" else "Отключена",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontSize = 11.sp,
-                                color = ColorTextMuted
-                            )
+                                color = ColorTextMuted,
+                            ),
                         )
                     }
                 }
@@ -781,9 +766,9 @@ private fun BellCountdownNotificationCard() {
                     },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = ColorBrandBlue
+                        checkedTrackColor = ColorBrandBlue,
                     ),
-                    modifier = Modifier.testTag("bell_notification_switch")
+                    modifier = Modifier.testTag("bell_notification_switch"),
                 )
             }
 
@@ -792,8 +777,8 @@ private fun BellCountdownNotificationCard() {
                 text = "Постоянная строка со временем до звонка — обновляется каждую минуту.",
                 style = androidx.compose.ui.text.TextStyle(
                     color = ColorTextMuted,
-                    fontSize = 11.sp
-                )
+                    fontSize = 11.sp,
+                ),
             )
 
             // C3: нет разрешения на точные будильники — отсчёт будет с задержкой, предлагаем открыть настройки
@@ -805,19 +790,19 @@ private fun BellCountdownNotificationCard() {
                     border = BorderStroke(1.dp, ColorWarning),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("exact_alarm_warning")
+                        .testTag("exact_alarm_warning"),
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
                             text = "Для точного отсчёта разрешите приложению точные будильники",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontSize = 12.sp,
-                                color = ColorTextBody
+                                color = ColorTextBody,
                             ),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         // ST3: хитбокс кнопки 44dp
@@ -826,11 +811,11 @@ private fun BellCountdownNotificationCard() {
                             color = ColorBrandFill,
                             modifier = Modifier
                                 .heightIn(min = 44.dp)
-                                .bouncyClickable { openExactAlarmSettings(context) }
+                                .bouncyClickable { openExactAlarmSettings(context) },
                         ) {
                             Box(
                                 contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 12.dp)
+                                modifier = Modifier.padding(horizontal = 12.dp),
                             ) {
                                 Text(
                                     text = "РАЗРЕШИТЬ",
@@ -839,8 +824,8 @@ private fun BellCountdownNotificationCard() {
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp,
-                                        color = Color.White
-                                    )
+                                        color = Color.White,
+                                    ),
                                 )
                             }
                         }
@@ -855,8 +840,8 @@ private fun BellCountdownNotificationCard() {
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
-                        color = ColorBrandBlue
-                    )
+                        color = ColorBrandBlue,
+                    ),
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
@@ -874,7 +859,7 @@ private fun BellCountdownNotificationCard() {
                             .bouncyClickable {
                                 selectedStyle = style
                                 com.politex.util.BellCountdownNotifier.setStyle(context, style)
-                            }
+                            },
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -884,7 +869,7 @@ private fun BellCountdownNotificationCard() {
                                         selectedStyle = style
                                         com.politex.util.BellCountdownNotifier.setStyle(context, style)
                                     },
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(20.dp),
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
@@ -892,17 +877,17 @@ private fun BellCountdownNotificationCard() {
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
-                                        color = ColorTextTitle
-                                    )
+                                        color = ColorTextTitle,
+                                    ),
                                 )
                             }
                             Text(
                                 text = stylePreviewBody(style),
                                 style = androidx.compose.ui.text.TextStyle(
                                     fontSize = 11.sp,
-                                    color = ColorTextMuted
+                                    color = ColorTextMuted,
                                 ),
-                                modifier = Modifier.padding(start = 28.dp)
+                                modifier = Modifier.padding(start = 28.dp),
                             )
                         }
                     }
@@ -914,8 +899,8 @@ private fun BellCountdownNotificationCard() {
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
-                        color = ColorBrandBlue
-                    )
+                        color = ColorBrandBlue,
+                    ),
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
@@ -933,20 +918,19 @@ private fun BellCountdownNotificationCard() {
                             .bouncyClickable {
                                 selectedTheme = theme
                                 com.politex.util.BellCountdownNotifier.setTheme(context, theme)
-                            }
+                            },
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-
                             Box(
                                 modifier = Modifier
                                     .size(18.dp)
                                     .background(
                                         if (theme.accent == 0) ColorSurfaceVariantLight else Color(theme.accent),
-                                        CircleShape
-                                    )
+                                        CircleShape,
+                                    ),
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
@@ -954,8 +938,8 @@ private fun BellCountdownNotificationCard() {
                                 style = androidx.compose.ui.text.TextStyle(
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                     fontSize = 12.sp,
-                                    color = ColorTextBody
-                                )
+                                    color = ColorTextBody,
+                                ),
                             )
                         }
                     }
@@ -967,8 +951,8 @@ private fun BellCountdownNotificationCard() {
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
-                        color = ColorBrandBlue
-                    )
+                        color = ColorBrandBlue,
+                    ),
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
@@ -989,7 +973,7 @@ private fun BellCountdownNotificationCard() {
                             .bouncyClickable {
                                 selectedScope = scope
                                 com.politex.util.BellCountdownNotifier.setScope(context, scope)
-                            }
+                            },
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -999,7 +983,7 @@ private fun BellCountdownNotificationCard() {
                                         selectedScope = scope
                                         com.politex.util.BellCountdownNotifier.setScope(context, scope)
                                     },
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(20.dp),
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
@@ -1007,17 +991,17 @@ private fun BellCountdownNotificationCard() {
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
-                                        color = ColorTextTitle
-                                    )
+                                        color = ColorTextTitle,
+                                    ),
                                 )
                             }
                             Text(
                                 text = scope.description,
                                 style = androidx.compose.ui.text.TextStyle(
                                     fontSize = 11.sp,
-                                    color = ColorTextMuted
+                                    color = ColorTextMuted,
                                 ),
-                                modifier = Modifier.padding(start = 28.dp)
+                                modifier = Modifier.padding(start = 28.dp),
                             )
                         }
                     }
@@ -1028,13 +1012,11 @@ private fun BellCountdownNotificationCard() {
 }
 
 // C3: на SDK < 31 точные будильники разрешены всегда, на 31+ спрашиваем AlarmManager
-internal fun canScheduleExactAlarms(context: Context): Boolean =
-    Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-        (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
+internal fun canScheduleExactAlarms(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+    (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
 
 // C3: строка-подсказка нужна только на SDK 31+ и без разрешения
-internal fun exactAlarmHintNeeded(sdkInt: Int, canScheduleExact: Boolean): Boolean =
-    sdkInt >= Build.VERSION_CODES.S && !canScheduleExact
+internal fun exactAlarmHintNeeded(sdkInt: Int, canScheduleExact: Boolean): Boolean = sdkInt >= Build.VERSION_CODES.S && !canScheduleExact
 
 // C3: системная страница выдачи разрешения на точные будильники (intent c package URI)
 private fun openExactAlarmSettings(context: Context) {
@@ -1043,8 +1025,8 @@ private fun openExactAlarmSettings(context: Context) {
         context.startActivity(
             Intent(
                 Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                Uri.parse("package:${context.packageName}")
-            )
+                Uri.parse("package:${context.packageName}"),
+            ),
         )
     } catch (_: Exception) {
         // нет такой страницы в прошивке — открываем общие настройки
@@ -1055,25 +1037,23 @@ private fun openExactAlarmSettings(context: Context) {
     }
 }
 
-private fun stylePreviewTitle(style: com.politex.util.BellCountdownNotifier.Style): String =
-    when (style) {
-        com.politex.util.BellCountdownNotifier.Style.COMPACT -> "До звонка: 12 мин"
-        com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME -> "Мой Политех"
-        com.politex.util.BellCountdownNotifier.Style.WITH_LESSON -> "До звонка: 12 мин"
-        com.politex.util.BellCountdownNotifier.Style.WITH_PROGRESS -> "До звонка: 12 мин"
-    }
+private fun stylePreviewTitle(style: com.politex.util.BellCountdownNotifier.Style): String = when (style) {
+    com.politex.util.BellCountdownNotifier.Style.COMPACT -> "До звонка: 12 мин"
+    com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME -> "Мой Политех"
+    com.politex.util.BellCountdownNotifier.Style.WITH_LESSON -> "До звонка: 12 мин"
+    com.politex.util.BellCountdownNotifier.Style.WITH_PROGRESS -> "До звонка: 12 мин"
+}
 
-private fun stylePreviewBody(style: com.politex.util.BellCountdownNotifier.Style): String =
-    when (style) {
-        com.politex.util.BellCountdownNotifier.Style.COMPACT ->
-            "Только суть — сколько осталось"
-        com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME ->
-            "Сверху название приложения, ниже отсчёт"
-        com.politex.util.BellCountdownNotifier.Style.WITH_LESSON ->
-            "Плюс номер идущего урока или «Перемена»"
-        com.politex.util.BellCountdownNotifier.Style.WITH_PROGRESS ->
-            "С полосой прогресса урока"
-    }
+private fun stylePreviewBody(style: com.politex.util.BellCountdownNotifier.Style): String = when (style) {
+    com.politex.util.BellCountdownNotifier.Style.COMPACT ->
+        "Только суть — сколько осталось"
+    com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME ->
+        "Сверху название приложения, ниже отсчёт"
+    com.politex.util.BellCountdownNotifier.Style.WITH_LESSON ->
+        "Плюс номер идущего урока или «Перемена»"
+    com.politex.util.BellCountdownNotifier.Style.WITH_PROGRESS ->
+        "С полосой прогресса урока"
+}
 
 @Composable
 private fun SectionHeader(text: String) {
@@ -1082,9 +1062,9 @@ private fun SectionHeader(text: String) {
         style = androidx.compose.ui.text.TextStyle(
             fontWeight = FontWeight.Bold,
             fontSize = 12.sp,
-            color = ColorBrandBlue
+            color = ColorBrandBlue,
         ),
-        modifier = Modifier.padding(top = 4.dp)
+        modifier = Modifier.padding(top = 4.dp),
     )
 }
 
@@ -1093,7 +1073,7 @@ private fun ActionChip(
     text: String,
     filled: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
@@ -1102,13 +1082,13 @@ private fun ActionChip(
         modifier = modifier
             // ST3: хитбокс чипа 48dp
             .heightIn(min = 48.dp)
-            .bouncyClickable(onClick = onClick)
+            .bouncyClickable(onClick = onClick),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 10.dp),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = text,
@@ -1117,10 +1097,9 @@ private fun ActionChip(
                 style = androidx.compose.ui.text.TextStyle(
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
-                    color = if (filled) Color.White else ColorTextTitle
-                )
+                    color = if (filled) Color.White else ColorTextTitle,
+                ),
             )
         }
     }
 }
-

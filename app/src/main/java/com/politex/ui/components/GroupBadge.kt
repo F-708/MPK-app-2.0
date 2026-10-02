@@ -1,4 +1,4 @@
-﻿package com.politex.ui.components
+package com.politex.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -30,17 +30,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
-import com.politex.ui.util.bouncyClickable
 import com.politex.ui.theme.ColorMenuBorder
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.util.bouncyClickable
 
 @Composable
 fun GroupBadge(
     groupName: String,
     modifier: Modifier = Modifier,
     isDarkHeader: Boolean = true,
-    onGroupChanged: (String) -> Unit = {}
+    onGroupChanged: (String) -> Unit = {},
 ) {
     var showDialog by remember { mutableStateOf(false) }
 
@@ -53,43 +53,46 @@ fun GroupBadge(
         color = bgColor,
         contentColor = contentColor,
         border = BorderStroke(1.dp, borderColor),
-        modifier = modifier
+        modifier =
+        modifier
             .wrapContentWidth()
             .bouncyClickable(onClick = { showDialog = true })
-            .testTag("group_badge_pill")
+            .testTag("group_badge_pill"),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
-            modifier = Modifier
+            modifier =
+            Modifier
                 .wrapContentWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         ) {
             Icon(
                 imageVector = Icons.Default.School,
                 contentDescription = null,
                 tint = contentColor,
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(14.dp),
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = groupName.ifBlank { "—" },
-                style = androidx.compose.ui.text.TextStyle(
+                style =
+                androidx.compose.ui.text.TextStyle(
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
-                    letterSpacing = 0.5.sp
+                    letterSpacing = 0.5.sp,
                 ),
                 color = contentColor,
                 maxLines = 1,
                 softWrap = false,
-                overflow = TextOverflow.Clip
+                overflow = TextOverflow.Clip,
             )
             Spacer(modifier = Modifier.width(2.dp))
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
                 contentDescription = "Сменить группу",
                 tint = contentColor,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(16.dp),
             )
         }
     }
@@ -101,7 +104,7 @@ fun GroupBadge(
             onGroupSelected = { newGroup ->
                 showDialog = false
                 onGroupChanged(newGroup)
-            }
+            },
         )
     }
 }

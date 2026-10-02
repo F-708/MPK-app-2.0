@@ -1,5 +1,6 @@
-﻿package com.politex
+package com.politex
 
+import androidx.compose.material3.Text
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.politex.data.local.MpkDatabase
@@ -13,7 +14,6 @@ import com.politex.ui.screens.TasksScreen
 import com.politex.ui.theme.MyApplicationTheme
 import com.politex.ui.theme.TextStylePageTitle
 import com.politex.util.GroupParser
-import androidx.compose.material3.Text
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,7 +23,6 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w360dp-h720dp")
 class UiRenderSmokeTest {
-
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -91,7 +90,7 @@ class UiRenderSmokeTest {
                 SettingsScreen(
                     groupInfo = group,
                     onGroupChanged = {},
-                    onRunConnectionTest = {}
+                    onRunConnectionTest = {},
                 )
             }
         }

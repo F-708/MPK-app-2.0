@@ -1,4 +1,4 @@
-﻿package com.politex.ui.viewmodel
+package com.politex.ui.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
@@ -7,9 +7,7 @@ import com.politex.data.local.MpkDatabase
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.local.entity.StudentTaskEntity
 import com.politex.data.model.GroupInfo
-import com.politex.data.repository.ScheduleRepository
 import com.politex.data.repository.TaskRepository
-import com.politex.util.GroupCatalog
 import com.politex.util.GroupParser
 import com.politex.widget.WidgetUpdateHelper
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -49,12 +47,16 @@ const val ROUTE_GROUP_SCHEDULE = "group_schedule?group={group}"
 /** Ключ одноразового запроса автопрокрутки в SavedStateHandle записи навигации. */
 const val ARG_SCROLL = "scroll"
 
-enum class AppTab(val title: String, val route: String) {
+enum class AppTab(
+    val title: String,
+    val route: String,
+) {
     SCHEDULE("Расписание", ROUTE_SCHEDULE),
+
     // Ф4: вкладка переименована по заказчику: внутри — Материалы/Задания/Оценки
     TASKS("Уроки", ROUTE_LESSONS),
     BELLS("Звонки", ROUTE_BELLS),
-    COLLEGE("Другое", ROUTE_COLLEGE)
+    COLLEGE("Другое", ROUTE_COLLEGE),
 }
 
 /**
@@ -67,12 +69,14 @@ data class AppUiState(
     val groupInfo: GroupInfo?,
     val isSyncing: Boolean = false,
     val hasSyncError: Boolean = false,
-    val showGroupSelection: Boolean = false
+    val showGroupSelection: Boolean = false,
 )
 
-class AppViewModel(application: Application) : AndroidViewModel(application) {
-
+class AppViewModel(
+    application: Application,
+) : AndroidViewModel(application) {
     private val database = MpkDatabase.getInstance(application)
+
     // E1: единый экземпляр из AppGraph (полный набор deps: каталог + teacherLessonDao),
     // вместо локального создания с риском рассинхрона зависимостей
     val scheduleRepository = com.politex.AppGraph.scheduleRepository
@@ -80,13 +84,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val diagnosticInfo = scheduleRepository.diagnosticInfo
 
-    private val _uiState = MutableStateFlow(
-        AppUiState(
-            currentGroupName = WidgetUpdateHelper.getSelectedGroup(application),
-            groupInfo = GroupParser.parse(WidgetUpdateHelper.getSelectedGroup(application)),
-            showGroupSelection = !WidgetUpdateHelper.hasSelectedGroup(application)
+    private val _uiState =
+        MutableStateFlow(
+            AppUiState(
+                currentGroupName = WidgetUpdateHelper.getSelectedGroup(application),
+                groupInfo = GroupParser.parse(WidgetUpdateHelper.getSelectedGroup(application)),
+                showGroupSelection = !WidgetUpdateHelper.hasSelectedGroup(application),
+            ),
         )
-    )
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
     private val _toastEvent = MutableSharedFlow<String>()
@@ -104,14 +109,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * получает кэш синхронно, без обращения к БД.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val groupLessons: StateFlow<List<LessonEntity>> = currentGroup
-        .flatMapLatest { name -> scheduleRepository.getAllLessonsForGroup(name) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val groupLessons: StateFlow<List<LessonEntity>> =
+        currentGroup
+            .flatMapLatest { name -> scheduleRepository.getAllLessonsForGroup(name) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** C3: то же для домашки — Flow тоже переживает пересоздание поддерева вкладки. */
-    val pendingTasks: StateFlow<List<StudentTaskEntity>> = currentGroup
-        .flatMapLatest { name -> taskRepository.getPendingTasksForGroup(name) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val pendingTasks: StateFlow<List<StudentTaskEntity>> =
+        currentGroup
+            .flatMapLatest { name -> taskRepository.getPendingTasksForGroup(name) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
 
@@ -134,7 +141,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 currentGroupName = parsed.canonicalName,
                 groupInfo = parsed,
                 hasSyncError = false,
-                showGroupSelection = false
+                showGroupSelection = false,
             )
         }
         viewModelScope.launch {
@@ -176,7 +183,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     if (!isAutoSync) {
                         _toastEvent.emit("Сбой обновления: проверьте интернет (сайт guo-mpk.by недоступен)")
                     }
-                }
+                },
             )
         }
     }

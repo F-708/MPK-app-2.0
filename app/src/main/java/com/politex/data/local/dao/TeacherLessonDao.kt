@@ -9,17 +9,21 @@ import com.politex.data.local.entity.TeacherLessonEntity
 
 @Dao
 interface TeacherLessonDao {
-
     /**
      * Занятия преподавателя на дату. Ключ — фамилия (в документе ФИО сокращённое),
      * порядок — по номеру занятия.
      */
-    @Query("""
+    @Query(
+        """
         SELECT * FROM teacher_lessons
         WHERE surnameKey = :surnameKey AND dateString = :dateString
         ORDER BY lessonNumber ASC
-    """)
-    suspend fun getForSurnameOnDate(surnameKey: String, dateString: String): List<TeacherLessonEntity>
+    """,
+    )
+    suspend fun getForSurnameOnDate(
+        surnameKey: String,
+        dateString: String,
+    ): List<TeacherLessonEntity>
 
     /** Преподаватели, у которых есть занятие в этот день — для списка активных. */
     @Query("SELECT DISTINCT teacherName FROM teacher_lessons WHERE dateString = :dateString")
@@ -36,14 +40,19 @@ interface TeacherLessonDao {
      * эмитится пустой список и в UI мелькает «занятий нет».
      */
     @Transaction
-    suspend fun replaceForDate(dateString: String, lessons: List<TeacherLessonEntity>) {
+    suspend fun replaceForDate(
+        dateString: String,
+        lessons: List<TeacherLessonEntity>,
+    ) {
         deleteForDate(dateString)
         insertLessons(lessons)
     }
 
-    @Query("""
+    @Query(
+        """
         SELECT DISTINCT dateString FROM teacher_lessons
         WHERE dateString != '' AND dateString IN (:dates)
-    """)
+    """,
+    )
     suspend fun getPresentDates(dates: List<String>): List<String>
 }

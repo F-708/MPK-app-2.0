@@ -15,7 +15,6 @@ import com.politex.data.local.entity.TaskReminderEntity
  */
 @Dao
 interface TaskReminderDao {
-
     @Query("SELECT * FROM task_reminders WHERE taskId = :taskId ORDER BY triggerAtMillis ASC")
     suspend fun getForTask(taskId: Long): List<TaskReminderEntity>
 
@@ -36,7 +35,10 @@ interface TaskReminderDao {
      * одной транзакцией, чтобы между ними воркер не увидел пустой список и не потерял напоминания.
      */
     @Transaction
-    suspend fun replaceForTask(taskId: Long, reminders: List<TaskReminderEntity>) {
+    suspend fun replaceForTask(
+        taskId: Long,
+        reminders: List<TaskReminderEntity>,
+    ) {
         deleteForTask(taskId)
         if (reminders.isNotEmpty()) insertAll(reminders)
     }

@@ -1,9 +1,9 @@
-﻿package com.politex.ui.screens
+package com.politex.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,29 +25,24 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,10 +57,8 @@ import androidx.compose.ui.unit.sp
 import com.politex.data.model.GroupInfo
 import com.politex.data.repository.ScheduleRepository
 import com.politex.data.repository.Student
-import com.politex.data.repository.StudentsRepository
-import com.politex.data.repository.TeacherInsights
 import com.politex.data.repository.Teacher
-import com.politex.data.repository.TeachersRepository
+import com.politex.data.repository.TeacherInsights
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
@@ -104,12 +97,13 @@ fun CollegeScreen(
     onOpenStudents: () -> Unit = {},
     onOpenGroupSchedule: () -> Unit = {},
     onOpenMap: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier
+        modifier =
+        modifier
             .fillMaxSize()
-            .background(ColorBgMain)
+            .background(ColorBgMain),
     ) {
         OtherMenu(
             groupInfo = groupInfo,
@@ -118,7 +112,7 @@ fun CollegeScreen(
             onOpenSettings = onOpenSettings,
             onOpenStudents = onOpenStudents,
             onOpenGroupSchedule = onOpenGroupSchedule,
-            onOpenMap = onOpenMap
+            onOpenMap = onOpenMap,
         )
     }
 }
@@ -126,7 +120,10 @@ fun CollegeScreen(
 // ---------- Обёртки route'ов подразделов (контент — прежние приватные страницы) ----------
 
 @Composable
-internal fun SpecialtyRoute(groupInfo: GroupInfo, onBack: () -> Unit) {
+internal fun SpecialtyRoute(
+    groupInfo: GroupInfo,
+    onBack: () -> Unit,
+) {
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
         MySpecialtyPage(groupInfo, onBack)
     }
@@ -137,14 +134,14 @@ internal fun TeachersRoute(
     groupInfo: GroupInfo,
     scheduleRepository: ScheduleRepository,
     onOpenTeacher: (Teacher) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
         TeachersPage(
             groupInfo = groupInfo,
             scheduleRepository = scheduleRepository,
             onBack = onBack,
-            onOpenTeacher = onOpenTeacher
+            onOpenTeacher = onOpenTeacher,
         )
     }
 }
@@ -162,17 +159,20 @@ internal fun TeacherCardRoute(
     scheduleRepository: ScheduleRepository,
     onOpenRoom: (String) -> Unit,
     onNotFound: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     val context = LocalContext.current
     var teacher by remember(teacherName) { mutableStateOf<Teacher?>(null) }
     LaunchedEffect(teacherName) {
         // E2: парсинг teachers.csv — не на main-потоке
-        teacher = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            com.politex.AppGraph.teachersRepository.loadTeachers()
-        }.firstOrNull {
-            TeacherInsights.surnameOf(it.name) == TeacherInsights.surnameOf(teacherName)
-        }
+        teacher =
+            kotlinx.coroutines
+                .withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    com.politex.AppGraph.teachersRepository
+                        .loadTeachers()
+                }.firstOrNull {
+                    TeacherInsights.surnameOf(it.name) == TeacherInsights.surnameOf(teacherName)
+                }
         if (teacher == null) onNotFound()
     }
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
@@ -181,12 +181,14 @@ internal fun TeacherCardRoute(
                 teacher = found,
                 groupInfo = groupInfo,
                 scheduleRepository = scheduleRepository,
-                teacherLessonDao = com.politex.data.local.MpkDatabase
-                    .getInstance(context).teacherLessonDao(),
+                teacherLessonDao =
+                com.politex.data.local.MpkDatabase
+                    .getInstance(context)
+                    .teacherLessonDao(),
                 // Б3: кабинет в расписании преподавателя ведёт на ту же карту,
                 // что и кабинет из своего расписания (раньше надпись была мёртвой)
                 onOpenRoom = onOpenRoom,
-                onBack = onBack
+                onBack = onBack,
             )
         }
     }
@@ -197,14 +199,14 @@ internal fun SettingsRoute(
     groupInfo: GroupInfo,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
         SettingsPage(
             groupInfo = groupInfo,
             onGroupChanged = onGroupChanged,
             onRunConnectionTest = onRunConnectionTest,
-            onBack = onBack
+            onBack = onBack,
         )
     }
 }
@@ -216,7 +218,10 @@ internal fun SettingsRoute(
  * глубже двух уровней здесь не было и нет.
  */
 @Composable
-internal fun StudentsRoute(scheduleRepository: ScheduleRepository, onBack: () -> Unit) {
+internal fun StudentsRoute(
+    scheduleRepository: ScheduleRepository,
+    onBack: () -> Unit,
+) {
     var selectedStudent by remember { mutableStateOf<Student?>(null) }
     BackHandler(enabled = selectedStudent != null) { selectedStudent = null }
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
@@ -224,13 +229,13 @@ internal fun StudentsRoute(scheduleRepository: ScheduleRepository, onBack: () ->
         if (student == null) {
             StudentsDatabaseScreen(
                 onBack = onBack,
-                onOpenStudent = { selectedStudent = it }
+                onOpenStudent = { selectedStudent = it },
             )
         } else {
             StudentCardScreen(
                 student = student,
                 scheduleRepository = scheduleRepository,
-                onBack = { selectedStudent = null }
+                onBack = { selectedStudent = null },
             )
         }
     }
@@ -244,7 +249,7 @@ private fun OtherMenu(
     onOpenSettings: () -> Unit,
     onOpenStudents: () -> Unit,
     onOpenGroupSchedule: () -> Unit,
-    onOpenMap: () -> Unit
+    onOpenMap: () -> Unit,
 ) {
     val context = LocalContext.current
     val isAdmin = com.politex.BuildConfig.FLAVOR == "admin"
@@ -255,25 +260,25 @@ private fun OtherMenu(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (isAdmin) {
-
                 item {
                     AdminMenuCard(
                         icon = { Icon(Icons.Default.AdminPanelSettings, null, tint = ADMIN_GOLD, modifier = Modifier.size(20.dp)) },
                         title = "База данных учащихся",
                         subtitle = "Все учащиеся колледжа: фильтры по группам и курсам",
                         badge = "ADMIN",
-                        onClick = onOpenStudents
+                        onClick = onOpenStudents,
                     )
                 }
                 item {
                     Box(
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .fillMaxWidth()
                             .height(1.dp)
-                            .background(ColorDividerLight)
+                            .background(ColorDividerLight),
                     )
                 }
             }
@@ -283,7 +288,7 @@ private fun OtherMenu(
                     icon = { Icon(Icons.Default.School, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
                     title = "Моя специальность",
                     subtitle = "Группа ${groupInfo.canonicalName}: код, квалификация, предметы по курсам",
-                    onClick = onOpenSpecialty
+                    onClick = onOpenSpecialty,
                 )
             }
             item {
@@ -291,7 +296,7 @@ private fun OtherMenu(
                     icon = { Icon(Icons.Default.DateRange, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
                     title = "Расписание группы",
                     subtitle = "Найти расписание любой группы колледжа",
-                    onClick = onOpenGroupSchedule
+                    onClick = onOpenGroupSchedule,
                 )
             }
             item {
@@ -299,7 +304,7 @@ private fun OtherMenu(
                     icon = { Icon(Icons.Default.LocationOn, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
                     title = "Карта колледжа",
                     subtitle = "Планы этажей и поиск кабинета",
-                    onClick = onOpenMap
+                    onClick = onOpenMap,
                 )
             }
             item {
@@ -307,7 +312,7 @@ private fun OtherMenu(
                     icon = { Icon(Icons.Default.Person, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
                     title = "Преподаватели",
                     subtitle = "Поиск по базе, избранное и фотографии",
-                    onClick = onOpenTeachers
+                    onClick = onOpenTeachers,
                 )
             }
             item {
@@ -315,7 +320,7 @@ private fun OtherMenu(
                     icon = { Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
                     title = "Настройки",
                     subtitle = "Группа, уведомления и диагностика",
-                    onClick = onOpenSettings
+                    onClick = onOpenSettings,
                 )
             }
             // N14: пункт «Сайт колледжа» перенесён в низ экрана настроек
@@ -328,50 +333,54 @@ private fun MenuCard(
     icon: @Composable () -> Unit,
     title: String,
     subtitle: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
         border = BorderStroke(1.dp, ColorBorderLight),
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
-            .bouncyClickable(onClick = onClick)
+            .bouncyClickable(onClick = onClick),
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .size(36.dp)
                     .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) { icon() }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = androidx.compose.ui.text.TextStyle(
+                    style =
+                    androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
-                        color = ColorTextTitle
-                    )
+                        color = ColorTextTitle,
+                    ),
                 )
                 Text(
                     text = subtitle,
-                    style = androidx.compose.ui.text.TextStyle(
+                    style =
+                    androidx.compose.ui.text.TextStyle(
                         fontSize = 12.sp,
-                        color = ColorTextMuted
+                        color = ColorTextMuted,
                     ),
-                    maxLines = 2
+                    maxLines = 2,
                 )
             }
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = ColorTextMuted,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(20.dp),
             )
         }
     }
@@ -383,68 +392,73 @@ private fun AdminMenuCard(
     title: String,
     subtitle: String,
     badge: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ADMIN_BG,
         border = BorderStroke(1.dp, ADMIN_ACCENT),
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
-            .bouncyClickable(onClick = onClick)
+            .bouncyClickable(onClick = onClick),
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .size(36.dp)
                     .background(ADMIN_ACCENT.copy(alpha = 0.25f), RoundedCornerShape(2.dp)),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) { icon() }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = title,
-                        style = androidx.compose.ui.text.TextStyle(
+                        style =
+                        androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
-                            color = ADMIN_GOLD
-                        )
+                            color = ADMIN_GOLD,
+                        ),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Surface(
                         shape = RoundedCornerShape(2.dp),
                         color = ADMIN_ACCENT,
-                        modifier = Modifier.padding(start = 2.dp)
+                        modifier = Modifier.padding(start = 2.dp),
                     ) {
                         Text(
                             text = badge,
-                            style = androidx.compose.ui.text.TextStyle(
+                            style =
+                            androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 8.sp,
-                                color = ADMIN_GOLD
+                                color = ADMIN_GOLD,
                             ),
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                         )
                     }
                 }
                 Text(
                     text = subtitle,
-                    style = androidx.compose.ui.text.TextStyle(
+                    style =
+                    androidx.compose.ui.text.TextStyle(
                         fontSize = 12.sp,
-                        color = Color(0xFFB8A87F)
+                        color = Color(0xFFB8A87F),
                     ),
-                    maxLines = 2
+                    maxLines = 2,
                 )
             }
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = ADMIN_GOLD,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(20.dp),
             )
         }
     }
@@ -455,14 +469,15 @@ private fun SettingsPage(
     groupInfo: GroupInfo,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             SubPageBackButton(onBack)
             Spacer(modifier = Modifier.width(8.dp))
@@ -470,39 +485,45 @@ private fun SettingsPage(
                 Text(
                     text = "Настройки",
                     style = TextStylePageTitle.copy(fontSize = 24.sp),
-                    maxLines = 1
+                    maxLines = 1,
                 )
                 Text(
                     text = "Параметры и диагностика приложения",
-                    style = androidx.compose.ui.text.TextStyle(
+                    style =
+                    androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp,
-                        color = ColorBrandBlue
-                    )
+                        color = ColorBrandBlue,
+                    ),
                 )
             }
         }
 
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(ColorDividerLight)
+                .background(ColorDividerLight),
         )
 
         SettingsScreen(
             groupInfo = groupInfo,
             onGroupChanged = onGroupChanged,
-            onRunConnectionTest = onRunConnectionTest
+            onRunConnectionTest = onRunConnectionTest,
         )
     }
 }
 
 @Composable
-private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
-    val specialty = remember(groupInfo.specialtyCode) {
-        MpkCurriculum.getSpecialty(groupInfo.specialtyCode)
-    }
+private fun MySpecialtyPage(
+    groupInfo: GroupInfo,
+    onBack: () -> Unit,
+) {
+    val specialty =
+        remember(groupInfo.specialtyCode) {
+            MpkCurriculum.getSpecialty(groupInfo.specialtyCode)
+        }
     val courses = specialty?.subjectsByCourse?.keys?.sorted() ?: emptyList()
     var selectedCourse by rememberSaveable(groupInfo.specialtyCode) {
         mutableIntStateOf(groupInfo.course.coerceIn(courses.minOrNull() ?: 1, courses.maxOrNull() ?: 1))
@@ -510,10 +531,11 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             SubPageBackButton(onBack)
             Spacer(modifier = Modifier.width(8.dp))
@@ -521,31 +543,33 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
                 Text(
                     text = "Моя специальность",
                     style = TextStylePageTitle.copy(fontSize = 24.sp),
-                    maxLines = 1
+                    maxLines = 1,
                 )
                 Text(
                     text = "Группа ${groupInfo.canonicalName}",
-                    style = androidx.compose.ui.text.TextStyle(
+                    style =
+                    androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 13.sp,
-                        color = ColorBrandBlue
+                        color = ColorBrandBlue,
                     ),
-                    maxLines = 1
+                    maxLines = 1,
                 )
             }
         }
 
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(ColorDividerLight)
+                .background(ColorDividerLight),
         )
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (specialty == null) {
                 item {
@@ -559,26 +583,29 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
                     border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .fillMaxWidth()
-                        .testTag("specialty_card")
+                        .testTag("specialty_card"),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
                             text = "СПЕЦИАЛЬНОСТЬ",
-                            style = androidx.compose.ui.text.TextStyle(
+                            style =
+                            androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 10.sp,
-                                color = ColorTextMuted
-                            )
+                                color = ColorTextMuted,
+                            ),
                         )
                         Text(
                             text = specialty.fullName,
-                            style = androidx.compose.ui.text.TextStyle(
+                            style =
+                            androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
-                                color = ColorTextTitle
-                            )
+                                color = ColorTextTitle,
+                            ),
                         )
 
                         Spacer(modifier = Modifier.height(10.dp))
@@ -587,27 +614,29 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
                             shape = RoundedCornerShape(2.dp),
                             color = ColorSurfaceHighlight,
                             border = BorderStroke(1.dp, ColorBrandBlue),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(vertical = 8.dp)
+                                modifier = Modifier.padding(vertical = 8.dp),
                             ) {
                                 Text(
                                     text = "КОД СПЕЦИАЛЬНОСТИ",
-                                    style = androidx.compose.ui.text.TextStyle(
+                                    style =
+                                    androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 10.sp,
-                                        color = ColorTextMuted
-                                    )
+                                        color = ColorTextMuted,
+                                    ),
                                 )
                                 Text(
                                     text = specialty.cipher,
-                                    style = androidx.compose.ui.text.TextStyle(
+                                    style =
+                                    androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 20.sp,
-                                        color = ColorBrandBlue
-                                    )
+                                        color = ColorBrandBlue,
+                                    ),
                                 )
                             }
                         }
@@ -628,15 +657,16 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
                         shape = RoundedCornerShape(2.dp),
                         color = ColorSurfaceVariantLight,
                         border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
                             text = profession,
-                            style = androidx.compose.ui.text.TextStyle(
+                            style =
+                            androidx.compose.ui.text.TextStyle(
                                 fontSize = 13.sp,
-                                color = ColorTextBody
+                                color = ColorTextBody,
                             ),
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         )
                     }
                 }
@@ -646,35 +676,44 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     courses.forEach { course ->
                         val isSelected = course == selectedCourse
                         val isCurrent = course == groupInfo.course
                         Surface(
                             shape = RoundedCornerShape(2.dp),
-                            border = BorderStroke(
+                            border =
+                            BorderStroke(
                                 1.dp,
-                                if (isSelected) ColorTopBar else if (isCurrent) ColorBrandBlue else ColorBorderLight
+                                if (isSelected) {
+                                    ColorTopBar
+                                } else if (isCurrent) {
+                                    ColorBrandBlue
+                                } else {
+                                    ColorBorderLight
+                                },
                             ),
                             color = if (isSelected) ColorTopBar else ColorBgMain,
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .weight(1f)
-                                .bouncyClickable { selectedCourse = course }
+                                .bouncyClickable { selectedCourse = course },
                         ) {
                             Box(
                                 contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(vertical = 8.dp)
+                                modifier = Modifier.padding(vertical = 8.dp),
                             ) {
                                 Text(
                                     text = "$course КУРС",
                                     softWrap = false,
                                     maxLines = 1,
-                                    style = androidx.compose.ui.text.TextStyle(
+                                    style =
+                                    androidx.compose.ui.text.TextStyle(
                                         fontWeight = if (isSelected || isCurrent) FontWeight.Bold else FontWeight.Medium,
                                         fontSize = 11.sp,
-                                        color = if (isSelected) Color.White else ColorTextBody
-                                    )
+                                        color = if (isSelected) Color.White else ColorTextBody,
+                                    ),
                                 )
                             }
                         }
@@ -691,24 +730,28 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
                         shape = RoundedCornerShape(2.dp),
                         color = ColorSurfaceVariantLight,
                         border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
-                                text = "ПРЕДМЕТЫ ${selectedCourse}-ГО КУРСА",
-                                style = androidx.compose.ui.text.TextStyle(
+                                text = "ПРЕДМЕТЫ $selectedCourse-ГО КУРСА",
+                                style =
+                                androidx.compose.ui.text.TextStyle(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
-                                    color = ColorBrandBlue
-                                )
+                                    color = ColorBrandBlue,
+                                ),
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 // P3: нейтральная формулировка — причина в данных колледжа,
                                 // не «приложение сломалось»
-                                text = "Список предметов для этого курса неполный — " +
+                                text =
+                                "Список предметов для этого курса неполный — " +
                                     "уточните в деканате.",
-                                style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextBody)
+                                style =
+                                androidx.compose.ui.text
+                                    .TextStyle(fontSize = 13.sp, color = ColorTextBody),
                             )
                         }
                     }
@@ -716,12 +759,13 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
             } else {
                 item {
                     Text(
-                        text = "ПРЕДМЕТЫ ${selectedCourse}-ГО КУРСА (${subjects.size})",
-                        style = androidx.compose.ui.text.TextStyle(
+                        text = "ПРЕДМЕТЫ $selectedCourse-ГО КУРСА (${subjects.size})",
+                        style =
+                        androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
-                            color = ColorBrandBlue
-                        )
+                            color = ColorBrandBlue,
+                        ),
                     )
                 }
                 items(subjects) { subject ->
@@ -729,15 +773,16 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
                         shape = RoundedCornerShape(2.dp),
                         color = ColorSurfaceVariantLight,
                         border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
                             text = subject,
-                            style = androidx.compose.ui.text.TextStyle(
+                            style =
+                            androidx.compose.ui.text.TextStyle(
                                 fontSize = 13.sp,
-                                color = ColorTextBody
+                                color = ColorTextBody,
                             ),
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         )
                     }
                 }
@@ -747,8 +792,13 @@ private fun MySpecialtyPage(groupInfo: GroupInfo, onBack: () -> Unit) {
 }
 
 private sealed interface TeacherRow {
-    data class Header(val title: String) : TeacherRow
-    data class Item(val teacher: Teacher) : TeacherRow
+    data class Header(
+        val title: String,
+    ) : TeacherRow
+
+    data class Item(
+        val teacher: Teacher,
+    ) : TeacherRow
 }
 
 @Composable
@@ -756,7 +806,7 @@ private fun TeachersPage(
     groupInfo: GroupInfo,
     scheduleRepository: ScheduleRepository,
     onBack: () -> Unit,
-    onOpenTeacher: (Teacher) -> Unit
+    onOpenTeacher: (Teacher) -> Unit,
 ) {
     val context = LocalContext.current
     // E1: единый репозиторий из AppGraph (кэш парсинга на процесс)
@@ -767,45 +817,53 @@ private fun TeachersPage(
         .getAllLessonsForGroup(groupInfo.canonicalName)
         .collectAsState(initial = emptyList())
 
-    val insights = remember(teachers, allLessons) {
-        TeacherInsights(teachers, allLessons)
-    }
+    val insights =
+        remember(teachers, allLessons) {
+            TeacherInsights(teachers, allLessons)
+        }
 
     var searchQuery by rememberSaveable { mutableStateOf("") }
 
-    val rows = remember(teachers, searchQuery, insights) {
-        val q = searchQuery.trim().lowercase()
-        val filtered = if (q.isBlank()) teachers else teachers.filter {
-            it.name.lowercase().contains(q) ||
-                it.subjects.lowercase().contains(q) ||
-                it.position.lowercase().contains(q) ||
-                it.department.lowercase().contains(q) ||
-                insights.rooms(it.name).any { room -> room.contains(q) }
-        }
-
-        val active = filtered.filter { insights.isActive(it.name) }.sortedBy { it.name }
-        val rest = filtered.filterNot { insights.isActive(it.name) }.sortedBy { it.name }
-
-        buildList {
-            if (active.isNotEmpty()) {
-                add(TeacherRow.Header("ВЕДУТ У ГРУППЫ ${groupInfo.canonicalName} (${active.size})"))
-                active.forEach { add(TeacherRow.Item(it)) }
-            }
-            if (rest.isNotEmpty()) {
-                if (active.isNotEmpty()) {
-                    add(TeacherRow.Header("ВСЕ ПРЕПОДАВАТЕЛИ (${rest.size})"))
+    val rows =
+        remember(teachers, searchQuery, insights) {
+            val q = searchQuery.trim().lowercase()
+            val filtered =
+                if (q.isBlank()) {
+                    teachers
+                } else {
+                    teachers.filter {
+                        it.name.lowercase().contains(q) ||
+                            it.subjects.lowercase().contains(q) ||
+                            it.position.lowercase().contains(q) ||
+                            it.department.lowercase().contains(q) ||
+                            insights.rooms(it.name).any { room -> room.contains(q) }
+                    }
                 }
-                rest.forEach { add(TeacherRow.Item(it)) }
+
+            val active = filtered.filter { insights.isActive(it.name) }.sortedBy { it.name }
+            val rest = filtered.filterNot { insights.isActive(it.name) }.sortedBy { it.name }
+
+            buildList {
+                if (active.isNotEmpty()) {
+                    add(TeacherRow.Header("ВЕДУТ У ГРУППЫ ${groupInfo.canonicalName} (${active.size})"))
+                    active.forEach { add(TeacherRow.Item(it)) }
+                }
+                if (rest.isNotEmpty()) {
+                    if (active.isNotEmpty()) {
+                        add(TeacherRow.Header("ВСЕ ПРЕПОДАВАТЕЛИ (${rest.size})"))
+                    }
+                    rest.forEach { add(TeacherRow.Item(it)) }
+                }
             }
         }
-    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             SubPageBackButton(onBack)
             Spacer(modifier = Modifier.width(8.dp))
@@ -813,25 +871,27 @@ private fun TeachersPage(
                 Text(
                     text = "Преподаватели",
                     style = TextStylePageTitle.copy(fontSize = 22.sp),
-                    maxLines = 1
+                    maxLines = 1,
                 )
                 Text(
                     text = "${teachers.size} сотрудников • ${insights.activeNames.size} ведут у ${groupInfo.canonicalName}",
-                    style = androidx.compose.ui.text.TextStyle(
+                    style =
+                    androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp,
-                        color = ColorBrandBlue
+                        color = ColorBrandBlue,
                     ),
-                    maxLines = 1
+                    maxLines = 1,
                 )
             }
         }
 
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(ColorDividerLight)
+                .background(ColorDividerLight),
         )
 
         OutlinedTextField(
@@ -843,53 +903,61 @@ private fun TeachersPage(
             },
             singleLine = true,
             shape = RoundedCornerShape(2.dp),
-            colors = TextFieldDefaults.colors(
+            colors =
+            TextFieldDefaults.colors(
                 focusedContainerColor = ColorSurfaceVariantLight,
                 unfocusedContainerColor = ColorSurfaceVariantLight,
                 focusedIndicatorColor = ColorBrandBlue,
-                unfocusedIndicatorColor = ColorBorderLight
+                unfocusedIndicatorColor = ColorBorderLight,
             ),
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
-                .testTag("teachers_search_input")
+                .testTag("teachers_search_input"),
         )
 
         if (rows.isEmpty()) {
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxSize()
                     .padding(24.dp),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = "Ничего не найдено по запросу «$searchQuery»",
-                    style = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = ColorTextMuted)
+                    style =
+                    androidx.compose.ui.text
+                        .TextStyle(fontSize = 14.sp, color = ColorTextMuted),
                 )
             }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 items(rows) { row ->
                     when (row) {
-                        is TeacherRow.Header -> Text(
-                            text = row.title,
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                color = ColorBrandBlue
-                            ),
-                            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
-                        )
-                        is TeacherRow.Item -> TeacherCard(
-                            teacher = row.teacher,
-                            isActive = insights.isActive(row.teacher.name),
-                            roomsFromSchedule = insights.rooms(row.teacher.name),
-                            onClick = { onOpenTeacher(row.teacher) }
-                        )
+                        is TeacherRow.Header ->
+                            Text(
+                                text = row.title,
+                                style =
+                                androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    color = ColorBrandBlue,
+                                ),
+                                modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+                            )
+                        is TeacherRow.Item ->
+                            TeacherCard(
+                                teacher = row.teacher,
+                                isActive = insights.isActive(row.teacher.name),
+                                roomsFromSchedule = insights.rooms(row.teacher.name),
+                                onClick = { onOpenTeacher(row.teacher) },
+                            )
                     }
                 }
             }
@@ -902,19 +970,20 @@ private fun TeacherCard(
     teacher: Teacher,
     isActive: Boolean,
     roomsFromSchedule: List<String>,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
         border = BorderStroke(1.dp, if (isActive) ColorActiveBlue else ColorBorderLight),
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
-            .bouncyClickable(onClick = onClick)
+            .bouncyClickable(onClick = onClick),
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             TeacherAvatar(teacher = teacher, size = 46.dp, highlight = isActive)
 
@@ -925,58 +994,64 @@ private fun TeacherCard(
                     Surface(
                         shape = RoundedCornerShape(2.dp),
                         color = ColorActiveBlue,
-                        modifier = Modifier.padding(bottom = 3.dp)
+                        modifier = Modifier.padding(bottom = 3.dp),
                     ) {
                         Text(
                             text = "ВЕДЁТ У ВАС",
                             softWrap = false,
-                            style = androidx.compose.ui.text.TextStyle(
+                            style =
+                            androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 9.sp,
-                                color = Color.White
+                                color = Color.White,
                             ),
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                         )
                     }
                 }
 
                 Text(
                     text = teacher.name,
-                    style = androidx.compose.ui.text.TextStyle(
+                    style =
+                    androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
-                        color = ColorTextTitle
+                        color = ColorTextTitle,
                     ),
-                    maxLines = 1
+                    maxLines = 1,
                 )
 
-                val details = listOf(teacher.position, teacher.subjects)
-                    .filter { it.isNotBlank() }
-                    .joinToString(" • ")
+                val details =
+                    listOf(teacher.position, teacher.subjects)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" • ")
                 if (details.isNotBlank()) {
                     Text(
                         text = details,
-                        style = androidx.compose.ui.text.TextStyle(
+                        style =
+                        androidx.compose.ui.text.TextStyle(
                             fontSize = 12.sp,
-                            color = ColorTextMuted
+                            color = ColorTextMuted,
                         ),
-                        maxLines = 2
+                        maxLines = 2,
                     )
                 }
 
-                val roomText = when {
-                    teacher.room.isNotBlank() -> "каб. ${teacher.room}"
-                    roomsFromSchedule.isNotEmpty() -> "каб. ${roomsFromSchedule.take(3).joinToString(", ")}"
-                    else -> ""
-                }
+                val roomText =
+                    when {
+                        teacher.room.isNotBlank() -> "каб. ${teacher.room}"
+                        roomsFromSchedule.isNotEmpty() -> "каб. ${roomsFromSchedule.take(3).joinToString(", ")}"
+                        else -> ""
+                    }
                 if (roomText.isNotBlank()) {
                     Text(
                         text = roomText,
-                        style = androidx.compose.ui.text.TextStyle(
+                        style =
+                        androidx.compose.ui.text.TextStyle(
                             fontSize = 11.sp,
-                            color = ColorBrandBlue
+                            color = ColorBrandBlue,
                         ),
-                        maxLines = 1
+                        maxLines = 1,
                     )
                 }
             }
@@ -985,7 +1060,7 @@ private fun TeacherCard(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = ColorTextMuted,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(18.dp),
             )
         }
     }
@@ -996,33 +1071,38 @@ private fun TeacherAvatar(
     teacher: Teacher,
     size: androidx.compose.ui.unit.Dp,
     highlight: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val border = if (highlight) ColorActiveBlue else ColorBorderLight
     if (teacher.photo.isNotBlank()) {
         coil.compose.AsyncImage(
             model = "file:///android_asset/teachers_photos/" + teacher.photo,
             contentDescription = teacher.name,
-
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             alignment = Alignment.TopCenter,
-            modifier = modifier
+            modifier =
+            modifier
                 .size(size)
                 .border(1.dp, border, RoundedCornerShape(2.dp))
-                .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
+                .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp)),
         )
     } else {
         Box(
-            modifier = modifier
+            modifier =
+            modifier
                 .size(size)
                 .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = teacher.name.split(" ").firstOrNull()?.take(1) ?: "?",
+                text =
+                teacher.name
+                    .split(" ")
+                    .firstOrNull()
+                    ?.take(1) ?: "?",
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
-                fontSize = (size.value * 0.4f).sp
+                fontSize = (size.value * 0.4f).sp,
             )
         }
     }
@@ -1035,7 +1115,7 @@ private fun TeacherCardPageWrapper(
     scheduleRepository: ScheduleRepository,
     teacherLessonDao: com.politex.data.local.dao.TeacherLessonDao,
     onOpenRoom: (String) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     val context = LocalContext.current
     // E1: единый репозиторий из AppGraph (кэш парсинга на процесс)
@@ -1055,7 +1135,7 @@ private fun TeacherCardPageWrapper(
         lessonsWithGroup = insights.lessonCount(teacher.name),
         teacherLessonDao = teacherLessonDao,
         onOpenRoom = onOpenRoom,
-        onBack = onBack
+        onBack = onBack,
     )
 }
 
@@ -1068,18 +1148,18 @@ private fun TeacherCardPage(
     lessonsWithGroup: Int,
     teacherLessonDao: com.politex.data.local.dao.TeacherLessonDao? = null,
     onOpenRoom: (String) -> Unit = {},
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf("О преподавателе", "Расписание")
 
     Column(modifier = Modifier.fillMaxSize()) {
-
         Row(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             SubPageBackButton(onBack)
             Spacer(modifier = Modifier.width(10.dp))
@@ -1088,47 +1168,51 @@ private fun TeacherCardPage(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = teacher.name,
-                    style = androidx.compose.ui.text.TextStyle(
+                    style =
+                    androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
-                        color = ColorTextTitle
+                        color = ColorTextTitle,
                     ),
-                    maxLines = 2
+                    maxLines = 2,
                 )
                 if (teacher.position.isNotBlank()) {
                     Text(
                         text = teacher.position,
-                        style = androidx.compose.ui.text.TextStyle(
+                        style =
+                        androidx.compose.ui.text.TextStyle(
                             fontSize = 11.sp,
-                            color = ColorBrandBlue
+                            color = ColorBrandBlue,
                         ),
-                        maxLines = 2
+                        maxLines = 2,
                     )
                 }
                 if (isActive) {
                     Text(
                         text = "ВЕДЁТ У ВАШЕЙ ГРУППЫ",
-                        style = androidx.compose.ui.text.TextStyle(
+                        style =
+                        androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 9.sp,
-                            color = ColorActiveBlue
-                        )
+                            color = ColorActiveBlue,
+                        ),
                     )
                 }
             }
         }
 
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(ColorDividerLight)
+                .background(ColorDividerLight),
         )
 
         androidx.compose.foundation.lazy.LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             items(tabs) { title ->
                 val index = tabs.indexOf(title)
@@ -1137,25 +1221,27 @@ private fun TeacherCardPage(
                     shape = RoundedCornerShape(2.dp),
                     border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
                     color = if (selected) ColorTopBar else ColorBgMain,
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         // P2: хитбокс табов карточки преподавателя 44dp
                         .heightIn(min = 44.dp)
-                        .bouncyClickable { tab = index }
+                        .bouncyClickable { tab = index },
                 ) {
                     // C2: у material3 Surface нет contentAlignment — без Box текст прижат к верху
                     Box(
                         modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = title.uppercase(),
                             softWrap = false,
-                            style = androidx.compose.ui.text.TextStyle(
+                            style =
+                            androidx.compose.ui.text.TextStyle(
                                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                 fontSize = 10.sp,
-                                color = if (selected) Color.White else ColorTextBody
+                                color = if (selected) Color.White else ColorTextBody,
                             ),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                         )
                     }
                 }
@@ -1163,16 +1249,23 @@ private fun TeacherCardPage(
         }
 
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(ColorDividerLight)
+                .background(ColorDividerLight),
         )
 
         when (tab) {
-            0 -> AboutTeacherTab(
-                teacher, isActive, lessonsWithGroup, roomsFromSchedule, subjectsFromSchedule, onOpenRoom
-            )
+            0 ->
+                AboutTeacherTab(
+                    teacher,
+                    isActive,
+                    lessonsWithGroup,
+                    roomsFromSchedule,
+                    subjectsFromSchedule,
+                    onOpenRoom,
+                )
             1 -> TeacherScheduleTab(teacher, teacherLessonDao, onOpenRoom)
         }
     }
@@ -1185,52 +1278,57 @@ private fun AboutTeacherTab(
     lessonsWithGroup: Int,
     roomsFromSchedule: List<String>,
     subjectsFromSchedule: List<String>,
-    onOpenRoom: (String) -> Unit = {}
+    onOpenRoom: (String) -> Unit = {},
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-
         item {
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 color = ColorBgMain,
                 border = BorderStroke(1.dp, ColorBorderLight),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .padding(16.dp),
                 ) {
                     if (teacher.photo.isNotBlank()) {
                         coil.compose.AsyncImage(
                             model = "file:///android_asset/teachers_photos/" + teacher.photo,
                             contentDescription = teacher.name,
-
                             contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .width(180.dp)
                                 .heightIn(max = 260.dp)
                                 .border(1.dp, ColorBorderLight, RoundedCornerShape(2.dp))
-                                .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
+                                .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp)),
                         )
                     } else {
                         Box(
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .width(180.dp)
                                 .height(230.dp)
                                 .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                            contentAlignment = Alignment.Center
+                            contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = teacher.name.split(" ").firstOrNull()?.take(1) ?: "?",
+                                text =
+                                teacher.name
+                                    .split(" ")
+                                    .firstOrNull()
+                                    ?.take(1) ?: "?",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 60.sp
+                                fontSize = 60.sp,
                             )
                         }
                     }
@@ -1243,7 +1341,7 @@ private fun AboutTeacherTab(
                 shape = RoundedCornerShape(2.dp),
                 color = ColorBgMain,
                 border = BorderStroke(1.dp, ColorBorderLight),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     SectionLabel("О ПРЕПОДАВАТЕЛЕ")
@@ -1253,12 +1351,17 @@ private fun AboutTeacherTab(
                     if (teacher.experience.isNotBlank()) InfoRow("Педагогический стаж", teacher.experience)
                     if (teacher.category.isNotBlank()) InfoRow("Квалификационная категория", teacher.category)
 
-                    val nothing = teacher.position.isBlank() && teacher.department.isBlank() &&
-                        teacher.experience.isBlank() && teacher.category.isBlank()
+                    val nothing =
+                        teacher.position.isBlank() &&
+                            teacher.department.isBlank() &&
+                            teacher.experience.isBlank() &&
+                            teacher.category.isBlank()
                     if (nothing) {
                         Text(
                             text = "Сведения в базе не заполнены",
-                            style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextMuted)
+                            style =
+                            androidx.compose.ui.text
+                                .TextStyle(fontSize = 13.sp, color = ColorTextMuted),
                         )
                     }
                 }
@@ -1269,22 +1372,24 @@ private fun AboutTeacherTab(
         if (teacher.subjects.isBlank()) {
             item { EmptyCard(text = "Перечень дисциплин в базе не заполнен") }
         } else {
-
-            val list = teacher.subjects
-                .split(';', ',')
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
+            val list =
+                teacher.subjects
+                    .split(';', ',')
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
             items(list) { subject ->
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorSurfaceVariantLight,
                     border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
                         text = subject,
-                        style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextBody),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        style =
+                        androidx.compose.ui.text
+                            .TextStyle(fontSize = 13.sp, color = ColorTextBody),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     )
                 }
             }
@@ -1297,7 +1402,7 @@ private fun AboutTeacherTab(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
                     border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         SectionLabel("КОНТАКТЫ")
@@ -1306,7 +1411,7 @@ private fun AboutTeacherTab(
                             InfoRow(
                                 label = "Кабинет",
                                 value = teacher.room,
-                                onClick = { onOpenRoom(teacher.room) }
+                                onClick = { onOpenRoom(teacher.room) },
                             )
                         }
                         if (teacher.phone.isNotBlank()) InfoRow("Телефон", teacher.phone)
@@ -1319,8 +1424,9 @@ private fun AboutTeacherTab(
         if (!isActive) {
             item {
                 EmptyCard(
-                    text = "По расписанию вашей группы этот преподаватель занятий не ведёт.\n\n" +
-                        "Откройте вкладку «Расписание», чтобы посмотреть его полное расписание."
+                    text =
+                    "По расписанию вашей группы этот преподаватель занятий не ведёт.\n\n" +
+                        "Откройте вкладку «Расписание», чтобы посмотреть его полное расписание.",
                 )
             }
         } else {
@@ -1329,7 +1435,7 @@ private fun AboutTeacherTab(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
                     border = BorderStroke(1.dp, ColorActiveBlue),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         SectionLabel("ВЕДЁТ У ВАШЕЙ ГРУППЫ")
@@ -1352,11 +1458,15 @@ private fun AboutTeacherTab(
 private fun TeacherScheduleTab(
     teacher: Teacher,
     teacherLessonDao: com.politex.data.local.dao.TeacherLessonDao? = null,
-    onOpenRoom: (String) -> Unit = {}
+    onOpenRoom: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val client = remember { com.politex.data.network.MpkNetworkClient() }
+    val client =
+        remember {
+            com.politex.data.network
+                .MpkNetworkClient()
+        }
     // Офлайн-путь: тот же репозиторий, что у приложения, — читает из teacher_lessons
     // E1: экземпляр AppGraph уже содержит teacherLessonDao; null — только если экран
     // открыт без офлайн-дао явно (семантика прежнего remember(teacherLessonDao))
@@ -1371,24 +1481,35 @@ private fun TeacherScheduleTab(
 
     val cache = remember { mutableMapOf<String, Map<String, List<com.politex.data.network.TeacherSlot>>>() }
 
-    val targetCalendar = remember(dayOffset, customDate) {
-        customDate ?: (java.util.Calendar.getInstance().clone() as Calendar).apply {
-            add(Calendar.DAY_OF_YEAR, dayOffset)
+    val targetCalendar =
+        remember(dayOffset, customDate) {
+            customDate ?: (
+                java.util.Calendar
+                    .getInstance()
+                    .clone() as Calendar
+                ).apply {
+                add(Calendar.DAY_OF_YEAR, dayOffset)
+            }
         }
-    }
 
-    val surname = remember(teacher.name) {
-        com.politex.data.repository.TeacherInsights.surnameOf(teacher.name)
-    }
+    val surname =
+        remember(teacher.name) {
+            com.politex.data.repository.TeacherInsights
+                .surnameOf(teacher.name)
+        }
 
     // День недели выбранной даты (для звонов и фильтра слотов)
-    val selectedDateDow = remember(targetCalendar) {
-        com.politex.data.network.MpkScheduleParser.dowOfCalendar(targetCalendar)
-    }
+    val selectedDateDow =
+        remember(targetCalendar) {
+            com.politex.data.network.MpkScheduleParser
+                .dowOfCalendar(targetCalendar)
+        }
 
     LaunchedEffect(teacher.name, dayOffset, customDate) {
-        val dateKey = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
-            .format(targetCalendar.time)
+        val dateKey =
+            java.text
+                .SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
+                .format(targetCalendar.time)
 
         /** Занятия из базы → слоты для UI. Пустой список означает «этого дня в базе нет». */
         suspend fun fromDatabase() = offlineRepository
@@ -1401,7 +1522,7 @@ private fun TeacherScheduleTab(
                     groups = it.groups.split(", ").filter { g -> g.isNotBlank() },
                     subject = it.subject,
                     room = it.room,
-                    dayOfWeek = it.dayOfWeek
+                    dayOfWeek = it.dayOfWeek,
                 )
             }
 
@@ -1414,12 +1535,13 @@ private fun TeacherScheduleTab(
                 offlineRepository.syncTeacherScheduleForDate(targetCalendar).fold(
                     onSuccess = { result = fromDatabase() },
                     onFailure = { e ->
-                        errorMessage = when {
-                            e.message?.contains("не найден") == true ->
-                                "Расписание на $dateKey ещё не опубликовано"
-                            else -> "Не удалось загрузить расписание (проверьте интернет)"
-                        }
-                    }
+                        errorMessage =
+                            when {
+                                e.message?.contains("не найден") == true ->
+                                    "Расписание на $dateKey ещё не опубликовано"
+                                else -> "Не удалось загрузить расписание (проверьте интернет)"
+                            }
+                    },
                 )
                 loading = false
             }
@@ -1428,37 +1550,46 @@ private fun TeacherScheduleTab(
         }
 
         // Без базы (тесты, вызов без DAO) — прежний путь через сетевой кэш экрана
-        val parsedAll = cache[dateKey] ?: run {
-            loading = true
-            errorMessage = ""
-            val fetched = client.fetchTeacherSchedule(targetCalendar)
-            loading = false
-            fetched.fold(
-                onSuccess = { parsed -> cache[dateKey] = parsed; parsed },
-                onFailure = { e ->
-                    errorMessage = when {
-                        e.message?.contains("не найден") == true -> "Расписание на $dateKey ещё не опубликовано"
-                        else -> "Не удалось загрузить расписание (проверьте интернет)"
-                    }
-                    null
-                }
-            )
-        } ?: return@LaunchedEffect
+        val parsedAll =
+            cache[dateKey] ?: run {
+                loading = true
+                errorMessage = ""
+                val fetched = client.fetchTeacherSchedule(targetCalendar)
+                loading = false
+                fetched.fold(
+                    onSuccess = { parsed ->
+                        cache[dateKey] = parsed
+                        parsed
+                    },
+                    onFailure = { e ->
+                        errorMessage =
+                            when {
+                                e.message?.contains("не найден") == true -> "Расписание на $dateKey ещё не опубликовано"
+                                else -> "Не удалось загрузить расписание (проверьте интернет)"
+                            }
+                        null
+                    },
+                )
+            } ?: return@LaunchedEffect
 
-        val allSlots = parsedAll.entries
-            .firstOrNull { com.politex.data.repository.TeacherInsights.surnameOf(it.key) == surname }
-            ?.value
-            .orEmpty()
+        val allSlots =
+            parsedAll.entries
+                .firstOrNull {
+                    com.politex.data.repository.TeacherInsights
+                        .surnameOf(it.key) == surname
+                }?.value
+                .orEmpty()
 
         // Слоты размечены днём недели документа: показываем только совпадающий день.
         // O7: при нераспознанном дне (docDow == 0) НЕ показываем весь документ —
         // иначе под любой прошлой датой возникало расписание (жалоба заказчика).
         val docDow = allSlots.firstOrNull()?.dayOfWeek ?: 0
-        slots = when {
-            docDow == 0 -> emptyList()
-            docDow == selectedDateDow -> allSlots
-            else -> emptyList()
-        }
+        slots =
+            when {
+                docDow == 0 -> emptyList()
+                docDow == selectedDateDow -> allSlots
+                else -> emptyList()
+            }
     }
 
     if (showCalendar) {
@@ -1468,55 +1599,65 @@ private fun TeacherScheduleTab(
             onDismiss = { showCalendar = false },
             onDateSelected = { _, dateStr ->
                 // dateStr приходит в dd.MM.yyyy; парсим календарём, не строковой заменой
-                val parsed = com.politex.data.network.MpkScheduleParser.parseDotDate(dateStr)
+                val parsed =
+                    com.politex.data.network.MpkScheduleParser
+                        .parseDotDate(dateStr)
                 parsed?.let {
                     customDate = (it.clone() as Calendar)
                     dayOffset = 0
                 }
                 showCalendar = false
-            }
+            },
         )
     }
 
-    val dateTitle = remember(targetCalendar) {
-        val sdf = java.text.SimpleDateFormat("dd.MM.yyyy (EEEE)", java.util.Locale("ru"))
-        sdf.format(targetCalendar.time).replaceFirstChar { it.uppercase() }
-    }
+    val dateTitle =
+        remember(targetCalendar) {
+            val sdf = java.text.SimpleDateFormat("dd.MM.yyyy (EEEE)", java.util.Locale("ru"))
+            sdf.format(targetCalendar.time).replaceFirstChar { it.uppercase() }
+        }
 
     Column(modifier = Modifier.fillMaxSize()) {
-
         Row(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             DayChip(
                 title = "СЕГОДНЯ",
                 selected = dayOffset == 0 && customDate == null,
-                onClick = { dayOffset = 0; customDate = null },
-                modifier = Modifier.weight(1f)
+                onClick = {
+                    dayOffset = 0
+                    customDate = null
+                },
+                modifier = Modifier.weight(1f),
             )
             DayChip(
                 title = "ЗАВТРА",
                 selected = dayOffset == 1 && customDate == null,
-                onClick = { dayOffset = 1; customDate = null },
-                modifier = Modifier.weight(1f)
+                onClick = {
+                    dayOffset = 1
+                    customDate = null
+                },
+                modifier = Modifier.weight(1f),
             )
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 border = BorderStroke(1.dp, if (customDate != null) ColorTopBar else ColorBorderLight),
                 color = if (customDate != null) ColorTopBar else ColorBgMain,
-                modifier = Modifier
+                modifier =
+                Modifier
                     .size(38.dp)
-                    .bouncyClickable { showCalendar = true }
+                    .bouncyClickable { showCalendar = true },
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Default.DateRange,
                         contentDescription = "Выбрать дату",
                         tint = if (customDate != null) Color.White else ColorBrandBlue,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp),
                     )
                 }
             }
@@ -1524,139 +1665,154 @@ private fun TeacherScheduleTab(
 
         Text(
             text = dateTitle,
-            style = androidx.compose.ui.text.TextStyle(
+            style =
+            androidx.compose.ui.text.TextStyle(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 12.sp,
-                color = ColorTextMuted
+                color = ColorTextMuted,
             ),
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
         )
 
         Spacer(modifier = Modifier.height(6.dp))
 
         when {
-            loading -> Box(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                androidx.compose.material3.CircularProgressIndicator(
-                    color = ColorBrandBlue,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(26.dp)
-                )
-            }
+            loading ->
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        color = ColorBrandBlue,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(26.dp),
+                    )
+                }
 
-            errorMessage.isNotBlank() -> Box(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = errorMessage,
-                    style = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = ColorTextMuted),
-                    textAlign = TextAlign.Center
-                )
-            }
+            errorMessage.isNotBlank() ->
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = errorMessage,
+                        style =
+                        androidx.compose.ui.text
+                            .TextStyle(fontSize = 14.sp, color = ColorTextMuted),
+                        textAlign = TextAlign.Center,
+                    )
+                }
 
-            slots.isEmpty() -> Box(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "В этот день у преподавателя занятий нет",
-                    style = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = ColorTextMuted),
-                    textAlign = TextAlign.Center
-                )
-            }
+            slots.isEmpty() ->
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "В этот день у преподавателя занятий нет",
+                        style =
+                        androidx.compose.ui.text
+                            .TextStyle(fontSize = 14.sp, color = ColorTextMuted),
+                        textAlign = TextAlign.Center,
+                    )
+                }
 
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(slots) { slot ->
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBgMain,
-                        border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+            else ->
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(slots) { slot ->
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            color = ColorBgMain,
+                            border = BorderStroke(1.dp, ColorBorderLight),
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(2.dp),
-                                color = ColorBrandFill,
-                                modifier = Modifier.size(26.dp)
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = "${slot.lessonNumber}",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = slot.subject.ifBlank { "Занятие" },
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = ColorTextTitle
-                                    ),
-                                    maxLines = 1
-                                )
-                                Text(
-                                    text = buildString {
-                                        val bells = com.politex.data.model.CollegeBellSchedule
-                                            .getBellsForDay(selectedDateDow)
-                                        val time = bells.firstOrNull { it.lessonNumber == slot.lessonNumber }
-                                        if (time != null) append("${time.start}–${time.end}")
-                                        if (slot.groups.isNotEmpty()) {
-                                            if (isNotEmpty()) append(" • ")
-                                            append(slot.groups.joinToString(", "))
-                                        }
-                                    },
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 11.sp,
-                                        color = ColorTextMuted
-                                    ),
-                                    maxLines = 2
-                                )
-                            }
-                            if (slot.room.isNotBlank()) {
-                                // Б3: тот же стиль и то же поведение, что у кабинета в своём
-                                // расписании (ScheduleScreen.SubgroupPane) — тап открывает карту
                                 Surface(
                                     shape = RoundedCornerShape(2.dp),
-                                    color = ColorSurfaceHighlight,
-                                    border = BorderStroke(1.dp, ColorBorderLight),
-                                    modifier = Modifier
-                                        .heightIn(min = 44.dp)
-                                        .bouncyClickable(scaleDown = 0.97f) { onOpenRoom(slot.room) }
+                                    color = ColorBrandFill,
+                                    modifier = Modifier.size(26.dp),
                                 ) {
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier = Modifier.padding(horizontal = 8.dp)
-                                    ) {
+                                    Box(contentAlignment = Alignment.Center) {
                                         Text(
-                                            text = "каб. ${slot.room}",
-                                            style = androidx.compose.ui.text.TextStyle(
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 11.sp,
-                                                color = ColorBrandBlue
-                                            )
+                                            text = "${slot.lessonNumber}",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
                                         )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = slot.subject.ifBlank { "Занятие" },
+                                        style =
+                                        androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = ColorTextTitle,
+                                        ),
+                                        maxLines = 1,
+                                    )
+                                    Text(
+                                        text =
+                                        buildString {
+                                            val bells =
+                                                com.politex.data.model.CollegeBellSchedule
+                                                    .getBellsForDay(selectedDateDow)
+                                            val time = bells.firstOrNull { it.lessonNumber == slot.lessonNumber }
+                                            if (time != null) append("${time.start}–${time.end}")
+                                            if (slot.groups.isNotEmpty()) {
+                                                if (isNotEmpty()) append(" • ")
+                                                append(slot.groups.joinToString(", "))
+                                            }
+                                        },
+                                        style =
+                                        androidx.compose.ui.text.TextStyle(
+                                            fontSize = 11.sp,
+                                            color = ColorTextMuted,
+                                        ),
+                                        maxLines = 2,
+                                    )
+                                }
+                                if (slot.room.isNotBlank()) {
+                                    // Б3: тот же стиль и то же поведение, что у кабинета в своём
+                                    // расписании (ScheduleScreen.SubgroupPane) — тап открывает карту
+                                    Surface(
+                                        shape = RoundedCornerShape(2.dp),
+                                        color = ColorSurfaceHighlight,
+                                        border = BorderStroke(1.dp, ColorBorderLight),
+                                        modifier =
+                                        Modifier
+                                            .heightIn(min = 44.dp)
+                                            .bouncyClickable(scaleDown = 0.97f) { onOpenRoom(slot.room) },
+                                    ) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier.padding(horizontal = 8.dp),
+                                        ) {
+                                            Text(
+                                                text = "каб. ${slot.room}",
+                                                style =
+                                                androidx.compose.ui.text.TextStyle(
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp,
+                                                    color = ColorBrandBlue,
+                                                ),
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
         }
     }
 }
@@ -1666,25 +1822,27 @@ private fun DayChip(
     title: String,
     selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
         color = if (selected) ColorTopBar else ColorBgMain,
-        modifier = modifier
+        modifier =
+        modifier
             .height(38.dp)
-            .bouncyClickable(onClick = onClick)
+            .bouncyClickable(onClick = onClick),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
                 text = title,
                 softWrap = false,
-                style = androidx.compose.ui.text.TextStyle(
+                style =
+                androidx.compose.ui.text.TextStyle(
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                     fontSize = 11.sp,
-                    color = if (selected) Color.White else ColorTextBody
-                )
+                    color = if (selected) Color.White else ColorTextBody,
+                ),
             )
         }
     }
@@ -1696,55 +1854,64 @@ private fun SubPageBackButton(onBack: () -> Unit) {
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
         border = BorderStroke(1.dp, ColorBorderLight),
-        modifier = Modifier
+        modifier =
+        Modifier
             .size(36.dp)
-            .bouncyClickable(onClick = onBack)
+            .bouncyClickable(onClick = onBack),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Назад",
                 tint = ColorBrandBlue,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(18.dp),
             )
         }
     }
 }
 
 @Composable
-private fun SubPageHeader(title: String, onBack: () -> Unit) {
+private fun SubPageHeader(
+    title: String,
+    onBack: () -> Unit,
+) {
     Row(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         SubPageBackButton(onBack)
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = title,
             style = TextStylePageTitle,
-            maxLines = 2
+            maxLines = 2,
         )
     }
 }
 
 @Composable
-private fun Header(title: String, subtitle: String) {
+private fun Header(
+    title: String,
+    subtitle: String,
+) {
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
         Text(
             text = title,
             style = TextStylePageTitle,
-            maxLines = 1
+            maxLines = 1,
         )
         Text(
             text = subtitle,
-            style = androidx.compose.ui.text.TextStyle(
+            style =
+            androidx.compose.ui.text.TextStyle(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 14.sp,
-                color = ColorBrandBlue
+                color = ColorBrandBlue,
             ),
-            maxLines = 1
+            maxLines = 1,
         )
     }
 }
@@ -1753,43 +1920,51 @@ private fun Header(title: String, subtitle: String) {
 private fun SectionLabel(text: String) {
     Text(
         text = text,
-        style = androidx.compose.ui.text.TextStyle(
+        style =
+        androidx.compose.ui.text.TextStyle(
             fontWeight = FontWeight.Bold,
             fontSize = 12.sp,
-            color = ColorBrandBlue
-        )
+            color = ColorBrandBlue,
+        ),
     )
 }
 
 @Composable
-private fun InfoRow(label: String, value: String, onClick: (() -> Unit)? = null) {
+private fun InfoRow(
+    label: String,
+    value: String,
+    onClick: (() -> Unit)? = null,
+) {
     // Б3: значение-кабинет (onClick != null) выглядит и ведёт себя как остальные
     // кликабельные кабинеты приложения — синим, с зоной нажатия не меньше 48dp.
-    val clickModifier = if (onClick != null) {
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .bouncyClickable(scaleDown = 0.97f, onClick = onClick)
-    } else {
-        Modifier
-    }
+    val clickModifier =
+        if (onClick != null) {
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .bouncyClickable(scaleDown = 0.97f, onClick = onClick)
+        } else {
+            Modifier
+        }
     Column(modifier = Modifier.padding(vertical = 3.dp)) {
         Text(
             text = label.uppercase(),
-            style = androidx.compose.ui.text.TextStyle(
+            style =
+            androidx.compose.ui.text.TextStyle(
                 fontWeight = FontWeight.Bold,
                 fontSize = 10.sp,
-                color = ColorTextMuted
-            )
+                color = ColorTextMuted,
+            ),
         )
         Box(modifier = clickModifier, contentAlignment = Alignment.CenterStart) {
             Text(
                 text = value,
-                style = androidx.compose.ui.text.TextStyle(
+                style =
+                androidx.compose.ui.text.TextStyle(
                     fontSize = 13.sp,
                     fontWeight = if (onClick != null) FontWeight.Bold else FontWeight.Normal,
-                    color = if (onClick != null) ColorBrandBlue else ColorTextBody
-                )
+                    color = if (onClick != null) ColorBrandBlue else ColorTextBody,
+                ),
             )
         }
     }
@@ -1801,16 +1976,17 @@ private fun EmptyCard(text: String) {
         shape = RoundedCornerShape(2.dp),
         color = ColorSurfaceVariantLight,
         border = BorderStroke(1.dp, ColorBorderLight),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
             text = text,
-            style = androidx.compose.ui.text.TextStyle(
+            style =
+            androidx.compose.ui.text.TextStyle(
                 fontSize = 13.sp,
-                color = ColorTextMuted
+                color = ColorTextMuted,
             ),
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(16.dp),
         )
     }
 }

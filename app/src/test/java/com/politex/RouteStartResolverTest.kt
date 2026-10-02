@@ -7,8 +7,12 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RouteStartResolverTest {
-
-    private fun lesson(n: Int, start: String, room: String, room2: String = "") = LessonEntity(
+    private fun lesson(
+        n: Int,
+        start: String,
+        room: String,
+        room2: String = "",
+    ) = LessonEntity(
         groupName = "11А",
         dayOfWeek = 1,
         lessonNumber = n,
@@ -17,17 +21,21 @@ class RouteStartResolverTest {
         subjectRaw = "Математика",
         roomFirst = room,
         teacherFirst = "",
-        roomSecond = room2
+        roomSecond = room2,
     )
 
     // Пн: 1-й 08:30, 2-й 09:25, 3-й 10:35 (реальные звоны колледжа)
-    private val lessons = listOf(
-        lesson(1, "08:30", "118"),
-        lesson(2, "09:25", "223"),
-        lesson(3, "10:35", "320")
-    )
+    private val lessons =
+        listOf(
+            lesson(1, "08:30", "118"),
+            lesson(2, "09:25", "223"),
+            lesson(3, "10:35", "320"),
+        )
 
-    private fun at(h: Int, m: Int) = h * 60 + m
+    private fun at(
+        h: Int,
+        m: Int,
+    ) = h * 60 + m
 
     @Test
     fun `до уроков — null (маршрут от главного входа)`() {

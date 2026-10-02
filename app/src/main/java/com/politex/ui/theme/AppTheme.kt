@@ -1,13 +1,18 @@
-﻿package com.politex.ui.theme
+package com.politex.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-enum class AppTheme(val id: String, val title: String, val hint: String, val palette: MpkPalette) {
+enum class AppTheme(
+    val id: String,
+    val title: String,
+    val hint: String,
+    val palette: MpkPalette,
+) {
     COLLEGE(
         "college",
         "Фирменная",
         "Синие цвета колледжа — как на сайте",
-        LightPalette
+        LightPalette,
     ),
     EMERALD(
         "emerald",
@@ -16,8 +21,8 @@ enum class AppTheme(val id: String, val title: String, val hint: String, val pal
         paletteWithAccents(
             topBar = Color(0xFF03291A),
             brand = Color(0xFF0B5D3B),
-            active = Color(0xFF0E8A55)
-        )
+            active = Color(0xFF0E8A55),
+        ),
     ),
     BORDEAUX(
         "bordeaux",
@@ -26,8 +31,8 @@ enum class AppTheme(val id: String, val title: String, val hint: String, val pal
         paletteWithAccents(
             topBar = Color(0xFF2B0A10),
             brand = Color(0xFF7B1225),
-            active = Color(0xFFA81B33)
-        )
+            active = Color(0xFFA81B33),
+        ),
     ),
     GRAPHITE(
         "graphite",
@@ -36,8 +41,8 @@ enum class AppTheme(val id: String, val title: String, val hint: String, val pal
         paletteWithAccents(
             topBar = Color(0xFF1C1E20),
             brand = Color(0xFF37474F),
-            active = Color(0xFF546E7A)
-        )
+            active = Color(0xFF546E7A),
+        ),
     ),
 
     // Б12: добавлены по выбору заказчика (2026-09-24). Все три — светлые, как и
@@ -52,8 +57,8 @@ enum class AppTheme(val id: String, val title: String, val hint: String, val pal
             // brand заливает кнопки под белым текстом — тёмный, чтобы текст читался;
             // active — только рамки и подписи, ему хватает среднего тона
             brand = Color(0xFF3730A3),
-            active = Color(0xFF4F46E5)
-        )
+            active = Color(0xFF4F46E5),
+        ),
     ),
     AMBER(
         "amber",
@@ -62,8 +67,8 @@ enum class AppTheme(val id: String, val title: String, val hint: String, val pal
         paletteWithAccents(
             topBar = Color(0xFF3E2723),
             brand = Color(0xFF92400E),
-            active = Color(0xFFB45309)
-        )
+            active = Color(0xFFB45309),
+        ),
     ),
     STEEL(
         "steel",
@@ -72,25 +77,28 @@ enum class AppTheme(val id: String, val title: String, val hint: String, val pal
         paletteWithAccents(
             topBar = Color(0xFF0C4A6E),
             brand = Color(0xFF075985),
-            active = Color(0xFF0369A1)
-        )
-    );
+            active = Color(0xFF0369A1),
+        ),
+    ),
+    ;
 
     companion object {
         fun from(id: String?): AppTheme = entries.firstOrNull { it.id == id } ?: COLLEGE
     }
 }
 
-private fun paletteWithAccents(topBar: Color, brand: Color, active: Color): MpkPalette =
-    LightPalette.copy(
-        topBar = topBar,
-        brandBlue = brand,
-        activeBlue = active,
-        brandFill = brand,
-        activeFill = active,
-
-        badgeDiploma = brand
-    )
+private fun paletteWithAccents(
+    topBar: Color,
+    brand: Color,
+    active: Color,
+): MpkPalette = LightPalette.copy(
+    topBar = topBar,
+    brandBlue = brand,
+    activeBlue = active,
+    brandFill = brand,
+    activeFill = active,
+    badgeDiploma = brand,
+)
 
 fun applyAppTheme(theme: AppTheme) {
     paletteState = theme.palette

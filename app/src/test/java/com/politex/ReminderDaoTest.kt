@@ -24,15 +24,16 @@ import org.robolectric.RobolectricTestRunner
  */
 @RunWith(RobolectricTestRunner::class)
 class ReminderDaoTest {
-
     private lateinit var db: MpkDatabase
 
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder(context, MpkDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
+        db =
+            Room
+                .inMemoryDatabaseBuilder(context, MpkDatabase::class.java)
+                .allowMainThreadQueries()
+                .build()
     }
 
     @After
@@ -40,13 +41,15 @@ class ReminderDaoTest {
         db.close()
     }
 
-    private suspend fun insertTask(title: String = "Лаба"): Long =
-        db.taskDao().insertTask(
-            StudentTaskEntity(
-                groupName = "41О", course = 4, subjectName = "ТОЭ",
-                taskType = "Домашнее задание", title = title
-            )
-        )
+    private suspend fun insertTask(title: String = "Лаба"): Long = db.taskDao().insertTask(
+        StudentTaskEntity(
+            groupName = "41О",
+            course = 4,
+            subjectName = "ТОЭ",
+            taskType = "Домашнее задание",
+            title = title,
+        ),
+    )
 
     @Test
     fun `getDueUntil returns past, in-window and boundary but not beyond`() = runBlocking {
@@ -55,18 +58,18 @@ class ReminderDaoTest {
         val now = System.currentTimeMillis()
         val until = now + 15 * 60_000L
 
-        val past = now - 60_000L          // просрочено
+        val past = now - 60_000L // просрочено
         val inWindow = now + 10 * 60_000L // внутри 15-мин окна
-        val boundary = until              // ровно на границе (<=)
-        val beyond = until + 1L           // за окном
+        val boundary = until // ровно на границе (<=)
+        val beyond = until + 1L // за окном
 
         dao.insertAll(
             listOf(
                 TaskReminderEntity(taskId = taskId, triggerAtMillis = past),
                 TaskReminderEntity(taskId = taskId, triggerAtMillis = inWindow),
                 TaskReminderEntity(taskId = taskId, triggerAtMillis = boundary),
-                TaskReminderEntity(taskId = taskId, triggerAtMillis = beyond)
-            )
+                TaskReminderEntity(taskId = taskId, triggerAtMillis = beyond),
+            ),
         )
 
         val due = dao.getDueUntil(until)
@@ -84,8 +87,8 @@ class ReminderDaoTest {
         dao.insertAll(
             listOf(
                 TaskReminderEntity(taskId = a, triggerAtMillis = now + 1000),
-                TaskReminderEntity(taskId = b, triggerAtMillis = now + 2000)
-            )
+                TaskReminderEntity(taskId = b, triggerAtMillis = now + 2000),
+            ),
         )
         assertEquals(1, dao.getForTask(a).size)
         assertEquals(1, dao.getForTask(b).size)
@@ -101,8 +104,8 @@ class ReminderDaoTest {
             taskId,
             listOf(
                 TaskReminderEntity(taskId = taskId, triggerAtMillis = now + 1000),
-                TaskReminderEntity(taskId = taskId, triggerAtMillis = now + 2000)
-            )
+                TaskReminderEntity(taskId = taskId, triggerAtMillis = now + 2000),
+            ),
         )
         assertEquals("две строки после первой замены", 2, dao.getForTask(taskId).size)
 

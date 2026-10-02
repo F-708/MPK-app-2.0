@@ -17,7 +17,6 @@ import org.junit.Test
  * разобрано, но при этом частичный документ не принимался за полный.
  */
 class ScheduleCacheGateTest {
-
     private val catalog = 64
 
     // --- нужен ли поход в сеть ---
@@ -81,10 +80,19 @@ class ScheduleCacheGateTest {
 
     // --- N2: сколько уроков считать в тосте «обновлено (N уроков)» ---
 
-    private fun lesson(group: String, num: Int) = LessonEntity(
-        groupName = group, dayOfWeek = 1, lessonNumber = num,
-        timeStart = "08:15", timeEnd = "09:55", subjectRaw = "Тест",
-        roomFirst = "204", teacherFirst = "Ковалев В.П.", dateString = "01.10.2026"
+    private fun lesson(
+        group: String,
+        num: Int,
+    ) = LessonEntity(
+        groupName = group,
+        dayOfWeek = 1,
+        lessonNumber = num,
+        timeStart = "08:15",
+        timeEnd = "09:55",
+        subjectRaw = "Тест",
+        roomFirst = "204",
+        teacherFirst = "Ковалев В.П.",
+        dateString = "01.10.2026",
     )
 
     @Test

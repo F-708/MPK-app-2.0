@@ -1,4 +1,4 @@
-﻿package com.politex
+package com.politex
 
 import com.politex.data.network.MpkScheduleParser
 import org.junit.Assert.assertEquals
@@ -6,9 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RealSiteDocParserTest {
-
-    private fun realDocBytes(): ByteArray =
-        javaClass.getResourceAsStream("/raspisanie-15.09.2026.doc")!!.readBytes()
+    private fun realDocBytes(): ByteArray = javaClass.getResourceAsStream("/raspisanie-15.09.2026.doc")!!.readBytes()
 
     @Test
     fun `извлекает все 8 уроков группы 41О из реального документа сайта`() {
@@ -73,8 +71,7 @@ class RealSiteDocParserTest {
         assertTrue(lessons.isEmpty())
     }
 
-    private fun wednesdayDocBytes(): ByteArray =
-        javaClass.getResourceAsStream("/raspisanie-16.09.2026.doc")!!.readBytes()
+    private fun wednesdayDocBytes(): ByteArray = javaClass.getResourceAsStream("/raspisanie-16.09.2026.doc")!!.readBytes()
 
     @Test
     fun `извлекает 8 уроков группы 41О из документа на среду 16_09`() {
@@ -100,15 +97,19 @@ class RealSiteDocParserTest {
 
     @Test
     fun `СТРАТЕГИЯ cells - уроки находятся даже если символы рамок таблицы ПОТЕРЯНЫ`() {
-
         val runs = MpkScheduleParser.extractUtf16LeRuns(realDocBytes())
-        val textWithoutBorders = runs.joinToString("\n")
-            .replace(Regex("[│─┬┴├┤┌┐└┘]"), "\n")
+        val textWithoutBorders =
+            runs
+                .joinToString("\n")
+                .replace(Regex("[│─┬┴├┤┌┐└┘]"), "\n")
 
         val lessons = MpkScheduleParser.parsePlainTextSchedule(textWithoutBorders, "41О", "15.09.2026")
 
-        assertEquals("Должна сработать позиционная стратегия cells, статистика: ${MpkScheduleParser.lastParseStats}",
-            "cells", MpkScheduleParser.lastParseStats.strategy)
+        assertEquals(
+            "Должна сработать позиционная стратегия cells, статистика: ${MpkScheduleParser.lastParseStats}",
+            "cells",
+            MpkScheduleParser.lastParseStats.strategy,
+        )
         assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8), lessons.map { it.lessonNumber })
 
         val first = lessons[0]
@@ -127,8 +128,9 @@ class RealSiteDocParserTest {
 
     @Test
     fun `HTML-страница вместо документа распознается и не парсится как расписание`() {
-        val html = "<!DOCTYPE html><html><head><title>302 Found</title></head><body>redirect</body></html>"
-            .toByteArray(Charsets.UTF_8)
+        val html =
+            "<!DOCTYPE html><html><head><title>302 Found</title></head><body>redirect</body></html>"
+                .toByteArray(Charsets.UTF_8)
         val lessons = MpkScheduleParser.parseFile(html, targetGroup = "41О", targetDate = "15.09.2026")
 
         assertTrue(lessons.isEmpty())

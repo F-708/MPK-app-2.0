@@ -1,4 +1,4 @@
-﻿package com.politex.util
+package com.politex.util
 
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.local.entity.StudentTaskEntity
@@ -8,13 +8,12 @@ import java.util.Calendar
 import java.util.Locale
 
 object HomeworkMarkers {
-
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
 
     data class DayContext(
         val dayIso: String,
         val isToday: Boolean,
-        val isPast: Boolean
+        val isPast: Boolean,
     )
 
     fun dayIsoOf(cal: Calendar): String = isoFormat.format(cal.time)
@@ -24,39 +23,42 @@ object HomeworkMarkers {
      * (сравнение дат через Calendar, не по строкам). Пустая dateString — старый формат.
      */
     fun dedupeByLatestDate(lessons: List<LessonEntity>): List<LessonEntity> {
-        val latestMillis = lessons
-            .filter { it.dateString.isNotBlank() }
-            .maxOfOrNull { dateToMillis(it.dateString) } ?: return lessons
+        val latestMillis =
+            lessons
+                .filter { it.dateString.isNotBlank() }
+                .maxOfOrNull { dateToMillis(it.dateString) } ?: return lessons
         return lessons.filter { it.dateString.isBlank() || dateToMillis(it.dateString) == latestMillis }
     }
 
     /** dd.MM.yyyy / ISO -> epoch; некорректная дата -> 0 (считается «самой ранней»). */
-    internal fun dateToMillis(date: String): Long =
-        com.politex.data.network.MpkScheduleParser.parseDotDate(date)?.timeInMillis ?: 0L
+    internal fun dateToMillis(date: String): Long = com.politex.data.network.MpkScheduleParser
+        .parseDotDate(date)
+        ?.timeInMillis ?: 0L
 
     fun markerLessonNumbers(
         dayLessons: List<LessonEntity>,
         day: DayContext,
         nowMillis: Long,
         weeklyLessonsByDow: Map<Int, List<LessonEntity>>,
-        pendingTasks: List<StudentTaskEntity>
+        pendingTasks: List<StudentTaskEntity>,
     ): Set<Int> {
         if (day.isPast || dayLessons.isEmpty() || pendingTasks.isEmpty()) return emptySet()
 
         val result = mutableSetOf<Int>()
         for (lesson in dayLessons) {
             val subject = lesson.officialSubjectName
-            val matched = pendingTasks.any { task ->
-                val deadline = task.deadlineDate.trim()
-                if (!subjectsMatch(subject, task.subjectName)) {
-                    false
-                } else if (deadline.isNotBlank()) {
-                    sameIsoDay(deadline, day.dayIso)
-                } else {
-                    val targetIso = resolveNextOccurrenceIso(task.createdAt, subject, weeklyLessonsByDow)
-                    targetIso != null && sameIsoDay(targetIso, day.dayIso)
+            val matched =
+                pendingTasks.any { task ->
+                    val deadline = task.deadlineDate.trim()
+                    if (!subjectsMatch(subject, task.subjectName)) {
+                        false
+                    } else if (deadline.isNotBlank()) {
+                        sameIsoDay(deadline, day.dayIso)
+                    } else {
+                        val targetIso = resolveNextOccurrenceIso(task.createdAt, subject, weeklyLessonsByDow)
+                        targetIso != null && sameIsoDay(targetIso, day.dayIso)
+                    }
                 }
-            }
             if (matched && !lessonPassed(lesson, day, nowMillis)) {
                 result += lesson.lessonNumber
             }
@@ -74,7 +76,7 @@ object HomeworkMarkers {
         day: DayContext,
         nowMillis: Long,
         weeklyLessonsByDow: Map<Int, List<LessonEntity>>,
-        pendingTasks: List<StudentTaskEntity>
+        pendingTasks: List<StudentTaskEntity>,
     ): Map<Int, List<TaskType>> {
         if (day.isPast || dayLessons.isEmpty() || pendingTasks.isEmpty()) return emptyMap()
 
@@ -84,14 +86,15 @@ object HomeworkMarkers {
             val subject = lesson.officialSubjectName
             for (task in pendingTasks) {
                 val deadline = task.deadlineDate.trim()
-                val matches = if (!subjectsMatch(subject, task.subjectName)) {
-                    false
-                } else if (deadline.isNotBlank()) {
-                    sameIsoDay(deadline, day.dayIso)
-                } else {
-                    val targetIso = resolveNextOccurrenceIso(task.createdAt, subject, weeklyLessonsByDow)
-                    targetIso != null && sameIsoDay(targetIso, day.dayIso)
-                }
+                val matches =
+                    if (!subjectsMatch(subject, task.subjectName)) {
+                        false
+                    } else if (deadline.isNotBlank()) {
+                        sameIsoDay(deadline, day.dayIso)
+                    } else {
+                        val targetIso = resolveNextOccurrenceIso(task.createdAt, subject, weeklyLessonsByDow)
+                        targetIso != null && sameIsoDay(targetIso, day.dayIso)
+                    }
                 if (matches) {
                     result.getOrPut(lesson.lessonNumber) { mutableListOf() }.add(task.taskTypeEnum)
                 }
@@ -100,28 +103,34 @@ object HomeworkMarkers {
         return result.mapValues { (_, types) -> types.distinct() }
     }
 
-    fun subjectsMatch(lessonSubject: String, taskSubject: String): Boolean {
+    fun subjectsMatch(
+        lessonSubject: String,
+        taskSubject: String,
+    ): Boolean {
         if (lessonSubject.isBlank() || taskSubject.isBlank()) return false
         val a = SubjectFormatter.normalize(lessonSubject)
         val b = SubjectFormatter.normalize(taskSubject)
         if (a.equals(b, ignoreCase = true)) return true
         return if (a.length >= 6 && b.length >= 6) {
             a.contains(b, ignoreCase = true) || b.contains(a, ignoreCase = true)
-        } else false
+        } else {
+            false
+        }
     }
 
     fun resolveNextOccurrenceIso(
         createdAt: Long,
         subject: String,
-        weeklyLessonsByDow: Map<Int, List<LessonEntity>>
+        weeklyLessonsByDow: Map<Int, List<LessonEntity>>,
     ): String? {
         val created = (Calendar.getInstance().apply { timeInMillis = createdAt }).clone() as Calendar
         for (offset in 0 until 28) {
             val cal = (created.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, offset) }
             val dow = calendarDow(cal)
             val dayLessons = weeklyLessonsByDow[dow] ?: continue
-            val subjectLessons = dayLessons
-                .filter { subjectsMatch(it.officialSubjectName, subject) }
+            val subjectLessons =
+                dayLessons
+                    .filter { subjectsMatch(it.officialSubjectName, subject) }
             for (lesson in subjectLessons) {
                 val endMillis = endOfDayMillis(cal, lesson.timeEnd)
                 if (endMillis > createdAt) return dayIsoOf(cal)
@@ -130,23 +139,32 @@ object HomeworkMarkers {
         return null
     }
 
-    private fun lessonPassed(lesson: LessonEntity, day: DayContext, nowMillis: Long): Boolean {
+    private fun lessonPassed(
+        lesson: LessonEntity,
+        day: DayContext,
+        nowMillis: Long,
+    ): Boolean {
         if (!day.isToday) return false
-        val nowMinutes = run {
-            val cal = Calendar.getInstance().apply { timeInMillis = nowMillis }
-            cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-        }
+        val nowMinutes =
+            run {
+                val cal = Calendar.getInstance().apply { timeInMillis = nowMillis }
+                cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+            }
         val endMinutes = parseMinutes(lesson.timeEnd) ?: return false
         return endMinutes <= nowMinutes
     }
 
-    private fun endOfDayMillis(dayCal: Calendar, timeEnd: String): Long {
-        val cal = (dayCal.clone() as Calendar).apply {
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
+    private fun endOfDayMillis(
+        dayCal: Calendar,
+        timeEnd: String,
+    ): Long {
+        val cal =
+            (dayCal.clone() as Calendar).apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
         val minutes = parseMinutes(timeEnd) ?: (24 * 60)
         cal.add(Calendar.MINUTE, minutes)
         return cal.timeInMillis
@@ -160,11 +178,12 @@ object HomeworkMarkers {
         return h * 60 + m
     }
 
-    private fun sameIsoDay(a: String, b: String): Boolean =
-        normalizeIso(a) == normalizeIso(b) && normalizeIso(a).isNotBlank()
+    private fun sameIsoDay(
+        a: String,
+        b: String,
+    ): Boolean = normalizeIso(a) == normalizeIso(b) && normalizeIso(a).isNotBlank()
 
-    private fun normalizeIso(value: String): String =
-        value.trim().replace("-", ".").replace("/", ".")
+    private fun normalizeIso(value: String): String = value.trim().replace("-", ".").replace("/", ".")
 
     private fun calendarDow(cal: Calendar): Int = when (cal.get(Calendar.DAY_OF_WEEK)) {
         Calendar.MONDAY -> 1

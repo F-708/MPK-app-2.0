@@ -1,4 +1,4 @@
-﻿package com.politex.widget
+package com.politex.widget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -11,8 +11,11 @@ import com.politex.R
 import com.politex.data.model.CollegeBellSchedule
 
 class BellsWidgetProvider : AppWidgetProvider() {
-
-    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+    override fun onUpdate(
+        context: Context,
+        manager: AppWidgetManager,
+        ids: IntArray,
+    ) {
         ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
         WidgetAlarm.scheduleNext(context)
     }
@@ -20,14 +23,16 @@ class BellsWidgetProvider : AppWidgetProvider() {
     override fun onEnabled(context: Context) = WidgetAlarm.scheduleNext(context)
 
     companion object {
-
         fun updateAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, BellsWidgetProvider::class.java))
             ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
         }
 
-        private fun buildViews(context: Context, appWidgetId: Int): RemoteViews {
+        private fun buildViews(
+            context: Context,
+            appWidgetId: Int,
+        ): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_bells)
             val style = WidgetStyle.load(context, appWidgetId)
 
@@ -56,14 +61,15 @@ class BellsWidgetProvider : AppWidgetProvider() {
                 row.setInt(
                     R.id.row_root,
                     "setBackgroundColor",
-                    if (isCurrent) style.highlightColor else style.backgroundColor
+                    if (isCurrent) style.highlightColor else style.backgroundColor,
                 )
 
-                val textColor = when {
-                    isCurrent -> style.mainColor
-                    isPast -> style.pastColor
-                    else -> style.mainColor
-                }
+                val textColor =
+                    when {
+                        isCurrent -> style.mainColor
+                        isPast -> style.pastColor
+                        else -> style.mainColor
+                    }
 
                 row.setTextViewText(R.id.row_number, if (bell.isInfoHour) "инф" else "${bell.lessonNumber}")
                 row.setTextColor(R.id.row_number, textColor)
@@ -74,17 +80,18 @@ class BellsWidgetProvider : AppWidgetProvider() {
                 views.addView(R.id.bells_rows, row)
             }
 
-            val open = PendingIntent.getActivity(
-                context,
-                appWidgetId,
-                Intent(context, com.politex.MainActivity::class.java)
-                    // CLEAR_TOP|SINGLE_TOP: тёплый тап по виджету доходит до onNewIntent,
-                    // а не плодит копии активити
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra("EXTRA_OPEN_TAB", "BELLS")
-                    .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_BELL"),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+            val open =
+                PendingIntent.getActivity(
+                    context,
+                    appWidgetId,
+                    Intent(context, com.politex.MainActivity::class.java)
+                        // CLEAR_TOP|SINGLE_TOP: тёплый тап по виджету доходит до onNewIntent,
+                        // а не плодит копии активити
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        .putExtra("EXTRA_OPEN_TAB", "BELLS")
+                        .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_BELL"),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
             views.setOnClickPendingIntent(R.id.bells_root, open)
             return views
         }

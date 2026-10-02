@@ -1,4 +1,4 @@
-﻿package com.politex
+package com.politex
 
 import com.politex.data.network.TeacherScheduleParser
 import org.junit.Assert.assertEquals
@@ -7,9 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TeacherScheduleParserTest {
-
-    private fun realDocBytes(): ByteArray =
-        javaClass.getResourceAsStream("/16.09.2026-raspisanie-prepodavatelej.doc")!!.readBytes()
+    private fun realDocBytes(): ByteArray = javaClass.getResourceAsStream("/16.09.2026-raspisanie-prepodavatelej.doc")!!.readBytes()
 
     private fun parsed() = TeacherScheduleParser.parse(realDocBytes())
 
@@ -42,7 +40,7 @@ class TeacherScheduleParserTest {
         withRoom.forEach { slot ->
             assertTrue(
                 "Кабинет «${slot.room}» не должен быть группой или дисциплиной",
-                !slot.room.matches(Regex("[1-4][1-9][А-Я]"))
+                !slot.room.matches(Regex("[1-4][1-9][А-Я]")),
             )
         }
     }
@@ -50,7 +48,11 @@ class TeacherScheduleParserTest {
     @Test
     fun `группы в записях выглядят как коды групп`() {
         val result = parsed()
-        val allGroups = result.values.flatten().flatMap { it.groups }.distinct()
+        val allGroups =
+            result.values
+                .flatten()
+                .flatMap { it.groups }
+                .distinct()
         assertTrue("Группы должны быть найдены", allGroups.isNotEmpty())
         allGroups.forEach { g ->
             assertTrue("«$g» не похоже на код группы", g.matches(Regex("[1-4][1-9][А-Я]")))
@@ -69,7 +71,7 @@ class TeacherScheduleParserTest {
         withSubject.take(20).forEach { slot ->
             assertTrue(
                 "«${slot.subject}» похоже на кабинет, а не дисциплину",
-                !slot.subject.matches(Regex("[0-9]{1,3}"))
+                !slot.subject.matches(Regex("[0-9]{1,3}")),
             )
         }
     }
@@ -110,15 +112,16 @@ class TeacherScheduleParserTest {
         assertEquals(
             5,
             TeacherScheduleParser.dowFromHeaderText(
-                "│ 1 НЕДЕЛЯ     ║ ПЯТНИЦА                 18.09.2026                        ║"
-            )
+                "│ 1 НЕДЕЛЯ     ║ ПЯТНИЦА                 18.09.2026                        ║",
+            ),
         )
     }
 
     @Test
     fun `заголовок без слова НЕДЕЛЯ всё равно находится`() {
-        val text = "│              ║ ЧЕТВЕРГ                                                    ║\r\n" +
-            "│Автушко Н.А.  ║    │    │41П │\r\n"
+        val text =
+            "│              ║ ЧЕТВЕРГ                                                    ║\r\n" +
+                "│Автушко Н.А.  ║    │    │41П │\r\n"
         assertEquals(4, TeacherScheduleParser.dowFromHeaderText(TeacherScheduleParser.findHeaderLine(text)!!))
     }
 
@@ -129,17 +132,27 @@ class TeacherScheduleParserTest {
         val text = TeacherScheduleParser.extractText(bytes)
         assertTrue("Текст документа должен извлекаться", text.isNotBlank())
 
-        val match = java.util.Calendar.getInstance().apply {
-            clear(); set(2026, java.util.Calendar.SEPTEMBER, 16)
-        }
-        val mismatch = java.util.Calendar.getInstance().apply {
-            clear(); set(2026, java.util.Calendar.SEPTEMBER, 17)
-        }
-        assertTrue("17.09.2026 не совпадает с запрошенным 16.09.2026",
-            !TeacherScheduleParser.matchesRequestedDate("ЧЕТВЕРГ 17.09.2026", match))
-        assertTrue("16.09.2026 совпадает с запрошенным 16.09.2026",
-            TeacherScheduleParser.matchesRequestedDate(text, match))
-        assertTrue("16.09.2026 не совпадает с запрошенным 17.09.2026",
-            !TeacherScheduleParser.matchesRequestedDate(text, mismatch))
+        val match =
+            java.util.Calendar.getInstance().apply {
+                clear()
+                set(2026, java.util.Calendar.SEPTEMBER, 16)
+            }
+        val mismatch =
+            java.util.Calendar.getInstance().apply {
+                clear()
+                set(2026, java.util.Calendar.SEPTEMBER, 17)
+            }
+        assertTrue(
+            "17.09.2026 не совпадает с запрошенным 16.09.2026",
+            !TeacherScheduleParser.matchesRequestedDate("ЧЕТВЕРГ 17.09.2026", match),
+        )
+        assertTrue(
+            "16.09.2026 совпадает с запрошенным 16.09.2026",
+            TeacherScheduleParser.matchesRequestedDate(text, match),
+        )
+        assertTrue(
+            "16.09.2026 не совпадает с запрошенным 17.09.2026",
+            !TeacherScheduleParser.matchesRequestedDate(text, mismatch),
+        )
     }
 }

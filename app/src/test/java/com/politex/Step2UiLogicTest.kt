@@ -1,8 +1,7 @@
-﻿package com.politex
+package com.politex
 
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.model.TaskType
-import com.politex.ui.viewmodel.AppTab
 import com.politex.util.GroupParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -11,7 +10,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class Step2UiLogicTest {
-
     @Test
     fun `test bell schedule business rules`() {
         assertEquals(12, CollegeBellSchedule.BELLS.size)
@@ -38,7 +36,6 @@ class Step2UiLogicTest {
 
     @Test
     fun `test task types availability per course`() {
-
         val course1Tasks = TaskType.getAvailableForCourse(1)
         assertFalse(course1Tasks.contains(TaskType.COURSE_WORK))
         assertFalse(course1Tasks.contains(TaskType.DIPLOMA))

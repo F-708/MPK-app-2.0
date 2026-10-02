@@ -14,7 +14,6 @@ import org.junit.Test
  * Опорные звонки (STANDARD, Пн): 1-й урок 08:15–09:00, 6-й 13:20–14:05, 12-й 18:50–19:35.
  */
 class NotificationQuietWindowTest {
-
     private val resume = BellCountdownNotifier.RESUME_MINUTE
     private val endOfLessons = 14 * 60 + 5 // конец последнего урока группы (14:05)
 

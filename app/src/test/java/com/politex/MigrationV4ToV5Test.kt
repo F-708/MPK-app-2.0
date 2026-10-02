@@ -44,7 +44,7 @@ class MigrationV4ToV5Test {
                                 "`timeEnd` TEXT NOT NULL, `subjectRaw` TEXT NOT NULL, " +
                                 "`roomFirst` TEXT NOT NULL, `teacherFirst` TEXT NOT NULL, " +
                                 "`roomSecond` TEXT NOT NULL, `teacherSecond` TEXT NOT NULL, " +
-                                "`isSplit` INTEGER NOT NULL, `dateString` TEXT NOT NULL)"
+                                "`isSplit` INTEGER NOT NULL, `dateString` TEXT NOT NULL)",
                         )
                         db.execSQL("CREATE INDEX IF NOT EXISTS `index_lessons_groupName_dayOfWeek` ON `lessons` (`groupName`, `dayOfWeek`)")
                         db.execSQL("CREATE INDEX IF NOT EXISTS `index_lessons_groupName_dateString` ON `lessons` (`groupName`, `dateString`)")
@@ -58,7 +58,7 @@ class MigrationV4ToV5Test {
                                 "`subjectName` TEXT NOT NULL, `taskType` TEXT NOT NULL, " +
                                 "`title` TEXT NOT NULL, `description` TEXT NOT NULL, " +
                                 "`isCompleted` INTEGER NOT NULL, `deadlineDate` TEXT NOT NULL, " +
-                                "`createdAt` INTEGER NOT NULL)"
+                                "`createdAt` INTEGER NOT NULL)",
                         )
                         db.execSQL(
                             "CREATE TABLE IF NOT EXISTS `teacher_lessons` (" +
@@ -66,39 +66,39 @@ class MigrationV4ToV5Test {
                                 "`teacherName` TEXT NOT NULL, `surnameKey` TEXT NOT NULL, " +
                                 "`dateString` TEXT NOT NULL, `dayOfWeek` INTEGER NOT NULL, " +
                                 "`lessonNumber` INTEGER NOT NULL, `groups` TEXT NOT NULL, " +
-                                "`subject` TEXT NOT NULL, `room` TEXT NOT NULL)"
+                                "`subject` TEXT NOT NULL, `room` TEXT NOT NULL)",
                         )
                         db.execSQL(
                             "CREATE INDEX IF NOT EXISTS `index_teacher_lessons_surnameKey_dateString` " +
-                                "ON `teacher_lessons` (`surnameKey`, `dateString`)"
+                                "ON `teacher_lessons` (`surnameKey`, `dateString`)",
                         )
                         db.execSQL(
                             "CREATE TABLE IF NOT EXISTS `task_reminders` (" +
                                 "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-                                "`taskId` INTEGER NOT NULL, `triggerAtMillis` INTEGER NOT NULL)"
+                                "`taskId` INTEGER NOT NULL, `triggerAtMillis` INTEGER NOT NULL)",
                         )
                         db.execSQL(
                             "CREATE INDEX IF NOT EXISTS `index_task_reminders_taskId` " +
-                                "ON `task_reminders` (`taskId`)"
+                                "ON `task_reminders` (`taskId`)",
                         )
                     }
 
                     override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
                 })
-                .build()
+                .build(),
         )
         helper.writableDatabase.use { db ->
             db.execSQL("PRAGMA user_version = 4")
             db.execSQL(
                 "INSERT INTO student_tasks " +
                     "(groupName, course, subjectName, taskType, title, description, isCompleted, deadlineDate, createdAt) " +
-                    "VALUES ('$group', 4, 'ТОЭ', 'Домашнее задание', 'Лаба по ТОЭ', '', 0, '2026-10-05', 1234567890)"
+                    "VALUES ('$group', 4, 'ТОЭ', 'Домашнее задание', 'Лаба по ТОЭ', '', 0, '2026-10-05', 1234567890)",
             )
             db.execSQL(
                 "INSERT INTO lessons " +
                     "(groupName, dayOfWeek, lessonNumber, timeStart, timeEnd, subjectRaw, roomFirst, " +
                     "teacherFirst, roomSecond, teacherSecond, isSplit, dateString) " +
-                    "VALUES ('$group', 3, 1, '08:15', '09:00', 'Математика', '229', 'Иванов И.И.', '', '', 0, '01.10.2026')"
+                    "VALUES ('$group', 3, 1, '08:15', '09:00', 'Математика', '229', 'Иванов И.И.', '', '', 0, '01.10.2026')",
             )
             // напоминание привязано к ДЗ: если миграция сотрёт student_tasks, оно повиснет в воздухе
             db.execSQL("INSERT INTO task_reminders (taskId, triggerAtMillis) VALUES (1, 1759650000000)")
@@ -147,7 +147,7 @@ class MigrationV4ToV5Test {
         val materialDao = db.materialDao()
         val folderId = kotlinx.coroutines.runBlocking {
             materialDao.insertFolder(
-                com.politex.data.local.entity.MaterialFolderEntity(subjectName = "ТОЭ", name = "Лекции")
+                com.politex.data.local.entity.MaterialFolderEntity(subjectName = "ТОЭ", name = "Лекции"),
             )
         }
         val itemId = kotlinx.coroutines.runBlocking {
@@ -158,8 +158,8 @@ class MigrationV4ToV5Test {
                     title = "Лекция 1",
                     fileName = "lek1.pdf",
                     ext = "pdf",
-                    uriPath = "/data/user/0/x/files/materials/1.pdf"
-                )
+                    uriPath = "/data/user/0/x/files/materials/1.pdf",
+                ),
             )
         }
         val saved = kotlinx.coroutines.runBlocking { materialDao.getItemById(itemId) }
@@ -186,7 +186,7 @@ class MigrationV4ToV5Test {
     private fun resetSingleton() {
         try {
             val cls = Class.forName("com.politex.data.local.MpkDatabase")
-            val field = cls.getDeclaredField("INSTANCE")
+            val field = cls.getDeclaredField("instance")
             field.isAccessible = true
             field.set(null, null)
         } catch (_: Exception) {

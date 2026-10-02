@@ -27,7 +27,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -81,33 +80,38 @@ import java.net.URLEncoder
 // URLEncoder — form-encoding (пробел → «+»), но Navigation трактует «+» буквально и не
 // декодирует его в пробел. Для query-компонента URI правильный пробел — «%20»: докодируем.
 // (Критично для ФИО преподавателей с пробелами: иначе surnameOf не сматчит → onNotFound.)
-private fun enc(value: String): String =
-    URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+private fun enc(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
 /** Паттерн вкладки с одноразовым scroll-аргументом: «schedule» → «schedule?scroll={scroll}». */
 fun scrollRoutePattern(base: String): String = "$base?$ARG_SCROLL={$ARG_SCROLL}"
 
 /** Конкретный route вкладки: scrollTarget null/пуст → базовый route без аргумента. */
-fun buildScrollRoute(base: String, scrollTarget: String?): String =
-    if (scrollTarget.isNullOrBlank()) base else "$base?$ARG_SCROLL=${enc(scrollTarget)}"
+fun buildScrollRoute(
+    base: String,
+    scrollTarget: String?,
+): String = if (scrollTarget.isNullOrBlank()) base else "$base?$ARG_SCROLL=${enc(scrollTarget)}"
 
 /**
  * Route карты. Семантика R1 сохранена: from != null (включая "") = «показать маршрут»
  * ("" — старт от главного входа); from == null — просто кабинет без маршрута.
  * route=true — явный запрос маршрута (виджет NowNext, N8).
  */
-fun buildMapRoute(room: String?, from: String?, showRoute: Boolean): String {
-    val params = buildList {
-        if (!room.isNullOrBlank()) add("room=${enc(room)}")
-        if (from != null) add("from=${enc(from)}")
-        if (showRoute) add("route=true")
-    }
+fun buildMapRoute(
+    room: String?,
+    from: String?,
+    showRoute: Boolean,
+): String {
+    val params =
+        buildList {
+            if (!room.isNullOrBlank()) add("room=${enc(room)}")
+            if (from != null) add("from=${enc(from)}")
+            if (showRoute) add("route=true")
+        }
     val base = ROUTE_MAP.substringBefore("?")
     return if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
 }
 
-fun buildTeacherRoute(name: String): String =
-    "${ROUTE_TEACHER.substringBefore("?")}?name=${enc(name)}"
+fun buildTeacherRoute(name: String): String = "${ROUTE_TEACHER.substringBefore("?")}?name=${enc(name)}"
 
 fun buildGroupScheduleRoute(group: String?): String {
     val base = ROUTE_GROUP_SCHEDULE.substringBefore("?")
@@ -136,7 +140,7 @@ fun NavController.navigateToTab(route: String) {
 fun MainScreen(
     viewModel: AppViewModel,
     navController: NavHostController,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
@@ -148,19 +152,20 @@ fun MainScreen(
         }
     }
 
-    val currentGroupInfo = uiState.groupInfo ?: GroupInfo(
-        rawName = uiState.currentGroupName,
-        course = 0,
-        groupNumber = 0,
-        specialtyCode = 'О'
-    )
+    val currentGroupInfo =
+        uiState.groupInfo ?: GroupInfo(
+            rawName = uiState.currentGroupName,
+            course = 0,
+            groupNumber = 0,
+            specialtyCode = 'О',
+        )
 
     if (uiState.showGroupSelection) {
         com.politex.ui.components.GroupSelectionDialog(
             currentGroupName = uiState.currentGroupName,
-            onDismissRequest = {  },
+            onDismissRequest = { },
             showClose = false,
-            onGroupSelected = { newGroup -> viewModel.setGroup(newGroup) }
+            onGroupSelected = { newGroup -> viewModel.setGroup(newGroup) },
         )
     }
 
@@ -181,22 +186,24 @@ fun MainScreen(
         bottomBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Box(
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(ColorDividerLight)
+                        .background(ColorDividerLight),
                 )
                 NavigationBar(
                     containerColor = ColorBgMain,
                     tonalElevation = 0.dp,
-                    modifier = Modifier.testTag("main_bottom_nav")
+                    modifier = Modifier.testTag("main_bottom_nav"),
                 ) {
-                    val tabs = listOf(
-                        Triple(AppTab.SCHEDULE, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
-                        Triple(AppTab.TASKS, Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
-                        Triple(AppTab.BELLS, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
-                        Triple(AppTab.COLLEGE, Icons.Filled.Apps, Icons.Outlined.Apps)
-                    )
+                    val tabs =
+                        listOf(
+                            Triple(AppTab.SCHEDULE, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
+                            Triple(AppTab.TASKS, Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
+                            Triple(AppTab.BELLS, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
+                            Triple(AppTab.COLLEGE, Icons.Filled.Apps, Icons.Outlined.Apps),
+                        )
 
                     tabs.forEach { (tab, filledIcon, outlinedIcon) ->
                         val isSelected = selectedTab == tab
@@ -207,7 +214,7 @@ fun MainScreen(
                                 Icon(
                                     imageVector = if (isSelected) filledIcon else outlinedIcon,
                                     contentDescription = tab.title,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(24.dp),
                                 )
                             },
                             label = {
@@ -218,40 +225,44 @@ fun MainScreen(
                                     softWrap = false,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    style = androidx.compose.ui.text.TextStyle(
+                                    style =
+                                    androidx.compose.ui.text.TextStyle(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                         fontSize = 10.sp,
-                                        letterSpacing = 0.sp
-                                    )
+                                        letterSpacing = 0.sp,
+                                    ),
                                 )
                             },
-                            colors = NavigationBarItemDefaults.colors(
+                            colors =
+                            NavigationBarItemDefaults.colors(
                                 selectedIconColor = ColorBrandBlue,
                                 selectedTextColor = ColorBrandBlue,
                                 indicatorColor = ColorSurfaceHighlight,
                                 unselectedIconColor = ColorTextMuted,
-                                unselectedTextColor = ColorTextMuted
-                            )
+                                unselectedTextColor = ColorTextMuted,
+                            ),
                         )
                     }
                 }
             }
         },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = ROUTE_SCHEDULE,
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(innerPadding),
         ) {
-            val scrollArg = listOf(
-                navArgument(ARG_SCROLL) {
-                    type = NavType.StringType
-                    defaultValue = ""
-                }
-            )
+            val scrollArg =
+                listOf(
+                    navArgument(ARG_SCROLL) {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                )
 
             composable(scrollRoutePattern(ROUTE_SCHEDULE), arguments = scrollArg) { entry ->
                 // C3: расписание и домашка читаются из VM (кэш переживает смену вкладок);
@@ -283,7 +294,7 @@ fun MainScreen(
                     selectedSlot = scheduleSlot,
                     onSlotChange = { scheduleSlot = it },
                     selectedDateString = scheduleDate,
-                    onDateChange = { scheduleDate = it }
+                    onDateChange = { scheduleDate = it },
                 )
             }
 
@@ -293,7 +304,7 @@ fun MainScreen(
                     taskRepository = viewModel.taskRepository,
                     modifier = Modifier.fillMaxSize(),
                     // T1: undo-снекбар удаления задания — хост уже висит в Scaffold
-                    snackbarHostState = snackbarHostState
+                    snackbarHostState = snackbarHostState,
                 )
             }
 
@@ -303,7 +314,7 @@ fun MainScreen(
                     groupInfo = currentGroupInfo,
                     scheduleRepository = viewModel.scheduleRepository,
                     scrollToCurrentRequested = scrollRequest == "CURRENT_BELL",
-                    onScrollToCurrentConsumed = { entry.savedStateHandle[ARG_SCROLL] = "" }
+                    onScrollToCurrentConsumed = { entry.savedStateHandle[ARG_SCROLL] = "" },
                 )
             }
 
@@ -315,14 +326,14 @@ fun MainScreen(
                     onOpenSettings = { navController.navigate(ROUTE_SETTINGS) },
                     onOpenStudents = { navController.navigate(ROUTE_STUDENTS) },
                     onOpenGroupSchedule = { navController.navigate(buildGroupScheduleRoute(null)) },
-                    onOpenMap = { navController.navigate(buildMapRoute(null, null, showRoute = false)) }
+                    onOpenMap = { navController.navigate(buildMapRoute(null, null, showRoute = false)) },
                 )
             }
 
             composable(ROUTE_SPECIALTY) {
                 SpecialtyRoute(
                     groupInfo = currentGroupInfo,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
                 )
             }
 
@@ -333,18 +344,19 @@ fun MainScreen(
                     onOpenTeacher = { teacher ->
                         navController.navigate(buildTeacherRoute(teacher.name))
                     },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
                 )
             }
 
             composable(
                 ROUTE_TEACHER,
-                arguments = listOf(
+                arguments =
+                listOf(
                     navArgument("name") {
                         type = NavType.StringType
                         defaultValue = ""
-                    }
-                )
+                    },
+                ),
             ) { entry ->
                 TeacherCardRoute(
                     teacherName = entry.arguments?.getString("name").orEmpty(),
@@ -354,13 +366,14 @@ fun MainScreen(
                         navController.navigate(buildMapRoute(room, null, showRoute = false))
                     },
                     onNotFound = { navController.popBackStack() },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
                 )
             }
 
             composable(
                 ROUTE_MAP,
-                arguments = listOf(
+                arguments =
+                listOf(
                     navArgument("room") {
                         type = NavType.StringType
                         defaultValue = null
@@ -374,8 +387,8 @@ fun MainScreen(
                     navArgument("route") {
                         type = NavType.BoolType
                         defaultValue = false
-                    }
-                )
+                    },
+                ),
             ) { entry ->
                 CollegeMapScreen(
                     initialRoom = entry.arguments?.getString("room"),
@@ -383,18 +396,19 @@ fun MainScreen(
                     fromRoom = entry.arguments?.getString("from"),
                     showRoute = entry.arguments?.getBoolean("route") == true,
                     onBack = { navController.popBackStack() },
-                    onOpenTeacher = { name -> navController.navigate(buildTeacherRoute(name)) }
+                    onOpenTeacher = { name -> navController.navigate(buildTeacherRoute(name)) },
                 )
             }
 
             composable(
                 ROUTE_GROUP_SCHEDULE,
-                arguments = listOf(
+                arguments =
+                listOf(
                     navArgument("group") {
                         type = NavType.StringType
                         defaultValue = ""
-                    }
-                )
+                    },
+                ),
             ) { entry ->
                 GroupScheduleRoute(
                     group = entry.arguments?.getString("group").orEmpty(),
@@ -409,7 +423,7 @@ fun MainScreen(
                     onTeacherClick = { name -> navController.navigate(buildTeacherRoute(name)) },
                     onRoomClick = { room, fromRoom ->
                         navController.navigate(buildMapRoute(room, fromRoom, showRoute = false))
-                    }
+                    },
                 )
             }
 
@@ -418,14 +432,14 @@ fun MainScreen(
                     groupInfo = currentGroupInfo,
                     onGroupChanged = { newGroup -> viewModel.setGroup(newGroup) },
                     onRunConnectionTest = { viewModel.syncSchedule() },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
                 )
             }
 
             composable(ROUTE_STUDENTS) {
                 StudentsRoute(
                     scheduleRepository = viewModel.scheduleRepository,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
                 )
             }
         }

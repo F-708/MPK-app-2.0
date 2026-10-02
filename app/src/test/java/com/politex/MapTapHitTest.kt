@@ -15,60 +15,70 @@ import org.junit.Test
  * принимает только target-значения, поэтому попадает всегда, даже mid-анимация.
  */
 class MapTapHitTest {
-
     private val imgW = 1000f
     private val imgH = 600f
-    private val room = MapRoom(
-        id = "r214", number = "214", title = "", note = "", status = "ok",
-        x = 0.5f, y = 0.5f, w = 0.1f, h = 0.1f
-    )
+    private val room =
+        MapRoom(
+            id = "r214",
+            number = "214",
+            title = "",
+            note = "",
+            status = "ok",
+            x = 0.5f,
+            y = 0.5f,
+            w = 0.1f,
+            h = 0.1f,
+        )
     private val floor = FloorMap(rooms = listOf(room))
 
     // Целевое «приближение к кабинету»: room в центре вида при zoom=2.6
     private val zoom = 2.6f
-    private val targetOffsetX = imgW / 2f - room.x * imgW * zoom   // = -800
-    private val targetOffsetY = imgH / 2f - room.y * imgH * zoom   // = -480
+    private val targetOffsetX = imgW / 2f - room.x * imgW * zoom // = -800
+    private val targetOffsetY = imgH / 2f - room.y * imgH * zoom // = -480
 
     @Test
     fun `тап в центре приближённой карты попадает в кабинет по target-значениям`() {
-        val hit = mapTapToRoom(
-            pos = Offset(imgW / 2f, imgH / 2f),
-            targetScale = zoom,
-            targetOffsetX = targetOffsetX,
-            targetOffsetY = targetOffsetY,
-            imgW = imgW,
-            imgH = imgH,
-            floor = floor
-        )
+        val hit =
+            mapTapToRoom(
+                pos = Offset(imgW / 2f, imgH / 2f),
+                targetScale = zoom,
+                targetOffsetX = targetOffsetX,
+                targetOffsetY = targetOffsetY,
+                imgW = imgW,
+                imgH = imgH,
+                floor = floor,
+            )
         assertEquals("214", hit?.number)
     }
 
     @Test
     fun `тап рядом с кабинетом дотягивается slop-фолбэком`() {
         // Чуть в стороне от центра (в пределах допуска) — всё равно попадаем
-        val hit = mapTapToRoom(
-            pos = Offset(imgW / 2f + 18f, imgH / 2f - 12f),
-            targetScale = zoom,
-            targetOffsetX = targetOffsetX,
-            targetOffsetY = targetOffsetY,
-            imgW = imgW,
-            imgH = imgH,
-            floor = floor
-        )
+        val hit =
+            mapTapToRoom(
+                pos = Offset(imgW / 2f + 18f, imgH / 2f - 12f),
+                targetScale = zoom,
+                targetOffsetX = targetOffsetX,
+                targetOffsetY = targetOffsetY,
+                imgW = imgW,
+                imgH = imgH,
+                floor = floor,
+            )
         assertEquals("214", hit?.number)
     }
 
     @Test
     fun `тап далеко от кабинета — промах`() {
-        val hit = mapTapToRoom(
-            pos = Offset(20f, 20f),
-            targetScale = zoom,
-            targetOffsetX = targetOffsetX,
-            targetOffsetY = targetOffsetY,
-            imgW = imgW,
-            imgH = imgH,
-            floor = floor
-        )
+        val hit =
+            mapTapToRoom(
+                pos = Offset(20f, 20f),
+                targetScale = zoom,
+                targetOffsetX = targetOffsetX,
+                targetOffsetY = targetOffsetY,
+                imgW = imgW,
+                imgH = imgH,
+                floor = floor,
+            )
         assertNull(hit)
     }
 
@@ -82,8 +92,8 @@ class MapTapHitTest {
                 targetOffsetY = 0f,
                 imgW = 0f,
                 imgH = 0f,
-                floor = floor
-            )
+                floor = floor,
+            ),
         )
     }
 }

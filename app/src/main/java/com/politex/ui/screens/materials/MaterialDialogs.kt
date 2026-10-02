@@ -74,7 +74,7 @@ fun MaterialImportTypeDialog(
     onDismiss: () -> Unit,
     onPickFile: () -> Unit,
     onPickImages: () -> Unit,
-    onPickText: () -> Unit
+    onPickText: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -89,26 +89,26 @@ fun MaterialImportTypeDialog(
                     title = "Файл",
                     subtitle = "PDF, DOCX, XLS и другие документы",
                     testTag = "import_type_file",
-                    onClick = onPickFile
+                    onClick = onPickFile,
                 )
                 DialogActionRow(
                     icon = Icons.Default.Image,
                     title = "Набор изображений",
                     subtitle = "Фото страниц и доски — один материал",
                     testTag = "import_type_images",
-                    onClick = onPickImages
+                    onClick = onPickImages,
                 )
                 DialogActionRow(
                     icon = Icons.Default.TextFields,
                     title = "Текст",
                     subtitle = "Записать конспект или объявление вручную",
                     testTag = "import_type_text",
-                    onClick = onPickText
+                    onClick = onPickText,
                 )
             }
         },
         confirmButton = {},
-        dismissButton = {}
+        dismissButton = {},
     )
 }
 
@@ -134,12 +134,12 @@ fun MaterialTextDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
                     shape = RoundedCornerShape(2.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("material_text_field")
+                        .testTag("material_text_field"),
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Текст сохраняется в базе и участвует в поиске — в том числе с опечатками.",
-                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted)
+                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                 )
             }
         },
@@ -150,7 +150,7 @@ fun MaterialTextDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
         },
         dismissButton = {
             DialogButton(text = "ОТМЕНА", color = ColorTextBody, testTag = "material_text_cancel", onClick = onDismiss)
-        }
+        },
     )
 }
 
@@ -166,7 +166,7 @@ fun MaterialDestinationDialog(
     curriculumSubjects: List<String>,
     folders: List<MaterialFolderEntity>,
     onDismiss: () -> Unit,
-    onConfirm: (subject: String, folderId: Long?, newFolderName: String) -> Unit
+    onConfirm: (subject: String, folderId: Long?, newFolderName: String) -> Unit,
 ) {
     val knownSubjects = remember(folders) {
         folders.filterNot { it.isArchive }.map { it.subjectName }.distinct()
@@ -208,7 +208,7 @@ fun MaterialDestinationDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     ToggleChip("Из списка", !isCustomSubject, Modifier.weight(1f)) { isCustomSubject = false }
@@ -225,7 +225,7 @@ fun MaterialDestinationDialog(
                         shape = RoundedCornerShape(2.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("dest_custom_subject_field")
+                            .testTag("dest_custom_subject_field"),
                     )
                 } else {
                     ExposedDropdownMenuBox(expanded = subjectExpanded, onExpandedChange = { subjectExpanded = it }) {
@@ -239,7 +239,7 @@ fun MaterialDestinationDialog(
                             modifier = Modifier
                                 .menuAnchor()
                                 .fillMaxWidth()
-                                .testTag("dest_subject_field")
+                                .testTag("dest_subject_field"),
                         )
                         ExposedDropdownMenu(expanded = subjectExpanded, onDismissRequest = { subjectExpanded = false }) {
                             subjectOptions.forEach { option ->
@@ -249,7 +249,7 @@ fun MaterialDestinationDialog(
                                         selectedSubject = option
                                         selectedFolderId = null
                                         subjectExpanded = false
-                                    }
+                                    },
                                 )
                             }
                         }
@@ -261,7 +261,7 @@ fun MaterialDestinationDialog(
                 if (subjectFolders.isEmpty() && !newFolderMode) {
                     Text(
                         text = "У предмета пока нет папок — создайте первую.",
-                        style = TextStyle(fontSize = 12.sp, color = ColorTextMuted)
+                        style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                     )
                 }
                 subjectFolders.forEach { folder ->
@@ -282,22 +282,22 @@ fun MaterialDestinationDialog(
                             newFolderMode = true
                             selectedFolderId = null
                         }
-                        .testTag("dest_new_folder_row")
+                        .testTag("dest_new_folder_row"),
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Default.CreateNewFolder,
                             contentDescription = null,
                             tint = ColorBrandBlue,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Новая папка",
-                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = ColorTextTitle)
+                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = ColorTextTitle),
                         )
                     }
                 }
@@ -312,7 +312,7 @@ fun MaterialDestinationDialog(
                         shape = RoundedCornerShape(2.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("dest_new_folder_field")
+                            .testTag("dest_new_folder_field"),
                     )
                 }
             }
@@ -322,14 +322,14 @@ fun MaterialDestinationDialog(
                 text = "ПОЛОЖИТЬ",
                 color = ColorBrandBlue,
                 enabled = canConfirm,
-                testTag = "dest_confirm_btn"
+                testTag = "dest_confirm_btn",
             ) {
                 onConfirm(subject, selectedFolderId, newFolderName.trim())
             }
         },
         dismissButton = {
             DialogButton(text = "ОТМЕНА", color = ColorTextBody, testTag = "dest_cancel_btn", onClick = onDismiss)
-        }
+        },
     )
 }
 
@@ -339,7 +339,7 @@ fun MaterialRenameDialog(
     initial: String,
     label: String,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
+    onConfirm: (String) -> Unit,
 ) {
     var value by remember { mutableStateOf(initial) }
     AlertDialog(
@@ -357,7 +357,7 @@ fun MaterialRenameDialog(
                 shape = RoundedCornerShape(2.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("rename_field")
+                    .testTag("rename_field"),
             )
         },
         confirmButton = {
@@ -367,7 +367,7 @@ fun MaterialRenameDialog(
         },
         dismissButton = {
             DialogButton(text = "ОТМЕНА", color = ColorTextBody, testTag = "rename_cancel_btn", onClick = onDismiss)
-        }
+        },
     )
 }
 
@@ -385,7 +385,7 @@ fun MaterialDeleteDialog(title: String, message: String, onDismiss: () -> Unit, 
         },
         dismissButton = {
             DialogButton(text = "ОТМЕНА", color = ColorTextBody, testTag = "delete_cancel_btn", onClick = onDismiss)
-        }
+        },
     )
 }
 
@@ -396,7 +396,7 @@ private fun DialogTitle(text: String, onClose: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = ColorTextTitle))
         IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
@@ -411,7 +411,7 @@ private fun DialogActionRow(
     title: String,
     subtitle: String,
     testTag: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
@@ -421,11 +421,11 @@ private fun DialogActionRow(
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .bouncyClickable(onClick = onClick)
-            .testTag(testTag)
+            .testTag(testTag),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             Icon(imageVector = icon, contentDescription = null, tint = ColorBrandBlue, modifier = Modifier.size(22.dp))
             Spacer(modifier = Modifier.width(12.dp))
@@ -435,7 +435,7 @@ private fun DialogActionRow(
                     text = subtitle,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted)
+                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                 )
             }
         }
@@ -452,17 +452,17 @@ private fun FolderPickRow(folder: MaterialFolderEntity, selected: Boolean, onCli
             .fillMaxWidth()
             .heightIn(min = 44.dp)
             .bouncyClickable(onClick = onClick)
-            .testTag("dest_folder_${folder.id}")
+            .testTag("dest_folder_${folder.id}"),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             Icon(
                 imageVector = Icons.Default.Folder,
                 contentDescription = null,
                 tint = if (selected) ColorBrandBlue else ColorTextMuted,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(18.dp),
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
@@ -472,8 +472,8 @@ private fun FolderPickRow(folder: MaterialFolderEntity, selected: Boolean, onCli
                 style = TextStyle(
                     fontSize = 13.sp,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    color = ColorTextTitle
-                )
+                    color = ColorTextTitle,
+                ),
             )
         }
     }
@@ -488,7 +488,7 @@ private fun ToggleChip(text: String, selected: Boolean, modifier: Modifier = Mod
         contentColor = if (selected) Color.White else ColorTextBody,
         modifier = modifier
             .heightIn(min = 36.dp)
-            .bouncyClickable(onClick = onClick)
+            .bouncyClickable(onClick = onClick),
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
             Text(text, maxLines = 1, style = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp))
@@ -502,7 +502,7 @@ private fun DialogButton(
     color: Color,
     testTag: String,
     enabled: Boolean = true,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
@@ -510,7 +510,7 @@ private fun DialogButton(
         modifier = Modifier
             .heightIn(min = 44.dp)
             .bouncyClickable(enabled = enabled, onClick = onClick)
-            .testTag(testTag)
+            .testTag(testTag),
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 14.dp)) {
             Text(
@@ -519,8 +519,8 @@ private fun DialogButton(
                 style = TextStyle(
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
-                    color = if (enabled) color else ColorTextMuted.copy(alpha = 0.5f)
-                )
+                    color = if (enabled) color else ColorTextMuted.copy(alpha = 0.5f),
+                ),
             )
         }
     }
@@ -533,7 +533,7 @@ fun BrandActionButton(
     label: String,
     testTag: String,
     filled: Boolean = true,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
@@ -542,17 +542,17 @@ fun BrandActionButton(
         modifier = Modifier
             .heightIn(min = 44.dp)
             .bouncyClickable(onClick = onClick)
-            .testTag(testTag)
+            .testTag(testTag),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
                 tint = if (filled) Color.White else ColorBrandBlue,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(16.dp),
             )
             if (label.isNotEmpty()) {
                 Spacer(modifier = Modifier.width(4.dp))
@@ -563,8 +563,8 @@ fun BrandActionButton(
                     style = TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
-                        color = if (filled) Color.White else ColorBrandBlue
-                    )
+                        color = if (filled) Color.White else ColorBrandBlue,
+                    ),
                 )
             }
         }

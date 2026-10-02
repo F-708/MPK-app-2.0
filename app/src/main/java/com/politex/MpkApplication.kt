@@ -20,7 +20,6 @@ import com.politex.util.NotificationHelper
  * не окупается; если точек создания станет больше 10 — переезжать на Koin.
  */
 object AppGraph {
-
     lateinit var scheduleRepository: ScheduleRepository
         private set
     lateinit var teachersRepository: TeachersRepository
@@ -31,11 +30,12 @@ object AppGraph {
     fun init(context: Application) {
         val app = context.applicationContext
         val db = MpkDatabase.getInstance(app)
-        scheduleRepository = ScheduleRepository(
-            lessonDao = db.lessonDao(),
-            catalogProvider = { GroupCatalog.load(app).all() },
-            teacherLessonDao = db.teacherLessonDao()
-        )
+        scheduleRepository =
+            ScheduleRepository(
+                lessonDao = db.lessonDao(),
+                catalogProvider = { GroupCatalog.load(app).all() },
+                teacherLessonDao = db.teacherLessonDao(),
+            )
         teachersRepository = TeachersRepository(app)
         studentsRepository = StudentsRepository(app)
     }
@@ -47,11 +47,11 @@ object AppGraph {
  * существовать и там.
  */
 class MpkApplication : Application() {
-
     override fun onCreate() {
         super.onCreate()
         AppGraph.init(this)
         NotificationHelper.createNotificationChannel(this)
-        com.politex.util.BellCountdownNotifier.createChannel(this)
+        com.politex.util.BellCountdownNotifier
+            .createChannel(this)
     }
 }

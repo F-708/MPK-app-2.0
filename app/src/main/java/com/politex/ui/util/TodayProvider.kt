@@ -26,9 +26,10 @@ fun rememberToday(): Calendar {
     val lifecycleOwner = LocalLifecycleOwner.current
     var dayKey by remember { mutableLongStateOf(dayKeyOf(Calendar.getInstance())) }
     DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) dayKey = dayKeyOf(Calendar.getInstance())
-        }
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) dayKey = dayKeyOf(Calendar.getInstance())
+            }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
@@ -40,15 +41,13 @@ fun rememberToday(): Calendar {
  * суток одного дня и различается у соседних дней — ровно то, что нужно ключом remember.
  * Чистая функция ради юнит-теста.
  */
-internal fun dayKeyOf(cal: Calendar): Long =
-    cal.get(Calendar.YEAR) * 1000L + cal.get(Calendar.DAY_OF_YEAR)
+internal fun dayKeyOf(cal: Calendar): Long = cal.get(Calendar.YEAR) * 1000L + cal.get(Calendar.DAY_OF_YEAR)
 
 /**
  * SUI-03: минуты от начала суток. Ключ поминутного тика — с ним «текущая пара» и
  * «уроки кончились» пересчитываются на границе урока без переоткрытия экрана.
  */
-internal fun minutesOfDay(cal: Calendar = Calendar.getInstance()): Int =
-    cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+internal fun minutesOfDay(cal: Calendar = Calendar.getInstance()): Int = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
 
 /** SUI-03: тикающая «текущая минута» (раз в минуту), ключ для remember «идущего урока». */
 @Composable

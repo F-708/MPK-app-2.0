@@ -1,7 +1,6 @@
 package com.politex.ui.screens.materials
 
 import android.graphics.Bitmap
-import android.graphics.Color as AndroidColor
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import android.util.LruCache
@@ -9,13 +8,13 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -78,6 +77,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import android.graphics.Color as AndroidColor
 
 /**
  * M2: просмотрщик PDF на `android.graphics.pdf.PdfRenderer` (платформа, ноль новых зависимостей).
@@ -102,18 +102,19 @@ fun MaterialPdfViewer(
     item: MaterialItemEntity,
     dao: MaterialDao,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
     val file = remember(item.uriPath) { File(item.uriPath) }
 
     // Один файл при входе на экран: открытие дешёвое, зато pageCount известен сразу.
-    val handle = remember(file) {
-        runCatching {
-            val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-            pfd to PdfRenderer(pfd)
-        }.getOrNull()
-    }
+    val handle =
+        remember(file) {
+            runCatching {
+                val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+                pfd to PdfRenderer(pfd)
+            }.getOrNull()
+        }
 
     DisposableEffect(handle) {
         onDispose {
@@ -135,9 +136,10 @@ fun MaterialPdfViewer(
     val renderer = handle.second
     val pageCount = renderer.pageCount
     val bookmarks by dao.getBookmarksFlow(item.id).collectAsState(initial = emptyList())
-    val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = item.lastPage.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
-    )
+    val listState =
+        rememberLazyListState(
+            initialFirstVisibleItemIndex = item.lastPage.coerceIn(0, (pageCount - 1).coerceAtLeast(0)),
+        )
     val renderLock = remember(renderer) { Mutex() }
     val pageCache = remember(renderer) { newPageBitmapCache() }
 
@@ -158,32 +160,33 @@ fun MaterialPdfViewer(
         MaterialViewerTopBar(
             title = item.title,
             testTag = "pdf_top_bar",
-            onBack = onBack
+            onBack = onBack,
         ) {
             ViewerAction(
                 icon = Icons.Default.BookmarkBorder,
                 description = "Закладки",
                 testTag = "pdf_bookmarks_btn",
                 active = showBookmarkList,
-                onClick = { showBookmarkList = !showBookmarkList }
+                onClick = { showBookmarkList = !showBookmarkList },
             )
             Spacer(modifier = Modifier.width(2.dp))
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 color = Color.Transparent,
-                modifier = Modifier
+                modifier =
+                Modifier
                     .heightIn(min = 44.dp)
                     .bouncyClickable { showPageJump = true }
-                    .testTag("pdf_page_indicator")
+                    .testTag("pdf_page_indicator"),
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(horizontal = 10.dp)
+                    modifier = Modifier.padding(horizontal = 10.dp),
                 ) {
                     Text(
                         text = "${currentPage + 1}/$pageCount",
                         maxLines = 1,
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White),
                     )
                 }
             }
@@ -196,7 +199,7 @@ fun MaterialPdfViewer(
                     showBookmarkList = false
                     scope.jumpToPage(listState, page, pageCount)
                 },
-                onDelete = { id -> scope.launch { dao.deleteBookmarkById(id) } }
+                onDelete = { id -> scope.launch { dao.deleteBookmarkById(id) } },
             )
         }
 
@@ -206,11 +209,12 @@ fun MaterialPdfViewer(
 
             LazyColumn(
                 state = listState,
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxSize()
                     .testTag("pdf_page_list"),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
-                contentPadding = PaddingValues(vertical = 6.dp)
+                contentPadding = PaddingValues(vertical = 6.dp),
             ) {
                 items(count = pageCount, key = { it }) { index ->
                     PdfPageRow(
@@ -220,7 +224,7 @@ fun MaterialPdfViewer(
                         renderLock = renderLock,
                         renderWidthPx = renderWidthPx,
                         bookmarked = bookmarks.any { it.page == index },
-                        onBookmarkClick = { bookmarkDraftPage = index }
+                        onBookmarkClick = { bookmarkDraftPage = index },
                     )
                 }
             }
@@ -238,7 +242,7 @@ fun MaterialPdfViewer(
                 scope.launch {
                     dao.insertBookmark(MaterialBookmarkEntity(itemId = item.id, page = page, label = label))
                 }
-            }
+            },
         )
     }
 
@@ -249,13 +253,17 @@ fun MaterialPdfViewer(
             onJump = { page ->
                 showPageJump = false
                 scope.jumpToPage(listState, page, pageCount)
-            }
+            },
         )
     }
 }
 
 /** Прыжок на страницу: номер приводим к диапазону (битый PDF может дать pageCount = 0). */
-private fun kotlinx.coroutines.CoroutineScope.jumpToPage(state: LazyListState, page: Int, pageCount: Int) {
+private fun kotlinx.coroutines.CoroutineScope.jumpToPage(
+    state: LazyListState,
+    page: Int,
+    pageCount: Int,
+) {
     val target = page.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
     launch { state.scrollToItem(target) }
 }
@@ -267,7 +275,10 @@ private fun kotlinx.coroutines.CoroutineScope.jumpToPage(state: LazyListState, p
 private fun newPageBitmapCache(): LruCache<Int, Bitmap> {
     val maxBytes = (Runtime.getRuntime().maxMemory() / 8).toInt().coerceAtLeast(4 * 1024 * 1024)
     return object : LruCache<Int, Bitmap>(maxBytes) {
-        override fun sizeOf(key: Int, value: Bitmap): Int = value.byteCount
+        override fun sizeOf(
+            key: Int,
+            value: Bitmap,
+        ): Int = value.byteCount
     }
 }
 
@@ -283,15 +294,16 @@ private fun PdfPageRow(
     renderLock: Mutex,
     renderWidthPx: Int,
     bookmarked: Boolean,
-    onBookmarkClick: () -> Unit
+    onBookmarkClick: () -> Unit,
 ) {
     var bitmap by remember(pageIndex) { mutableStateOf(cache.get(pageIndex)) }
 
     LaunchedEffect(pageIndex, renderer) {
         if (bitmap != null) return@LaunchedEffect
-        val rendered = withContext(Dispatchers.Default) {
-            renderLock.withLock { renderPageBitmap(renderer, pageIndex, renderWidthPx) }
-        }
+        val rendered =
+            withContext(Dispatchers.Default) {
+                renderLock.withLock { renderPageBitmap(renderer, pageIndex, renderWidthPx) }
+            }
         if (rendered != null) {
             cache.put(pageIndex, rendered)
             bitmap = rendered
@@ -299,10 +311,11 @@ private fun PdfPageRow(
     }
 
     Box(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp)
-            .testTag("pdf_page_$pageIndex")
+            .testTag("pdf_page_$pageIndex"),
     ) {
         val bmp = bitmap
         if (bmp != null) {
@@ -310,22 +323,23 @@ private fun PdfPageRow(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = "Страница ${pageIndex + 1}",
                 contentScale = ContentScale.FillWidth,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             )
         } else {
             // Плейсхолдер пропорций A4 (1:1.414) через aspectRatio, а НЕ «пиксели как dp»:
             // renderWidthPx — это пиксели, и .dp из него дал бы на плотном экране заглушку
             // втрое выше настоящей страницы, из-за чего список прыгал бы при дорисовке.
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxWidth()
                     .aspectRatio(0.707f)
                     .background(ColorBgMain, RoundedCornerShape(2.dp)),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = "${pageIndex + 1}",
-                    style = TextStyle(fontSize = 12.sp, color = ColorTextMuted)
+                    style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                 )
             }
         }
@@ -333,22 +347,23 @@ private fun PdfPageRow(
         // Номер страницы + закладка поверх: хитбокс 44dp, палец попадает без прицеливания
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
+            modifier =
+            Modifier
                 .align(Alignment.TopEnd)
-                .padding(4.dp)
+                .padding(4.dp),
         ) {
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 color = ColorBgMain.copy(alpha = 0.85f),
-                border = BorderStroke(1.dp, ColorBorderLight)
+                border = BorderStroke(1.dp, ColorBorderLight),
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                 ) {
                     Text(
                         text = "${pageIndex + 1}",
-                        style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ColorTextBody)
+                        style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ColorTextBody),
                     )
                 }
             }
@@ -357,17 +372,18 @@ private fun PdfPageRow(
                 shape = RoundedCornerShape(2.dp),
                 color = if (bookmarked) ColorBrandBlue else ColorBgMain.copy(alpha = 0.85f),
                 border = BorderStroke(1.dp, ColorBorderLight),
-                modifier = Modifier
+                modifier =
+                Modifier
                     .size(44.dp)
                     .bouncyClickable(onClick = onBookmarkClick)
-                    .testTag("pdf_bookmark_add_$pageIndex")
+                    .testTag("pdf_bookmark_add_$pageIndex"),
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                         contentDescription = "Закладка на странице ${pageIndex + 1}",
                         tint = if (bookmarked) Color.White else ColorBrandBlue,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
@@ -379,7 +395,11 @@ private fun PdfPageRow(
  * Рендер одной страницы. ВЫЗЫВАТЬ ПОД МЬЮТЕКСОМ: PdfRenderer допускает ровно одну открытую
  * страницу и не потокобезопасен. Сбой страницы (битый PDF) — null, страница останется плейсхолдером.
  */
-private fun renderPageBitmap(renderer: PdfRenderer, pageIndex: Int, widthPx: Int): Bitmap? = runCatching {
+private fun renderPageBitmap(
+    renderer: PdfRenderer,
+    pageIndex: Int,
+    widthPx: Int,
+): Bitmap? = runCatching {
     renderer.openPage(pageIndex).use { page ->
         val w = widthPx.coerceAtLeast(1)
         val h = (w.toFloat() * page.height.toFloat() / page.width.toFloat()).toInt().coerceAtLeast(1)
@@ -395,22 +415,23 @@ private fun renderPageBitmap(renderer: PdfRenderer, pageIndex: Int, widthPx: Int
 private fun BookmarkPanel(
     bookmarks: List<MaterialBookmarkEntity>,
     onJump: (Int) -> Unit,
-    onDelete: (Long) -> Unit
+    onDelete: (Long) -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
         border = BorderStroke(1.dp, ColorBorderLight),
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp)
-            .testTag("pdf_bookmark_panel")
+            .testTag("pdf_bookmark_panel"),
     ) {
         if (bookmarks.isEmpty()) {
             Text(
                 text = "Закладок нет. Нажмите значок закладки на нужной странице.",
                 style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-                modifier = Modifier.padding(12.dp)
+                modifier = Modifier.padding(12.dp),
             )
         } else {
             LazyColumn(modifier = Modifier.heightIn(max = 220.dp)) {
@@ -418,18 +439,19 @@ private fun BookmarkPanel(
                     val bm = bookmarks[i]
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .fillMaxWidth()
                             .heightIn(min = 44.dp)
                             .bouncyClickable { onJump(bm.page) }
                             .padding(start = 12.dp, end = 2.dp)
-                            .testTag("pdf_bookmark_${bm.id}")
+                            .testTag("pdf_bookmark_${bm.id}"),
                     ) {
                         Icon(
                             imageVector = Icons.Default.Bookmark,
                             contentDescription = null,
                             tint = ColorBrandBlue,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(16.dp),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -437,11 +459,11 @@ private fun BookmarkPanel(
                                 text = bm.label.ifBlank { "Страница ${bm.page + 1}" },
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle)
+                                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle),
                             )
                             Text(
                                 text = "Стр. ${bm.page + 1}",
-                                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted)
+                                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                             )
                         }
                         IconButton(onClick = { onDelete(bm.id) }, modifier = Modifier.size(44.dp)) {
@@ -449,7 +471,7 @@ private fun BookmarkPanel(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = "Удалить закладку",
                                 tint = ColorTextMuted,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(18.dp),
                             )
                         }
                     }
@@ -460,7 +482,11 @@ private fun BookmarkPanel(
 }
 
 @Composable
-private fun AddBookmarkDialog(page: Int, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+private fun AddBookmarkDialog(
+    page: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
     var label by remember { mutableStateOf("Страница ${page + 1}") }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -469,7 +495,7 @@ private fun AddBookmarkDialog(page: Int, onDismiss: () -> Unit, onConfirm: (Stri
         title = {
             Text(
                 text = "Закладка на странице ${page + 1}",
-                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ColorTextTitle)
+                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ColorTextTitle),
             )
         },
         text = {
@@ -479,9 +505,10 @@ private fun AddBookmarkDialog(page: Int, onDismiss: () -> Unit, onConfirm: (Stri
                 label = { Text("Подпись", fontSize = 12.sp) },
                 singleLine = true,
                 shape = RoundedCornerShape(2.dp),
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxWidth()
-                    .testTag("bookmark_label_field")
+                    .testTag("bookmark_label_field"),
             )
         },
         confirmButton = {
@@ -493,12 +520,16 @@ private fun AddBookmarkDialog(page: Int, onDismiss: () -> Unit, onConfirm: (Stri
             TextButton(onClick = onDismiss) {
                 Text("ОТМЕНА", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ColorTextBody))
             }
-        }
+        },
     )
 }
 
 @Composable
-private fun PageJumpDialog(pageCount: Int, onDismiss: () -> Unit, onJump: (Int) -> Unit) {
+private fun PageJumpDialog(
+    pageCount: Int,
+    onDismiss: () -> Unit,
+    onJump: (Int) -> Unit,
+) {
     var raw by remember { mutableStateOf("1") }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -507,7 +538,7 @@ private fun PageJumpDialog(pageCount: Int, onDismiss: () -> Unit, onJump: (Int) 
         title = {
             Text(
                 text = "Перейти на страницу",
-                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ColorTextTitle)
+                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ColorTextTitle),
             )
         },
         text = {
@@ -517,9 +548,10 @@ private fun PageJumpDialog(pageCount: Int, onDismiss: () -> Unit, onJump: (Int) 
                 label = { Text("Номер (1…$pageCount)", fontSize = 12.sp) },
                 singleLine = true,
                 shape = RoundedCornerShape(2.dp),
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxWidth()
-                    .testTag("page_jump_field")
+                    .testTag("page_jump_field"),
             )
         },
         confirmButton = {
@@ -531,6 +563,6 @@ private fun PageJumpDialog(pageCount: Int, onDismiss: () -> Unit, onJump: (Int) 
             TextButton(onClick = onDismiss) {
                 Text("ОТМЕНА", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ColorTextBody))
             }
-        }
+        },
     )
 }

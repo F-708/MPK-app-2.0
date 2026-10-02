@@ -1,4 +1,4 @@
-﻿package com.politex.widget
+package com.politex.widget
 
 import android.appwidget.AppWidgetManager
 import android.content.Intent
@@ -46,14 +46,14 @@ import com.politex.ui.theme.MyApplicationTheme
 import com.politex.ui.util.bouncyClickable
 
 class WidgetConfigActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val appWidgetId = intent?.extras?.getInt(
-            AppWidgetManager.EXTRA_APPWIDGET_ID,
-            AppWidgetManager.INVALID_APPWIDGET_ID
-        ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
+        val appWidgetId =
+            intent?.extras?.getInt(
+                AppWidgetManager.EXTRA_APPWIDGET_ID,
+                AppWidgetManager.INVALID_APPWIDGET_ID,
+            ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
 
         if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
             finish()
@@ -70,22 +70,23 @@ class WidgetConfigActivity : ComponentActivity() {
                     var showRoom by remember { mutableStateOf(true) }
 
                     Column(
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
-                            .padding(20.dp)
+                            .padding(20.dp),
                     ) {
                         Text(
                             text = kind.title,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
-                            color = ColorTextTitle
+                            color = ColorTextTitle,
                         )
                         Text(
                             text = kind.hint,
                             fontSize = 13.sp,
                             color = ColorTextMuted,
-                            modifier = Modifier.padding(top = 4.dp)
+                            modifier = Modifier.padding(top = 4.dp),
                         )
 
                         Spacer(modifier = Modifier.height(18.dp))
@@ -100,19 +101,20 @@ class WidgetConfigActivity : ComponentActivity() {
                                 onClick = { style = option },
                                 leading = {
                                     Box(
-                                        modifier = Modifier
+                                        modifier =
+                                        Modifier
                                             .size(32.dp)
                                             .background(Color(option.backgroundColor), RoundedCornerShape(2.dp)),
-                                        contentAlignment = Alignment.Center
+                                        contentAlignment = Alignment.Center,
                                     ) {
                                         Text(
                                             text = "12",
                                             color = Color(option.mainColor),
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 14.sp
+                                            fontSize = 14.sp,
                                         )
                                     }
-                                }
+                                },
                             )
                         }
 
@@ -124,7 +126,7 @@ class WidgetConfigActivity : ComponentActivity() {
                                     selected = countdownMode == option,
                                     title = option.title,
                                     description = option.description,
-                                    onClick = { countdownMode = option }
+                                    onClick = { countdownMode = option },
                                 )
                             }
                         }
@@ -133,22 +135,23 @@ class WidgetConfigActivity : ComponentActivity() {
                             Spacer(modifier = Modifier.height(18.dp))
                             SectionTitle("Дополнительно")
                             Row(
-                                modifier = Modifier
+                                modifier =
+                                Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = "Показывать кабинет",
                                         fontSize = 14.sp,
-                                        color = ColorTextBody
+                                        color = ColorTextBody,
                                     )
                                     Text(
                                         text = "Если не нужен — строки станут короче",
                                         fontSize = 12.sp,
-                                        color = ColorTextMuted
+                                        color = ColorTextMuted,
                                     )
                                 }
                                 Switch(checked = showRoom, onCheckedChange = { showRoom = it })
@@ -160,7 +163,8 @@ class WidgetConfigActivity : ComponentActivity() {
                         Surface(
                             shape = RoundedCornerShape(2.dp),
                             color = ColorBrandFill,
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .fillMaxWidth()
                                 .bouncyClickable {
                                     WidgetStyle.save(this@WidgetConfigActivity, appWidgetId, style)
@@ -173,22 +177,23 @@ class WidgetConfigActivity : ComponentActivity() {
 
                                     setResult(
                                         RESULT_OK,
-                                        Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                                        Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
                                     )
                                     finish()
-                                }
+                                },
                         ) {
                             Box(
-                                modifier = Modifier
+                                modifier =
+                                Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 12.dp),
-                                contentAlignment = Alignment.Center
+                                contentAlignment = Alignment.Center,
                             ) {
                                 Text(
                                     text = "ДОБАВИТЬ ВИДЖЕТ",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
+                                    fontSize = 13.sp,
                                 )
                             }
                         }
@@ -203,35 +208,39 @@ enum class WidgetKind(
     val title: String,
     val hint: String,
     val providerClass: Class<*>,
-    val showRoomOption: Boolean
+    val showRoomOption: Boolean,
 ) {
     COUNTDOWN(
         "Виджет «До звонка»",
         "Сколько осталось до звонка. Тема и до чего считать отсчёт",
         BellCountdownWidgetProvider::class.java,
-        false
+        false,
     ),
     NOW_NEXT(
         "Виджет «Сейчас и дальше»",
         "Что идёт сейчас и что будет следующим",
         NowNextWidgetProvider::class.java,
-        true
+        true,
     ),
     TODAY(
         "Виджет «Расписание на сегодня»",
         "Весь день списком: время, предмет, кабинет",
         TodayScheduleWidgetProvider::class.java,
-        true
+        true,
     ),
     BELLS(
         "Виджет «Звонки»",
         "Расписание звонков с подсветкой текущего урока",
         BellsWidgetProvider::class.java,
-        false
-    );
+        false,
+    ),
+    ;
 
     companion object {
-        fun of(context: android.content.Context, appWidgetId: Int): WidgetKind {
+        fun of(
+            context: android.content.Context,
+            appWidgetId: Int,
+        ): WidgetKind {
             val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(appWidgetId)
             val providerName = info?.provider?.className
             return entries.firstOrNull { it.providerClass.name == providerName } ?: COUNTDOWN
@@ -240,14 +249,21 @@ enum class WidgetKind(
 }
 
 object WidgetOptions {
-
     private const val PREF_SHOW_ROOM = "widget_show_room_"
 
-    fun showRoom(context: android.content.Context, appWidgetId: Int): Boolean =
-        WidgetUpdateHelper.getPrefs(context).getBoolean(PREF_SHOW_ROOM + appWidgetId, true)
+    fun showRoom(
+        context: android.content.Context,
+        appWidgetId: Int,
+    ): Boolean = WidgetUpdateHelper.getPrefs(context).getBoolean(PREF_SHOW_ROOM + appWidgetId, true)
 
-    fun setShowRoom(context: android.content.Context, appWidgetId: Int, value: Boolean) {
-        WidgetUpdateHelper.getPrefs(context).edit()
+    fun setShowRoom(
+        context: android.content.Context,
+        appWidgetId: Int,
+        value: Boolean,
+    ) {
+        WidgetUpdateHelper
+            .getPrefs(context)
+            .edit()
             .putBoolean(PREF_SHOW_ROOM + appWidgetId, value)
             .apply()
     }
@@ -259,7 +275,7 @@ private fun SectionTitle(text: String) {
         text = text,
         fontSize = 15.sp,
         fontWeight = FontWeight.Bold,
-        color = ColorTextTitle
+        color = ColorTextTitle,
     )
     Spacer(modifier = Modifier.height(6.dp))
 }
@@ -270,20 +286,21 @@ private fun OptionRow(
     title: String,
     description: String?,
     onClick: () -> Unit,
-    leading: (@Composable () -> Unit)? = null
+    leading: (@Composable () -> Unit)? = null,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         border = BorderStroke(1.dp, if (selected) ColorBrandBlue else ColorBorderLight),
         color = ColorBgMain,
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .bouncyClickable(onClick = onClick)
+            .bouncyClickable(onClick = onClick),
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             if (leading != null) {
                 leading()
@@ -294,7 +311,7 @@ private fun OptionRow(
                     text = title,
                     fontSize = 14.sp,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                    color = ColorTextBody
+                    color = ColorTextBody,
                 )
                 if (description != null) {
                     Text(text = description, fontSize = 12.sp, color = ColorTextMuted)

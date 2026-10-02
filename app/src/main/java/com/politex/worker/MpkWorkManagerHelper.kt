@@ -1,4 +1,4 @@
-﻿package com.politex.worker
+package com.politex.worker
 
 import android.content.Context
 import androidx.work.Constraints
@@ -10,7 +10,6 @@ import com.politex.widget.WidgetUpdateHelper
 import java.util.concurrent.TimeUnit
 
 object MpkWorkManagerHelper {
-
     private const val CHECK_INTERVAL_MINUTES = 15L
 
     fun setupPeriodicScheduleCheck(context: Context) {
@@ -18,21 +17,23 @@ object MpkWorkManagerHelper {
         val workManager = WorkManager.getInstance(context)
 
         if (isEnabled) {
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build()
+            val constraints =
+                Constraints
+                    .Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
 
-            val workRequest = PeriodicWorkRequestBuilder<ScheduleCheckWorker>(
-                CHECK_INTERVAL_MINUTES,
-                TimeUnit.MINUTES
-            )
-                .setConstraints(constraints)
-                .build()
+            val workRequest =
+                PeriodicWorkRequestBuilder<ScheduleCheckWorker>(
+                    CHECK_INTERVAL_MINUTES,
+                    TimeUnit.MINUTES,
+                ).setConstraints(constraints)
+                    .build()
 
             workManager.enqueueUniquePeriodicWork(
                 ScheduleCheckWorker.WORK_NAME,
                 ExistingPeriodicWorkPolicy.UPDATE,
-                workRequest
+                workRequest,
             )
         } else {
             workManager.cancelUniqueWork(ScheduleCheckWorker.WORK_NAME)
@@ -46,13 +47,15 @@ object MpkWorkManagerHelper {
      * по isEnabled строки отсчёта.
      */
     fun setupBellServiceWatchdog(context: Context) {
-        val request = PeriodicWorkRequestBuilder<BellServiceWatchdogWorker>(
-            CHECK_INTERVAL_MINUTES, TimeUnit.MINUTES
-        ).build()
+        val request =
+            PeriodicWorkRequestBuilder<BellServiceWatchdogWorker>(
+                CHECK_INTERVAL_MINUTES,
+                TimeUnit.MINUTES,
+            ).build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             BellServiceWatchdogWorker.WORK_NAME,
             ExistingPeriodicWorkPolicy.KEEP,
-            request
+            request,
         )
     }
 
@@ -63,13 +66,15 @@ object MpkWorkManagerHelper {
      * Сеть не нужна, поэтому без Constraints. KEEP — не перезапускать уже идущее расписание.
      */
     fun setupPeriodicReminderCheck(context: Context) {
-        val request = PeriodicWorkRequestBuilder<ReminderCheckWorker>(
-            CHECK_INTERVAL_MINUTES, TimeUnit.MINUTES
-        ).build()
+        val request =
+            PeriodicWorkRequestBuilder<ReminderCheckWorker>(
+                CHECK_INTERVAL_MINUTES,
+                TimeUnit.MINUTES,
+            ).build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             ReminderCheckWorker.WORK_NAME,
             ExistingPeriodicWorkPolicy.KEEP,
-            request
+            request,
         )
     }
 }

@@ -1,4 +1,4 @@
-﻿package com.politex.data.repository
+package com.politex.data.repository
 
 import com.politex.data.local.dao.TaskDao
 import com.politex.data.local.entity.StudentTaskEntity
@@ -7,19 +7,17 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 
-class TaskRepository(private val taskDao: TaskDao) {
+class TaskRepository(
+    private val taskDao: TaskDao,
+) {
+    fun getTasksForGroup(groupName: String): Flow<List<StudentTaskEntity>> = taskDao.getTasksForGroup(groupName).flowOn(Dispatchers.IO)
 
-    fun getTasksForGroup(groupName: String): Flow<List<StudentTaskEntity>> {
-        return taskDao.getTasksForGroup(groupName).flowOn(Dispatchers.IO)
-    }
+    fun getTasksForGroupAndSubject(
+        groupName: String,
+        subjectName: String,
+    ): Flow<List<StudentTaskEntity>> = taskDao.getTasksForGroupAndSubject(groupName, subjectName).flowOn(Dispatchers.IO)
 
-    fun getTasksForGroupAndSubject(groupName: String, subjectName: String): Flow<List<StudentTaskEntity>> {
-        return taskDao.getTasksForGroupAndSubject(groupName, subjectName).flowOn(Dispatchers.IO)
-    }
-
-    fun getPendingTasksForGroup(groupName: String): Flow<List<StudentTaskEntity>> {
-        return taskDao.getPendingTasksForGroup(groupName).flowOn(Dispatchers.IO)
-    }
+    fun getPendingTasksForGroup(groupName: String): Flow<List<StudentTaskEntity>> = taskDao.getPendingTasksForGroup(groupName).flowOn(Dispatchers.IO)
 
     suspend fun getTaskById(id: Long): StudentTaskEntity? = withContext(Dispatchers.IO) {
         taskDao.getTaskById(id)
@@ -43,7 +41,10 @@ class TaskRepository(private val taskDao: TaskDao) {
         taskDao.updateTask(task)
     }
 
-    suspend fun toggleTaskCompleted(id: Long, isCompleted: Boolean) = withContext(Dispatchers.IO) {
+    suspend fun toggleTaskCompleted(
+        id: Long,
+        isCompleted: Boolean,
+    ) = withContext(Dispatchers.IO) {
         taskDao.setTaskCompleted(id, isCompleted)
     }
 

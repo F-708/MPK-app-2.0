@@ -2,29 +2,38 @@ package com.politex
 
 import com.politex.data.local.entity.LessonEntity
 import com.politex.ui.screens.groupScheduleDayOfWeek
+import com.politex.ui.screens.groupScheduleDbDate
 import com.politex.ui.screens.groupScheduleIsSchoolDay
 import com.politex.ui.screens.groupScheduleNextSchoolDay
-import com.politex.ui.screens.groupScheduleDbDate
 import com.politex.ui.screens.pickForeignGroupLessons
 import com.politex.util.GroupParser
 import com.politex.util.MpkCurriculum
-import java.util.Calendar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Calendar
 
 /**
  * T7: логика подстраницы «Расписание группы» — выбор дня, приоритет строк
  * с точной датой над шаблоном дня недели, группы из учебного плана.
  */
 class GroupScheduleLogicTest {
-
-    private fun lesson(date: String, dow: Int, num: Int) = LessonEntity(
-        groupName = "41О", dayOfWeek = dow, lessonNumber = num,
-        timeStart = "08:15", timeEnd = "09:55", subjectRaw = "Тест",
-        roomFirst = "204", teacherFirst = "Ковалев В.П.", dateString = date
+    private fun lesson(
+        date: String,
+        dow: Int,
+        num: Int,
+    ) = LessonEntity(
+        groupName = "41О",
+        dayOfWeek = dow,
+        lessonNumber = num,
+        timeStart = "08:15",
+        timeEnd = "09:55",
+        subjectRaw = "Тест",
+        roomFirst = "204",
+        teacherFirst = "Ковалев В.П.",
+        dateString = date,
     )
 
     @Test
@@ -64,10 +73,11 @@ class GroupScheduleLogicTest {
 
     @Test
     fun `точная дата приоритетнее шаблона дня недели`() {
-        val rows = listOf(
-            lesson("22.09.2026", 2, 1),   // точная дата
-            lesson("", 2, 2)              // шаблон дня недели
-        )
+        val rows =
+            listOf(
+                lesson("22.09.2026", 2, 1), // точная дата
+                lesson("", 2, 2), // шаблон дня недели
+            )
         // выбрана дата 22.09 → только точная строка
         assertEquals(1, pickForeignGroupLessons(rows, "22.09.2026").size)
         assertEquals(1, pickForeignGroupLessons(rows, "22.09.2026")[0].lessonNumber)

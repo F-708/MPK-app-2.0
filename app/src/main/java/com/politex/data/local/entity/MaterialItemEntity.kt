@@ -28,7 +28,7 @@ enum class MaterialKind { FILE, IMAGES, TEXT }
  */
 @Entity(
     tableName = "material_items",
-    indices = [Index("folderId")]
+    indices = [Index("folderId")],
 )
 data class MaterialItemEntity(
     @PrimaryKey(autoGenerate = true)
@@ -50,7 +50,7 @@ data class MaterialItemEntity(
     val rotationDeg: Int = 0,
     val sortOrder: Int = 0,
     val textContent: String = "",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
 ) {
     val kindEnum: MaterialKind
         get() = runCatching { MaterialKind.valueOf(kind) }.getOrDefault(MaterialKind.FILE)

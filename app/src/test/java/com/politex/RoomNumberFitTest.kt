@@ -11,7 +11,6 @@ import org.junit.Test
  * но при этом выглядеть единообразно по этажу.
  */
 class RoomNumberFitTest {
-
     @Test
     fun `никогда не превышает влезающий размер`() {
         // Мелкий кабинет: raw меньше медианы — цифра обязана ужаться до raw
@@ -59,9 +58,10 @@ class RoomNumberFitTest {
     fun `размеры большинства кабинетов совпадают`() {
         // Заказчик: «примерно одного размера». Кабинеты с большим запасом raw
         // должны получить ОДИНАКОВЫЙ размер, а не разъезжаться по величине кабинета
-        val fits = listOf(2.0f, 3.5f, 10f, 1.5f).map {
-            roomNumberFit(raw = it, median = 1.0f, minReadable = 0.1f)!!
-        }
+        val fits =
+            listOf(2.0f, 3.5f, 10f, 1.5f).map {
+                roomNumberFit(raw = it, median = 1.0f, minReadable = 0.1f)!!
+            }
         assertEquals(1, fits.distinct().size)
     }
 

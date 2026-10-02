@@ -57,7 +57,7 @@ private val TEXT_LIKE_EXT = setOf("txt", "md", "markdown", "csv", "log", "json",
 fun MaterialDocTextViewer(
     item: MaterialItemEntity,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var paragraphs by remember(item.id, item.uriPath) { mutableStateOf<List<DocxParagraph>?>(null) }
     var failed by remember(item.id, item.uriPath) { mutableStateOf(false) }
@@ -83,7 +83,7 @@ fun MaterialDocTextViewer(
                 Text(
                     text = "Текст не найден: документ пустой или не читается встроенным просмотрщиком.",
                     style = TextStyle(fontSize = 13.sp),
-                    modifier = Modifier.padding(24.dp)
+                    modifier = Modifier.padding(24.dp),
                 )
             }
 
@@ -92,7 +92,7 @@ fun MaterialDocTextViewer(
                     .fillMaxSize()
                     .testTag("doc_paragraph_list"),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 items(content.size) { index ->
                     val p = content[index]
@@ -106,7 +106,7 @@ fun MaterialDocTextViewer(
                             p.heading -> TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle, lineHeight = 21.sp)
                             p.bold -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle, lineHeight = 19.sp)
                             else -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, color = ColorTextBody, lineHeight = 19.sp)
-                        }
+                        },
                     )
                 }
             }

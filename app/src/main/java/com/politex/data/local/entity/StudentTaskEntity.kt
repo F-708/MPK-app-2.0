@@ -1,4 +1,4 @@
-﻿package com.politex.data.local.entity
+package com.politex.data.local.entity
 
 import androidx.room.Entity
 import androidx.room.Ignore
@@ -18,9 +18,8 @@ data class StudentTaskEntity(
     val description: String = "",
     val isCompleted: Boolean = false,
     val deadlineDate: String = "",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
 ) {
-
     @delegate:Ignore
     val taskTypeEnum: TaskType by lazy {
         TaskType.fromDisplayName(taskType)

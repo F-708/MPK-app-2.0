@@ -1,4 +1,4 @@
-﻿package com.politex.ui.util
+package com.politex.ui.util
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 fun Modifier.bouncyClickable(
     enabled: Boolean = true,
     scaleDown: Float = 0.95f,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ): Modifier = composed {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -22,18 +22,17 @@ fun Modifier.bouncyClickable(
     val scale by animateFloatAsState(
         targetValue = if (isPressed && enabled) scaleDown else 1f,
         animationSpec = tween(durationMillis = 120),
-        label = "BouncyScaleAnimation"
+        label = "BouncyScaleAnimation",
     )
 
     this
         .graphicsLayer {
             scaleX = scale
             scaleY = scale
-        }
-        .clickable(
+        }.clickable(
             interactionSource = interactionSource,
             indication = null,
             enabled = enabled,
-            onClick = onClick
+            onClick = onClick,
         )
 }

@@ -2,10 +2,10 @@ package com.politex
 
 import com.politex.data.network.MpkNetworkClient
 import com.politex.data.network.MpkScheduleParser
-import java.util.Calendar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Calendar
 
 /**
  * SCH-01: сайт публикует документ в папке месяца ЗАГРУЗКИ (не целевой даты) и с
@@ -14,10 +14,13 @@ import org.junit.Test
  * iframe — без сети.
  */
 class ScheduleUrlResolverTest {
-
     private val client = MpkNetworkClient()
 
-    private fun cal(y: Int, m: Int, d: Int): Calendar = Calendar.getInstance().apply {
+    private fun cal(
+        y: Int,
+        m: Int,
+        d: Int,
+    ): Calendar = Calendar.getInstance().apply {
         clear()
         set(y, m - 1, d)
     }
@@ -29,7 +32,7 @@ class ScheduleUrlResolverTest {
         // Реальный URL документа (доказан curl 2026-10-01): папка сентября, суффикс «-1»
         assertTrue(
             "должен быть сентябрьский URL с суффиксом -1",
-            urls.contains("https://guo-mpk.by/wp-content/uploads/2026/09/01.10.2026-raspisanie-uchashhihsya-1.doc")
+            urls.contains("https://guo-mpk.by/wp-content/uploads/2026/09/01.10.2026-raspisanie-uchashhihsya-1.doc"),
         )
         // Перехлёст публикаций: обе папки месяца
         assertTrue(urls.any { it.contains("/2026/09/") })
@@ -46,7 +49,7 @@ class ScheduleUrlResolverTest {
         val urls = client.generateCandidateDirectUrls(cal(2026, 10, 1), "raspisanie-prepodavatelej").map { it.first }
         assertTrue(urls.all { it.contains("raspisanie-prepodavatelej") })
         assertTrue(
-            urls.contains("https://guo-mpk.by/wp-content/uploads/2026/09/01.10.2026-raspisanie-prepodavatelej-1.doc")
+            urls.contains("https://guo-mpk.by/wp-content/uploads/2026/09/01.10.2026-raspisanie-prepodavatelej-1.doc"),
         )
     }
 
@@ -60,30 +63,33 @@ class ScheduleUrlResolverTest {
     @Test
     fun `extractDocumentUrls достаёт и декодирует doc из officeapps-iframe`() {
         // Ровно та разметка, что на реальной event-странице 01.10.2026
-        val eventHtml = """
+        val eventHtml =
+            """
             <div class="entry-content">
                 <iframe src="//view.officeapps.live.com/op/embed.aspx?src=https%3A%2F%2Fguo-mpk.by%2Fwp-content%2Fuploads%2F2026%2F09%2F01.10.2026-raspisanie-uchashhihsya-1.doc"></iframe>
             </div>
-        """.trimIndent()
+            """.trimIndent()
 
-        val docUrls = MpkScheduleParser.extractDocumentUrls(
-            eventHtml,
-            "https://guo-mpk.by/raspisanie/01-10-2026-raspisanie-uchashhihsya/"
-        )
+        val docUrls =
+            MpkScheduleParser.extractDocumentUrls(
+                eventHtml,
+                "https://guo-mpk.by/raspisanie/01-10-2026-raspisanie-uchashhihsya/",
+            )
         assertEquals(1, docUrls.size)
         assertEquals(
             "https://guo-mpk.by/wp-content/uploads/2026/09/01.10.2026-raspisanie-uchashhihsya-1.doc",
-            docUrls[0]
+            docUrls[0],
         )
     }
 
     @Test
     fun `extractEventPageUrls находит event-страницы нужной даты на портале`() {
-        val portalHtml = """
+        val portalHtml =
+            """
             <a href="https://guo-mpk.by/raspisanie/01-10-2026-raspisanie-uchashhihsya/?occurrence=2026-10-01">01.10</a>
             <a href="https://guo-mpk.by/raspisanie/01-10-2026-raspisanie-prepodavatelej-2/">преподаватели</a>
             <a href="https://guo-mpk.by/raspisanie/02-10-2026-raspisanie-uchashhihsya/">чужая дата</a>
-        """.trimIndent()
+            """.trimIndent()
 
         val pages = client.extractEventPageUrls(portalHtml, "01-10-2026")
         assertTrue(pages.any { it.contains("01-10-2026-raspisanie-uchashhihsya") })

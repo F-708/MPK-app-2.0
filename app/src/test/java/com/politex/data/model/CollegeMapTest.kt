@@ -1,11 +1,10 @@
-﻿package com.politex.data.model
+package com.politex.data.model
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CollegeMapTest {
-
     @Test
     fun `первая цифра номера задаёт этаж`() {
         assertEquals(CollegeMap.Floor.FIRST, CollegeMap.floorForRoom("101"))
@@ -24,7 +23,6 @@ class CollegeMapTest {
 
     @Test
     fun `нестандартные кабинеты не привязываются к этажу наугад`() {
-
         assertNull(CollegeMap.floorForRoom(""))
         assertNull(CollegeMap.floorForRoom("спортзал"))
         assertNull(CollegeMap.floorForRoom("актовый зал"))

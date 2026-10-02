@@ -49,8 +49,7 @@ import com.politex.ui.util.bouncyClickable
  * M2/M4/M5: общие куски просмотрщиков — тёмная шапка (фирменный ColorTopBar, как в остальном
  * приложении), иконка материала по расширению и «честная плашка» для неподдерживаемых форматов.
  */
-
-/** M4: иконка материала по расширению. */
+/** M4: иконка материала по расширению (общие куски просмотрщиков описаны выше). */
 fun materialIconFor(item: MaterialItemEntity): ImageVector = when {
     item.ext == "pdf" -> Icons.Default.PictureAsPdf
     item.ext == "doc" || item.ext == "docx" -> Icons.Default.Description
@@ -79,32 +78,32 @@ fun MaterialViewerTopBar(
     title: String,
     testTag: String,
     onBack: (() -> Unit)? = null,
-    actions: @Composable () -> Unit = {}
+    actions: @Composable () -> Unit = {},
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorTopBar,
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(testTag)
+            .testTag(testTag),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 2.dp)
+                .padding(horizontal = 4.dp, vertical = 2.dp),
         ) {
             if (onBack != null) {
                 IconButton(
                     onClick = onBack,
                     modifier = Modifier
                         .size(48.dp)
-                        .testTag("${testTag}_back")
+                        .testTag("${testTag}_back"),
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Назад",
-                        tint = Color.White
+                        tint = Color.White,
                     )
                 }
             }
@@ -115,7 +114,7 @@ fun MaterialViewerTopBar(
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = if (onBack == null) 12.dp else 0.dp),
-                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
+                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White),
             )
             actions()
         }
@@ -129,7 +128,7 @@ fun ViewerAction(
     description: String,
     testTag: String,
     active: Boolean = false,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
@@ -137,14 +136,14 @@ fun ViewerAction(
         modifier = Modifier
             .size(44.dp)
             .bouncyClickable(onClick = onClick)
-            .testTag(testTag)
+            .testTag(testTag),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = icon,
                 contentDescription = description,
                 tint = Color.White,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(20.dp),
             )
         }
     }
@@ -164,7 +163,7 @@ fun UnsupportedFormatPlaque(ext: String, fileName: String, modifier: Modifier = 
         modifier = modifier
             .fillMaxWidth()
             .padding(16.dp),
-        contentAlignment = Alignment.TopCenter
+        contentAlignment = Alignment.TopCenter,
     ) {
         Surface(
             shape = RoundedCornerShape(2.dp),
@@ -172,31 +171,34 @@ fun UnsupportedFormatPlaque(ext: String, fileName: String, modifier: Modifier = 
             color = ColorBgMain,
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("unsupported_plaque")
+                .testTag("unsupported_plaque"),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     text = "Формат .${ext.ifBlank { "?" }} не поддерживается встроенным просмотрщиком",
-                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp, color = ColorTextTitle)
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp, color = ColorTextTitle),
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = when (ext) {
-                        "doc" -> "Конвертируйте файл в .docx (Word → «Сохранить как» → .docx) и загрузите заново: " +
-                            ".docx читается прямо в приложении, и по нему работает поиск."
-                        "xls", "xlsx" -> "Таблицы Excel открываются только внешним приложением. " +
-                            "Файл сохранён в материальной базе и никуда не денется."
-                        else -> "Файл сохранён в материальной базе. Внутри приложения читаются PDF, DOCX, " +
-                            "TXT и наборы изображений."
+                        "doc" ->
+                            "Конвертируйте файл в .docx (Word → «Сохранить как» → .docx) и загрузите заново: " +
+                                ".docx читается прямо в приложении, и по нему работает поиск."
+                        "xls", "xlsx" ->
+                            "Таблицы Excel открываются только внешним приложением. " +
+                                "Файл сохранён в материальной базе и никуда не денется."
+                        else ->
+                            "Файл сохранён в материальной базе. Внутри приложения читаются PDF, DOCX, " +
+                                "TXT и наборы изображений."
                     },
-                    style = TextStyle(fontSize = 12.sp, color = ColorTextMuted)
+                    style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = fileName,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = ColorTextBody)
+                    style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = ColorTextBody),
                 )
             }
         }
@@ -218,22 +220,22 @@ fun PdfSearchHintPlaque(modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
-            .testTag("pdf_search_hint")
+            .testTag("pdf_search_hint"),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             Icon(
                 imageVector = Icons.Default.PictureAsPdf,
                 contentDescription = null,
                 tint = Color(0xFFDC2626),
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(18.dp),
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "PDF не ищется по тексту — используйте закладки и номер страницы. По названию PDF находится.",
-                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted)
+                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
             )
         }
     }
@@ -245,7 +247,7 @@ fun MaterialCard(
     modifier: Modifier = Modifier,
     testTag: String? = null,
     onClick: (() -> Unit)? = null,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val base = modifier
         .fillMaxWidth()
@@ -256,11 +258,11 @@ fun MaterialCard(
         shape = RoundedCornerShape(2.dp),
         border = BorderStroke(1.dp, ColorBorderLight),
         color = ColorBgMain,
-        modifier = base
+        modifier = base,
     ) {
         Box(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            contentAlignment = Alignment.CenterStart
+            contentAlignment = Alignment.CenterStart,
         ) { content() }
     }
 }

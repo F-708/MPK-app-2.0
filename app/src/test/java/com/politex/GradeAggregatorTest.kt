@@ -13,33 +13,34 @@ import org.junit.Test
  * только практ, свой priority, LAB не входит, округление до 1 знака.
  */
 class GradeAggregatorTest {
-
     private val delta = 1e-9
 
     @Test
     fun `дефолтная формула без экзамена`() {
         // ((8 + 7) / 2 + 9) / 2 = 8.25 — обычные средние, практ, контрольная
-        val avg = GradeAggregator.average(
-            mapOf(
-                "REGULAR" to listOf(8, 8),
-                "PRACTICAL" to listOf(7),
-                "CONTROL" to listOf(9)
+        val avg =
+            GradeAggregator.average(
+                mapOf(
+                    "REGULAR" to listOf(8, 8),
+                    "PRACTICAL" to listOf(7),
+                    "CONTROL" to listOf(9),
+                ),
             )
-        )
         assertEquals(8.25, avg!!, delta)
     }
 
     @Test
     fun `дефолтная формула с экзаменом`() {
         // (((8 + 7) / 2 + 9) / 2 + 10) / 2 = 9.125
-        val avg = GradeAggregator.average(
-            mapOf(
-                "REGULAR" to listOf(8),
-                "PRACTICAL" to listOf(7),
-                "CONTROL" to listOf(9),
-                "EXAM" to listOf(10)
+        val avg =
+            GradeAggregator.average(
+                mapOf(
+                    "REGULAR" to listOf(8),
+                    "PRACTICAL" to listOf(7),
+                    "CONTROL" to listOf(9),
+                    "EXAM" to listOf(10),
+                ),
             )
-        )
         assertEquals(9.125, avg!!, delta)
         assertEquals(9.1, GradeAggregator.round1(avg), delta)
     }
@@ -47,20 +48,21 @@ class GradeAggregatorTest {
     @Test
     fun `пустая контрольная пропускается без сдвига acc`() {
         // (8 + 6) / 2 = 7.0; CONTROL пуст — acc НЕ делится лишний раз
-        val avg = GradeAggregator.average(
-            mapOf(
-                "REGULAR" to listOf(8),
-                "PRACTICAL" to listOf(6),
-                "CONTROL" to emptyList()
+        val avg =
+            GradeAggregator.average(
+                mapOf(
+                    "REGULAR" to listOf(8),
+                    "PRACTICAL" to listOf(6),
+                    "CONTROL" to emptyList(),
+                ),
             )
-        )
         assertEquals(7.0, avg!!, delta)
 
         // то же самое, если категории вообще нет в карте
         assertEquals(
             7.0,
             GradeAggregator.average(mapOf("REGULAR" to listOf(8), "PRACTICAL" to listOf(6)))!!,
-            delta
+            delta,
         )
     }
 
@@ -85,7 +87,7 @@ class GradeAggregatorTest {
         assertEquals(
             7.5,
             GradeAggregator.average(values, listOf("EXAM", "CONTROL", "REGULAR"))!!,
-            delta
+            delta,
         )
     }
 
@@ -97,7 +99,7 @@ class GradeAggregatorTest {
         assertEquals(
             8.0,
             GradeAggregator.average(values, listOf("REGULAR", "LAB"))!!,
-            delta
+            delta,
         )
         // только LAB → среднего нет
         assertNull(GradeAggregator.average(mapOf("LAB" to listOf(1)), listOf("LAB")))
@@ -119,9 +121,9 @@ class GradeAggregatorTest {
                 GradeCategory.REGULAR.name,
                 GradeCategory.PRACTICAL.name,
                 GradeCategory.CONTROL.name,
-                GradeCategory.EXAM.name
+                GradeCategory.EXAM.name,
             ),
-            GradeAggregator.DEFAULT_PRIORITY
+            GradeAggregator.DEFAULT_PRIORITY,
         )
     }
 }

@@ -1,4 +1,4 @@
-﻿package com.politex.util
+package com.politex.util
 
 import android.app.Service
 import android.content.Context
@@ -14,7 +14,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class BellTimerService : Service() {
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var tickJob: Job? = null
     private var widgetRefreshCounter = 0
@@ -30,40 +29,43 @@ class BellTimerService : Service() {
         startTicking()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int,
+    ): Int {
         if (tickJob?.isActive != true) startTicking()
         return START_STICKY
     }
 
     private fun startTicking() {
         tickJob?.cancel()
-        tickJob = scope.launch {
-            while (true) {
+        tickJob =
+            scope.launch {
+                while (true) {
+                    val nowMs = System.currentTimeMillis()
+                    val msToNextMinute = 60_000L - (nowMs % 60_000L)
+                    delay(msToNextMinute)
 
-                val nowMs = System.currentTimeMillis()
-                val msToNextMinute = 60_000L - (nowMs % 60_000L)
-                delay(msToNextMinute)
+                    // Т10: показ ИЛИ демоут в заглушку — foreground-уведомление сервиса
+                    // всегда обновляется через startForeground (в скрытом состоянии это
+                    // заменяет строку тихой заглушкой; сервис живёт и в 07:00 вернёт отсчёт).
+                    try {
+                        startForeground(
+                            BellCountdownNotifier.NOTIFICATION_ID,
+                            BellCountdownNotifier.buildNotification(this@BellTimerService),
+                        )
+                    } catch (_: Exception) {
+                        BellCountdownNotifier.show(this@BellTimerService)
+                    }
 
-                // Т10: показ ИЛИ демоут в заглушку — foreground-уведомление сервиса
-                // всегда обновляется через startForeground (в скрытом состоянии это
-                // заменяет строку тихой заглушкой; сервис живёт и в 07:00 вернёт отсчёт).
-                try {
-                    startForeground(
-                        BellCountdownNotifier.NOTIFICATION_ID,
-                        BellCountdownNotifier.buildNotification(this@BellTimerService)
-                    )
-                } catch (_: Exception) {
-                    BellCountdownNotifier.show(this@BellTimerService)
-                }
-
-                widgetRefreshCounter++
-                if (widgetRefreshCounter >= 1) {
-                    widgetRefreshCounter = 0
-                    BellCountdownWidgetProvider.updateAll(this@BellTimerService)
+                    widgetRefreshCounter++
+                    if (widgetRefreshCounter >= 1) {
+                        widgetRefreshCounter = 0
+                        BellCountdownWidgetProvider.updateAll(this@BellTimerService)
+                    }
                 }
             }
-        }
     }
 
     override fun onDestroy() {
@@ -73,7 +75,6 @@ class BellTimerService : Service() {
     }
 
     companion object {
-
         /** O6: сервис держит foreground-уведомление — нотификатор по этому флагу понимает,
          *  что снимать строку нельзя, можно только заменить её тихой заглушкой. */
         @Volatile
@@ -88,7 +89,6 @@ class BellTimerService : Service() {
                     context.startService(intent)
                 }
             } catch (_: Exception) {
-
             }
         }
 

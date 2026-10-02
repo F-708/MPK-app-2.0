@@ -2,22 +2,26 @@ package com.politex
 
 import com.politex.ui.util.dayKeyOf
 import com.politex.ui.util.minutesOfDay
-import java.util.Calendar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
+import java.util.Calendar
 
 /**
  * SUI-01/SUI-03: чистые функции «дня» и «минуты», на которых держатся ключи remember.
  * «Сегодня» обязано пересчитываться на границе дня, а «текущая пара» — на границе минуты.
  */
 class TodayProviderTest {
-
-    private fun at(year: Int, month: Int, day: Int, hour: Int = 0, minute: Int = 0): Calendar =
-        Calendar.getInstance().apply {
-            clear()
-            set(year, month - 1, day, hour, minute, 0)
-        }
+    private fun at(
+        year: Int,
+        month: Int,
+        day: Int,
+        hour: Int = 0,
+        minute: Int = 0,
+    ): Calendar = Calendar.getInstance().apply {
+        clear()
+        set(year, month - 1, day, hour, minute, 0)
+    }
 
     @Test
     fun `ключ дня одинаков в пределах суток`() {

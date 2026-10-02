@@ -24,16 +24,17 @@ import org.robolectric.RobolectricTestRunner
  */
 @RunWith(RobolectricTestRunner::class)
 class TaskUpsertTest {
-
     private lateinit var db: MpkDatabase
     private lateinit var repo: TaskRepository
 
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder(context, MpkDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
+        db =
+            Room
+                .inMemoryDatabaseBuilder(context, MpkDatabase::class.java)
+                .allowMainThreadQueries()
+                .build()
         repo = TaskRepository(db.taskDao())
     }
 
@@ -42,14 +43,17 @@ class TaskUpsertTest {
         db.close()
     }
 
-    private fun task(id: Long = 0, title: String) = StudentTaskEntity(
+    private fun task(
+        id: Long = 0,
+        title: String,
+    ) = StudentTaskEntity(
         id = id,
         groupName = "41О",
         course = 4,
         subjectName = "ТОЭ",
         taskType = "Домашнее задание",
         title = title,
-        deadlineDate = "2026-10-05"
+        deadlineDate = "2026-10-05",
     )
 
     @Test

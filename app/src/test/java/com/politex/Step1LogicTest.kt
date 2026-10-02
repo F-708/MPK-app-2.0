@@ -1,6 +1,5 @@
-﻿package com.politex
+package com.politex
 
-import com.politex.data.model.GroupInfo
 import com.politex.data.model.TaskType
 import com.politex.util.GroupParser
 import com.politex.util.MpkCurriculum
@@ -13,10 +12,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class Step1LogicTest {
-
     @Test
     fun testGroupParser_validGroups() {
-
         val group11E = GroupParser.parse("11Э")
         assertNotNull(group11E)
         assertEquals(1, group11E!!.course)
@@ -56,7 +53,6 @@ class Step1LogicTest {
 
     @Test
     fun testGroupParser_latinInputNormalization() {
-
         val groupWithLatin = GroupParser.parse("41O")
         assertNotNull(groupWithLatin)
         assertEquals('О', groupWithLatin!!.specialtyCode)
@@ -89,10 +85,9 @@ class Step1LogicTest {
             for (course in courses) {
                 val subjects = specialty.subjectsByCourse[course]!!
                 if (course in specialty.incompleteCourses) {
-
                     assertTrue(
                         "Курс $course специальности '$code' помечен повреждённым, список должен быть пустым",
-                        subjects.isEmpty()
+                        subjects.isEmpty(),
                     )
                 } else {
                     assertTrue("Список предметов '$code' курса $course не должен быть пустым", subjects.isNotEmpty())
@@ -123,7 +118,6 @@ class Step1LogicTest {
 
     @Test
     fun testSubjectFormatter_normalizationAndFuzzyMatch() {
-
         val raw1 = "лек. Охрана труда ауд. 203"
         assertEquals("Охрана труда", SubjectFormatter.normalize(raw1))
 

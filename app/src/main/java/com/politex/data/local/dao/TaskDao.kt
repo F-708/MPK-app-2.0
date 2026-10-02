@@ -1,4 +1,4 @@
-﻿package com.politex.data.local.dao
+package com.politex.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Delete
@@ -11,12 +11,16 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TaskDao {
-
     @Query("SELECT * FROM student_tasks WHERE groupName = :groupName ORDER BY isCompleted ASC, deadlineDate ASC, id DESC")
     fun getTasksForGroup(groupName: String): Flow<List<StudentTaskEntity>>
 
-    @Query("SELECT * FROM student_tasks WHERE groupName = :groupName AND subjectName = :subjectName ORDER BY isCompleted ASC, deadlineDate ASC")
-    fun getTasksForGroupAndSubject(groupName: String, subjectName: String): Flow<List<StudentTaskEntity>>
+    @Query(
+        "SELECT * FROM student_tasks WHERE groupName = :groupName AND subjectName = :subjectName ORDER BY isCompleted ASC, deadlineDate ASC",
+    )
+    fun getTasksForGroupAndSubject(
+        groupName: String,
+        subjectName: String,
+    ): Flow<List<StudentTaskEntity>>
 
     @Query("SELECT * FROM student_tasks WHERE groupName = :groupName AND isCompleted = 0 ORDER BY deadlineDate ASC")
     fun getPendingTasksForGroup(groupName: String): Flow<List<StudentTaskEntity>>
@@ -34,7 +38,10 @@ interface TaskDao {
     suspend fun updateTask(task: StudentTaskEntity)
 
     @Query("UPDATE student_tasks SET isCompleted = :isCompleted WHERE id = :id")
-    suspend fun setTaskCompleted(id: Long, isCompleted: Boolean)
+    suspend fun setTaskCompleted(
+        id: Long,
+        isCompleted: Boolean,
+    )
 
     @Delete
     suspend fun deleteTask(task: StudentTaskEntity)

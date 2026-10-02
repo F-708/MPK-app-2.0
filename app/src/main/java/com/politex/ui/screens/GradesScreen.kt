@@ -65,11 +65,11 @@ import com.politex.ui.theme.ColorSuccess
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
-import com.politex.util.MpkCurriculum
-import com.politex.util.GradeAggregator
-import com.politex.util.GradeCategory
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberToday
+import com.politex.util.GradeAggregator
+import com.politex.util.GradeCategory
+import com.politex.util.MpkCurriculum
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import java.util.Calendar
@@ -92,7 +92,7 @@ import java.util.Locale
 @Composable
 fun GradesScreen(
     groupInfo: GroupInfo,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val dao = remember { MpkDatabase.getInstance(context).gradeDao() }
@@ -101,27 +101,31 @@ fun GradesScreen(
     var prioritySubject by rememberSaveable { mutableStateOf<String?>(null) }
 
     Box(
-        modifier = modifier
+        modifier =
+        modifier
             .fillMaxSize()
-            .background(ColorBgMain)
+            .background(ColorBgMain),
     ) {
         when {
-            prioritySubject != null -> GradePriorityScreen(
-                subject = prioritySubject!!,
-                dao = dao,
-                onBack = { prioritySubject = null }
-            )
-            openSubject != null -> GradeSubjectScreen(
-                subject = openSubject!!,
-                dao = dao,
-                onBack = { openSubject = null },
-                onOpenPriority = { prioritySubject = openSubject }
-            )
-            else -> GradeSubjectList(
-                groupInfo = groupInfo,
-                dao = dao,
-                onOpenSubject = { openSubject = it }
-            )
+            prioritySubject != null ->
+                GradePriorityScreen(
+                    subject = prioritySubject!!,
+                    dao = dao,
+                    onBack = { prioritySubject = null },
+                )
+            openSubject != null ->
+                GradeSubjectScreen(
+                    subject = openSubject!!,
+                    dao = dao,
+                    onBack = { openSubject = null },
+                    onOpenPriority = { prioritySubject = openSubject },
+                )
+            else ->
+                GradeSubjectList(
+                    groupInfo = groupInfo,
+                    dao = dao,
+                    onOpenSubject = { openSubject = it },
+                )
         }
     }
 }
@@ -132,57 +136,66 @@ fun GradesScreen(
 private fun GradeSubjectList(
     groupInfo: GroupInfo,
     dao: GradeDao,
-    onOpenSubject: (String) -> Unit
+    onOpenSubject: (String) -> Unit,
 ) {
     val entries by dao.allEntries().collectAsState(initial = emptyList())
     val configs by dao.allConfigs().collectAsState(initial = emptyList())
-    val subjects = remember(groupInfo.specialtyCode, groupInfo.course) {
-        MpkCurriculum.getSubjects(groupInfo.specialtyCode, groupInfo.course)
-    }
+    val subjects =
+        remember(groupInfo.specialtyCode, groupInfo.course) {
+            MpkCurriculum.getSubjects(groupInfo.specialtyCode, groupInfo.course)
+        }
 
     LazyColumn(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxSize()
             .testTag("grades_root_list"),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentPadding =
+        androidx.compose.foundation.layout
+            .PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(subjects) { subject ->
             // G2/G3: средний балл справа крупно, цвет по семантике
-            val avg = remember(entries, configs, subject) {
-                GradeAggregator.average(
-                    byCategory = entries.filter { it.subjectName == subject }
-                        .groupBy({ it.category }) { it.value },
-                    priority = priorityFor(configs, subject)
-                )
-            }
+            val avg =
+                remember(entries, configs, subject) {
+                    GradeAggregator.average(
+                        byCategory =
+                        entries
+                            .filter { it.subjectName == subject }
+                            .groupBy({ it.category }) { it.value },
+                        priority = priorityFor(configs, subject),
+                    )
+                }
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 color = ColorBgMain,
                 border = BorderStroke(1.dp, ColorBorderLight),
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxWidth()
                     .testTag("grades_subject_row_$subject")
-                    .bouncyClickable { onOpenSubject(subject) }
+                    .bouncyClickable { onOpenSubject(subject) },
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         text = subject,
                         style = TextStyle(fontSize = 14.sp, color = ColorTextTitle),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = GradeAggregator.format(avg),
-                        style = TextStyle(
+                        style =
+                        TextStyle(
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
-                            color = gradeColor(avg)
+                            color = gradeColor(avg),
                         ),
-                        modifier = Modifier.testTag("grades_avg_$subject")
+                        modifier = Modifier.testTag("grades_avg_$subject"),
                     )
                 }
             }
@@ -197,7 +210,7 @@ private fun GradeSubjectScreen(
     subject: String,
     dao: GradeDao,
     onBack: () -> Unit,
-    onOpenPriority: () -> Unit
+    onOpenPriority: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val today = rememberToday()
@@ -205,9 +218,10 @@ private fun GradeSubjectScreen(
     val configs by dao.allConfigs().collectAsState(initial = emptyList())
 
     val byCategory = remember(entries) { entries.groupBy({ it.category }) { it.value } }
-    val avg = remember(byCategory, configs, subject) {
-        GradeAggregator.average(byCategory, priorityFor(configs, subject))
-    }
+    val avg =
+        remember(byCategory, configs, subject) {
+            GradeAggregator.average(byCategory, priorityFor(configs, subject))
+        }
 
     var activeCategory by rememberSaveable(subject) { mutableStateOf(GradeCategory.REGULAR.name) }
     // G4: «+ работа» взводит подпись и дату — следующий тап по оценке пишет их
@@ -215,13 +229,14 @@ private fun GradeSubjectScreen(
     var showWorkDialog by remember { mutableStateOf(false) }
 
     fun submit(value: Int) {
-        val entry = GradeEntryEntity(
-            subjectName = subject,
-            category = activeCategory,
-            value = value,
-            label = pendingWork?.first ?: "",
-            dateIso = pendingWork?.second ?: isoOf(today)
-        )
+        val entry =
+            GradeEntryEntity(
+                subjectName = subject,
+                category = activeCategory,
+                value = value,
+                label = pendingWork?.first ?: "",
+                dateIso = pendingWork?.second ?: isoOf(today),
+            )
         scope.launch {
             if (activeCategory == GradeCategory.EXAM.name) dao.upsertExam(entry) else dao.insert(entry)
             pendingWork = null
@@ -229,14 +244,15 @@ private fun GradeSubjectScreen(
     }
 
     Column(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxSize()
-            .testTag("grades_subject_screen")
+            .testTag("grades_subject_screen"),
     ) {
         // Шапка: назад, предмет, шестерёнка приоритета
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("grades_back")) {
                 Icon(Icons.Default.ChevronLeft, contentDescription = "Назад", tint = ColorTextTitle)
@@ -245,11 +261,11 @@ private fun GradeSubjectScreen(
                 text = subject,
                 maxLines = 1,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
             IconButton(
                 onClick = onOpenPriority,
-                modifier = Modifier.size(48.dp).testTag("grades_priority_btn")
+                modifier = Modifier.size(48.dp).testTag("grades_priority_btn"),
             ) {
                 Icon(Icons.Default.Settings, contentDescription = "Вес категорий", tint = ColorTextMuted)
             }
@@ -258,39 +274,44 @@ private fun GradeSubjectScreen(
         // G3: ТЕКУЩИЙ средний балл по центру, 32sp
         Box(
             modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = GradeAggregator.format(avg),
-                style = TextStyle(
+                style =
+                TextStyle(
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold,
-                    color = gradeColor(avg)
+                    color = gradeColor(avg),
                 ),
-                modifier = Modifier.testTag("grades_current_avg")
+                modifier = Modifier.testTag("grades_current_avg"),
             )
         }
 
         // Секции категорий: список оценок (value, label, дата) — видно, какие работы сданы
         LazyColumn(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .testTag("grades_entries_list"),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            contentPadding =
+            androidx.compose.foundation.layout
+                .PaddingValues(horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             GradeCategory.values().forEach { category ->
                 val categoryEntries = entries.filter { it.category == category.name }
                 item(key = "header_${category.name}") {
                     Text(
                         text = category.title + if (categoryEntries.isEmpty()) "" else " · ${categoryEntries.size}",
-                        style = TextStyle(
+                        style =
+                        TextStyle(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = ColorTextMuted
+                            color = ColorTextMuted,
                         ),
-                        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+                        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
                     )
                 }
                 if (categoryEntries.isEmpty()) {
@@ -298,14 +319,14 @@ private fun GradeSubjectScreen(
                         Text(
                             text = "Пока нет оценок",
                             style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-                            modifier = Modifier.padding(start = 4.dp)
+                            modifier = Modifier.padding(start = 4.dp),
                         )
                     }
                 } else {
                     items(categoryEntries, key = { it.id }) { entry ->
                         GradeEntryRow(
                             entry = entry,
-                            onDelete = { scope.launch { dao.deleteById(entry.id) } }
+                            onDelete = { scope.launch { dao.deleteById(entry.id) } },
                         )
                     }
                 }
@@ -317,9 +338,10 @@ private fun GradeSubjectScreen(
             shape = RoundedCornerShape(2.dp),
             color = ColorBgMain,
             border = BorderStroke(1.dp, ColorBorderLight),
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
-                .testTag("grades_input_panel")
+                .testTag("grades_input_panel"),
         ) {
             Column(modifier = Modifier.padding(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -328,7 +350,7 @@ private fun GradeSubjectScreen(
                         text = "+ работа",
                         selected = pendingWork != null,
                         tag = "grades_add_work",
-                        onClick = { showWorkDialog = true }
+                        onClick = { showWorkDialog = true },
                     ) { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp)) }
                     if (pendingWork != null) {
                         Spacer(modifier = Modifier.width(6.dp))
@@ -336,7 +358,7 @@ private fun GradeSubjectScreen(
                             text = "${pendingWork!!.first} · ${displayDate(pendingWork!!.second)}",
                             selected = true,
                             tag = "grades_pending_work",
-                            onClick = { pendingWork = null }
+                            onClick = { pendingWork = null },
                         ) { Icon(Icons.Default.Close, contentDescription = "Сбросить подпись", modifier = Modifier.size(14.dp)) }
                     }
                 }
@@ -349,7 +371,7 @@ private fun GradeSubjectScreen(
                             text = category.title,
                             selected = activeCategory == category.name,
                             tag = "grades_chip_${category.name}",
-                            onClick = { activeCategory = category.name }
+                            onClick = { activeCategory = category.name },
                         )
                     }
                 }
@@ -357,19 +379,21 @@ private fun GradeSubjectScreen(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 when (activeCategory) {
-                    GradeCategory.LAB.name -> Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        // G4: LAB — тумблер «Зачёт/Незачёт», value 1/0
-                        LabButton(text = "Зачёт", value = 1, tag = "grades_lab_pass", onSubmit = ::submit)
-                        LabButton(text = "Незачёт", value = 0, tag = "grades_lab_fail", onSubmit = ::submit)
-                    }
-                    else -> LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items((1..10).toList()) { value ->
-                            NumberKey(value = value, onSubmit = ::submit)
+                    GradeCategory.LAB.name ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            // G4: LAB — тумблер «Зачёт/Незачёт», value 1/0
+                            LabButton(text = "Зачёт", value = 1, tag = "grades_lab_pass", onSubmit = ::submit)
+                            LabButton(text = "Незачёт", value = 0, tag = "grades_lab_fail", onSubmit = ::submit)
                         }
-                    }
+                    else ->
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            items((1..10).toList()) { value ->
+                                NumberKey(value = value, onSubmit = ::submit)
+                            }
+                        }
                 }
             }
         }
@@ -382,62 +406,75 @@ private fun GradeSubjectScreen(
             onConfirm = { label, dateIso ->
                 pendingWork = label to dateIso
                 showWorkDialog = false
-            }
+            },
         )
     }
 }
 
 /** Строка оценки: value-бейдж, подпись, дата, ✕ (44dp хитбокс). LAB — «Зачёт/Незачёт». */
 @Composable
-private fun GradeEntryRow(entry: GradeEntryEntity, onDelete: () -> Unit) {
+private fun GradeEntryRow(
+    entry: GradeEntryEntity,
+    onDelete: () -> Unit,
+) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
         border = BorderStroke(1.dp, ColorBorderLight),
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
-            .testTag("grades_entry_${entry.id}")
+            .testTag("grades_entry_${entry.id}"),
     ) {
         Row(
             modifier = Modifier.padding(start = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            val valueText = if (entry.category == GradeCategory.LAB.name) {
-                if (entry.value == 1) "Зач" else "Нез"
-            } else entry.value.toString()
+            val valueText =
+                if (entry.category == GradeCategory.LAB.name) {
+                    if (entry.value == 1) "Зач" else "Нез"
+                } else {
+                    entry.value.toString()
+                }
             Text(
                 text = valueText,
-                style = TextStyle(
+                style =
+                TextStyle(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (entry.category == GradeCategory.LAB.name) ColorTextTitle
-                    else gradeColor(entry.value.toDouble())
+                    color =
+                    if (entry.category == GradeCategory.LAB.name) {
+                        ColorTextTitle
+                    } else {
+                        gradeColor(entry.value.toDouble())
+                    },
                 ),
-                modifier = Modifier.width(34.dp)
+                modifier = Modifier.width(34.dp),
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = entry.label.ifEmpty { GradeCategory.values().first { it.name == entry.category }.title },
                     maxLines = 1,
-                    style = TextStyle(fontSize = 13.sp, color = ColorTextTitle)
+                    style = TextStyle(fontSize = 13.sp, color = ColorTextTitle),
                 )
                 Text(
                     text = displayDate(entry.dateIso),
-                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted)
+                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                 )
             }
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .size(44.dp)
                     .bouncyClickable(onClick = onDelete)
                     .testTag("grades_delete_${entry.id}"),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Удалить оценку",
                     tint = ColorTextMuted,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(14.dp),
                 )
             }
         }
@@ -446,12 +483,16 @@ private fun GradeEntryRow(entry: GradeEntryEntity, onDelete: () -> Unit) {
 
 /** Квадрат 40dp с цифрой — под большой палец одной руки (G4). */
 @Composable
-private fun NumberKey(value: Int, onSubmit: (Int) -> Unit) {
+private fun NumberKey(
+    value: Int,
+    onSubmit: (Int) -> Unit,
+) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
         border = BorderStroke(1.dp, ColorBorderLight),
-        modifier = Modifier
+        modifier =
+        Modifier
             .size(40.dp)
             .testTag("grades_num_$value")
             .bouncyClickable { onSubmit(value) },
@@ -459,7 +500,7 @@ private fun NumberKey(value: Int, onSubmit: (Int) -> Unit) {
         Box(contentAlignment = Alignment.Center) {
             Text(
                 text = value.toString(),
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle)
+                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
             )
         }
     }
@@ -470,26 +511,28 @@ private fun androidx.compose.foundation.layout.RowScope.LabButton(
     text: String,
     value: Int,
     tag: String,
-    onSubmit: (Int) -> Unit
+    onSubmit: (Int) -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = if (value == 1) ColorBrandFill else ColorBgMain,
         border = BorderStroke(1.dp, if (value == 1) ColorBrandFill else ColorBorderLight),
-        modifier = Modifier
+        modifier =
+        Modifier
             .weight(1f)
             .height(40.dp)
             .testTag(tag)
-            .bouncyClickable { onSubmit(value) }
+            .bouncyClickable { onSubmit(value) },
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
                 text = text,
-                style = TextStyle(
+                style =
+                TextStyle(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (value == 1) Color.White else ColorTextTitle
-                )
+                    color = if (value == 1) Color.White else ColorTextTitle,
+                ),
             )
         }
     }
@@ -501,20 +544,21 @@ private fun Chip(
     selected: Boolean,
     tag: String,
     onClick: () -> Unit,
-    icon: (@Composable () -> Unit)? = null
+    icon: (@Composable () -> Unit)? = null,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = if (selected) ColorBrandBlue else ColorBgMain,
         border = BorderStroke(1.dp, if (selected) ColorBrandBlue else ColorBorderLight),
-        modifier = Modifier
+        modifier =
+        Modifier
             .height(30.dp)
             .testTag(tag)
-            .bouncyClickable(onClick = onClick)
+            .bouncyClickable(onClick = onClick),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             if (icon != null) {
                 icon()
@@ -523,11 +567,12 @@ private fun Chip(
             Text(
                 text = text,
                 maxLines = 1,
-                style = TextStyle(
+                style =
+                TextStyle(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (selected) Color.White else ColorTextBody
-                )
+                    color = if (selected) Color.White else ColorTextBody,
+                ),
             )
         }
     }
@@ -538,7 +583,7 @@ private fun Chip(
 private fun AddWorkDialog(
     today: Calendar,
     onDismiss: () -> Unit,
-    onConfirm: (label: String, dateIso: String) -> Unit
+    onConfirm: (label: String, dateIso: String) -> Unit,
 ) {
     var label by remember { mutableStateOf("") }
     var dateIso by remember { mutableStateOf(isoOf(today)) }
@@ -552,7 +597,7 @@ private fun AddWorkDialog(
         title = {
             Text(
                 text = "Работа с подписью",
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle)
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
             )
         },
         text = {
@@ -562,22 +607,24 @@ private fun AddWorkDialog(
                     onValueChange = { label = it },
                     singleLine = true,
                     label = { Text("Например: Практ. №3") },
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .fillMaxWidth()
-                        .testTag("grades_work_label")
+                        .testTag("grades_work_label"),
                 )
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
                     border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .testTag("grades_work_date")
-                        .bouncyClickable { showDatePicker = true }
+                        .bouncyClickable { showDatePicker = true },
                 ) {
                     Text(
                         text = "Дата: ${displayDate(dateIso)}",
                         style = TextStyle(fontSize = 13.sp, color = ColorTextTitle),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                     )
                 }
             }
@@ -585,14 +632,14 @@ private fun AddWorkDialog(
         confirmButton = {
             TextButton(
                 onClick = { onConfirm(label.trim().ifEmpty { "Работа" }, dateIso) },
-                modifier = Modifier.testTag("grades_work_confirm")
+                modifier = Modifier.testTag("grades_work_confirm"),
             ) { Text("ГОТОВО", style = TextStyle(fontWeight = FontWeight.Bold, color = ColorBrandBlue)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("ОТМЕНА", style = TextStyle(fontWeight = FontWeight.Bold, color = ColorTextMuted))
             }
-        }
+        },
     )
 
     if (showDatePicker) {
@@ -601,7 +648,10 @@ private fun AddWorkDialog(
             minYear = year - 1,
             maxYear = year + 1,
             onDismiss = { showDatePicker = false },
-            onConfirm = { dateIso = it; showDatePicker = false }
+            onConfirm = {
+                dateIso = it
+                showDatePicker = false
+            },
         )
     }
 }
@@ -612,7 +662,7 @@ private fun AddWorkDialog(
 private fun GradePriorityScreen(
     subject: String,
     dao: GradeDao,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var order by remember { mutableStateOf<List<String>?>(null) } // null = загрузка
@@ -623,13 +673,14 @@ private fun GradePriorityScreen(
     }
 
     Column(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxSize()
-            .testTag("grades_priority_screen")
+            .testTag("grades_priority_screen"),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Default.ChevronLeft, contentDescription = "Назад", tint = ColorTextTitle)
@@ -638,58 +689,60 @@ private fun GradePriorityScreen(
                 text = "Вес категорий",
                 maxLines = 1,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
         }
         Text(
             text = subject,
             style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp),
         )
 
         val list = order
         if (list != null) {
             Column(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .weight(1f)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 list.forEachIndexed { index, categoryName ->
                     Surface(
                         shape = RoundedCornerShape(2.dp),
                         color = ColorBgMain,
                         border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .fillMaxWidth()
-                            .testTag("grades_priority_row_$categoryName")
+                            .testTag("grades_priority_row_$categoryName"),
                     ) {
                         Row(
                             modifier = Modifier.padding(start = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DragIndicator,
                                 contentDescription = null,
                                 tint = ColorTextMuted,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(18.dp),
                             )
                             Text(
                                 text = "${index + 1}. ${titleOf(categoryName)}",
                                 style = TextStyle(fontSize = 14.sp, color = ColorTextTitle),
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
                             )
                             ReorderArrow(
                                 tag = "grades_priority_up_$categoryName",
                                 up = true,
                                 enabled = index > 0,
-                                onClick = { order = list.swap(index, index - 1) }
+                                onClick = { order = list.swap(index, index - 1) },
                             )
                             ReorderArrow(
                                 tag = "grades_priority_down_$categoryName",
                                 up = false,
                                 enabled = index < list.lastIndex,
-                                onClick = { order = list.swap(index, index + 1) }
+                                onClick = { order = list.swap(index, index + 1) },
                             )
                         }
                     }
@@ -701,7 +754,8 @@ private fun GradePriorityScreen(
                 shape = RoundedCornerShape(2.dp),
                 color = ColorBrandFill,
                 border = BorderStroke(1.dp, ColorBrandFill),
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxWidth()
                     .padding(12.dp)
                     .height(44.dp)
@@ -711,17 +765,17 @@ private fun GradePriorityScreen(
                             dao.upsertConfig(
                                 GradeConfigEntity(
                                     subjectName = subject,
-                                    priorityJson = JSONArray(list).toString()
-                                )
+                                    priorityJson = JSONArray(list).toString(),
+                                ),
                             )
                             onBack()
                         }
-                    }
+                    },
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
                         text = "СОХРАНИТЬ",
-                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White),
                     )
                 }
             }
@@ -730,19 +784,25 @@ private fun GradePriorityScreen(
 }
 
 @Composable
-private fun ReorderArrow(tag: String, up: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun ReorderArrow(
+    tag: String,
+    up: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
     Box(
-        modifier = Modifier
+        modifier =
+        Modifier
             .size(44.dp) // D4: хитбокс 44dp
             .testTag(tag)
             .bouncyClickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = if (up) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
             contentDescription = if (up) "Выше" else "Ниже",
             tint = if (enabled) ColorBrandBlue else ColorTextMuted,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(20.dp),
         )
     }
 }
@@ -758,29 +818,37 @@ private fun gradeColor(avg: Double?): Color = when {
 }
 
 /** Приоритет предмета из grade_config или дефолт; битый JSON = дефолт (не роняем экран). */
-private fun priorityFor(configs: List<GradeConfigEntity>, subject: String): List<String> =
-    configs.firstOrNull { it.subjectName == subject }?.let { parsePriority(it.priorityJson) }
-        ?: GradeAggregator.DEFAULT_PRIORITY
+private fun priorityFor(
+    configs: List<GradeConfigEntity>,
+    subject: String,
+): List<String> = configs.firstOrNull { it.subjectName == subject }?.let { parsePriority(it.priorityJson) }
+    ?: GradeAggregator.DEFAULT_PRIORITY
 
 private fun parsePriority(json: String): List<String> = try {
     val arr = JSONArray(json)
-    (0 until arr.length()).map { arr.getString(it) }
+    (0 until arr.length())
+        .map { arr.getString(it) }
         .filter { name -> name != GradeCategory.LAB.name && GradeCategory.values().any { it.name == name } }
         .ifEmpty { GradeAggregator.DEFAULT_PRIORITY }
 } catch (_: Exception) {
     GradeAggregator.DEFAULT_PRIORITY
 }
 
-private fun titleOf(categoryName: String): String =
-    GradeCategory.values().firstOrNull { it.name == categoryName }?.title ?: categoryName
+private fun titleOf(categoryName: String): String = GradeCategory.values().firstOrNull { it.name == categoryName }?.title ?: categoryName
 
-private fun <T> List<T>.swap(i: Int, j: Int): List<T> = toMutableList().also {
+private fun <T> List<T>.swap(
+    i: Int,
+    j: Int,
+): List<T> = toMutableList().also {
     it[i] = it[j].also { tmp -> it[j] = it[i] }
 }
 
 private fun isoOf(cal: Calendar): String = String.format(
-    Locale.ROOT, "%04d-%02d-%02d",
-    cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)
+    Locale.ROOT,
+    "%04d-%02d-%02d",
+    cal.get(Calendar.YEAR),
+    cal.get(Calendar.MONTH) + 1,
+    cal.get(Calendar.DAY_OF_MONTH),
 )
 
 /** yyyy-MM-dd → dd.MM.yyyy (конвенция показа дат проекта). */

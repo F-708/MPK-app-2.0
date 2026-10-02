@@ -20,14 +20,17 @@ import org.robolectric.RuntimeEnvironment
  */
 @RunWith(RobolectricTestRunner::class)
 class StudentsCsvParseTest {
-
     // Тест гоняется на флейворе standard, где ассета students.csv нет (он только в admin) —
     // поэтому разбираем фикстуру из test/resources, а не ассет сборки.
-    private val students = StudentsRepository(RuntimeEnvironment.getApplication()).parse(
-        lines = javaClass.classLoader!!.getResourceAsStream("students_fixture.csv")!!
-            .bufferedReader(Charsets.UTF_8).readLines(),
-        knownGroups = GroupCatalog.load(RuntimeEnvironment.getApplication()).all().toSet()
-    )
+    private val students =
+        StudentsRepository(RuntimeEnvironment.getApplication()).parse(
+            lines =
+            javaClass.classLoader!!
+                .getResourceAsStream("students_fixture.csv")!!
+                .bufferedReader(Charsets.UTF_8)
+                .readLines(),
+            knownGroups = GroupCatalog.load(RuntimeEnvironment.getApplication()).all().toSet(),
+        )
 
     @Test
     fun `заголовок не попадает в список студентов`() {

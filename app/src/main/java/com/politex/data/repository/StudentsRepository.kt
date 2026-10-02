@@ -14,8 +14,7 @@ data class Student(
     val dormitory: String,
     val curator: String,
     val room: String,
-
-    val courseMismatch: Boolean = false
+    val courseMismatch: Boolean = false,
 )
 
 /**
@@ -28,8 +27,9 @@ data class Student(
  * Базовое образование, Студент-куратор, Кабинет). Кавычки снимаются,
  * поэтому строку нельзя резать по «;» без учёта обёртки.
  */
-class StudentsRepository(private val context: Context) {
-
+class StudentsRepository(
+    private val context: Context,
+) {
     /**
      * E2/ARC-03: 800 КБ CSV парсились на main-thread внутри remember{} (ANR-риск на
      * admin-сборке). Кэш один на процесс (приём TeachersRepository Б13), а UI-сайты
@@ -37,8 +37,11 @@ class StudentsRepository(private val context: Context) {
      */
     fun loadStudents(): List<Student> = cached ?: try {
         parse(
-            context.assets.open("students.csv").bufferedReader(Charsets.UTF_8).readLines(),
-            knownGroups = GroupCatalog.load(context).all().toSet()
+            context.assets
+                .open("students.csv")
+                .bufferedReader(Charsets.UTF_8)
+                .readLines(),
+            knownGroups = GroupCatalog.load(context).all().toSet(),
         ).also { cached = it }
     } catch (_: Exception) {
         emptyList()
@@ -50,7 +53,10 @@ class StudentsRepository(private val context: Context) {
     }
 
     /** O8: виден тестам — разбор выгрузки без чтения ассета флейвора admin. */
-    internal fun parse(lines: List<String>, knownGroups: Set<String>): List<Student> {
+    internal fun parse(
+        lines: List<String>,
+        knownGroups: Set<String>,
+    ): List<Student> {
         val header = lines.firstOrNull()?.let { splitRow(stripBom(it)) } ?: return emptyList()
 
         // Заголовок ищется с начала строки, поэтому BOM уже снят и «№» не мешает.
@@ -66,20 +72,25 @@ class StudentsRepository(private val context: Context) {
 
         if (idxName < 0 || idxGroup < 0 || idxCourse < 0) return emptyList()
 
-        return lines.drop(1)
+        return lines
+            .drop(1)
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .map { line ->
                 val p = splitRow(line)
+
                 fun cell(i: Int) = p.getOrElse(i) { "" }.trim()
 
                 val group = cell(idxGroup)
                 val course = cell(idxCourse).filter { it.isDigit() }
 
                 val letter = group.lastOrNull()
-                val maxCourse = letter
-                    ?.let { MpkCurriculum.getSpecialty(it) }
-                    ?.subjectsByCourse?.keys?.maxOrNull()
+                val maxCourse =
+                    letter
+                        ?.let { MpkCurriculum.getSpecialty(it) }
+                        ?.subjectsByCourse
+                        ?.keys
+                        ?.maxOrNull()
                 Student(
                     fullName = cell(idxName),
                     group = group,
@@ -95,11 +106,12 @@ class StudentsRepository(private val context: Context) {
                     // 41Д/41М/42Д/42М: у специальностей Д и М в плане нет 4 курса).
                     // Без этой поправки 125 студентов получают ложное предупреждение
                     // «группы нет в расписании».
-                    courseMismatch = group !in knownGroups && maxCourse != null &&
-                        (course.toIntOrNull() ?: 0) > maxCourse
+                    courseMismatch =
+                    group !in knownGroups &&
+                        maxCourse != null &&
+                        (course.toIntOrNull() ?: 0) > maxCourse,
                 )
-            }
-            .filter { it.fullName.isNotBlank() }
+            }.filter { it.fullName.isNotBlank() }
     }
 
     /**
@@ -138,6 +150,5 @@ class StudentsRepository(private val context: Context) {
     }
 
     /** BOM в начале файла иначе прилипнет к имени первой колонки и сломает поиск по заголовку. */
-    private fun stripBom(s: String): String =
-        if (s.firstOrNull() == '﻿') s.substring(1) else s
+    private fun stripBom(s: String): String = if (s.firstOrNull() == '﻿') s.substring(1) else s
 }

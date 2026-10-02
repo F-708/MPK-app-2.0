@@ -1,17 +1,30 @@
-﻿package com.politex
+package com.politex
 
-import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class WidgetLayoutsTest {
-
-    private val allowedTags = setOf(
-        "FrameLayout", "LinearLayout", "RelativeLayout", "GridLayout",
-        "AnalogClock", "Button", "Chronometer", "ImageButton", "ImageView",
-        "ProgressBar", "TextView", "ViewFlipper", "ListView", "GridView",
-        "StackView", "AdapterViewFlipper", "ViewStub"
-    )
+    private val allowedTags =
+        setOf(
+            "FrameLayout",
+            "LinearLayout",
+            "RelativeLayout",
+            "GridLayout",
+            "AnalogClock",
+            "Button",
+            "Chronometer",
+            "ImageButton",
+            "ImageView",
+            "ProgressBar",
+            "TextView",
+            "ViewFlipper",
+            "ListView",
+            "GridView",
+            "StackView",
+            "AdapterViewFlipper",
+            "ViewStub",
+        )
 
     private val layoutsDir = File("src/main/res/layout")
 
@@ -24,10 +37,11 @@ class WidgetLayoutsTest {
         widgetLayouts.forEach { file ->
             val text = file.readText()
 
-            val tags = Regex("""<\s*/?\s*([A-Za-z][A-Za-z0-9_.]*)""")
-                .findAll(text)
-                .map { it.groupValues[1] }
-                .toSet()
+            val tags =
+                Regex("""<\s*/?\s*([A-Za-z][A-Za-z0-9_.]*)""")
+                    .findAll(text)
+                    .map { it.groupValues[1] }
+                    .toSet()
 
             tags.filter { it !in allowedTags && !it.contains('.') }.forEach { tag ->
                 problems += "${file.name}: <$tag> не поддерживается RemoteViews"
@@ -52,17 +66,17 @@ class WidgetLayoutsTest {
         // Строка «время + чип» горизонтальна => чип справа от времени, не под/поверх текста
         assertTrue(
             "строка время+чип должна быть горизонтальной",
-            text.contains("android:orientation=\"horizontal\"")
+            text.contains("android:orientation=\"horizontal\""),
         )
         // Время занимает остаток ширины по весу (0dp) и выталкивает чип в правый конец
         assertTrue(
             "время должно тянуться по весу, выталкивая чип вправо",
-            text.contains("android:layout_width=\"0dp\"")
+            text.contains("android:layout_width=\"0dp\""),
         )
         // Аккуратный зазор 8dp — чип не липнет ни к времени, ни к разделителю
         assertTrue(
             "чип должен иметь отступ 8dp от времени",
-            text.contains("android:layout_marginStart=\"8dp\"")
+            text.contains("android:layout_marginStart=\"8dp\""),
         )
     }
 }

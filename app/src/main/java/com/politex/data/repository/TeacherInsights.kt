@@ -1,12 +1,11 @@
-﻿package com.politex.data.repository
+package com.politex.data.repository
 
 import com.politex.data.local.entity.LessonEntity
 
 class TeacherInsights(
     private val teachers: List<Teacher>,
-    lessons: List<LessonEntity>
+    lessons: List<LessonEntity>,
 ) {
-
     private val bySurname: Map<String, List<Teacher>> =
         teachers.groupBy { surnameOf(it.name) }.filterKeys { it.isNotBlank() }
 
@@ -28,7 +27,7 @@ class TeacherInsights(
         val rooms: List<String>,
         val subjects: List<String>,
         val count: Int,
-        val lastDate: String
+        val lastDate: String,
     )
 
     private fun buildFacts(lessons: List<LessonEntity>): Map<String, TeacherFacts> {
@@ -63,12 +62,17 @@ class TeacherInsights(
 
         return counts.keys.associateWith { full ->
             TeacherFacts(
-
-                rooms = rooms[full].orEmpty().groupingBy { it }.eachCount()
-                    .entries.sortedByDescending { it.value }.map { it.key },
+                rooms =
+                rooms[full]
+                    .orEmpty()
+                    .groupingBy { it }
+                    .eachCount()
+                    .entries
+                    .sortedByDescending { it.value }
+                    .map { it.key },
                 subjects = subjects[full].orEmpty().distinct().take(6),
                 count = counts[full] ?: 0,
-                lastDate = dates[full].orEmpty()
+                lastDate = dates[full].orEmpty(),
             )
         }
     }
@@ -107,25 +111,27 @@ class TeacherInsights(
     }
 
     companion object {
-
-        fun splitTeacherNames(raw: String): List<String> =
-            raw.split('/')
-                .map { it.trim() }
-                .filter { it.length >= 3 }
+        fun splitTeacherNames(raw: String): List<String> = raw
+            .split('/')
+            .map { it.trim() }
+            .filter { it.length >= 3 }
 
         fun surnameOf(raw: String): String {
-            val first = raw.trim()
-                .replace(Regex("[0-9]"), "")
-                .split(Regex("\\s+"))
-                .firstOrNull() ?: return ""
+            val first =
+                raw
+                    .trim()
+                    .replace(Regex("[0-9]"), "")
+                    .split(Regex("\\s+"))
+                    .firstOrNull() ?: return ""
             return first.trim(' ', ',', '.', '-', '/', '\\').lowercase()
         }
 
         fun initialsOf(raw: String): String {
             val parts = raw.trim().split(Regex("\\s+")).drop(1)
-            return parts.joinToString("") { part ->
-                part.trim('.', ',', '/', '-').take(1).lowercase()
-            }.filter { it.isLetter() }
+            return parts
+                .joinToString("") { part ->
+                    part.trim('.', ',', '/', '-').take(1).lowercase()
+                }.filter { it.isLetter() }
         }
     }
 }

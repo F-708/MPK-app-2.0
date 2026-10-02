@@ -23,16 +23,17 @@ import org.robolectric.RobolectricTestRunner
  */
 @RunWith(RobolectricTestRunner::class)
 class GradeDaoTest {
-
     private lateinit var db: MpkDatabase
     private lateinit var dao: GradeDao
 
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder(context, MpkDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
+        db =
+            Room
+                .inMemoryDatabaseBuilder(context, MpkDatabase::class.java)
+                .allowMainThreadQueries()
+                .build()
         dao = db.gradeDao()
     }
 
@@ -46,13 +47,13 @@ class GradeDaoTest {
         category: String = "REGULAR",
         value: Int = 8,
         label: String = "",
-        dateIso: String = "2026-10-01"
+        dateIso: String = "2026-10-01",
     ) = GradeEntryEntity(
         subjectName = subject,
         category = category,
         value = value,
         label = label,
-        dateIso = dateIso
+        dateIso = dateIso,
     )
 
     @Test
@@ -108,7 +109,7 @@ class GradeDaoTest {
         dao.upsertConfig(GradeConfigEntity("ТОЭ", """["EXAM","CONTROL","PRACTICAL","REGULAR"]"""))
         assertEquals(
             """["EXAM","CONTROL","PRACTICAL","REGULAR"]""",
-            dao.getConfig("ТОЭ")?.priorityJson
+            dao.getConfig("ТОЭ")?.priorityJson,
         )
 
         // повторная запись того же предмета заменяет строку, а не плодит дубли

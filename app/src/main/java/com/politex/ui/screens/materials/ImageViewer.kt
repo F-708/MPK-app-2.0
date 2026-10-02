@@ -69,7 +69,7 @@ fun MaterialImageViewer(
     item: MaterialItemEntity,
     dao: MaterialDao,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
     val paths = remember(item.uriPath) { item.imagePaths }
@@ -81,7 +81,7 @@ fun MaterialImageViewer(
                 Text(
                     text = "Изображения не найдены: файлы материала удалены с диска.",
                     style = TextStyle(fontSize = 13.sp, color = ColorTextMuted),
-                    modifier = Modifier.padding(24.dp)
+                    modifier = Modifier.padding(24.dp),
                 )
             }
         }
@@ -103,7 +103,7 @@ fun MaterialImageViewer(
         MaterialViewerTopBar(
             title = item.title,
             testTag = "image_top_bar",
-            onBack = onBack
+            onBack = onBack,
         ) {
             ViewerAction(
                 icon = Icons.Default.RotateRight,
@@ -112,22 +112,24 @@ fun MaterialImageViewer(
                 onClick = {
                     rotation = (rotation + 90) % 360
                     scope.launch { dao.setRotationDeg(item.id, rotation) }
-                }
+                },
             )
             Surface(
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                shape =
+                androidx.compose.foundation.shape
+                    .RoundedCornerShape(2.dp),
                 color = Color.Transparent,
-                modifier = Modifier.padding(end = 8.dp)
+                modifier = Modifier.padding(end = 8.dp),
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(horizontal = 6.dp)
+                    modifier = Modifier.padding(horizontal = 6.dp),
                 ) {
                     Text(
                         text = "${pagerState.currentPage + 1}/${paths.size}",
                         maxLines = 1,
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White),
-                        modifier = Modifier.testTag("image_page_counter")
+                        modifier = Modifier.testTag("image_page_counter"),
                     )
                 }
             }
@@ -135,16 +137,18 @@ fun MaterialImageViewer(
 
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .testTag("image_pager")
+                .testTag("image_pager"),
         ) { page ->
             BoxWithConstraints(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxSize()
                     .background(Color.Black),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 val boxW = with(LocalDensity.current) { maxWidth.toPx() }
                 val boxH = with(LocalDensity.current) { maxHeight.toPx() }
@@ -158,16 +162,18 @@ fun MaterialImageViewer(
                 // Coil-трансформации здесь не помощник: в coil-base 2.7 лежат только CircleCrop и
                 // RoundedCorners, RotateTransformation нет, а тянуть отдельный модуль ради поворота
                 // дороже, чем четыре строки математики.
-                val fit = if (rotation % 180 != 0 && boxW > 0f && boxH > 0f) {
-                    min(boxW / boxH, boxH / boxW)
-                } else {
-                    1f
-                }
+                val fit =
+                    if (rotation % 180 != 0 && boxW > 0f && boxH > 0f) {
+                        min(boxW / boxH, boxH / boxW)
+                    } else {
+                        1f
+                    }
                 AsyncImage(
                     model = File(paths[page]),
                     contentDescription = "Изображение ${page + 1} из ${paths.size}",
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .fillMaxSize()
                         .pointerInput(page) {
                             detectTransformGestures { _, gesturePan, gestureZoom, _ ->
@@ -176,19 +182,19 @@ fun MaterialImageViewer(
                                 val maxX = max(0f, (newZoom - 1f) * size.width / 2f)
                                 val maxY = max(0f, (newZoom - 1f) * size.height / 2f)
                                 zoom = newZoom
-                                pan = Offset(
-                                    (pan.x + gesturePan.x).coerceIn(-maxX, maxX),
-                                    (pan.y + gesturePan.y).coerceIn(-maxY, maxY)
-                                )
+                                pan =
+                                    Offset(
+                                        (pan.x + gesturePan.x).coerceIn(-maxX, maxX),
+                                        (pan.y + gesturePan.y).coerceIn(-maxY, maxY),
+                                    )
                             }
-                        }
-                        .graphicsLayer {
+                        }.graphicsLayer {
                             rotationZ = rotation.toFloat()
                             scaleX = zoom * fit
                             scaleY = zoom * fit
                             translationX = pan.x
                             translationY = pan.y
-                        }
+                        },
                 )
             }
         }
@@ -196,22 +202,24 @@ fun MaterialImageViewer(
         // Двойной тап не используем: сброс зума — кнопкой, она заметнее жеста
         if (zoom > 1.01f) {
             Surface(
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                shape =
+                androidx.compose.foundation.shape
+                    .RoundedCornerShape(2.dp),
                 color = Color.White.copy(alpha = 0.12f),
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxWidth()
                     .padding(8.dp)
                     .bouncyClickable {
                         zoom = 1f
                         pan = Offset.Zero
-                    }
-                    .testTag("image_reset_zoom_btn")
+                    }.testTag("image_reset_zoom_btn"),
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 8.dp)) {
                     Text(
                         text = "СБРОСИТЬ МАСШТАБ",
                         maxLines = 1,
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.White)
+                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.White),
                     )
                 }
             }

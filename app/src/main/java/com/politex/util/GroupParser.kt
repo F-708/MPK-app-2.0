@@ -1,23 +1,35 @@
-﻿package com.politex.util
+package com.politex.util
 
 import com.politex.data.model.GroupInfo
 
 object GroupParser {
-
-    private val LATIN_TO_CYRILLIC: Map<Char, Char> = mapOf(
-        'O' to 'О', 'o' to 'О',
-        'H' to 'Н', 'h' to 'Н',
-        'N' to 'Н', 'n' to 'Н',
-        'E' to 'Э', 'e' to 'Э',
-        'P' to 'П', 'p' to 'П',
-        'T' to 'Т', 't' to 'Т',
-        'G' to 'Г', 'g' to 'Г',
-        'D' to 'Д', 'd' to 'Д',
-        'A' to 'А', 'a' to 'А',
-        'C' to 'С', 'c' to 'С',
-        'S' to 'С', 's' to 'С',
-        'M' to 'М', 'm' to 'М'
-    )
+    private val LATIN_TO_CYRILLIC: Map<Char, Char> =
+        mapOf(
+            'O' to 'О',
+            'o' to 'О',
+            'H' to 'Н',
+            'h' to 'Н',
+            'N' to 'Н',
+            'n' to 'Н',
+            'E' to 'Э',
+            'e' to 'Э',
+            'P' to 'П',
+            'p' to 'П',
+            'T' to 'Т',
+            't' to 'Т',
+            'G' to 'Г',
+            'g' to 'Г',
+            'D' to 'Д',
+            'd' to 'Д',
+            'A' to 'А',
+            'a' to 'А',
+            'C' to 'С',
+            'c' to 'С',
+            'S' to 'С',
+            's' to 'С',
+            'M' to 'М',
+            'm' to 'М',
+        )
 
     fun createGroupSearchRegex(targetGroup: String): Regex {
         val parsed = parse(targetGroup)
@@ -25,24 +37,28 @@ object GroupParser {
         val number = parsed?.groupNumber?.toString() ?: targetGroup.filter { it.isDigit() }.drop(1).take(1)
         val letter = parsed?.specialtyCode ?: targetGroup.filter { it.isLetter() }.firstOrNull()?.let { normalizeSpecialtyChar(it) } ?: 'О'
 
-        val latinVariants = when (letter) {
-            'О' -> "[ОоOo]"
-            'Н' -> "[НнHhNn]"
-            'Э' -> "[ЭэEe]"
-            'П' -> "[ПпPp]"
-            'Т' -> "[ТтTt]"
-            'Г' -> "[ГгGg]"
-            'Д' -> "[ДдDd]"
-            'А' -> "[АаAa]"
-            'С' -> "[СсCcSs]"
-            'М' -> "[МмMm]"
-            else -> "[$letter]"
-        }
+        val latinVariants =
+            when (letter) {
+                'О' -> "[ОоOo]"
+                'Н' -> "[НнHhNn]"
+                'Э' -> "[ЭэEe]"
+                'П' -> "[ПпPp]"
+                'Т' -> "[ТтTt]"
+                'Г' -> "[ГгGg]"
+                'Д' -> "[ДдDd]"
+                'А' -> "[АаAa]"
+                'С' -> "[СсCcSs]"
+                'М' -> "[МмMm]"
+                else -> "[$letter]"
+            }
 
         return Regex("(?i)(?:^|[^0-9\\u0400-\\u04FFa-z])$course\\s*$number\\s*[-_\\s]*$latinVariants(?:$|[^0-9\\u0400-\\u04FFa-z])")
     }
 
-    fun matchesGroup(text: String, targetGroup: String): Boolean {
+    fun matchesGroup(
+        text: String,
+        targetGroup: String,
+    ): Boolean {
         val cleanTarget = cleanRawGroupName(targetGroup)
         val cleanText = text.replace("\\s+".toRegex(), "").uppercase()
         if (cleanText.contains(cleanTarget)) return true
@@ -85,17 +101,13 @@ object GroupParser {
             groupNumber = groupNumber,
             specialtyCode = normalizedChar,
             specialtyCipher = specialty?.cipher ?: "",
-            specialtyFullName = specialty?.fullName ?: ""
+            specialtyFullName = specialty?.fullName ?: "",
         )
     }
 
-    fun isValid(rawGroupName: String): Boolean {
-        return parse(rawGroupName) != null
-    }
+    fun isValid(rawGroupName: String): Boolean = parse(rawGroupName) != null
 
-    fun cleanRawGroupName(rawGroupName: String): String {
-        return parse(rawGroupName)?.canonicalName ?: rawGroupName.trim().replace("\\s+".toRegex(), "").uppercase()
-    }
+    fun cleanRawGroupName(rawGroupName: String): String = parse(rawGroupName)?.canonicalName ?: rawGroupName.trim().replace("\\s+".toRegex(), "").uppercase()
 
     fun normalizeSpecialtyChar(char: Char): Char {
         val upper = char.uppercaseChar()
@@ -119,8 +131,8 @@ object GroupParser {
                         groupNumber = 1,
                         specialtyCode = code,
                         specialtyCipher = specialty?.cipher ?: "",
-                        specialtyFullName = specialty?.fullName ?: ""
-                    )
+                        specialtyFullName = specialty?.fullName ?: "",
+                    ),
                 )
 
                 if (code in listOf('О', 'Э', 'Т', 'Д', 'С')) {
@@ -131,8 +143,8 @@ object GroupParser {
                             groupNumber = 2,
                             specialtyCode = code,
                             specialtyCipher = specialty?.cipher ?: "",
-                            specialtyFullName = specialty?.fullName ?: ""
-                        )
+                            specialtyFullName = specialty?.fullName ?: "",
+                        ),
                     )
                 }
             }

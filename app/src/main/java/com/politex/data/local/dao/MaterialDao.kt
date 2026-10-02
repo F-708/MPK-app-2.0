@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.Flow
  */
 @Dao
 interface MaterialDao {
-
     // ── Папки ────────────────────────────────────────────────────────────────
 
     @Query("SELECT * FROM material_folders ORDER BY sortOrder ASC, id ASC")
@@ -79,25 +78,44 @@ interface MaterialDao {
     suspend fun deleteItemsOfFolder(folderId: Long)
 
     @Query("UPDATE material_items SET title = :title WHERE id = :itemId")
-    suspend fun renameItem(itemId: Long, title: String)
+    suspend fun renameItem(
+        itemId: Long,
+        title: String,
+    )
 
     @Query("UPDATE material_items SET folderId = :folderId, sortOrder = :sortOrder WHERE id = :itemId")
-    suspend fun moveItemToFolder(itemId: Long, folderId: Long, sortOrder: Int)
+    suspend fun moveItemToFolder(
+        itemId: Long,
+        folderId: Long,
+        sortOrder: Int,
+    )
 
     @Query("UPDATE material_items SET lastPage = :page WHERE id = :itemId")
-    suspend fun setLastPage(itemId: Long, page: Int)
+    suspend fun setLastPage(
+        itemId: Long,
+        page: Int,
+    )
 
     @Query("UPDATE material_items SET rotationDeg = :deg WHERE id = :itemId")
-    suspend fun setRotationDeg(itemId: Long, deg: Int)
+    suspend fun setRotationDeg(
+        itemId: Long,
+        deg: Int,
+    )
 
     /** M4: порядок страниц набора изображений — список путей обратно в `uriPath`. */
     @Query("UPDATE material_items SET uriPath = :uriPath WHERE id = :itemId")
-    suspend fun setImagePaths(itemId: Long, uriPath: String)
+    suspend fun setImagePaths(
+        itemId: Long,
+        uriPath: String,
+    )
 
     // ── Переупорядочивание ───────────────────────────────────────────────────
 
     @Query("UPDATE material_items SET sortOrder = :sortOrder WHERE id = :itemId")
-    suspend fun updateSortOrder(itemId: Long, sortOrder: Int)
+    suspend fun updateSortOrder(
+        itemId: Long,
+        sortOrder: Int,
+    )
 
     /**
      * M4: перестановка соседних материалов (кнопки-стрелки в строке материала).
@@ -108,7 +126,10 @@ interface MaterialDao {
      * если понадобится drag — тот же sortOrder, только пересчёт всего хвоста папки.
      */
     @Transaction
-    suspend fun swapSortOrder(itemIdA: Long, itemIdB: Long) {
+    suspend fun swapSortOrder(
+        itemIdA: Long,
+        itemIdB: Long,
+    ) {
         val a = getItemById(itemIdA) ?: return
         val b = getItemById(itemIdB) ?: return
         if (a.sortOrder == b.sortOrder) return

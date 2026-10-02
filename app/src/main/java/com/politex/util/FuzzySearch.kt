@@ -27,7 +27,6 @@ import kotlin.math.abs
  * станут мегабайтными (тогда индекс слов стоит предпосчитать при импорте, а не на каждый запрос).
  */
 object FuzzySearch {
-
     /** Порог «длинного слова», для которого разрешены опечатки (правило 3). */
     const val MIN_FUZZY_WORD_LENGTH = 4
 
@@ -39,13 +38,19 @@ object FuzzySearch {
      * «ё» приводится отдельно, потому что в русском тексте она стабильно теряется при вводе
      * («учёба» ↔ «учеба» — одна и та же словоформа с точки зрения студента).
      */
-    fun normalize(raw: String, caseSensitive: Boolean = false): String {
+    fun normalize(
+        raw: String,
+        caseSensitive: Boolean = false,
+    ): String {
         val lowered = if (caseSensitive) raw else raw.lowercase()
         return lowered.replace('ё', 'е').replace('Ё', 'Е')
     }
 
     /** Словарь текста: слова из букв/цифр длиной ≥ 2 (одиночные буквы — шум). */
-    fun wordsOf(text: String, caseSensitive: Boolean = false): Set<String> {
+    fun wordsOf(
+        text: String,
+        caseSensitive: Boolean = false,
+    ): Set<String> {
         val normalized = normalize(text, caseSensitive)
         val out = HashSet<String>(normalized.length / 6 + 8)
         var start = -1
@@ -63,7 +68,10 @@ object FuzzySearch {
     }
 
     /** Матчит ли одно слово текста одно слово запроса (правила 1–3 из KDoc). */
-    fun wordMatches(textWord: String, queryWord: String): Boolean {
+    fun wordMatches(
+        textWord: String,
+        queryWord: String,
+    ): Boolean {
         if (textWord == queryWord) return true
         if (commonPrefixLength(textWord, queryWord) >= MIN_FUZZY_WORD_LENGTH) return true
         if (queryWord.length < MIN_FUZZY_WORD_LENGTH) return false
@@ -74,7 +82,11 @@ object FuzzySearch {
      * Число слов запроса, нашедших пару в тексте. 0 = материал не подходит.
      * Пустой/пробельный запрос → 0 (ничего не фильтруем, но и не «совпадение»).
      */
-    fun score(text: String, query: String, caseSensitive: Boolean = false): Int {
+    fun score(
+        text: String,
+        query: String,
+        caseSensitive: Boolean = false,
+    ): Int {
         val queryWords = wordsOf(query, caseSensitive)
         if (queryWords.isEmpty()) return 0
         val textWords = wordsOf(text, caseSensitive)
@@ -86,10 +98,15 @@ object FuzzySearch {
         return matched
     }
 
-    fun queryWordCount(query: String, caseSensitive: Boolean = false): Int =
-        wordsOf(query, caseSensitive).size
+    fun queryWordCount(
+        query: String,
+        caseSensitive: Boolean = false,
+    ): Int = wordsOf(query, caseSensitive).size
 
-    fun commonPrefixLength(a: String, b: String): Int {
+    fun commonPrefixLength(
+        a: String,
+        b: String,
+    ): Int {
         val n = minOf(a.length, b.length)
         var i = 0
         while (i < n && a[i] == b[i]) i++
@@ -105,7 +122,11 @@ object FuzzySearch {
      * человеческих опечаток разницы нет, а код втрое короче. Полная матрица O(n·m), но
      * n,m ≤ ~30 (слова), так что это микросекунды.
      */
-    fun damerauLevenshtein(a: String, b: String, limit: Int = Int.MAX_VALUE): Int {
+    fun damerauLevenshtein(
+        a: String,
+        b: String,
+        limit: Int = Int.MAX_VALUE,
+    ): Int {
         if (a == b) return 0
         if (abs(a.length - b.length) > limit) return limit + 1
         val n = a.length
@@ -117,8 +138,8 @@ object FuzzySearch {
         // `cur` получает бывший `twoBack`, и нулевая длина дала бы ArrayIndexOutOfBounds
         // на второй итерации. Значения twoBack читаются только при i>1, поэтому нули безопасны.
         var twoBack = IntArray(m + 1)
-        var prev = IntArray(m + 1) { it }                          // строка i-1
-        var cur = IntArray(m + 1)                                  // строка i
+        var prev = IntArray(m + 1) { it } // строка i-1
+        var cur = IntArray(m + 1) // строка i
 
         for (i in 1..n) {
             cur[0] = i
@@ -127,7 +148,7 @@ object FuzzySearch {
                 val cost = if (a[i - 1] == b[j - 1]) 0 else 1
                 var v = minOf(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost)
                 if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]) {
-                    v = minOf(v, twoBack[j - 2] + 1)               // перестановка соседей
+                    v = minOf(v, twoBack[j - 2] + 1) // перестановка соседей
                 }
                 cur[j] = v
                 if (v < rowMin) rowMin = v

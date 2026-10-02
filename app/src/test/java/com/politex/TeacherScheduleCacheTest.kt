@@ -14,9 +14,7 @@ import org.junit.Test
  * и ключ поиска, по которому карточка преподавателя читает базу.
  */
 class TeacherScheduleCacheTest {
-
-    private fun fixture(name: String): ByteArray =
-        javaClass.classLoader!!.getResourceAsStream(name)!!.readBytes()
+    private fun fixture(name: String): ByteArray = javaClass.classLoader!!.getResourceAsStream(name)!!.readBytes()
 
     @Test
     fun `реальный документ преподавателей разбирается по фамилиям`() {
@@ -25,13 +23,17 @@ class TeacherScheduleCacheTest {
         assertTrue("документ должен разобраться", parsed.isNotEmpty())
 
         // Каждый преподаватель в документе опознаётся по фамилии — это ключ чтения из базы
-        val surnames = parsed.keys
-            .map { com.politex.data.repository.TeacherInsights.surnameOf(it) }
-            .filter { it.isNotBlank() }
+        val surnames =
+            parsed.keys
+                .map {
+                    com.politex.data.repository.TeacherInsights
+                        .surnameOf(it)
+                }.filter { it.isNotBlank() }
         assertTrue("должны опознаваться фамилии", surnames.isNotEmpty())
         assertEquals(
             "фамилий без повторов должно быть столько же, сколько преподавателей",
-            parsed.size, surnames.toSet().size
+            parsed.size,
+            surnames.toSet().size,
         )
     }
 
@@ -45,20 +47,25 @@ class TeacherScheduleCacheTest {
         val full = "Ламкина Ирина Петровна"
         val rawInDocument = "Ламкина И.П."
 
-        val keyFromCard = com.politex.data.repository.TeacherInsights.surnameOf(full)
-        val keyFromDocument = com.politex.data.repository.TeacherInsights.surnameOf(rawInDocument)
+        val keyFromCard =
+            com.politex.data.repository.TeacherInsights
+                .surnameOf(full)
+        val keyFromDocument =
+            com.politex.data.repository.TeacherInsights
+                .surnameOf(rawInDocument)
         assertEquals(keyFromCard, keyFromDocument)
 
-        val row = TeacherLessonEntity(
-            teacherName = rawInDocument,
-            surnameKey = keyFromDocument,
-            dateString = "16.09.2026",
-            dayOfWeek = 3,
-            lessonNumber = 3,
-            groups = "31П, 32П",
-            subject = "ТОЭ",
-            room = "301"
-        )
+        val row =
+            TeacherLessonEntity(
+                teacherName = rawInDocument,
+                surnameKey = keyFromDocument,
+                dateString = "16.09.2026",
+                dayOfWeek = 3,
+                lessonNumber = 3,
+                groups = "31П, 32П",
+                subject = "ТОЭ",
+                room = "301",
+            )
         assertEquals("ламкина", row.surnameKey)
         assertEquals("301", row.room)
         assertEquals(listOf("31П", "32П"), row.groups.split(", "))
@@ -80,7 +87,7 @@ class TeacherScheduleCacheTest {
         assertTrue("день недели должен распознаваться", recognized.isNotEmpty())
         assertTrue(
             "все распознанные слоты — среда (16.09.2026)",
-            recognized.all { it == 3 }
+            recognized.all { it == 3 },
         )
     }
 }

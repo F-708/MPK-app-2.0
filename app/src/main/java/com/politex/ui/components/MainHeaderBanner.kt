@@ -1,4 +1,4 @@
-﻿package com.politex.ui.components
+package com.politex.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -30,44 +30,47 @@ import com.politex.ui.theme.TextStyleCollegeBranding
 private const val MPK_HEADER_BANNER_URL = "https://guo-mpk.by/wp-content/uploads/2024/11/cropped-cropped-cropped-logo-na-sajt.png"
 
 @Composable
-fun MainHeaderBanner(
-    modifier: Modifier = Modifier
-) {
+fun MainHeaderBanner(modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier
+        modifier =
+        modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(Color.White),
     ) {
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .background(Color.White)
                 .statusBarsPadding()
-                .height(56.dp)
+                .height(56.dp),
         ) {
-
             SubcomposeAsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
+                model =
+                ImageRequest
+                    .Builder(LocalContext.current)
                     .data(MPK_HEADER_BANNER_URL)
                     .crossfade(false)
                     .build(),
                 contentDescription = "Баннер Минского политехнического колледжа",
-                modifier = Modifier
+                modifier =
+                Modifier
                     .align(Alignment.Center)
                     .padding(horizontal = 16.dp)
                     .height(44.dp)
                     .fillMaxWidth(),
                 contentScale = ContentScale.Fit,
                 loading = { HeaderFallback() },
-                error = { HeaderFallback() }
+                error = { HeaderFallback() },
             )
         }
 
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(ColorDividerLight)
+                .background(ColorDividerLight),
         )
     }
 }
@@ -77,7 +80,7 @@ private fun HeaderFallback() {
     Row(verticalAlignment = Alignment.CenterVertically) {
         CollegePorticoIcon(
             color = ColorBrandBlue,
-            modifier = Modifier.size(32.dp)
+            modifier = Modifier.size(32.dp),
         )
         Spacer(modifier = Modifier.width(10.dp))
         Column {
@@ -85,13 +88,13 @@ private fun HeaderFallback() {
                 text = "ГОСУДАРСТВЕННОЕ УЧРЕЖДЕНИЕ ОБРАЗОВАНИЯ",
                 style = TextStyleCollegeBranding,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = "«МИНСКИЙ ПОЛИТЕХНИЧЕСКИЙ КОЛЛЕДЖ»",
                 style = TextStyleCollegeBranding.copy(fontSize = 12.sp),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -100,24 +103,29 @@ private fun HeaderFallback() {
 @Composable
 fun CollegePorticoIcon(
     color: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     androidx.compose.foundation.Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
 
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(0f, h * 0.35f)
-            lineTo(w * 0.5f, 0f)
-            lineTo(w, h * 0.35f)
-            close()
-        }
+        val path =
+            androidx.compose.ui.graphics.Path().apply {
+                moveTo(0f, h * 0.35f)
+                lineTo(w * 0.5f, 0f)
+                lineTo(w, h * 0.35f)
+                close()
+            }
         drawPath(path, color = color)
 
         drawRect(
             color = color,
-            topLeft = androidx.compose.ui.geometry.Offset(0f, h * 0.35f),
-            size = androidx.compose.ui.geometry.Size(w, h * 0.08f)
+            topLeft =
+            androidx.compose.ui.geometry
+                .Offset(0f, h * 0.35f),
+            size =
+            androidx.compose.ui.geometry
+                .Size(w, h * 0.08f),
         )
 
         val colWidth = w * 0.12f
@@ -129,15 +137,23 @@ fun CollegePorticoIcon(
             val left = i * (colWidth + colGap)
             drawRect(
                 color = color,
-                topLeft = androidx.compose.ui.geometry.Offset(left, colTop),
-                size = androidx.compose.ui.geometry.Size(colWidth, colHeight)
+                topLeft =
+                androidx.compose.ui.geometry
+                    .Offset(left, colTop),
+                size =
+                androidx.compose.ui.geometry
+                    .Size(colWidth, colHeight),
             )
         }
 
         drawRect(
             color = color,
-            topLeft = androidx.compose.ui.geometry.Offset(0f, h * 0.88f),
-            size = androidx.compose.ui.geometry.Size(w, h * 0.12f)
+            topLeft =
+            androidx.compose.ui.geometry
+                .Offset(0f, h * 0.88f),
+            size =
+            androidx.compose.ui.geometry
+                .Size(w, h * 0.12f),
         )
     }
 }

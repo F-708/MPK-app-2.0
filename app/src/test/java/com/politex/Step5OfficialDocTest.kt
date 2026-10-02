@@ -1,19 +1,17 @@
-﻿package com.politex
+package com.politex
 
-import com.politex.data.model.BellScheduleType
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.network.MpkNetworkClient
 import com.politex.data.network.MpkScheduleParser
-import java.io.ByteArrayOutputStream
-import java.util.Calendar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayOutputStream
+import java.util.Calendar
 
 class Step5OfficialDocTest {
-
     @Test
     fun testStandardBellSchedule() {
         val standard = CollegeBellSchedule.STANDARD_BELLS
@@ -76,7 +74,6 @@ class Step5OfficialDocTest {
 
     @Test
     fun testGetTimeForNumber() {
-
         val pair1 = CollegeBellSchedule.getTimeForNumber(1, dayOfWeek = 1)
         assertEquals("08:15", pair1.first)
         assertEquals("09:55", pair1.second)
@@ -88,7 +85,8 @@ class Step5OfficialDocTest {
 
     @Test
     fun testRealCollegeScheduleGridParser() {
-        val rawCollegeText = """
+        val rawCollegeText =
+            """
             1 НЕДЕЛЯ РАСПИСАНИЕ на   15.09.2026 г.  ВТОРНИК
             ┌─────────────────────────┬─────────────────────────┬─────────────────────────┬─────────────────────────┬─────────────────────────┬─────────────────────────┬─────────────────────────┐
             │          11А            │          11Г            │          11Д            │          11М            │          11Н            │          11О            │          11П            │
@@ -122,7 +120,7 @@ class Step5OfficialDocTest {
             │   Побегайло В.В.        │   Коваль Л.А.           │   Смольская Л.А.        │   Побегайло В.В.        │   Цепелев Д.В.          │                         │                         │
             │ 7                       │ 7                       │ 7                       │ 7                       │ 7 ОИнжГра/ОИнжГра245/245│ 7 ИнЯзПро/ИнЯзПро247/337│ 7                       │
             │                         │                         │                         │                         │   Белый Е.В. /Демидова Е│   Савицкая О./Павлова А.│                         │
-        """.trimIndent()
+            """.trimIndent()
 
         val lessons11O = MpkScheduleParser.parsePlainTextSchedule(rawCollegeText, targetGroup = "11О")
         assertEquals(6, lessons11O.size)
@@ -156,16 +154,15 @@ class Step5OfficialDocTest {
         val lessons21D = MpkScheduleParser.parsePlainTextSchedule(rawCollegeText, targetGroup = "21Д")
 
         assertEquals(4, lessons21D.size)
-        val lesson21D_pair2 = lessons21D.find { it.lessonNumber == 2 }
-        assertNotNull(lesson21D_pair2)
-        assertTrue(lesson21D_pair2!!.isSplit)
-        assertEquals("135", lesson21D_pair2.roomFirst)
-        assertEquals("Романенко И.", lesson21D_pair2.teacherFirst)
+        val lesson21DPair2 = lessons21D.find { it.lessonNumber == 2 }
+        assertNotNull(lesson21DPair2)
+        assertTrue(lesson21DPair2!!.isSplit)
+        assertEquals("135", lesson21DPair2.roomFirst)
+        assertEquals("Романенко И.", lesson21DPair2.teacherFirst)
     }
 
     @Test
     fun testBinaryDocParserWithCellDelimiters() {
-
         val baos = ByteArrayOutputStream()
 
         baos.write("Группа 41О\u0007Понедельник\u0007\r\n".toByteArray(charset("windows-1251")))
@@ -196,9 +193,10 @@ class Step5OfficialDocTest {
     @Test
     fun testNetworkCandidateUrls() {
         val client = MpkNetworkClient()
-        val cal = Calendar.getInstance().apply {
-            set(2026, Calendar.SEPTEMBER, 15)
-        }
+        val cal =
+            Calendar.getInstance().apply {
+                set(2026, Calendar.SEPTEMBER, 15)
+            }
 
         val directUrls = client.generateCandidateDirectUrls(cal)
         assertTrue(directUrls.isNotEmpty())

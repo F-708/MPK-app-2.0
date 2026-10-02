@@ -1,4 +1,4 @@
-﻿package com.politex.data.model
+package com.politex.data.model
 
 object CollegeRouteFinder {
 
@@ -76,7 +76,10 @@ object CollegeRouteFinder {
                 var bestD = JOIN_RADIUS
                 nodeIndex.values.forEach { ni ->
                     val d = dist(vertices[end], vertices[ni])
-                    if (d < bestD) { bestD = d; best = ni }
+                    if (d < bestD) {
+                        bestD = d
+                        best = ni
+                    }
                 }
                 if (best >= 0) link(end, best)
             }
@@ -94,7 +97,8 @@ object CollegeRouteFinder {
                 link(vertices.indexOfFirst { it === v }, qv)
                 // проекция обязана лежать НА сегменте: addVertex её задедупит с точкой
                 // коридора только при точном совпадении; иначе соединим с концами сегмента
-                val ai = vertices.indexOf(a); val bi = vertices.indexOf(b)
+                val ai = vertices.indexOf(a)
+                val bi = vertices.indexOf(b)
                 if (ai >= 0 && vertices[ai] !== q) link(qv, ai)
                 if (bi >= 0 && vertices[bi] !== q) link(qv, bi)
             }
@@ -104,18 +108,29 @@ object CollegeRouteFinder {
 
     /** Проекция точки p на отрезок ab; null если перпендикуляр длиннее PROJECTION_RADIUS. */
     private fun projectOnSegment(p: Vertex, a: Vertex, b: Vertex): Vertex? {
-        val dx = b.x - a.x; val dy = b.y - a.y
+        val dx = b.x - a.x
+        val dy = b.y - a.y
         val len2 = dx * dx + dy * dy
         if (len2 == 0f) return null
         val t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2
-        val tc = if (t < 0f) 0f else if (t > 1f) 1f else t
+        val tc = if (t < 0f) {
+            0f
+        } else if (t > 1f) {
+            1f
+        } else {
+            t
+        }
         val q = Vertex(a.x + tc * dx, a.y + tc * dy)
         return if (dist(p, q) <= PROJECTION_RADIUS) q else null
     }
 
     /** Путь по графу одного этажа от точки (ax,ay) до (bx,by): последовательность точек графа (без концов). */
     private fun floorPath(
-        floor: FloorMap, ax: Float, ay: Float, bx: Float, by: Float
+        floor: FloorMap,
+        ax: Float,
+        ay: Float,
+        bx: Float,
+        by: Float,
     ): List<MapPoint>? {
         val (vertices, adjacency) = buildGraph(floor)
         if (vertices.isEmpty()) return null
@@ -129,7 +144,7 @@ object CollegeRouteFinder {
     fun findRoute(
         from: MapRoom,
         to: MapRoom,
-        floor: FloorMap
+        floor: FloorMap,
     ): Route? {
         if (from.id == to.id) return null
         val graph = floorPath(floor, from.x, from.y, to.x, to.y) ?: return null
@@ -163,7 +178,7 @@ object CollegeRouteFinder {
         from: MapRoom,
         to: MapRoom,
         floors: Map<String, FloorMap>,
-        isUsableStair: (MapEntrance) -> Boolean = { it.usable }
+        isUsableStair: (MapEntrance) -> Boolean = { it.usable },
     ): MultiFloorRoute? {
         val fromId = CollegeMap.floorForRoom(from.number)?.id ?: return null
         val toId = CollegeMap.floorForRoom(to.number)?.id ?: return null
@@ -186,13 +201,15 @@ object CollegeRouteFinder {
             gVerts.forEachIndexed { i, v ->
                 if (v.first == fid && Math.abs(v.second - x) < 1e-4f && Math.abs(v.third - y) < 1e-4f) return i
             }
-            gVerts.add(Triple(fid, x, y)); gAdj.add(mutableListOf())
+            gVerts.add(Triple(fid, x, y))
+            gAdj.add(mutableListOf())
             return gVerts.size - 1
         }
         fun linkV(a: Int, b: Int, w: Float? = null) {
             if (a == b) return
             val d = w ?: hypot(gVerts[a].second - gVerts[b].second, gVerts[a].third - gVerts[b].third)
-            gAdj[a].add(b to d); gAdj[b].add(a to d)
+            gAdj[a].add(b to d)
+            gAdj[b].add(a to d)
         }
 
         // Этажные подграфы (nodes + corridors, как в buildGraph) и индексы лестниц
@@ -208,10 +225,14 @@ object CollegeRouteFinder {
 
             fun snap(x: Float, y: Float): Int {
                 // Ближайшая вершина этажного графа к точке (лестница/комната)
-                var best = -1; var bd = Float.MAX_VALUE
+                var best = -1
+                var bd = Float.MAX_VALUE
                 verts.forEachIndexed { i, v ->
                     val d = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y)
-                    if (d < bd) { bd = d; best = i }
+                    if (d < bd) {
+                        bd = d
+                        best = i
+                    }
                 }
                 return if (best < 0) -1 else base + best
             }
@@ -227,18 +248,31 @@ object CollegeRouteFinder {
             // ponytail: привязка к БЛИЖАЙШЕЙ вершине без ограничения радиуса — для дальних комнат
             // (~0.3 от коридора, wing'ы без vision-доразметки) линия подхода будет диагональной;
             // когда vision-разметка f1/f3-4 добавит коридоры, диагонали исчезнут сами.
-            if (fid == fromId) { val v = addV(fid, from.x, from.y); val n = snap(from.x, from.y); if (n >= 0) linkV(v, n); startV = v }
-            if (fid == toId) { val v = addV(fid, to.x, to.y); val n = snap(to.x, to.y); if (n >= 0) linkV(v, n); finishV = v }
+            if (fid == fromId) {
+                val v = addV(fid, from.x, from.y)
+                val n = snap(from.x, from.y)
+                if (n >= 0) linkV(v, n)
+                startV = v
+            }
+            if (fid == toId) {
+                val v = addV(fid, to.x, to.y)
+                val n = snap(to.x, to.y)
+                if (n >= 0) linkV(v, n)
+                finishV = v
+            }
         }
 
         // Межэтажные рёбра: сопряжённые лестницы соседних этажей (≤ STAIR_PAIR_RADIUS)
         for (pos in 0 until chain.size - 1) {
             val here = stairByFloor[pos] ?: continue
             val there = stairByFloor[pos + 1] ?: continue
-            for (a in here) for (b in there) {
-                val va = gVerts[a]; val vb = gVerts[b]
-                if (hypot(va.second - vb.second, va.third - vb.third) <= STAIR_PAIR_RADIUS) {
-                    linkV(a, b, STAIR_COST)
+            for (a in here) {
+                for (b in there) {
+                    val va = gVerts[a]
+                    val vb = gVerts[b]
+                    if (hypot(va.second - vb.second, va.third - vb.third) <= STAIR_PAIR_RADIUS) {
+                        linkV(a, b, STAIR_COST)
+                    }
                 }
             }
         }
@@ -250,21 +284,29 @@ object CollegeRouteFinder {
         val result = mutableListOf<FloorPath>()
         var curFloor = gVerts[path.first()].first
         var cur = mutableListOf<MapPoint>()
-        fun flush() { if (cur.size >= 1) result.add(FloorPath(curFloor, cur.toList())); cur = mutableListOf() }
+        fun flush() {
+            if (cur.size >= 1) result.add(FloorPath(curFloor, cur.toList()))
+            cur = mutableListOf()
+        }
         for (vi in path) {
             val v = gVerts[vi]
-            if (v.first != curFloor) { flush(); curFloor = v.first }
+            if (v.first != curFloor) {
+                flush()
+                curFloor = v.first
+            }
             cur.add(MapPoint(v.second, v.third))
         }
         flush()
         // Начало/конец — центры кабинетов (могут отличаться от snapped-вершин)
         if (result.isNotEmpty()) {
             val first = result[0]
-            if (first.points.isEmpty() || distP(first.points.first(), MapPoint(from.x, from.y)) > 1e-4f)
+            if (first.points.isEmpty() || distP(first.points.first(), MapPoint(from.x, from.y)) > 1e-4f) {
                 result[0] = first.copy(points = listOf(MapPoint(from.x, from.y)) + first.points)
+            }
             val last = result[result.size - 1]
-            if (last.points.isEmpty() || distP(last.points.last(), MapPoint(to.x, to.y)) > 1e-4f)
+            if (last.points.isEmpty() || distP(last.points.last(), MapPoint(to.x, to.y)) > 1e-4f) {
                 result[result.size - 1] = last.copy(points = last.points + MapPoint(to.x, to.y))
+            }
         }
         var total = 0f
         result.forEach { fp -> for (i in 1 until fp.points.size) total += distP(fp.points[i - 1], fp.points[i]) }
@@ -273,7 +315,10 @@ object CollegeRouteFinder {
     }
 
     private fun shortestPathGlobal(
-        adjacency: List<List<Pair<Int, Float>>>, n: Int, start: Int, finish: Int
+        adjacency: List<List<Pair<Int, Float>>>,
+        n: Int,
+        start: Int,
+        finish: Int,
     ): List<Int>? {
         if (start < 0 || finish < 0 || start >= n || finish >= n) return null
         val best = FloatArray(n) { Float.MAX_VALUE }
@@ -281,18 +326,31 @@ object CollegeRouteFinder {
         val used = BooleanArray(n)
         best[start] = 0f
         repeat(n) {
-            var v = -1; var bestD = Float.MAX_VALUE
-            for (i in 0 until n) if (!used[i] && best[i] < bestD) { bestD = best[i]; v = i }
+            var v = -1
+            var bestD = Float.MAX_VALUE
+            for (i in 0 until n) {
+                if (!used[i] && best[i] < bestD) {
+                    bestD = best[i]
+                    v = i
+                }
+            }
             if (v < 0) return@repeat
             used[v] = true
             adjacency[v].forEach { (to, w) ->
-                if (best[v] + w < best[to]) { best[to] = best[v] + w; prev[to] = v }
+                if (best[v] + w < best[to]) {
+                    best[to] = best[v] + w
+                    prev[to] = v
+                }
             }
         }
         if (best[finish] == Float.MAX_VALUE) return null
         val path = ArrayDeque<Int>()
         var cur = finish
-        while (cur >= 0) { path.addFirst(cur); if (cur == start) break; cur = prev[cur] }
+        while (cur >= 0) {
+            path.addFirst(cur)
+            if (cur == start) break
+            cur = prev[cur]
+        }
         return if (path.first() == start) path.toList() else null
     }
 
@@ -305,19 +363,21 @@ object CollegeRouteFinder {
         var bestD = Float.MAX_VALUE
         vertices.forEachIndexed { i, v ->
             val d = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y)
-            if (d < bestD) { bestD = d; best = i }
+            if (d < bestD) {
+                bestD = d
+                best = i
+            }
         }
         return best
     }
 
-    private fun dist(a: Vertex, b: Vertex): Float =
-        Math.hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble()).toFloat()
+    private fun dist(a: Vertex, b: Vertex): Float = Math.hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble()).toFloat()
 
     private fun shortestPath(
         vertices: List<Vertex>,
         adjacency: List<List<Pair<Int, Float>>>,
         start: Int,
-        finish: Int
+        finish: Int,
     ): List<Int>? {
         val n = vertices.size
         val best = FloatArray(n) { Float.MAX_VALUE }
@@ -329,7 +389,10 @@ object CollegeRouteFinder {
             var v = -1
             var bestD = Float.MAX_VALUE
             for (i in 0 until n) {
-                if (!used[i] && best[i] < bestD) { bestD = best[i]; v = i }
+                if (!used[i] && best[i] < bestD) {
+                    bestD = best[i]
+                    v = i
+                }
             }
             if (v < 0) return@repeat
             used[v] = true

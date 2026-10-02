@@ -5,12 +5,14 @@ import java.util.Locale
 /**
  * Ф4.2: категории оценок. `title` — подпись в UI, `name` — значение колонки category.
  */
-enum class GradeCategory(val title: String) {
+enum class GradeCategory(
+    val title: String,
+) {
     REGULAR("Обычные"),
     PRACTICAL("Практические"),
     CONTROL("Контрольные"),
     LAB("Лабораторные"),
-    EXAM("Экзамен");
+    EXAM("Экзамен"),
 }
 
 /**
@@ -27,14 +29,14 @@ enum class GradeCategory(val title: String) {
  * Округление только для показа: [round1] / [format].
  */
 object GradeAggregator {
-
     /** Порядок категорий по умолчанию (MASTER-PLAN Ф4.2). LAB сюда не входит. */
-    val DEFAULT_PRIORITY: List<String> = listOf(
-        GradeCategory.REGULAR.name,
-        GradeCategory.PRACTICAL.name,
-        GradeCategory.CONTROL.name,
-        GradeCategory.EXAM.name
-    )
+    val DEFAULT_PRIORITY: List<String> =
+        listOf(
+            GradeCategory.REGULAR.name,
+            GradeCategory.PRACTICAL.name,
+            GradeCategory.CONTROL.name,
+            GradeCategory.EXAM.name,
+        )
 
     /**
      * @param byCategory значения оценок по именам категорий (category -> список value)
@@ -43,7 +45,7 @@ object GradeAggregator {
      */
     fun average(
         byCategory: Map<String, List<Int>>,
-        priority: List<String> = DEFAULT_PRIORITY
+        priority: List<String> = DEFAULT_PRIORITY,
     ): Double? {
         var acc: Double? = null
         for (name in priority) {

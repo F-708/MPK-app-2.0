@@ -19,13 +19,11 @@ import org.robolectric.RobolectricTestRunner
  */
 @RunWith(RobolectricTestRunner::class)
 class RealMapMultiFloorRouteTest {
-
     private val mapData: CollegeMapData by lazy {
         CollegeMapData.load(ApplicationProvider.getApplicationContext())
     }
 
-    private fun floorsMap(): Map<String, FloorMap> =
-        CollegeMap.Floor.entries.associate { it.id to mapData.floor(it.id) }
+    private fun floorsMap(): Map<String, FloorMap> = CollegeMap.Floor.entries.associate { it.id to mapData.floor(it.id) }
 
     private fun room(number: String): MapRoom {
         val floorId = CollegeMap.floorForRoom(number)?.id ?: error("$number: неизвестный этаж")
@@ -42,16 +40,22 @@ class RealMapMultiFloorRouteTest {
     @Test
     fun `usable-разметка лестниц соответствует списку заказчика`() {
         val floors = floorsMap()
-        val usableStairs = floors.values.flatMap { it.entrances }
-            .filter { it.kind == "stairs" && it.usable }
+        val usableStairs =
+            floors.values
+                .flatMap { it.entrances }
+                .filter { it.kind == "stairs" && it.usable }
         assertTrue("пригодных лестниц должно быть несколько", usableStairs.size >= 8)
         // Все лестницы имеют явное поле usable из JSON (схема v1 → usable:true по умолчанию)
         val allStairs = floors.values.flatMap { it.entrances }.filter { it.kind == "stairs" }
         assertTrue(allStairs.isNotEmpty())
         // Аварийные (118/223/320 ствол) помечены unusable
         val unusableIds = allStairs.filter { !it.usable }.map { it.id }
-        assertTrue("ствол 118-223-320 должен быть unusable", unusableIds.containsAll(
-            listOf("e_9kyra5x", "e_eztq0l0", "e_0jof8nz")))
+        assertTrue(
+            "ствол 118-223-320 должен быть unusable",
+            unusableIds.containsAll(
+                listOf("e_9kyra5x", "e_eztq0l0", "e_0jof8nz"),
+            ),
+        )
     }
 
     @Test
@@ -87,12 +91,14 @@ class RealMapMultiFloorRouteTest {
         // ствола; проверяем что через сам аварийный ствол путь не идёт.
         val r = CollegeRouteFinder.findMultiFloorRoute(room("118"), room("223"), floorsMap())
         if (r != null) {
-            val stairsUsed = r.floorPaths.flatMap { fp ->
-                floorsMap()[fp.floorId]?.entrances
-                    ?.filter { it.kind == "stairs" && !it.usable }
-                    ?.filter { s -> fp.points.any { p -> Math.abs(p.x - s.x) < 1e-3f && Math.abs(p.y - s.y) < 1e-3f } }
-                    ?.map { it.id } ?: emptyList()
-            }
+            val stairsUsed =
+                r.floorPaths.flatMap { fp ->
+                    floorsMap()[fp.floorId]
+                        ?.entrances
+                        ?.filter { it.kind == "stairs" && !it.usable }
+                        ?.filter { s -> fp.points.any { p -> Math.abs(p.x - s.x) < 1e-3f && Math.abs(p.y - s.y) < 1e-3f } }
+                        ?.map { it.id } ?: emptyList()
+                }
             assertTrue("аварийные лестницы не должны использоваться: $stairsUsed", stairsUsed.isEmpty())
         }
     }
@@ -116,8 +122,18 @@ class RealMapMultiFloorRouteTest {
         assertNotNull("главный вход должен быть в данных", main)
         // Маршрут «от главного входа» (фаза 2.3: первая пара) — псевдо-комната с номером
         // 1-го этажа (floorForRoom по первой цифре) и координатами входа
-        val startRoom = MapRoom(id = "entrance", number = "100", title = "", note = "",
-            status = "normal", x = main!!.x, y = main.y, w = 0.01f, h = 0.01f)
+        val startRoom =
+            MapRoom(
+                id = "entrance",
+                number = "100",
+                title = "",
+                note = "",
+                status = "normal",
+                x = main!!.x,
+                y = main.y,
+                w = 0.01f,
+                h = 0.01f,
+            )
         val r = CollegeRouteFinder.findMultiFloorRoute(startRoom, room("301"), floorsMap())
         assertNotNull("маршрут от главного входа до 301 должен строиться", r)
     }

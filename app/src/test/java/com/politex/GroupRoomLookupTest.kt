@@ -15,14 +15,13 @@ import org.junit.Test
  * Опорные звонки (STANDARD, Пн): 1-й 08:15–09:00, 3-й 10:20–11:05, 5-й 12:25–13:10.
  */
 class GroupRoomLookupTest {
-
     private fun lesson(
         number: Int,
         roomFirst: String,
         roomSecond: String = "",
         isSplit: Boolean = false,
         dateString: String = "01.09.2026",
-        timeStart: String = ""
+        timeStart: String = "",
     ) = LessonEntity(
         groupName = "41О",
         dayOfWeek = 1,
@@ -35,7 +34,7 @@ class GroupRoomLookupTest {
         roomSecond = roomSecond,
         teacherSecond = "",
         isSplit = isSplit,
-        dateString = dateString
+        dateString = dateString,
     )
 
     // ---------- Урок идёт сейчас ----------
@@ -43,11 +42,12 @@ class GroupRoomLookupTest {
     @Test
     fun currentLesson_roomFromSlot() {
         // 10:30 внутри 3-го урока (10:20–11:05) → кабинет 214
-        val res = findGroupRoomNow(
-            lessons = listOf(lesson(3, "214"), lesson(5, "101")),
-            currentMinutes = 10 * 60 + 30,
-            dayOfWeek = 1
-        )
+        val res =
+            findGroupRoomNow(
+                lessons = listOf(lesson(3, "214"), lesson(5, "101")),
+                currentMinutes = 10 * 60 + 30,
+                dayOfWeek = 1,
+            )
         assertNotNull(res)
         assertEquals("214", res!!.room)
         assertEquals(3, res.lessonNumber)
@@ -57,11 +57,12 @@ class GroupRoomLookupTest {
     @Test
     fun currentSlotButGroupHasNoLesson_fallsToNext() {
         // 10:30 — идёт 3-й урок, но у группы его нет → ближайший 5-й, «к 5 уроку»
-        val res = findGroupRoomNow(
-            lessons = listOf(lesson(5, "101")),
-            currentMinutes = 10 * 60 + 30,
-            dayOfWeek = 1
-        )
+        val res =
+            findGroupRoomNow(
+                lessons = listOf(lesson(5, "101")),
+                currentMinutes = 10 * 60 + 30,
+                dayOfWeek = 1,
+            )
         assertNotNull(res)
         assertEquals("101", res!!.room)
         assertEquals(5, res.lessonNumber)
@@ -71,21 +72,23 @@ class GroupRoomLookupTest {
     @Test
     fun splitLesson_prefersRoomFirst() {
         // split-урок: подгруппу надёжно не определить — берём roomFirst
-        val res = findGroupRoomNow(
-            lessons = listOf(lesson(3, "214", "305", isSplit = true)),
-            currentMinutes = 10 * 60 + 30,
-            dayOfWeek = 1
-        )
+        val res =
+            findGroupRoomNow(
+                lessons = listOf(lesson(3, "214", "305", isSplit = true)),
+                currentMinutes = 10 * 60 + 30,
+                dayOfWeek = 1,
+            )
         assertEquals("214", res!!.room)
     }
 
     @Test
     fun roomFirstBlank_fallsToRoomSecond() {
-        val res = findGroupRoomNow(
-            lessons = listOf(lesson(3, "", "305")),
-            currentMinutes = 10 * 60 + 30,
-            dayOfWeek = 1
-        )
+        val res =
+            findGroupRoomNow(
+                lessons = listOf(lesson(3, "", "305")),
+                currentMinutes = 10 * 60 + 30,
+                dayOfWeek = 1,
+            )
         assertEquals("305", res!!.room)
     }
 
@@ -94,11 +97,12 @@ class GroupRoomLookupTest {
     @Test
     fun betweenLessons_nextLessonRoom() {
         // 11:30 — после 3-го, до 5-го (12:25) → комната 5-го урока, метка «к 5 уроку»
-        val res = findGroupRoomNow(
-            lessons = listOf(lesson(3, "214"), lesson(5, "101")),
-            currentMinutes = 11 * 60 + 30,
-            dayOfWeek = 1
-        )
+        val res =
+            findGroupRoomNow(
+                lessons = listOf(lesson(3, "214"), lesson(5, "101")),
+                currentMinutes = 11 * 60 + 30,
+                dayOfWeek = 1,
+            )
         assertNotNull(res)
         assertEquals("101", res!!.room)
         assertEquals(5, res.lessonNumber)
@@ -109,18 +113,19 @@ class GroupRoomLookupTest {
     fun afterAllLessons_null() {
         // 20:00 — все уроки закончились, следующего нет
         assertNull(
-            findGroupRoomNow(listOf(lesson(3, "214")), 20 * 60, 1)
+            findGroupRoomNow(listOf(lesson(3, "214")), 20 * 60, 1),
         )
     }
 
     @Test
     fun beforeAllLessons_firstLesson() {
         // 07:30 — до 1-го урока (08:15) → кабинет 1-го урока, «к 1 уроку»
-        val res = findGroupRoomNow(
-            lessons = listOf(lesson(3, "214"), lesson(1, "102")),
-            currentMinutes = 7 * 60 + 30,
-            dayOfWeek = 1
-        )
+        val res =
+            findGroupRoomNow(
+                lessons = listOf(lesson(3, "214"), lesson(1, "102")),
+                currentMinutes = 7 * 60 + 30,
+                dayOfWeek = 1,
+            )
         assertNotNull(res)
         assertEquals("102", res!!.room)
         assertEquals(1, res.lessonNumber)
@@ -132,11 +137,12 @@ class GroupRoomLookupTest {
     @Test
     fun saturdayBellsUsed() {
         // Суббота, 14:00 — между 7-м (13:45–14:30)? нет: 14:00 внутри 7-го урока субботы
-        val res = findGroupRoomNow(
-            lessons = listOf(lesson(7, "305"), lesson(8, "101")),
-            currentMinutes = 14 * 60,
-            dayOfWeek = 6
-        )
+        val res =
+            findGroupRoomNow(
+                lessons = listOf(lesson(7, "305"), lesson(8, "101")),
+                currentMinutes = 14 * 60,
+                dayOfWeek = 6,
+            )
         assertNotNull(res)
         assertEquals("305", res!!.room)
         assertEquals(true, res.isNow)
@@ -159,11 +165,12 @@ class GroupRoomLookupTest {
     fun timeStartFallbackWhenBellMissing() {
         // номер урока вне сетки звонков (например, 11 при пустых звонках дня не находится) —
         // фолбэк на timeStart строки: урок 11 в 17:55, сейчас 12:00 → «к 11 уроку»
-        val res = findGroupRoomNow(
-            lessons = listOf(lesson(11, "214", timeStart = "17:55")),
-            currentMinutes = 12 * 60,
-            dayOfWeek = 1
-        )
+        val res =
+            findGroupRoomNow(
+                lessons = listOf(lesson(11, "214", timeStart = "17:55")),
+                currentMinutes = 12 * 60,
+                dayOfWeek = 1,
+            )
         assertNotNull(res)
         assertEquals("214", res!!.room)
         assertEquals(11, res.lessonNumber)

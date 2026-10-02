@@ -1,14 +1,13 @@
-﻿package com.politex
+package com.politex
 
 import com.politex.data.network.MpkNetworkClient
-import java.net.InetAddress
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import java.net.InetAddress
 
 class LiveNetworkSmokeTest {
-
     @Test
     fun fetchScheduleForGroup_41О_сЖивогоСайта() {
         assumeTrue("guo-mpk.by недоступен из этого окружения", hostReachable())
@@ -31,12 +30,12 @@ class LiveNetworkSmokeTest {
                 assertTrue(
                     "Ожидались уроки 41О (сайт должен отдавать документ на сегодня), " +
                         "диагностика: $diag",
-                    lessons.isNotEmpty()
+                    lessons.isNotEmpty(),
                 )
             },
             onFailure = { e ->
                 throw AssertionError("Сетевой запрос упал: ${e.javaClass.simpleName}: ${e.message}", e)
-            }
+            },
         )
     }
 

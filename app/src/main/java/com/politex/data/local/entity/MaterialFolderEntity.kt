@@ -1,7 +1,6 @@
 package com.politex.data.local.entity
 
 import androidx.room.Entity
-import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
@@ -27,7 +26,7 @@ data class MaterialFolderEntity(
     val name: String,
     val isArchive: Boolean = false,
     val sortOrder: Int = 0,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
 ) {
     companion object {
         /** Предмет-владелец системной папки «Архив» (M3). */

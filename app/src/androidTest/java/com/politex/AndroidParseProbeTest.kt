@@ -1,4 +1,4 @@
-﻿package com.politex
+package com.politex
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -9,13 +9,15 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AndroidParseProbeTest {
-
     private fun log(msg: String) {
         println("MPK_PROBE | $msg")
     }
 
-    private fun realDocBytes(): ByteArray =
-        InstrumentationRegistry.getInstrumentation().context.assets.open("raspisanie-15.09.2026.doc").use { it.readBytes() }
+    private fun realDocBytes(): ByteArray = InstrumentationRegistry
+        .getInstrumentation()
+        .context.assets
+        .open("raspisanie-15.09.2026.doc")
+        .use { it.readBytes() }
 
     @Test
     fun probeEverything() {

@@ -11,16 +11,16 @@ import com.politex.widget.startMinutes
  * Чистая функция (время строкой из LessonEntity.timeStart), чтобы юнит-тест без Robolectric.
  */
 object RouteStartResolver {
-
     /** Номер кабинета текущей/предыдущей пары или null, если ничего не началось / кабинета нет. */
-    fun previousRoomNow(lessons: List<LessonEntity>, nowMinutes: Int): String? =
-        lessons
-            .filter {
-                it.lessonNumber > 0 &&
-                    it.startMinutes() in 0..nowMinutes &&
-                    (it.roomFirst.isNotBlank() || it.roomSecond.isNotBlank())
-            }
-            .maxByOrNull { it.lessonNumber }
-            // ponytail: подгруппу split-пары не определяем — roomFirst, как в findGroupRoomNow
-            ?.let { it.roomFirst.ifBlank { it.roomSecond }.trim() }
+    fun previousRoomNow(
+        lessons: List<LessonEntity>,
+        nowMinutes: Int,
+    ): String? = lessons
+        .filter {
+            it.lessonNumber > 0 &&
+                it.startMinutes() in 0..nowMinutes &&
+                (it.roomFirst.isNotBlank() || it.roomSecond.isNotBlank())
+        }.maxByOrNull { it.lessonNumber }
+        // ponytail: подгруппу split-пары не определяем — roomFirst, как в findGroupRoomNow
+        ?.let { it.roomFirst.ifBlank { it.roomSecond }.trim() }
 }

@@ -31,16 +31,17 @@ import org.robolectric.RobolectricTestRunner
  */
 @RunWith(RobolectricTestRunner::class)
 class MaterialDaoTest {
-
     private lateinit var db: MpkDatabase
     private lateinit var dao: MaterialDao
 
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder(context, MpkDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
+        db =
+            Room
+                .inMemoryDatabaseBuilder(context, MpkDatabase::class.java)
+                .allowMainThreadQueries()
+                .build()
         dao = db.materialDao()
     }
 
@@ -49,32 +50,39 @@ class MaterialDaoTest {
         db.close()
     }
 
-    private fun newFolder(subject: String = "ТОЭ", name: String = "Лекции", isArchive: Boolean = false): Long =
-        runBlocking {
-            dao.insertFolder(
-                MaterialFolderEntity(
-                    subjectName = subject,
-                    name = name,
-                    isArchive = isArchive,
-                    sortOrder = dao.nextFolderSortOrder(subject)
-                )
-            )
-        }
+    private fun newFolder(
+        subject: String = "ТОЭ",
+        name: String = "Лекции",
+        isArchive: Boolean = false,
+    ): Long = runBlocking {
+        dao.insertFolder(
+            MaterialFolderEntity(
+                subjectName = subject,
+                name = name,
+                isArchive = isArchive,
+                sortOrder = dao.nextFolderSortOrder(subject),
+            ),
+        )
+    }
 
-    private fun newItem(folderId: Long, title: String, kind: MaterialKind = MaterialKind.FILE, ext: String = "pdf"): Long =
-        runBlocking {
-            dao.insertItem(
-                MaterialItemEntity(
-                    folderId = folderId,
-                    kind = kind.name,
-                    title = title,
-                    fileName = "$title.$ext",
-                    ext = ext,
-                    uriPath = "/data/files/materials/$title.$ext",
-                    sortOrder = dao.nextItemSortOrder(folderId)
-                )
-            )
-        }
+    private fun newItem(
+        folderId: Long,
+        title: String,
+        kind: MaterialKind = MaterialKind.FILE,
+        ext: String = "pdf",
+    ): Long = runBlocking {
+        dao.insertItem(
+            MaterialItemEntity(
+                folderId = folderId,
+                kind = kind.name,
+                title = title,
+                fileName = "$title.$ext",
+                ext = ext,
+                uriPath = "/data/files/materials/$title.$ext",
+                sortOrder = dao.nextItemSortOrder(folderId),
+            ),
+        )
+    }
 
     private fun titlesIn(folderId: Long): List<String> = runBlocking {
         dao.getForFolder(folderId).first().map { it.title }
@@ -202,7 +210,14 @@ class MaterialDaoTest {
 
         assertEquals(archive, dao.getArchiveFolder()?.id)
         assertEquals("getAllFolders отдаёт и архив тоже", 2, dao.getAllFolders().first().size)
-        assertEquals(folder, dao.getAllFolders().first().first { !it.isArchive }.id)
+        assertEquals(
+            folder,
+            dao
+                .getAllFolders()
+                .first()
+                .first { !it.isArchive }
+                .id,
+        )
     }
 
     @Test

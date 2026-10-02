@@ -18,11 +18,11 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "task_reminders",
-    indices = [Index("taskId")]
+    indices = [Index("taskId")],
 )
 data class TaskReminderEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val taskId: Long,
-    val triggerAtMillis: Long
+    val triggerAtMillis: Long,
 )

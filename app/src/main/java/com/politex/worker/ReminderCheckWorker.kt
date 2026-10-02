@@ -21,9 +21,8 @@ import kotlinx.coroutines.withContext
  */
 class ReminderCheckWorker(
     context: Context,
-    workerParams: WorkerParameters
+    workerParams: WorkerParameters,
 ) : CoroutineWorker(context, workerParams) {
-
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val db = MpkDatabase.getInstance(applicationContext)
         val reminderDao = db.taskReminderDao()
@@ -45,6 +44,7 @@ class ReminderCheckWorker(
 
     companion object {
         const val WORK_NAME = "mpk_reminder_check_worker"
+
         // 15 минут — совпадает с периодом PeriodicWorkRequest, чтобы каждое напоминание
         // попадало ровно в одно due-окно (следующий запуск его уже удалит).
         private const val LOOKAHEAD_MILLIS = 15L * 60L * 1000L

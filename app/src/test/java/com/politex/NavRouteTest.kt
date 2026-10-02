@@ -17,7 +17,6 @@ import java.net.URLDecoder
  * поэтому round-trip проверяется явно.
  */
 class NavRouteTest {
-
     private fun decode(value: String) = URLDecoder.decode(value, "UTF-8")
 
     @Test

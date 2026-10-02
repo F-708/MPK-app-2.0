@@ -9,7 +9,6 @@ import org.junit.Test
  * 8.2/8.3: к какому слоту автопрокручивается список расписания.
  */
 class T8NavigationScrollTest {
-
     @Test
     fun `идёт урок 3 — скроллим к нему`() {
         assertEquals(2, autoScrollLessonIndex(listOf(1, 2, 3, 4), 3, true))

@@ -17,20 +17,27 @@ import org.robolectric.RuntimeEnvironment
  */
 @RunWith(RobolectricTestRunner::class)
 class TeachersCsvParseTest {
-
     private val teachers: List<Teacher> =
         TeachersRepository(RuntimeEnvironment.getApplication()).loadTeachers()
 
     private fun parseOne(line: String): Teacher {
         val p = line.split(';')
+
         fun cell(i: Int): String {
             val v = p.getOrElse(i) { "" }.trim()
             return if (v.isEmpty() || v == "—" || v == "–" || v == "-") "" else v
         }
         return Teacher(
-            name = cell(0), position = cell(1), subjects = cell(2), room = cell(3),
-            phone = cell(4), email = cell(5), photo = cell(6), department = cell(7),
-            experience = cell(8), category = cell(9)
+            name = cell(0),
+            position = cell(1),
+            subjects = cell(2),
+            room = cell(3),
+            phone = cell(4),
+            email = cell(5),
+            photo = cell(6),
+            department = cell(7),
+            experience = cell(8),
+            category = cell(9),
         )
     }
 
@@ -62,10 +69,15 @@ class TeachersCsvParseTest {
 
     @Test
     fun `все строки реального CSV имеют 10 полей`() {
-        val lines = RuntimeEnvironment.getApplication().assets.open("teachers.csv")
-            .bufferedReader(Charsets.UTF_8).readLines()
-            .map { it.trim() }
-            .filter { it.isNotBlank() && !it.startsWith("#") }
+        val lines =
+            RuntimeEnvironment
+                .getApplication()
+                .assets
+                .open("teachers.csv")
+                .bufferedReader(Charsets.UTF_8)
+                .readLines()
+                .map { it.trim() }
+                .filter { it.isNotBlank() && !it.startsWith("#") }
         assertTrue(lines.isNotEmpty())
         for (l in lines) {
             assertEquals("строка не из 10 полей: $l", 10, l.split(';').size)

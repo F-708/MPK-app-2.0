@@ -15,7 +15,6 @@ import org.junit.Test
  * выбор пользователя, а неизвестный id безопасно откатывается на фирменную.
  */
 class AppThemeTest {
-
     @Test
     fun `выбор пользователя читается по id`() {
         AppTheme.entries.forEach { theme ->
@@ -46,11 +45,13 @@ class AppThemeTest {
         AppTheme.entries.filter { it != AppTheme.COLLEGE }.forEach { theme ->
             assertNotEquals(
                 "${theme.title}: шапка должна отличаться от фирменной",
-                AppTheme.COLLEGE.palette.topBar, theme.palette.topBar
+                AppTheme.COLLEGE.palette.topBar,
+                theme.palette.topBar,
             )
             assertNotEquals(
                 "${theme.title}: акцент должен отличаться от фирменной",
-                AppTheme.COLLEGE.palette.brandBlue, theme.palette.brandBlue
+                AppTheme.COLLEGE.palette.brandBlue,
+                theme.palette.brandBlue,
             )
         }
     }
@@ -66,7 +67,7 @@ class AppThemeTest {
             val luminance = 0.299 * fill.red + 0.587 * fill.green + 0.114 * fill.blue
             assertTrue(
                 "${theme.title}: brandFill слишком светлый для белого текста (luma=$luminance)",
-                luminance < 0.6f
+                luminance < 0.6f,
             )
         }
     }

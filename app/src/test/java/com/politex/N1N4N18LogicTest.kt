@@ -26,7 +26,6 @@ import org.junit.Test
  *  - N18 — маппинг TaskType→цвет бейджа и урок→типы заданий.
  */
 class N1N4N18LogicTest {
-
     // ---------- N1: исход «рукопожатия» по кодам HEAD и GET-Range ----------
 
     @Test
@@ -99,34 +98,58 @@ class N1N4N18LogicTest {
 
     // ---------- N18: урок → типы заданий дня ----------
 
-    private fun lesson(num: Int, subject: String, date: String, dow: Int) = LessonEntity(
-        groupName = "41О", dayOfWeek = dow, lessonNumber = num,
-        timeStart = "08:15", timeEnd = "09:55", subjectRaw = subject,
-        roomFirst = "204", teacherFirst = "Ковалев В.П.", dateString = date
+    private fun lesson(
+        num: Int,
+        subject: String,
+        date: String,
+        dow: Int,
+    ) = LessonEntity(
+        groupName = "41О",
+        dayOfWeek = dow,
+        lessonNumber = num,
+        timeStart = "08:15",
+        timeEnd = "09:55",
+        subjectRaw = subject,
+        roomFirst = "204",
+        teacherFirst = "Ковалев В.П.",
+        dateString = date,
     )
 
-    private fun task(subject: String, type: String, deadline: String) = StudentTaskEntity(
-        groupName = "41О", course = 4, subjectName = subject,
-        taskType = type, title = "t", deadlineDate = deadline
+    private fun task(
+        subject: String,
+        type: String,
+        deadline: String,
+    ) = StudentTaskEntity(
+        groupName = "41О",
+        course = 4,
+        subjectName = subject,
+        taskType = type,
+        title = "t",
+        deadlineDate = deadline,
     )
 
     @Test
     fun `N18 урок собирает все типы заданий дня (дедуплик)`() {
         val day = HomeworkMarkers.DayContext(dayIso = "2026-10-05", isToday = false, isPast = false)
         val lessons = listOf(lesson(1, "ТОЭ", "05.10.2026", 1))
-        val tasks = listOf(
-            task("ТОЭ", "Домашнее задание", "2026-10-05"),
-            task("ТОЭ", "Лабораторная работа", "2026-10-05"),
-            // дубль того же типа — должен схлопнуться
-            task("ТОЭ", "Домашнее задание", "2026-10-05"),
-            // чужой предмет — не матчится
-            task("Математика", "Домашнее задание", "2026-10-05")
-        )
+        val tasks =
+            listOf(
+                task("ТОЭ", "Домашнее задание", "2026-10-05"),
+                task("ТОЭ", "Лабораторная работа", "2026-10-05"),
+                // дубль того же типа — должен схлопнуться
+                task("ТОЭ", "Домашнее задание", "2026-10-05"),
+                // чужой предмет — не матчится
+                task("Математика", "Домашнее задание", "2026-10-05"),
+            )
 
-        val byLesson = HomeworkMarkers.markerLessonTypes(
-            dayLessons = lessons, day = day, nowMillis = 0L,
-            weeklyLessonsByDow = emptyMap(), pendingTasks = tasks
-        )
+        val byLesson =
+            HomeworkMarkers.markerLessonTypes(
+                dayLessons = lessons,
+                day = day,
+                nowMillis = 0L,
+                weeklyLessonsByDow = emptyMap(),
+                pendingTasks = tasks,
+            )
 
         assertEquals(setOf(1), byLesson.keys)
         assertEquals(listOf(TaskType.HOMEWORK, TaskType.LAB_WORK), byLesson[1])
@@ -138,14 +161,22 @@ class N1N4N18LogicTest {
         val lessons = listOf(lesson(1, "ТОЭ", "05.10.2026", 1), lesson(2, "Физика", "05.10.2026", 1))
         val tasks = listOf(task("ТОЭ", "Домашнее задание", "2026-10-05"))
 
-        val numbers = HomeworkMarkers.markerLessonNumbers(
-            dayLessons = lessons, day = day, nowMillis = 0L,
-            weeklyLessonsByDow = emptyMap(), pendingTasks = tasks
-        )
-        val types = HomeworkMarkers.markerLessonTypes(
-            dayLessons = lessons, day = day, nowMillis = 0L,
-            weeklyLessonsByDow = emptyMap(), pendingTasks = tasks
-        )
+        val numbers =
+            HomeworkMarkers.markerLessonNumbers(
+                dayLessons = lessons,
+                day = day,
+                nowMillis = 0L,
+                weeklyLessonsByDow = emptyMap(),
+                pendingTasks = tasks,
+            )
+        val types =
+            HomeworkMarkers.markerLessonTypes(
+                dayLessons = lessons,
+                day = day,
+                nowMillis = 0L,
+                weeklyLessonsByDow = emptyMap(),
+                pendingTasks = tasks,
+            )
         assertEquals(numbers, types.keys)
         assertEquals(setOf(1), numbers)
     }
@@ -156,10 +187,14 @@ class N1N4N18LogicTest {
         val lessons = listOf(lesson(1, "ТОЭ", "01.10.2026", 4))
         val tasks = listOf(task("ТОЭ", "Домашнее задание", "2026-10-01"))
         assertTrue(
-            HomeworkMarkers.markerLessonTypes(
-                dayLessons = lessons, day = past, nowMillis = 0L,
-                weeklyLessonsByDow = emptyMap(), pendingTasks = tasks
-            ).isEmpty()
+            HomeworkMarkers
+                .markerLessonTypes(
+                    dayLessons = lessons,
+                    day = past,
+                    nowMillis = 0L,
+                    weeklyLessonsByDow = emptyMap(),
+                    pendingTasks = tasks,
+                ).isEmpty(),
         )
     }
 
@@ -167,10 +202,11 @@ class N1N4N18LogicTest {
 
     @Test
     fun `N4 точная дата приоритетнее шаблона дня недели`() {
-        val rows = listOf(
-            lesson(1, "ТОЭ", "05.10.2026", 1),   // точная дата
-            lesson(2, "Химия", "", 1)            // шаблон дня недели (пн)
-        )
+        val rows =
+            listOf(
+                lesson(1, "ТОЭ", "05.10.2026", 1), // точная дата
+                lesson(2, "Химия", "", 1), // шаблон дня недели (пн)
+            )
         val exact = lessonsForDay(rows, activeDateString = "05.10.2026", activeDayOfWeek = 1)
         assertEquals(1, exact.size)
         assertEquals(1, exact[0].lessonNumber)
@@ -178,10 +214,11 @@ class N1N4N18LogicTest {
 
     @Test
     fun `N4 нет точной даты — фолбэк на шаблон нужного дня недели`() {
-        val rows = listOf(
-            lesson(1, "ТОЭ", "", 1),   // пн
-            lesson(2, "Химия", "", 2)  // вт
-        )
+        val rows =
+            listOf(
+                lesson(1, "ТОЭ", "", 1), // пн
+                lesson(2, "Химия", "", 2), // вт
+            )
         val tue = lessonsForDay(rows, activeDateString = "06.10.2026", activeDayOfWeek = 2)
         assertEquals(1, tue.size)
         assertEquals(2, tue[0].lessonNumber)

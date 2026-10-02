@@ -14,16 +14,15 @@ import org.junit.Test
  * ломает одиночный разбор.
  */
 class AllGroupsParseTest {
-
-    private fun fixture(name: String): ByteArray =
-        javaClass.classLoader!!.getResourceAsStream(name)!!.readBytes()
+    private fun fixture(name: String): ByteArray = javaClass.classLoader!!.getResourceAsStream(name)!!.readBytes()
 
     private val groups = listOf("41О", "21М", "31П", "11А", "42Э")
 
     @Test
     fun `перебор групп не возвращает ничего лишнего при пустом списке групп`() {
-        val bytes = runCatching { fixture("16.09.2026-raspisanie-prepodavatelej.doc") }.getOrNull()
-            ?: return
+        val bytes =
+            runCatching { fixture("16.09.2026-raspisanie-prepodavatelej.doc") }.getOrNull()
+                ?: return
         assertTrue(MpkScheduleParser.parseFileAllGroups(bytes, "16.09.2026", emptyList()).isEmpty())
     }
 
@@ -40,7 +39,7 @@ class AllGroupsParseTest {
         val all = MpkScheduleParser.parseFileAllGroups(bytes, "16.09.2026", groups)
         assertTrue(
             "по всем группам (${all.size}) должно быть не меньше, чем по одной (${one.size})",
-            all.size >= one.size
+            all.size >= one.size,
         )
     }
 

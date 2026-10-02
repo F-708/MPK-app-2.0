@@ -10,6 +10,7 @@ import com.politex.data.local.entity.MaterialFolderEntity
 import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.data.local.entity.MaterialKind
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
@@ -17,7 +18,6 @@ import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import kotlin.coroutines.coroutineContext
 import kotlin.math.max
-import kotlinx.coroutines.ensureActive
 
 /**
  * M3: то, что выбрано в диалоге импорта и ещё не положено на диск.
@@ -25,9 +25,17 @@ import kotlinx.coroutines.ensureActive
  * TEXT — текст, набранный в приложении (байтов нет вообще).
  */
 sealed interface PendingMaterial {
-    data class SingleFile(val uri: Uri) : PendingMaterial
-    data class Images(val uris: List<Uri>) : PendingMaterial
-    data class Text(val text: String) : PendingMaterial
+    data class SingleFile(
+        val uri: Uri,
+    ) : PendingMaterial
+
+    data class Images(
+        val uris: List<Uri>,
+    ) : PendingMaterial
+
+    data class Text(
+        val text: String,
+    ) : PendingMaterial
 }
 
 /**
@@ -44,7 +52,6 @@ sealed interface PendingMaterial {
  * (порядок в `uriPath` = порядок страниц в просмотрщике).
  */
 object MaterialImporter {
-
     /** Подкаталог filesDir, где живут все материалы. */
     const val STORAGE_DIR_NAME = "materials"
 
@@ -62,11 +69,13 @@ object MaterialImporter {
     /** Расширения изображений, которые SAF отдаёт по маске image (см. пикер набора изображений). */
     private val IMAGE_EXT = setOf("jpg", "jpeg", "png", "webp", "bmp", "gif", "heic", "heif")
 
-    fun storageDir(context: Context): File =
-        File(context.filesDir, STORAGE_DIR_NAME).apply { if (!exists()) mkdirs() }
+    fun storageDir(context: Context): File = File(context.filesDir, STORAGE_DIR_NAME).apply { if (!exists()) mkdirs() }
 
     /** Имя файла из SAF (DISPLAY_NAME), с откатом на lastPathSegment. */
-    fun queryDisplayName(context: Context, uri: Uri): String {
+    fun queryDisplayName(
+        context: Context,
+        uri: Uri,
+    ): String {
         runCatching {
             context.contentResolver.query(uri, null, null, null, null)?.use { c ->
                 val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -86,7 +95,10 @@ object MaterialImporter {
     fun titleOf(fileName: String): String = fileName.substringBeforeLast('.', fileName).ifBlank { fileName }
 
     /** MIME → расширение, когда в имени файла точки нет (SAF такое отдаёт регулярно). */
-    fun extFromMime(context: Context, uri: Uri): String = when (context.contentResolver.getType(uri)) {
+    fun extFromMime(
+        context: Context,
+        uri: Uri,
+    ): String = when (context.contentResolver.getType(uri)) {
         "application/pdf" -> "pdf"
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> "docx"
         "application/msword" -> "doc"
@@ -99,24 +111,28 @@ object MaterialImporter {
     }
 
     /** Скопировать байты SAF-Uri в хранилище материалов. Отменяемо, на Dispatchers.IO. */
-    suspend fun copyToStorage(context: Context, uri: Uri, fileName: String): File =
-        withContext(Dispatchers.IO) {
-            val target = File(storageDir(context), fileName)
-            val input = context.contentResolver.openInputStream(uri)
+    suspend fun copyToStorage(
+        context: Context,
+        uri: Uri,
+        fileName: String,
+    ): File = withContext(Dispatchers.IO) {
+        val target = File(storageDir(context), fileName)
+        val input =
+            context.contentResolver.openInputStream(uri)
                 ?: throw IOException("Не удалось открыть файл (нет доступа к выбранному документу)")
-            input.use { source ->
-                target.outputStream().use { out ->
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        coroutineContext.ensureActive()
-                        val read = source.read(buffer)
-                        if (read < 0) break
-                        out.write(buffer, 0, read)
-                    }
+        input.use { source ->
+            target.outputStream().use { out ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    coroutineContext.ensureActive()
+                    val read = source.read(buffer)
+                    if (read < 0) break
+                    out.write(buffer, 0, read)
                 }
             }
-            target
         }
+        target
+    }
 
     /** Число страниц PDF (0, если файл не PDF или повреждён — просмотрщик тогда сам разберётся). */
     suspend fun pdfPageCount(file: File): Int = withContext(Dispatchers.IO) {
@@ -137,20 +153,26 @@ object MaterialImporter {
 
     internal fun decodeSmart(bytes: ByteArray): String {
         runCatching {
-            Charsets.UTF_8.newDecoder()
+            Charsets.UTF_8
+                .newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
                 .onUnmappableCharacter(CodingErrorAction.REPORT)
                 .decode(ByteBuffer.wrap(bytes))
         }.getOrNull()?.let { return it.toString() }
-        return runCatching { String(bytes, java.nio.charset.Charset.forName("windows-1251")) }
-            .getOrDefault(String(bytes))
+        return runCatching {
+            String(
+                bytes,
+                java.nio.charset.Charset
+                    .forName("windows-1251"),
+            )
+        }.getOrDefault(String(bytes))
     }
 
     /** Текст DOCX для поиска (пустая строка, если файл не читается). */
     suspend fun readDocxText(file: File): String = withContext(Dispatchers.IO) {
         runCatching {
             DocxTextExtractor.toPlainText(
-                file.inputStream().use { DocxTextExtractor.extract(it) }
+                file.inputStream().use { DocxTextExtractor.extract(it) },
             )
         }.getOrDefault("")
     }
@@ -187,7 +209,7 @@ object MaterialImporter {
         context: Context,
         dao: MaterialDao,
         folderId: Long,
-        pending: PendingMaterial
+        pending: PendingMaterial,
     ): Long {
         val sortOrder = dao.nextItemSortOrder(folderId)
         val now = System.currentTimeMillis()
@@ -196,8 +218,13 @@ object MaterialImporter {
             is PendingMaterial.Text -> {
                 val text = pending.text.trim()
                 require(text.isNotEmpty()) { "Пустой текст материала" }
-                val title = text.lineSequence().first { it.isNotBlank() }
-                    .trim().take(60).ifBlank { "Заметка" }
+                val title =
+                    text
+                        .lineSequence()
+                        .first { it.isNotBlank() }
+                        .trim()
+                        .take(60)
+                        .ifBlank { "Заметка" }
                 dao.insertItem(
                     MaterialItemEntity(
                         folderId = folderId,
@@ -206,25 +233,26 @@ object MaterialImporter {
                         ext = "txt",
                         sortOrder = sortOrder,
                         textContent = text.take(MAX_INDEXED_CHARS),
-                        createdAt = now
-                    )
+                        createdAt = now,
+                    ),
                 )
             }
 
             is PendingMaterial.SingleFile -> {
                 val name = queryDisplayName(context, pending.uri)
                 val ext = extOf(name).ifBlank { extFromMime(context, pending.uri) }
-                val id = dao.insertItem(
-                    MaterialItemEntity(
-                        folderId = folderId,
-                        kind = MaterialKind.FILE.name,
-                        title = titleOf(name),
-                        fileName = name,
-                        ext = ext,
-                        sortOrder = sortOrder,
-                        createdAt = now
+                val id =
+                    dao.insertItem(
+                        MaterialItemEntity(
+                            folderId = folderId,
+                            kind = MaterialKind.FILE.name,
+                            title = titleOf(name),
+                            fileName = name,
+                            ext = ext,
+                            sortOrder = sortOrder,
+                            createdAt = now,
+                        ),
                     )
-                )
                 finalizeFileImport(context, dao, id, pending.uri, ext, name)
             }
 
@@ -232,20 +260,25 @@ object MaterialImporter {
                 require(pending.uris.isNotEmpty()) { "Не выбрано ни одного изображения" }
                 val firstName = queryDisplayName(context, pending.uris.first())
                 val ext = extOf(firstName).ifBlank { "jpg" }.let { if (it in IMAGE_EXT) it else "jpg" }
-                val title = if (pending.uris.size == 1) titleOf(firstName)
-                else "${titleOf(firstName)} (набор: ${pending.uris.size})"
-                val id = dao.insertItem(
-                    MaterialItemEntity(
-                        folderId = folderId,
-                        kind = MaterialKind.IMAGES.name,
-                        title = title,
-                        fileName = firstName,
-                        ext = ext,
-                        pageCount = pending.uris.size,
-                        sortOrder = sortOrder,
-                        createdAt = now
+                val title =
+                    if (pending.uris.size == 1) {
+                        titleOf(firstName)
+                    } else {
+                        "${titleOf(firstName)} (набор: ${pending.uris.size})"
+                    }
+                val id =
+                    dao.insertItem(
+                        MaterialItemEntity(
+                            folderId = folderId,
+                            kind = MaterialKind.IMAGES.name,
+                            title = title,
+                            fileName = firstName,
+                            ext = ext,
+                            pageCount = pending.uris.size,
+                            sortOrder = sortOrder,
+                            createdAt = now,
+                        ),
                     )
-                )
                 val copied = ArrayList<String>(pending.uris.size)
                 try {
                     pending.uris.forEachIndexed { index, uri ->
@@ -256,8 +289,8 @@ object MaterialImporter {
                     dao.updateItem(
                         requireNotNull(dao.getItemById(id)).copy(
                             uriPath = copied.joinToString("\n"),
-                            textContent = text
-                        )
+                            textContent = text,
+                        ),
                     )
                 } catch (t: Throwable) {
                     rollback(dao, id, copied.joinToString("\n"))
@@ -275,17 +308,18 @@ object MaterialImporter {
         itemId: Long,
         uri: Uri,
         ext: String,
-        originalName: String
+        originalName: String,
     ): Long {
         var stored: File? = null
         try {
             stored = copyToStorage(context, uri, "$itemId.$ext")
             val pages = if (ext == "pdf") pdfPageCount(stored) else 0
-            val text = when {
-                ext == "docx" -> readDocxText(stored)
-                ext in PLAIN_TEXT_EXT -> readTextFile(stored)
-                else -> ""
-            }
+            val text =
+                when {
+                    ext == "docx" -> readDocxText(stored)
+                    ext in PLAIN_TEXT_EXT -> readTextFile(stored)
+                    else -> ""
+                }
             val row = requireNotNull(dao.getItemById(itemId)) { "Строка материала исчезла во время импорта" }
             dao.updateItem(
                 row.copy(
@@ -293,8 +327,8 @@ object MaterialImporter {
                     pageCount = pages,
                     textContent = text.take(MAX_INDEXED_CHARS),
                     ext = if (ext.isBlank()) row.ext else ext,
-                    title = row.title.ifBlank { titleOf(originalName) }
-                )
+                    title = row.title.ifBlank { titleOf(originalName) },
+                ),
             )
             return itemId
         } catch (t: Throwable) {
@@ -312,7 +346,11 @@ object MaterialImporter {
     private fun extractImageSetSearchText(firstName: String): String = titleOf(firstName)
 
     /** Сбой импорта: стираем строку и уже записанные байты, чтобы не оставлять мусор. */
-    private suspend fun rollback(dao: MaterialDao, itemId: Long, uriPath: String) {
+    private suspend fun rollback(
+        dao: MaterialDao,
+        itemId: Long,
+        uriPath: String,
+    ) {
         runCatching {
             uriPath.split('\n').forEach { if (it.isNotBlank()) File(it).delete() }
             dao.deleteBookmarksForItem(itemId)
@@ -332,8 +370,8 @@ object MaterialImporter {
                 name = MaterialFolderEntity.ARCHIVE_NAME,
                 isArchive = true,
                 sortOrder = Int.MAX_VALUE,
-                createdAt = System.currentTimeMillis()
-            )
+                createdAt = System.currentTimeMillis(),
+            ),
         )
     }
 }

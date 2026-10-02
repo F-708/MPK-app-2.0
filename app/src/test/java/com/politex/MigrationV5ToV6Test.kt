@@ -44,7 +44,7 @@ class MigrationV5ToV6Test {
                                 "`timeEnd` TEXT NOT NULL, `subjectRaw` TEXT NOT NULL, " +
                                 "`roomFirst` TEXT NOT NULL, `teacherFirst` TEXT NOT NULL, " +
                                 "`roomSecond` TEXT NOT NULL, `teacherSecond` TEXT NOT NULL, " +
-                                "`isSplit` INTEGER NOT NULL, `dateString` TEXT NOT NULL)"
+                                "`isSplit` INTEGER NOT NULL, `dateString` TEXT NOT NULL)",
                         )
                         db.execSQL("CREATE INDEX IF NOT EXISTS `index_lessons_groupName_dayOfWeek` ON `lessons` (`groupName`, `dayOfWeek`)")
                         db.execSQL("CREATE INDEX IF NOT EXISTS `index_lessons_groupName_dateString` ON `lessons` (`groupName`, `dateString`)")
@@ -58,7 +58,7 @@ class MigrationV5ToV6Test {
                                 "`subjectName` TEXT NOT NULL, `taskType` TEXT NOT NULL, " +
                                 "`title` TEXT NOT NULL, `description` TEXT NOT NULL, " +
                                 "`isCompleted` INTEGER NOT NULL, `deadlineDate` TEXT NOT NULL, " +
-                                "`createdAt` INTEGER NOT NULL)"
+                                "`createdAt` INTEGER NOT NULL)",
                         )
                         db.execSQL(
                             "CREATE TABLE IF NOT EXISTS `teacher_lessons` (" +
@@ -66,27 +66,27 @@ class MigrationV5ToV6Test {
                                 "`teacherName` TEXT NOT NULL, `surnameKey` TEXT NOT NULL, " +
                                 "`dateString` TEXT NOT NULL, `dayOfWeek` INTEGER NOT NULL, " +
                                 "`lessonNumber` INTEGER NOT NULL, `groups` TEXT NOT NULL, " +
-                                "`subject` TEXT NOT NULL, `room` TEXT NOT NULL)"
+                                "`subject` TEXT NOT NULL, `room` TEXT NOT NULL)",
                         )
                         db.execSQL(
                             "CREATE INDEX IF NOT EXISTS `index_teacher_lessons_surnameKey_dateString` " +
-                                "ON `teacher_lessons` (`surnameKey`, `dateString`)"
+                                "ON `teacher_lessons` (`surnameKey`, `dateString`)",
                         )
                         db.execSQL(
                             "CREATE TABLE IF NOT EXISTS `task_reminders` (" +
                                 "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-                                "`taskId` INTEGER NOT NULL, `triggerAtMillis` INTEGER NOT NULL)"
+                                "`taskId` INTEGER NOT NULL, `triggerAtMillis` INTEGER NOT NULL)",
                         )
                         db.execSQL(
                             "CREATE INDEX IF NOT EXISTS `index_task_reminders_taskId` " +
-                                "ON `task_reminders` (`taskId`)"
+                                "ON `task_reminders` (`taskId`)",
                         )
                         db.execSQL(
                             "CREATE TABLE IF NOT EXISTS `material_folders` (" +
                                 "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
                                 "`subjectName` TEXT NOT NULL, `name` TEXT NOT NULL, " +
                                 "`isArchive` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, " +
-                                "`createdAt` INTEGER NOT NULL)"
+                                "`createdAt` INTEGER NOT NULL)",
                         )
                         db.execSQL(
                             "CREATE TABLE IF NOT EXISTS `material_items` (" +
@@ -96,32 +96,32 @@ class MigrationV5ToV6Test {
                                 "`ext` TEXT NOT NULL, `uriPath` TEXT NOT NULL, " +
                                 "`pageCount` INTEGER NOT NULL, `lastPage` INTEGER NOT NULL, " +
                                 "`rotationDeg` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, " +
-                                "`textContent` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)"
+                                "`textContent` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)",
                         )
                         db.execSQL("CREATE INDEX IF NOT EXISTS `index_material_items_folderId` ON `material_items` (`folderId`)")
                         db.execSQL(
                             "CREATE TABLE IF NOT EXISTS `material_bookmarks` (" +
                                 "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
                                 "`itemId` INTEGER NOT NULL, `page` INTEGER NOT NULL, " +
-                                "`label` TEXT NOT NULL)"
+                                "`label` TEXT NOT NULL)",
                         )
                         db.execSQL("CREATE INDEX IF NOT EXISTS `index_material_bookmarks_itemId` ON `material_bookmarks` (`itemId`)")
                     }
 
                     override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
                 })
-                .build()
+                .build(),
         )
         helper.writableDatabase.use { db ->
             db.execSQL("PRAGMA user_version = 5")
             db.execSQL(
                 "INSERT INTO student_tasks " +
                     "(groupName, course, subjectName, taskType, title, description, isCompleted, deadlineDate, createdAt) " +
-                    "VALUES ('$group', 4, 'ТОЭ', 'Домашнее задание', 'Лаба по ТОЭ', '', 0, '2026-10-05', 1234567890)"
+                    "VALUES ('$group', 4, 'ТОЭ', 'Домашнее задание', 'Лаба по ТОЭ', '', 0, '2026-10-05', 1234567890)",
             )
             db.execSQL(
                 "INSERT INTO material_folders (subjectName, name, isArchive, sortOrder, createdAt) " +
-                    "VALUES ('ТОЭ', 'Лекции', 0, 0, 1234567890)"
+                    "VALUES ('ТОЭ', 'Лекции', 0, 0, 1234567890)",
             )
         }
     }
@@ -161,8 +161,8 @@ class MigrationV5ToV6Test {
                     category = "REGULAR",
                     value = 8,
                     label = "Практ. №1",
-                    dateIso = "2026-10-01"
-                )
+                    dateIso = "2026-10-01",
+                ),
             )
         }
         val entries = runBlocking { gradeDao.entriesForSubject("ТОЭ").first() }
@@ -184,7 +184,7 @@ class MigrationV5ToV6Test {
     private fun resetSingleton() {
         try {
             val cls = Class.forName("com.politex.data.local.MpkDatabase")
-            val field = cls.getDeclaredField("INSTANCE")
+            val field = cls.getDeclaredField("instance")
             field.isAccessible = true
             field.set(null, null)
         } catch (_: Exception) {

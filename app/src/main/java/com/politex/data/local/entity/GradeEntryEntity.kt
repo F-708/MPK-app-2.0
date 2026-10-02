@@ -26,5 +26,5 @@ data class GradeEntryEntity(
     val value: Int,
     val label: String = "",
     val dateIso: String,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
 )

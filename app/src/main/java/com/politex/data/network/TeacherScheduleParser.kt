@@ -1,4 +1,4 @@
-﻿package com.politex.data.network
+package com.politex.data.network
 
 import java.io.ByteArrayInputStream
 import java.nio.charset.Charset
@@ -12,11 +12,10 @@ data class TeacherSlot(
     val subject: String,
     val room: String,
     /** День недели 1..6, извлечённый из заголовка документа; 0 = неизвестен. */
-    val dayOfWeek: Int = 0
+    val dayOfWeek: Int = 0,
 )
 
 object TeacherScheduleParser {
-
     private val CP1251 = Charset.forName("windows-1251")
 
     private val GROUP_REGEX = Regex("^([1-4])([1-9])([\\u0410-\\u042F])$")
@@ -33,9 +32,11 @@ object TeacherScheduleParser {
     // dowFromHeaderText возвращал null, dayOfWeek у слотов оставался 0, и UI (CollegeScreen)
     // по ветке «docDow == 0 → показать все» показывал пары под ЛЮБОЙ выбранной датой.
     // Покрываем все падежные формы (ПЯТНИЦА/ПЯТНИЦУ/ПЯТНИЦЕ и т.п.).
-    private val HEADER_DOW_REGEX = Regex(
-        "ПОНЕДЕЛЬНИК|ВТОРНИК|СРЕД[АУЕ]|ЧЕТВЕРГ|ПЯТНИЦ[АУЕ]|СУББОТ", RegexOption.IGNORE_CASE
-    )
+    private val HEADER_DOW_REGEX =
+        Regex(
+            "ПОНЕДЕЛЬНИК|ВТОРНИК|СРЕД[АУЕ]|ЧЕТВЕРГ|ПЯТНИЦ[АУЕ]|СУББОТ",
+            RegexOption.IGNORE_CASE,
+        )
 
     /** День недели из строки заголовка вида «║ СРЕДА 16.09.2026 ║». */
     fun dowFromHeaderText(text: String): Int? {
@@ -69,19 +70,20 @@ object TeacherScheduleParser {
     }
 
     /** Дата «дд.ММ.гггг» из строки, либо null. */
-    fun dateFromHeaderText(text: String): String? =
-        DATE_DOT_REGEX.find(text)?.value
+    fun dateFromHeaderText(text: String): String? = DATE_DOT_REGEX.find(text)?.value
 
     /** Дата в формате БД «дд.ММ.гггг» по календарю — для сравнения с датой запрошенного файла. */
-    fun dotDate(cal: java.util.Calendar): String =
-        SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(cal.time)
+    fun dotDate(cal: java.util.Calendar): String = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(cal.time)
 
     /**
      * O7: проверка, что скачанный документ — действительно за запрошенную дату.
      * Документ дня содержит дату в заголовке; если она не совпадает с запрошенной,
      * показывать его нельзя (иначе под выбранной датой окажутся пары другого дня).
      */
-    fun matchesRequestedDate(text: String, requested: java.util.Calendar): Boolean {
+    fun matchesRequestedDate(
+        text: String,
+        requested: java.util.Calendar,
+    ): Boolean {
         val header = findHeaderLine(text) ?: return false
         val inDocDate = dateFromHeaderText(header)
         // Точная дата в документе — сверяем по ней (сравнение календарём, не строкой)
@@ -117,7 +119,7 @@ object TeacherScheduleParser {
         data class Cell(
             val groups: MutableList<String> = mutableListOf(),
             val rooms: MutableList<String> = mutableListOf(),
-            var subject: String = ""
+            var subject: String = "",
         )
 
         // Документ дня содержит заголовок «1 НЕДЕЛЯ ║ СРЕДА 16.09.2026»: помечаем слоты днём.
@@ -125,12 +127,13 @@ object TeacherScheduleParser {
         // даты самого документа. Если и даты нет — 0 («неизвестен»), и UI обязан показать
         // честное пустое состояние, а не пары под произвольной датой.
         val headerLine = findHeaderLine(text)
-        val headerDow = headerLine?.let { line ->
-            dowFromHeaderText(line)
-                ?: dateFromHeaderText(line)
-                    ?.let { dot -> MpkScheduleParser.parseDotDate(dot) }
-                    ?.let { cal -> MpkScheduleParser.dowOfCalendar(cal) }
-        } ?: 0
+        val headerDow =
+            headerLine?.let { line ->
+                dowFromHeaderText(line)
+                    ?: dateFromHeaderText(line)
+                        ?.let { dot -> MpkScheduleParser.parseDotDate(dot) }
+                        ?.let { cal -> MpkScheduleParser.dowOfCalendar(cal) }
+            } ?: 0
 
         val result = mutableMapOf<String, MutableMap<Int, Cell>>()
         var currentTeacher: String? = null
@@ -152,7 +155,9 @@ object TeacherScheduleParser {
                 if (line.contains("НЕДЕЛЯ", ignoreCase = true) ||
                     HEADER_DOW_REGEX.containsMatchIn(line) ||
                     DATE_DOT_REGEX.containsMatchIn(line)
-                ) headerSeen = true
+                ) {
+                    headerSeen = true
+                }
                 return@forEach
             }
 
@@ -184,18 +189,18 @@ object TeacherScheduleParser {
             }
         }
 
-        return result.mapValues { (_, byLesson) ->
-            byLesson.entries.sortedBy { it.key }.map { (lessonNumber, cell) ->
-                TeacherSlot(
-                    lessonNumber = lessonNumber,
-                    groups = cell.groups.distinct(),
-                    subject = cell.subject,
-
-                    room = cell.rooms.firstOrNull().orEmpty(),
-                    dayOfWeek = headerDow
-                )
-            }
-        }.filterValues { it.isNotEmpty() }
+        return result
+            .mapValues { (_, byLesson) ->
+                byLesson.entries.sortedBy { it.key }.map { (lessonNumber, cell) ->
+                    TeacherSlot(
+                        lessonNumber = lessonNumber,
+                        groups = cell.groups.distinct(),
+                        subject = cell.subject,
+                        room = cell.rooms.firstOrNull().orEmpty(),
+                        dayOfWeek = headerDow,
+                    )
+                }
+            }.filterValues { it.isNotEmpty() }
     }
 
     /**
@@ -240,12 +245,15 @@ object TeacherScheduleParser {
             val isCyrillic = b1 == 0x04 && b0 <= 0x5F
             val isBoxDrawing = b1 == 0x25
             if (isAscii || isCyrillic || isBoxDrawing) {
-                buffer.add(bytes[i]); buffer.add(bytes[i + 1]); i += 2
+                buffer.add(bytes[i])
+                buffer.add(bytes[i + 1])
+                i += 2
             } else {
                 if (buffer.size >= 6) {
                     runs.add(String(buffer.toByteArray(), Charsets.UTF_16LE))
                 }
-                buffer.clear(); i += 2
+                buffer.clear()
+                i += 2
             }
         }
         if (buffer.size >= 6) runs.add(String(buffer.toByteArray(), Charsets.UTF_16LE))
@@ -257,9 +265,14 @@ object TeacherScheduleParser {
         val buffer = mutableListOf<Byte>()
         for (b in bytes) {
             val unsigned = b.toInt() and 0xFF
-            val isValid = (unsigned in 0x20..0x7E) || (unsigned >= 0xC0) ||
-                unsigned == 0xA8 || unsigned == 0xB8 ||
-                unsigned == 0x09 || unsigned == 0x0A || unsigned == 0x0D
+            val isValid =
+                (unsigned in 0x20..0x7E) ||
+                    (unsigned >= 0xC0) ||
+                    unsigned == 0xA8 ||
+                    unsigned == 0xB8 ||
+                    unsigned == 0x09 ||
+                    unsigned == 0x0A ||
+                    unsigned == 0x0D
             if (isValid) {
                 buffer.add(b)
             } else {
@@ -274,8 +287,7 @@ object TeacherScheduleParser {
         return runs.joinToString("\n")
     }
 
-    private fun parseDocx(bytes: ByteArray): Map<String, List<TeacherSlot>>? =
-        parseDocxText(bytes)?.let { parsePlainText(it) }
+    private fun parseDocx(bytes: ByteArray): Map<String, List<TeacherSlot>>? = parseDocxText(bytes)?.let { parsePlainText(it) }
 
     private fun xmlToPseudoTable(xml: String): String {
         val sb = StringBuilder()
@@ -286,8 +298,11 @@ object TeacherScheduleParser {
             val rowXml = xml.substring(rowMatch.range.first, rowEnd)
             sb.append('│')
             Regex("<w:t[^>]*>([^<]*)</w:t>").findAll(rowXml).forEach { textMatch ->
-                if (cellIndex == 0) sb.append(textMatch.groupValues[1]).append('║')
-                else sb.append(textMatch.groupValues[1]).append('│')
+                if (cellIndex == 0) {
+                    sb.append(textMatch.groupValues[1]).append('║')
+                } else {
+                    sb.append(textMatch.groupValues[1]).append('│')
+                }
                 cellIndex++
             }
             sb.append('\n')

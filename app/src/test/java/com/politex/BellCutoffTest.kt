@@ -16,7 +16,6 @@ import org.junit.Test
  * SATURDAY: 6-й урок 12:50–13:35, 8-й 14:40–15:25.
  */
 class BellCutoffTest {
-
     private val standard = CollegeBellSchedule.getBellsForDay(1)
     private val saturday = CollegeBellSchedule.getBellsForDay(6)
 
@@ -26,16 +25,25 @@ class BellCutoffTest {
     fun hiddenBefore0700EvenIfLessonsLater() {
         assertNull(
             BellCountdownWidgetProvider.countdownForMinute(
-                6 * 60 + 59, 1, standard, CountdownMode.GROUP_LESSONS, 6
-            )
+                6 * 60 + 59,
+                1,
+                standard,
+                CountdownMode.GROUP_LESSONS,
+                6,
+            ),
         )
     }
 
     @Test
     fun visibleAt0700Sharp() {
-        val info = BellCountdownWidgetProvider.countdownForMinute(
-            7 * 60, 1, standard, CountdownMode.GROUP_LESSONS, 6
-        )
+        val info =
+            BellCountdownWidgetProvider.countdownForMinute(
+                7 * 60,
+                1,
+                standard,
+                CountdownMode.GROUP_LESSONS,
+                6,
+            )
         // 07:00 < 08:15 → «до 1 урока», 75 мин.
         assertEquals(75L, info?.first)
         assertEquals("до 1 урока", info?.second)
@@ -46,9 +54,14 @@ class BellCutoffTest {
     @Test
     fun groupLessons_stillVisibleInsideLastLesson() {
         // 13:30 внутри 6-го урока (13:20–14:05): «до звонка», 35 мин.
-        val info = BellCountdownWidgetProvider.countdownForMinute(
-            13 * 60 + 30, 1, standard, CountdownMode.GROUP_LESSONS, 6
-        )
+        val info =
+            BellCountdownWidgetProvider.countdownForMinute(
+                13 * 60 + 30,
+                1,
+                standard,
+                CountdownMode.GROUP_LESSONS,
+                6,
+            )
         assertNotNull(info)
         assertEquals("до звонка", info!!.second)
         assertEquals(6, info.third)
@@ -58,9 +71,14 @@ class BellCutoffTest {
     @Test
     fun groupLessons_lastMinuteOfLastLessonStillCounts() {
         // 14:05 — последняя (включительно) минута 6-го урока: 0 мин, не скрыто.
-        val info = BellCountdownWidgetProvider.countdownForMinute(
-            14 * 60 + 5, 1, standard, CountdownMode.GROUP_LESSONS, 6
-        )
+        val info =
+            BellCountdownWidgetProvider.countdownForMinute(
+                14 * 60 + 5,
+                1,
+                standard,
+                CountdownMode.GROUP_LESSONS,
+                6,
+            )
         assertNotNull(info)
         assertEquals(0L, info!!.first)
         assertEquals(6, info.third)
@@ -71,8 +89,12 @@ class BellCutoffTest {
         // Уроки группы кончились в 14:05 → в 14:06 строки уже нет (главный баг Т10).
         assertNull(
             BellCountdownWidgetProvider.countdownForMinute(
-                14 * 60 + 6, 1, standard, CountdownMode.GROUP_LESSONS, 6
-            )
+                14 * 60 + 6,
+                1,
+                standard,
+                CountdownMode.GROUP_LESSONS,
+                6,
+            ),
         )
     }
 
@@ -81,8 +103,12 @@ class BellCutoffTest {
         // 14:10 — перемена после последнего урока группы: НЕ «до 7 урока», а скрыто.
         assertNull(
             BellCountdownWidgetProvider.countdownForMinute(
-                14 * 60 + 10, 1, standard, CountdownMode.GROUP_LESSONS, 6
-            )
+                14 * 60 + 10,
+                1,
+                standard,
+                CountdownMode.GROUP_LESSONS,
+                6,
+            ),
         )
     }
 
@@ -91,17 +117,26 @@ class BellCutoffTest {
         // 16:00: у группы 6 уроков, колледж ещё занимается (7–12) — строки нет.
         assertNull(
             BellCountdownWidgetProvider.countdownForMinute(
-                16 * 60, 1, standard, CountdownMode.GROUP_LESSONS, 6
-            )
+                16 * 60,
+                1,
+                standard,
+                CountdownMode.GROUP_LESSONS,
+                6,
+            ),
         )
     }
 
     @Test
     fun groupLessons_breakBetweenGroupLessons_countsToNextGroupLesson() {
         // 12:10 — большая перемена (после 4-го, 11:15–12:00): «до 5 урока», 15 мин.
-        val info = BellCountdownWidgetProvider.countdownForMinute(
-            12 * 60 + 10, 1, standard, CountdownMode.GROUP_LESSONS, 6
-        )
+        val info =
+            BellCountdownWidgetProvider.countdownForMinute(
+                12 * 60 + 10,
+                1,
+                standard,
+                CountdownMode.GROUP_LESSONS,
+                6,
+            )
         assertNotNull(info)
         assertEquals("до 5 урока", info!!.second)
         assertEquals(15L, info.first)
@@ -110,9 +145,14 @@ class BellCutoffTest {
     @Test
     fun groupLessons_smallBreakBeforeLastLesson() {
         // 13:12 — перемена после 5-го (12:25–13:10): «до 6 урока», 8 мин.
-        val info = BellCountdownWidgetProvider.countdownForMinute(
-            13 * 60 + 12, 1, standard, CountdownMode.GROUP_LESSONS, 6
-        )
+        val info =
+            BellCountdownWidgetProvider.countdownForMinute(
+                13 * 60 + 12,
+                1,
+                standard,
+                CountdownMode.GROUP_LESSONS,
+                6,
+            )
         assertNotNull(info)
         assertEquals("до 6 урока", info!!.second)
         assertEquals(8L, info.first)
@@ -124,8 +164,12 @@ class BellCutoffTest {
         for (minute in intArrayOf(7 * 60, 10 * 60, 15 * 60, 20 * 60)) {
             assertNull(
                 BellCountdownWidgetProvider.countdownForMinute(
-                    minute, 1, standard, CountdownMode.GROUP_LESSONS, null
-                )
+                    minute,
+                    1,
+                    standard,
+                    CountdownMode.GROUP_LESSONS,
+                    null,
+                ),
             )
         }
     }
@@ -135,9 +179,14 @@ class BellCutoffTest {
     @Test
     fun saturday_visibleDuringLastLesson() {
         // Сб, 15:00 внутри 8-го урока (14:40–15:25): 25 мин.
-        val info = BellCountdownWidgetProvider.countdownForMinute(
-            15 * 60, 6, saturday, CountdownMode.GROUP_LESSONS, 8
-        )
+        val info =
+            BellCountdownWidgetProvider.countdownForMinute(
+                15 * 60,
+                6,
+                saturday,
+                CountdownMode.GROUP_LESSONS,
+                8,
+            )
         assertNotNull(info)
         assertEquals(8, info!!.third)
         assertEquals(25L, info.first)
@@ -147,8 +196,12 @@ class BellCutoffTest {
     fun saturday_hiddenAfterLastLesson() {
         assertNull(
             BellCountdownWidgetProvider.countdownForMinute(
-                15 * 60 + 26, 6, saturday, CountdownMode.GROUP_LESSONS, 8
-            )
+                15 * 60 + 26,
+                6,
+                saturday,
+                CountdownMode.GROUP_LESSONS,
+                8,
+            ),
         )
     }
 
@@ -157,8 +210,12 @@ class BellCutoffTest {
         // Сб, у группы 6 уроков (конец 13:35): в 13:36 скрыто, хотя 7–8 идут до 15:25.
         assertNull(
             BellCountdownWidgetProvider.countdownForMinute(
-                13 * 60 + 36, 6, saturday, CountdownMode.GROUP_LESSONS, 6
-            )
+                13 * 60 + 36,
+                6,
+                saturday,
+                CountdownMode.GROUP_LESSONS,
+                6,
+            ),
         )
     }
 
@@ -168,9 +225,14 @@ class BellCutoffTest {
     fun allBells_visibleDuringLateLesson() {
         // 18:00 внутри 11-го урока (17:55–18:40): «до звонка», 40 мин —
         // режим колледжа игнорирует cutoff группы.
-        val info = BellCountdownWidgetProvider.countdownForMinute(
-            18 * 60, 1, standard, CountdownMode.ALL_BELLS, null
-        )
+        val info =
+            BellCountdownWidgetProvider.countdownForMinute(
+                18 * 60,
+                1,
+                standard,
+                CountdownMode.ALL_BELLS,
+                null,
+            )
         assertNotNull(info)
         assertEquals("до звонка", info!!.second)
         assertEquals(40L, info.first)
@@ -181,8 +243,12 @@ class BellCutoffTest {
         // 19:36 — минута после конца 12-го урока (19:35): скрыто и в ALL_BELLS.
         assertNull(
             BellCountdownWidgetProvider.countdownForMinute(
-                19 * 60 + 36, 1, standard, CountdownMode.ALL_BELLS, null
-            )
+                19 * 60 + 36,
+                1,
+                standard,
+                CountdownMode.ALL_BELLS,
+                null,
+            ),
         )
     }
 
@@ -192,13 +258,21 @@ class BellCutoffTest {
     fun sunday_hiddenAllDay_bothModes() {
         assertNull(
             BellCountdownWidgetProvider.countdownForMinute(
-                12 * 60, 7, standard, CountdownMode.GROUP_LESSONS, 6
-            )
+                12 * 60,
+                7,
+                standard,
+                CountdownMode.GROUP_LESSONS,
+                6,
+            ),
         )
         assertNull(
             BellCountdownWidgetProvider.countdownForMinute(
-                12 * 60, 7, standard, CountdownMode.ALL_BELLS, null
-            )
+                12 * 60,
+                7,
+                standard,
+                CountdownMode.ALL_BELLS,
+                null,
+            ),
         )
     }
 }

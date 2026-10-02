@@ -42,7 +42,7 @@ class MigrationV3ToV4Test {
                                 "`timeEnd` TEXT NOT NULL, `subjectRaw` TEXT NOT NULL, " +
                                 "`roomFirst` TEXT NOT NULL, `teacherFirst` TEXT NOT NULL, " +
                                 "`roomSecond` TEXT NOT NULL, `teacherSecond` TEXT NOT NULL, " +
-                                "`isSplit` INTEGER NOT NULL, `dateString` TEXT NOT NULL)"
+                                "`isSplit` INTEGER NOT NULL, `dateString` TEXT NOT NULL)",
                         )
                         db.execSQL("CREATE INDEX IF NOT EXISTS `index_lessons_groupName_dayOfWeek` ON `lessons` (`groupName`, `dayOfWeek`)")
                         db.execSQL("CREATE INDEX IF NOT EXISTS `index_lessons_groupName_dateString` ON `lessons` (`groupName`, `dateString`)")
@@ -56,7 +56,7 @@ class MigrationV3ToV4Test {
                                 "`subjectName` TEXT NOT NULL, `taskType` TEXT NOT NULL, " +
                                 "`title` TEXT NOT NULL, `description` TEXT NOT NULL, " +
                                 "`isCompleted` INTEGER NOT NULL, `deadlineDate` TEXT NOT NULL, " +
-                                "`createdAt` INTEGER NOT NULL)"
+                                "`createdAt` INTEGER NOT NULL)",
                         )
                         db.execSQL(
                             "CREATE TABLE IF NOT EXISTS `teacher_lessons` (" +
@@ -64,30 +64,30 @@ class MigrationV3ToV4Test {
                                 "`teacherName` TEXT NOT NULL, `surnameKey` TEXT NOT NULL, " +
                                 "`dateString` TEXT NOT NULL, `dayOfWeek` INTEGER NOT NULL, " +
                                 "`lessonNumber` INTEGER NOT NULL, `groups` TEXT NOT NULL, " +
-                                "`subject` TEXT NOT NULL, `room` TEXT NOT NULL)"
+                                "`subject` TEXT NOT NULL, `room` TEXT NOT NULL)",
                         )
                         db.execSQL(
                             "CREATE INDEX IF NOT EXISTS `index_teacher_lessons_surnameKey_dateString` " +
-                                "ON `teacher_lessons` (`surnameKey`, `dateString`)"
+                                "ON `teacher_lessons` (`surnameKey`, `dateString`)",
                         )
                     }
 
                     override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
                 })
-                .build()
+                .build(),
         )
         helper.writableDatabase.use { db ->
             db.execSQL("PRAGMA user_version = 3")
             db.execSQL(
                 "INSERT INTO student_tasks " +
                     "(groupName, course, subjectName, taskType, title, description, isCompleted, deadlineDate, createdAt) " +
-                    "VALUES ('$group', 4, 'ТОЭ', 'Домашнее задание', 'Лаба по ТОЭ', '', 0, '2026-10-05', 1234567890)"
+                    "VALUES ('$group', 4, 'ТОЭ', 'Домашнее задание', 'Лаба по ТОЭ', '', 0, '2026-10-05', 1234567890)",
             )
             db.execSQL(
                 "INSERT INTO lessons " +
                     "(groupName, dayOfWeek, lessonNumber, timeStart, timeEnd, subjectRaw, roomFirst, " +
                     "teacherFirst, roomSecond, teacherSecond, isSplit, dateString) " +
-                    "VALUES ('$group', 3, 1, '08:15', '09:00', 'Математика', '229', 'Иванов И.И.', '', '', 0, '01.10.2026')"
+                    "VALUES ('$group', 3, 1, '08:15', '09:00', 'Математика', '229', 'Иванов И.И.', '', '', 0, '01.10.2026')",
             )
         }
     }
@@ -129,7 +129,7 @@ class MigrationV3ToV4Test {
             .use { c -> while (c.moveToNext()) indexNames.add(c.getString(0)) }
         assertTrue(
             "индекс index_task_reminders_taskId должен существовать, есть: $indexNames",
-            indexNames.contains("index_task_reminders_taskId")
+            indexNames.contains("index_task_reminders_taskId"),
         )
     }
 
@@ -137,7 +137,7 @@ class MigrationV3ToV4Test {
     private fun resetSingleton() {
         try {
             val cls = Class.forName("com.politex.data.local.MpkDatabase")
-            val field = cls.getDeclaredField("INSTANCE")
+            val field = cls.getDeclaredField("instance")
             field.isAccessible = true
             field.set(null, null)
         } catch (_: Exception) {

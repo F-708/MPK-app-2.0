@@ -16,9 +16,8 @@ import com.politex.widget.BellCountdownWidgetProvider
  */
 class BellServiceWatchdogWorker(
     context: Context,
-    params: WorkerParameters
+    params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
-
     override suspend fun doWork(): Result {
         val ctx = applicationContext
         if (BellCountdownNotifier.isEnabled(ctx) && !BellTimerService.isRunning) {

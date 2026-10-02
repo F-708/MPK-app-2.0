@@ -13,15 +13,14 @@ import org.junit.Test
  * Чистый JVM-тест: FuzzySearch не трогает Android, Robolectric здесь только замедлил бы прогон.
  */
 class FuzzySearchTest {
-
     // ── Расстояние Даммерау-Левенштейна ──────────────────────────────────────
 
     @Test
     fun `расстояние считает замены вставки и удаления`() {
         assertEquals(0, FuzzySearch.damerauLevenshtein("abc", "abc"))
-        assertEquals(1, FuzzySearch.damerauLevenshtein("abc", "abd"))   // замена
-        assertEquals(1, FuzzySearch.damerauLevenshtein("abc", "ab"))    // удаление
-        assertEquals(1, FuzzySearch.damerauLevenshtein("abc", "abcd"))  // вставка
+        assertEquals(1, FuzzySearch.damerauLevenshtein("abc", "abd")) // замена
+        assertEquals(1, FuzzySearch.damerauLevenshtein("abc", "ab")) // удаление
+        assertEquals(1, FuzzySearch.damerauLevenshtein("abc", "abcd")) // вставка
         assertEquals(3, FuzzySearch.damerauLevenshtein("kitten", "sitting"))
         assertEquals(3, FuzzySearch.damerauLevenshtein("", "abc"))
     }
@@ -146,10 +145,11 @@ class FuzzySearchTest {
 
     @Test
     fun `поиск по длинному тексту с опечаткой в середине`() {
-        val text = buildString {
-            repeat(200) { append("обычный текст конспекта номер $it. ") }
-            append("Электротехника и электроника — раздел про цепи")
-        }
+        val text =
+            buildString {
+                repeat(200) { append("обычный текст конспекта номер $it. ") }
+                append("Электротехника и электроника — раздел про цепи")
+            }
         assertTrue(FuzzySearch.score(text, "эликтротехника цепи") > 0)
     }
 }

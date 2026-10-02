@@ -18,13 +18,12 @@ import kotlinx.coroutines.flow.Flow
  */
 @Dao
 interface GradeDao {
-
     @Query("SELECT * FROM grade_entries")
     fun allEntries(): Flow<List<GradeEntryEntity>>
 
     @Query(
         "SELECT * FROM grade_entries WHERE subjectName = :subjectName " +
-            "ORDER BY dateIso ASC, id ASC"
+            "ORDER BY dateIso ASC, id ASC",
     )
     fun entriesForSubject(subjectName: String): Flow<List<GradeEntryEntity>>
 

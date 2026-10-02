@@ -1,4 +1,4 @@
-﻿package com.politex.ui.screens
+package com.politex.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -34,28 +35,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.politex.data.local.MpkDatabase
 import com.politex.data.model.CollegeBellSchedule
-import com.politex.data.model.GroupInfo
 import com.politex.data.repository.ScheduleRepository
 import com.politex.data.repository.Student
-import com.politex.data.repository.StudentsRepository
 import com.politex.data.repository.Teacher
+import com.politex.data.repository.TeacherInsights
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -65,17 +64,13 @@ import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
-import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStylePageTitle
-import com.politex.data.repository.TeachersRepository
-import com.politex.data.repository.TeacherInsights
-import androidx.compose.material3.CircularProgressIndicator
 import com.politex.ui.util.bouncyClickable
-import java.util.Calendar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Calendar
 
 private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
@@ -85,7 +80,7 @@ private val ADMIN_GOLD = Color(0xFFE8C55A)
 fun StudentsDatabaseScreen(
     onBack: () -> Unit,
     onOpenStudent: (Student) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     // E2: 800 КБ CSV не парсятся на main-thread — produceState + IO; кэш репозитория
@@ -104,8 +99,11 @@ fun StudentsDatabaseScreen(
     val filtered = remember(students, searchQuery, groupFilter, courseFilter) {
         val q = searchQuery.trim().lowercase()
         students.filter { s ->
-            (q.isBlank() || s.fullName.lowercase().contains(q) ||
-                s.curator.lowercase().contains(q)) &&
+            (
+                q.isBlank() ||
+                    s.fullName.lowercase().contains(q) ||
+                    s.curator.lowercase().contains(q)
+                ) &&
                 (groupFilter.isBlank() || s.group == groupFilter) &&
                 (courseFilter.isBlank() || s.course == courseFilter)
         }
@@ -114,14 +112,13 @@ fun StudentsDatabaseScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ColorBgMain)
+            .background(ColorBgMain),
     ) {
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             BackButton(onBack)
             Spacer(modifier = Modifier.width(8.dp))
@@ -131,13 +128,13 @@ fun StudentsDatabaseScreen(
                         imageVector = Icons.Default.AdminPanelSettings,
                         contentDescription = null,
                         tint = ADMIN_ACCENT,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(22.dp),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "База данных учащихся",
                         style = TextStylePageTitle.copy(fontSize = 22.sp),
-                        maxLines = 1
+                        maxLines = 1,
                     )
                 }
                 Text(
@@ -145,8 +142,8 @@ fun StudentsDatabaseScreen(
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp,
-                        color = ADMIN_ACCENT
-                    )
+                        color = ADMIN_ACCENT,
+                    ),
                 )
             }
         }
@@ -155,7 +152,7 @@ fun StudentsDatabaseScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(ColorDividerLight)
+                .background(ColorDividerLight),
         )
 
         OutlinedTextField(
@@ -169,32 +166,32 @@ fun StudentsDatabaseScreen(
                 focusedContainerColor = ColorSurfaceVariantLight,
                 unfocusedContainerColor = ColorSurfaceVariantLight,
                 focusedIndicatorColor = ADMIN_ACCENT,
-                unfocusedIndicatorColor = ColorBorderLight
+                unfocusedIndicatorColor = ColorBorderLight,
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
         )
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilterDropdown(
                 label = if (groupFilter.isBlank()) "Группа" else groupFilter,
                 options = groups,
                 selected = groupFilter,
                 onSelect = { groupFilter = it },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
             FilterDropdown(
                 label = if (courseFilter.isBlank()) "Курс" else courseFilter,
                 options = courses,
                 selected = courseFilter,
                 onSelect = { courseFilter = it },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
         }
 
@@ -204,7 +201,7 @@ fun StudentsDatabaseScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(24.dp),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
@@ -212,9 +209,9 @@ fun StudentsDatabaseScreen(
                         style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
-                            color = ColorTextTitle
+                            color = ColorTextTitle,
                         ),
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Surface(
@@ -227,7 +224,7 @@ fun StudentsDatabaseScreen(
                                 groupFilter = ""
                                 courseFilter = ""
                             }
-                            .testTag("students_reset_filters_btn")
+                            .testTag("students_reset_filters_btn"),
                     ) {
                         Text(
                             text = "СБРОСИТЬ ФИЛЬТРЫ",
@@ -236,9 +233,9 @@ fun StudentsDatabaseScreen(
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
-                                color = Color.White
+                                color = Color.White,
                             ),
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                         )
                     }
                 }
@@ -247,7 +244,7 @@ fun StudentsDatabaseScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 items(filtered) { student ->
                     StudentRow(student) { onOpenStudent(student) }
@@ -263,7 +260,7 @@ private fun FilterDropdown(
     options: List<String>,
     selected: String,
     onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
@@ -273,27 +270,33 @@ private fun FilterDropdown(
             color = ColorBgMain,
             modifier = Modifier
                 .fillMaxWidth()
-                .bouncyClickable { expanded = true }
+                .bouncyClickable { expanded = true },
         ) {
             Text(
                 text = label,
                 style = androidx.compose.ui.text.TextStyle(
                     fontWeight = FontWeight.Medium,
                     fontSize = 12.sp,
-                    color = ColorTextBody
+                    color = ColorTextBody,
                 ),
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             )
         }
         androidx.compose.material3.DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             androidx.compose.material3.DropdownMenuItem(
                 text = { Text("Все") },
-                onClick = { onSelect(""); expanded = false }
+                onClick = {
+                    onSelect("")
+                    expanded = false
+                },
             )
             options.forEach { opt ->
                 androidx.compose.material3.DropdownMenuItem(
                     text = { Text(opt) },
-                    onClick = { onSelect(opt); expanded = false }
+                    onClick = {
+                        onSelect(opt)
+                        expanded = false
+                    },
                 )
             }
         }
@@ -310,23 +313,23 @@ private fun StudentRow(student: Student, onClick: () -> Unit) {
             .fillMaxWidth()
             // A2: строка результата 48dp (контент тот же — паддинг добирает высоту)
             .heightIn(min = 48.dp)
-            .bouncyClickable(onClick = onClick)
+            .bouncyClickable(onClick = onClick),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier = Modifier
                     .size(34.dp)
                     .background(ADMIN_BG, RoundedCornerShape(2.dp)),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = student.group,
                     color = Color(0xFFE8C55A),
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp
+                    fontSize = 11.sp,
                 )
             }
             Spacer(modifier = Modifier.width(10.dp))
@@ -336,22 +339,22 @@ private fun StudentRow(student: Student, onClick: () -> Unit) {
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
-                        color = ColorTextTitle
-                    )
+                        color = ColorTextTitle,
+                    ),
                 )
                 Text(
                     text = listOf(student.course + " курс", student.funding).filter { it.isNotBlank() }.joinToString(" • "),
                     style = androidx.compose.ui.text.TextStyle(
                         fontSize = 11.sp,
-                        color = ColorTextMuted
-                    )
+                        color = ColorTextMuted,
+                    ),
                 )
             }
             Icon(
                 imageVector = Icons.Default.PersonSearch,
                 contentDescription = null,
                 tint = ADMIN_ACCENT,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(16.dp),
             )
         }
     }
@@ -362,7 +365,7 @@ fun StudentCardScreen(
     student: Student,
     scheduleRepository: ScheduleRepository,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val now = remember { Calendar.getInstance() }
@@ -420,21 +423,22 @@ fun StudentCardScreen(
         isLoading = true
         loadMessage = ""
         scope.launch {
-
             val result = scheduleRepository.syncScheduleFromWeb(student.group, force = force)
             loadMessage = result.fold(
                 onSuccess = { count ->
-                    if (count > 0) "Загружено уроков: $count"
-                    else "Группы ${student.group} нет в опубликованном расписании на эту дату"
+                    if (count > 0) {
+                        "Загружено уроков: $count"
+                    } else {
+                        "Группы ${student.group} нет в опубликованном расписании на эту дату"
+                    }
                 },
-                onFailure = { "Не удалось загрузить (проверьте интернет)" }
+                onFailure = { "Не удалось загрузить (проверьте интернет)" },
             )
             isLoading = false
         }
     }
 
     LaunchedEffect(student.group) {
-
         if (!scheduleRepository.hasSchedule(student.group)) {
             loadSchedule(force = false)
         }
@@ -453,7 +457,9 @@ fun StudentCardScreen(
         val currentNum = bells.firstOrNull { minutes in it.startMinutes..it.endMinutes }?.lessonNumber
         if (currentNum != null && currentNum > 0) {
             todayLessons.firstOrNull { it.lessonNumber == currentNum }
-        } else null
+        } else {
+            null
+        }
     }
     val nextLesson = remember(todayLessons, minutes, currentLesson) {
         todayLessons.filter { it.lessonNumber > (currentLesson?.lessonNumber ?: 0) }
@@ -463,13 +469,13 @@ fun StudentCardScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ColorBgMain)
+            .background(ColorBgMain),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             BackButton(onBack)
             Spacer(modifier = Modifier.width(8.dp))
@@ -477,19 +483,19 @@ fun StudentCardScreen(
                 Text(
                     text = student.fullName,
                     style = TextStylePageTitle.copy(fontSize = 19.sp),
-                    maxLines = 2
+                    maxLines = 2,
                 )
                 Text(
                     text = listOf(
                         "Группа ${student.group}",
-                        if (student.course.isNotBlank()) "${student.course} курс" else ""
+                        if (student.course.isNotBlank()) "${student.course} курс" else "",
                     ).filter { it.isNotBlank() }.joinToString(" • "),
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp,
-                        color = ADMIN_ACCENT
+                        color = ADMIN_ACCENT,
                     ),
-                    maxLines = 1
+                    maxLines = 1,
                 )
             }
 
@@ -499,21 +505,21 @@ fun StudentCardScreen(
                 color = ColorBgMain,
                 modifier = Modifier
                     .size(36.dp)
-                    .bouncyClickable { loadSchedule() }
+                    .bouncyClickable { loadSchedule() },
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     if (isLoading) {
                         CircularProgressIndicator(
                             color = ADMIN_ACCENT,
                             strokeWidth = 2.dp,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(16.dp),
                         )
                     } else {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Обновить расписание группы",
                             tint = ADMIN_ACCENT,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }
@@ -524,7 +530,7 @@ fun StudentCardScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(ColorDividerLight)
+                .background(ColorDividerLight),
         )
 
         if (loadMessage.isNotBlank()) {
@@ -534,12 +540,12 @@ fun StudentCardScreen(
                 border = BorderStroke(1.dp, ColorBorderLight),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
             ) {
                 Text(
                     text = loadMessage,
                     style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                 )
             }
         }
@@ -547,15 +553,14 @@ fun StudentCardScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
                     border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         InfoLine("Специальность", student.specialty)
@@ -574,8 +579,8 @@ fun StudentCardScreen(
                                     "не будет — проверьте группу и курс.",
                                 style = androidx.compose.ui.text.TextStyle(
                                     fontSize = 12.sp,
-                                    color = Color(0xFFB3261E)
-                                )
+                                    color = Color(0xFFB3261E),
+                                ),
                             )
                         }
                     }
@@ -589,7 +594,7 @@ fun StudentCardScreen(
                     border = BorderStroke(1.dp, ADMIN_ACCENT),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("student_where_now")
+                        .testTag("student_where_now"),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
@@ -597,8 +602,8 @@ fun StudentCardScreen(
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
-                                color = ADMIN_GOLD
-                            )
+                                color = ADMIN_GOLD,
+                            ),
                         )
                         Spacer(modifier = Modifier.height(6.dp))
 
@@ -609,8 +614,8 @@ fun StudentCardScreen(
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp,
-                                        color = Color.White
-                                    )
+                                        color = Color.White,
+                                    ),
                                 )
                                 Text(
                                     text = buildString {
@@ -622,8 +627,8 @@ fun StudentCardScreen(
                                     },
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontSize = 13.sp,
-                                        color = Color(0xFFD9CBA8)
-                                    )
+                                        color = Color(0xFFD9CBA8),
+                                    ),
                                 )
                                 val teacher = listOf(currentLesson.teacherFirst, currentLesson.teacherSecond)
                                     .filter { it.isNotBlank() }
@@ -633,8 +638,8 @@ fun StudentCardScreen(
                                         text = teacher,
                                         style = androidx.compose.ui.text.TextStyle(
                                             fontSize = 12.sp,
-                                            color = Color(0xFFB8A87F)
-                                        )
+                                            color = Color(0xFFB8A87F),
+                                        ),
                                     )
                                 }
                             }
@@ -644,14 +649,15 @@ fun StudentCardScreen(
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 15.sp,
-                                        color = Color.White
-                                    )
+                                        color = Color.White,
+                                    ),
                                 )
                             }
                             else -> {
                                 val bells = CollegeBellSchedule.getBellsForDay(dow)
                                 val breakNow = bells.firstOrNull {
-                                    it.breakAfterMinutes > 0 && minutes > it.endMinutes &&
+                                    it.breakAfterMinutes > 0 &&
+                                        minutes > it.endMinutes &&
                                         minutes < it.endMinutes + it.breakAfterMinutes
                                 }
                                 Text(
@@ -665,16 +671,16 @@ fun StudentCardScreen(
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 15.sp,
-                                        color = Color.White
-                                    )
+                                        color = Color.White,
+                                    ),
                                 )
                                 if (nextLesson != null) {
                                     Text(
                                         text = "Следующий: урок ${nextLesson.lessonNumber} в ${nextLesson.timeStart} — ${nextLesson.subjectRaw}",
                                         style = androidx.compose.ui.text.TextStyle(
                                             fontSize = 13.sp,
-                                            color = Color(0xFFD9CBA8)
-                                        )
+                                            color = Color(0xFFD9CBA8),
+                                        ),
                                     )
                                 }
                             }
@@ -690,8 +696,8 @@ fun StudentCardScreen(
                         style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
-                            color = ADMIN_ACCENT
-                        )
+                            color = ADMIN_ACCENT,
+                        ),
                     )
                 }
                 items(insights.activeNames.sorted()) { teacherName ->
@@ -701,7 +707,7 @@ fun StudentCardScreen(
                         shape = RoundedCornerShape(2.dp),
                         color = ColorBgMain,
                         border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                             Text(
@@ -709,17 +715,17 @@ fun StudentCardScreen(
                                 style = androidx.compose.ui.text.TextStyle(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
-                                    color = ColorTextTitle
-                                )
+                                    color = ColorTextTitle,
+                                ),
                             )
                             if (subjects.isNotEmpty()) {
                                 Text(
                                     text = subjects.take(3).joinToString("; "),
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontSize = 11.sp,
-                                        color = ColorTextMuted
+                                        color = ColorTextMuted,
                                     ),
-                                    maxLines = 2
+                                    maxLines = 2,
                                 )
                             }
                             if (rooms.isNotEmpty()) {
@@ -727,9 +733,9 @@ fun StudentCardScreen(
                                     text = "каб. ${rooms.take(4).joinToString(", ")}",
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontSize = 11.sp,
-                                        color = ColorBrandBlue
+                                        color = ColorBrandBlue,
                                     ),
-                                    maxLines = 1
+                                    maxLines = 1,
                                 )
                             }
                         }
@@ -745,8 +751,8 @@ fun StudentCardScreen(
                         style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
-                            color = ADMIN_ACCENT
-                        )
+                            color = ADMIN_ACCENT,
+                        ),
                     )
                 }
                 items(subjects) { subject ->
@@ -754,12 +760,12 @@ fun StudentCardScreen(
                         shape = RoundedCornerShape(2.dp),
                         color = ColorSurfaceVariantLight,
                         border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
                             text = subject,
                             style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextBody),
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         )
                     }
                 }
@@ -769,7 +775,7 @@ fun StudentCardScreen(
                 Column {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         DayMode.entries.forEach { mode ->
                             val selected = dayMode == mode
@@ -779,7 +785,10 @@ fun StudentCardScreen(
                                 border = BorderStroke(1.dp, ADMIN_ACCENT),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .bouncyClickable { dayMode = mode; calendarDate = null }
+                                    .bouncyClickable {
+                                        dayMode = mode
+                                        calendarDate = null
+                                    },
                             ) {
                                 Text(
                                     text = mode.title,
@@ -787,11 +796,11 @@ fun StudentCardScreen(
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
-                                        color = if (selected) Color.White else ADMIN_ACCENT
+                                        color = if (selected) Color.White else ADMIN_ACCENT,
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 8.dp)
+                                        .padding(vertical = 8.dp),
                                 )
                             }
                         }
@@ -807,8 +816,8 @@ fun StudentCardScreen(
                         style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
-                            color = ColorBrandBlue
-                        )
+                            color = ColorBrandBlue,
+                        ),
                     )
                 }
             }
@@ -820,19 +829,19 @@ fun StudentCardScreen(
                             shape = RoundedCornerShape(2.dp),
                             color = ColorSurfaceVariantLight,
                             border = BorderStroke(1.dp, ColorBorderLight),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(
                                 text = "Архив расписания группы пуст — нажмите «Обновить» справа сверху",
                                 style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextMuted),
-                                modifier = Modifier.padding(12.dp)
+                                modifier = Modifier.padding(12.dp),
                             )
                         }
                     }
                 } else {
                     item {
                         LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             items(availableDates) { date ->
                                 val selected = date == calendarDate
@@ -840,16 +849,16 @@ fun StudentCardScreen(
                                     shape = RoundedCornerShape(2.dp),
                                     color = if (selected) ADMIN_ACCENT else ColorBgMain,
                                     border = BorderStroke(1.dp, ADMIN_ACCENT),
-                                    modifier = Modifier.bouncyClickable { calendarDate = date }
+                                    modifier = Modifier.bouncyClickable { calendarDate = date },
                                 ) {
                                     Text(
                                         text = date,
                                         style = androidx.compose.ui.text.TextStyle(
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.sp,
-                                            color = if (selected) Color.White else ColorTextBody
+                                            color = if (selected) Color.White else ColorTextBody,
                                         ),
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                     )
                                 }
                             }
@@ -865,7 +874,7 @@ fun StudentCardScreen(
                         shape = RoundedCornerShape(2.dp),
                         color = ColorSurfaceVariantLight,
                         border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
                             text = when {
@@ -875,7 +884,7 @@ fun StudentCardScreen(
                                 else -> "На сегодня уроков нет"
                             },
                             style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextMuted),
-                            modifier = Modifier.padding(12.dp)
+                            modifier = Modifier.padding(12.dp),
                         )
                     }
                 }
@@ -885,31 +894,31 @@ fun StudentCardScreen(
                         shape = RoundedCornerShape(2.dp),
                         color = ColorSurfaceVariantLight,
                         border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
                                 text = "${lesson.lessonNumber}",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
-                                color = ColorBrandBlue
+                                color = ColorBrandBlue,
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = lesson.subjectRaw,
-                                    style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextBody)
+                                    style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextBody),
                                 )
                                 Text(
                                     text = listOf(
                                         "${lesson.timeStart}–${lesson.timeEnd}",
                                         lesson.teacherFirst,
-                                        lesson.roomFirst.takeIf { it.isNotBlank() }?.let { "каб. $it" } ?: ""
+                                        lesson.roomFirst.takeIf { it.isNotBlank() }?.let { "каб. $it" } ?: "",
                                     ).filter { it.isNotBlank() }.joinToString(" • "),
-                                    style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = ColorTextMuted)
+                                    style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                                 )
                             }
                         }
@@ -923,24 +932,25 @@ fun StudentCardScreen(
 private enum class DayMode(val title: String) {
     TODAY("Сегодня"),
     TOMORROW("Завтра"),
-    CALENDAR("Календарь")
+    CALENDAR("Календарь"),
 }
 
 @Composable
-private fun BackButton(onBack: () -> Unit) {    Surface(
+private fun BackButton(onBack: () -> Unit) {
+    Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
         border = BorderStroke(1.dp, ColorBorderLight),
         modifier = Modifier
             .size(36.dp)
-            .bouncyClickable(onClick = onBack)
+            .bouncyClickable(onClick = onBack),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Назад",
                 tint = ColorBrandBlue,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(18.dp),
             )
         }
     }
@@ -954,15 +964,15 @@ private fun InfoLine(label: String, value: String) {
             style = androidx.compose.ui.text.TextStyle(
                 fontWeight = FontWeight.Bold,
                 fontSize = 10.sp,
-                color = ColorTextMuted
-            )
+                color = ColorTextMuted,
+            ),
         )
         Text(
             text = value,
             style = androidx.compose.ui.text.TextStyle(
                 fontSize = 13.sp,
-                color = ColorTextBody
-            )
+                color = ColorTextBody,
+            ),
         )
     }
 }

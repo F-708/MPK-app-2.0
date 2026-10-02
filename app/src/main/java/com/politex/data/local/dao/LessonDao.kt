@@ -1,4 +1,4 @@
-﻿package com.politex.data.local.dao
+package com.politex.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -10,14 +10,20 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface LessonDao {
-
     @Query("SELECT * FROM lessons WHERE groupName = :groupName AND dayOfWeek = :dayOfWeek ORDER BY lessonNumber ASC")
-    fun getLessonsForDay(groupName: String, dayOfWeek: Int): Flow<List<LessonEntity>>
+    fun getLessonsForDay(
+        groupName: String,
+        dayOfWeek: Int,
+    ): Flow<List<LessonEntity>>
 
     @Query("SELECT * FROM lessons WHERE groupName = :groupName AND dateString = :dateString ORDER BY lessonNumber ASC")
-    fun getLessonsForDate(groupName: String, dateString: String): Flow<List<LessonEntity>>
+    fun getLessonsForDate(
+        groupName: String,
+        dateString: String,
+    ): Flow<List<LessonEntity>>
 
-    @Query("""
+    @Query(
+        """
         SELECT * FROM lessons
         WHERE groupName = :groupName
           AND (
@@ -25,11 +31,17 @@ interface LessonDao {
             OR (dateString = '' AND dayOfWeek = :dayOfWeek)
           )
         ORDER BY lessonNumber ASC
-    """)
-    fun getLessonsForDateOrDay(groupName: String, dateString: String, dayOfWeek: Int): Flow<List<LessonEntity>>
+    """,
+    )
+    fun getLessonsForDateOrDay(
+        groupName: String,
+        dateString: String,
+        dayOfWeek: Int,
+    ): Flow<List<LessonEntity>>
 
     // Пары в конкретном кабинете на дату (точная дата приоритетна, пустой dateString — фолбэк по дню недели)
-    @Query("""
+    @Query(
+        """
         SELECT * FROM lessons
         WHERE (roomFirst = :room OR roomSecond = :room)
           AND (
@@ -37,23 +49,36 @@ interface LessonDao {
             OR (dateString = '' AND dayOfWeek = :dayOfWeek)
           )
         ORDER BY lessonNumber ASC
-    """)
-    fun getLessonsForRoomOnDate(room: String, dateString: String, dayOfWeek: Int): Flow<List<LessonEntity>>
+    """,
+    )
+    fun getLessonsForRoomOnDate(
+        room: String,
+        dateString: String,
+        dayOfWeek: Int,
+    ): Flow<List<LessonEntity>>
 
     @Query("SELECT * FROM lessons WHERE groupName = :groupName ORDER BY dayOfWeek ASC, lessonNumber ASC")
     fun getAllLessonsForGroup(groupName: String): Flow<List<LessonEntity>>
 
     @Query("SELECT * FROM lessons WHERE groupName = :groupName AND dayOfWeek = :dayOfWeek ORDER BY lessonNumber ASC")
-    suspend fun getLessonsForDaySync(groupName: String, dayOfWeek: Int): List<LessonEntity>
+    suspend fun getLessonsForDaySync(
+        groupName: String,
+        dayOfWeek: Int,
+    ): List<LessonEntity>
 
     // Т5: группы, у которых есть уроки в указанную дату (или недельный шаблон на этот день)
-    @Query("""
+    @Query(
+        """
         SELECT DISTINCT groupName FROM lessons
         WHERE (dateString != '' AND dateString = :dateString)
            OR (dateString = '' AND dayOfWeek = :dayOfWeek)
         ORDER BY groupName ASC
-    """)
-    suspend fun getDistinctGroupsForDateOrDay(dateString: String, dayOfWeek: Int): List<String>
+    """,
+    )
+    suspend fun getDistinctGroupsForDateOrDay(
+        dateString: String,
+        dayOfWeek: Int,
+    ): List<String>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLessons(lessons: List<LessonEntity>)
@@ -65,20 +90,33 @@ interface LessonDao {
     suspend fun clearLessonsForGroup(groupName: String)
 
     @Query("DELETE FROM lessons WHERE groupName = :groupName AND dateString = :dateString")
-    suspend fun deleteLessonsForDate(groupName: String, dateString: String)
+    suspend fun deleteLessonsForDate(
+        groupName: String,
+        dateString: String,
+    )
 
     @Query("DELETE FROM lessons WHERE groupName = :groupName AND dayOfWeek = :dayOfWeek")
-    suspend fun deleteLessonsForDay(groupName: String, dayOfWeek: Int)
+    suspend fun deleteLessonsForDay(
+        groupName: String,
+        dayOfWeek: Int,
+    )
 
-    @Query("""
+    @Query(
+        """
         SELECT DISTINCT dateString FROM lessons
         WHERE groupName = :groupName AND dateString != ''
         ORDER BY substr(dateString, 7, 4) DESC, substr(dateString, 4, 2) DESC, substr(dateString, 1, 2) DESC
-    """)
+    """,
+    )
     fun getDistinctDatesForGroup(groupName: String): Flow<List<String>>
 
-    @Query("SELECT * FROM lessons WHERE groupName = :groupName AND (subjectRaw LIKE '%' || :query || '%' OR teacherFirst LIKE '%' || :query || '%' OR teacherSecond LIKE '%' || :query || '%' OR roomFirst LIKE '%' || :query || '%') ORDER BY dayOfWeek ASC, lessonNumber ASC")
-    fun searchLessonsForGroup(groupName: String, query: String): Flow<List<LessonEntity>>
+    @Query(
+        "SELECT * FROM lessons WHERE groupName = :groupName AND (subjectRaw LIKE '%' || :query || '%' OR teacherFirst LIKE '%' || :query || '%' OR teacherSecond LIKE '%' || :query || '%' OR roomFirst LIKE '%' || :query || '%') ORDER BY dayOfWeek ASC, lessonNumber ASC",
+    )
+    fun searchLessonsForGroup(
+        groupName: String,
+        query: String,
+    ): Flow<List<LessonEntity>>
 
     @Query("SELECT COUNT(*) FROM lessons WHERE groupName = :groupName")
     suspend fun getLessonCountForGroup(groupName: String): Int
@@ -87,13 +125,19 @@ interface LessonDao {
     suspend fun getAllDistinctDatesSync(): List<String>
 
     @Query("SELECT COUNT(*) FROM lessons WHERE groupName = :groupName AND dateString = :dateString")
-    suspend fun getLessonCountForDate(groupName: String, dateString: String): Int
+    suspend fun getLessonCountForDate(
+        groupName: String,
+        dateString: String,
+    ): Int
 
     @Query("DELETE FROM lessons WHERE dateString = :dateString")
     suspend fun deleteLessonsByDate(dateString: String)
 
     @Transaction
-    suspend fun replaceScheduleForGroup(groupName: String, newLessons: List<LessonEntity>) {
+    suspend fun replaceScheduleForGroup(
+        groupName: String,
+        newLessons: List<LessonEntity>,
+    ) {
         clearLessonsForGroup(groupName)
         insertLessons(newLessons)
     }
@@ -101,7 +145,11 @@ interface LessonDao {
     // O7/O1: DELETE + INSERT одной транзакцией — иначе между ними Room эмитит пустой
     // список и в UI на миг мелькает «расписание не опубликовано».
     @Transaction
-    suspend fun replaceForDate(groupName: String, dateString: String, lessons: List<LessonEntity>) {
+    suspend fun replaceForDate(
+        groupName: String,
+        dateString: String,
+        lessons: List<LessonEntity>,
+    ) {
         deleteLessonsForDate(groupName, dateString)
         insertLessons(lessons)
     }

@@ -60,7 +60,7 @@ import com.politex.ui.util.bouncyClickable
 fun filterRoomLessonsForDate(
     lessons: List<LessonEntity>,
     room: String,
-    dateString: String
+    dateString: String,
 ): List<LessonEntity> {
     if (room.isBlank()) return emptyList()
     val inRoom = lessons.filter { it.roomFirst == room || it.roomSecond == room }
@@ -74,17 +74,22 @@ fun filterRoomLessonsForDate(
  * В одной паре кабинета обычно несколько групп (31-я 1-2 урок, 22-я 3-4 и т.д.) —
  * диалог рисует на каждую пару заголовок и блок карточек.
  */
-fun groupRoomLessonsByNumber(lessons: List<LessonEntity>): List<Pair<Int, List<LessonEntity>>> =
-    lessons.groupBy { it.lessonNumber }.toSortedMap().map { (n, l) -> n to l }
+fun groupRoomLessonsByNumber(lessons: List<LessonEntity>): List<Pair<Int, List<LessonEntity>>> = lessons.groupBy { it.lessonNumber }.toSortedMap().map { (n, l) -> n to l }
 
 /**
  * Номер текущей (идущей прямо сейчас) пары, null — если сейчас перемена/вне занятий.
  * Тот же расчёт, что во вкладке «Расписание»: звонки дня недели (dayOfWeek 1=Пн..7=Вс)
  * и текущая минута суток. Инфочас четверга (lessonNumber=0) парой не считается.
  */
-fun currentRoomLessonNumber(currentMinutes: Int, dayOfWeek: Int): Int? {
-    val bells = com.politex.data.model.CollegeBellSchedule.getBellsForDay(dayOfWeek)
-    return bells.firstOrNull { currentMinutes in it.startMinutes..it.endMinutes }
+fun currentRoomLessonNumber(
+    currentMinutes: Int,
+    dayOfWeek: Int,
+): Int? {
+    val bells =
+        com.politex.data.model.CollegeBellSchedule
+            .getBellsForDay(dayOfWeek)
+    return bells
+        .firstOrNull { currentMinutes in it.startMinutes..it.endMinutes }
         ?.lessonNumber
         ?.takeIf { it > 0 }
 }
@@ -110,12 +115,13 @@ fun RoomScheduleDialog(
     // Б8: «сегодня»/«завтра» — заказчик просил смотреть кабинет на оба дня
     tomorrowSelected: Boolean = false,
     onDayChange: (Boolean) -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     AlertDialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = modifier
+        modifier =
+        modifier
             .padding(horizontal = 16.dp)
             .fillMaxWidth(),
         containerColor = ColorBgMain,
@@ -123,18 +129,23 @@ fun RoomScheduleDialog(
         title = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBrandFill,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(32.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
                             text = roomNumber,
-                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp, color = androidx.compose.ui.graphics.Color.White),
-                            maxLines = 1
+                            style =
+                            TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = androidx.compose.ui.graphics.Color.White,
+                            ),
+                            maxLines = 1,
                         )
                     }
                 }
@@ -142,29 +153,29 @@ fun RoomScheduleDialog(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Кабинет $roomNumber",
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = ColorTextTitle)
+                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = ColorTextTitle),
                     )
                     if (dateTitle.isNotBlank()) {
                         Text(
                             text = dateTitle,
-                            style = TextStyle(fontSize = 12.sp, color = ColorTextMuted)
+                            style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                         )
                     }
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 DayToggle(
                     tomorrowSelected = tomorrowSelected,
-                    onDayChange = onDayChange
+                    onDayChange = onDayChange,
                 )
                 IconButton(
                     onClick = onDismissRequest,
                     // D4: хитбокс крестика 48dp
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(48.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Закрыть",
-                        tint = ColorTextMuted
+                        tint = ColorTextMuted,
                     )
                 }
             }
@@ -175,11 +186,12 @@ fun RoomScheduleDialog(
             } else {
                 val groupedLessons = remember(lessons) { groupRoomLessonsByNumber(lessons) }
                 LazyColumn(
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .fillMaxWidth()
                         .heightIn(max = 420.dp),
                     contentPadding = PaddingValues(bottom = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     // O3-b: заголовок на каждую пару — при нескольких группах в кабинете карточки
                     // разных групп в одной паре разделены явно
@@ -188,33 +200,34 @@ fun RoomScheduleDialog(
                             RoomLessonHeader(
                                 lessonNumber = lessonNumber,
                                 groupCount = pairLessons.size,
-                                isCurrent = lessonNumber == currentLessonNumber
+                                isCurrent = lessonNumber == currentLessonNumber,
                             )
                         }
                         items(
                             pairLessons,
-                            key = { "${it.groupName}_${it.lessonNumber}_${it.id}" }
+                            key = { "${it.groupName}_${it.lessonNumber}_${it.id}" },
                         ) { lesson ->
                             RoomLessonCard(
                                 lesson = lesson,
                                 isCurrent = lesson.lessonNumber == currentLessonNumber,
-                                onTeacherClick = onTeacherClick
+                                onTeacherClick = onTeacherClick,
                             )
                         }
                     }
                 }
             }
-        }
+        },
     )
 }
 
 @Composable
 private fun RoomScheduleEmptyState(tomorrow: Boolean) {
     Column(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .padding(vertical = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         RoomScheduleEmptyContent(tomorrow = tomorrow)
     }
@@ -228,11 +241,11 @@ private fun RoomScheduleEmptyState(tomorrow: Boolean) {
 private fun DayToggle(
     tomorrowSelected: Boolean,
     onDayChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier.testTag("room_day_toggle"),
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         listOf(false to "СЕГОДНЯ", true to "ЗАВТРА").forEach { (isTomorrow, title) ->
             val selected = tomorrowSelected == isTomorrow
@@ -240,24 +253,26 @@ private fun DayToggle(
                 shape = RoundedCornerShape(2.dp),
                 color = if (selected) ColorBrandFill else ColorBgMain,
                 border = BorderStroke(1.dp, if (selected) ColorBrandFill else ColorBorderLight),
-                modifier = Modifier
+                modifier =
+                Modifier
                     .heightIn(min = 40.dp)
                     .bouncyClickable(scaleDown = 0.97f) { onDayChange(isTomorrow) }
-                    .testTag(if (isTomorrow) "room_day_tomorrow" else "room_day_today")
+                    .testTag(if (isTomorrow) "room_day_tomorrow" else "room_day_today"),
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(horizontal = 8.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp),
                 ) {
                     Text(
                         text = title,
                         softWrap = false,
                         maxLines = 1,
-                        style = TextStyle(
+                        style =
+                        TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp,
-                            color = if (selected) androidx.compose.ui.graphics.Color.White else ColorTextMuted
-                        )
+                            color = if (selected) androidx.compose.ui.graphics.Color.White else ColorTextMuted,
+                        ),
                     )
                 }
             }
@@ -269,31 +284,32 @@ private fun DayToggle(
 private fun RoomScheduleEmptyContent(tomorrow: Boolean) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Surface(
             shape = RoundedCornerShape(28.dp),
             color = ColorSurfaceHighlight,
-            modifier = Modifier.size(56.dp)
+            modifier = Modifier.size(56.dp),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = Icons.Default.EventBusy,
                     contentDescription = null,
                     tint = ColorBrandBlue,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(28.dp),
                 )
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = if (tomorrow) {
+            text =
+            if (tomorrow) {
                 "Нет занятий в этом кабинете завтра"
             } else {
                 "Нет занятий в этом кабинете сегодня"
             },
             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
 }
@@ -307,30 +323,33 @@ private fun RoomLessonHeader(
     lessonNumber: Int,
     groupCount: Int,
     isCurrent: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier
+        modifier =
+        modifier
             .fillMaxWidth()
             .testTag("room_lesson_header_$lessonNumber"),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = "$lessonNumber урок",
-            style = TextStyle(
+            style =
+            TextStyle(
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,
-                color = if (isCurrent) ColorActiveBlue else ColorTextMuted
-            )
+                color = if (isCurrent) ColorActiveBlue else ColorTextMuted,
+            ),
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = when {
+            text =
+            when {
                 groupCount % 10 == 1 && groupCount % 100 != 11 -> "$groupCount группа"
                 groupCount % 10 in 2..4 && groupCount % 100 !in 12..14 -> "$groupCount группы"
                 else -> "$groupCount групп"
             },
-            style = TextStyle(fontSize = 11.sp, color = ColorTextMuted)
+            style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
         )
     }
 }
@@ -345,41 +364,46 @@ private fun RoomLessonCard(
     lesson: LessonEntity,
     isCurrent: Boolean,
     onTeacherClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
         border = BorderStroke(if (isCurrent) 2.dp else 1.dp, if (isCurrent) ColorActiveBlue else ColorBorderLight),
         shadowElevation = 0.dp,
-        modifier = modifier
+        modifier =
+        modifier
             .fillMaxWidth()
-            .testTag("room_lesson_card_${lesson.lessonNumber}")
+            .testTag("room_lesson_card_${lesson.lessonNumber}"),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
                         shape = RoundedCornerShape(2.dp),
                         color = ColorBrandFill,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(24.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = "${lesson.lessonNumber}",
-                                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = androidx.compose.ui.graphics.Color.White)
+                                style =
+                                TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = androidx.compose.ui.graphics.Color.White,
+                                ),
                             )
                         }
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = lesson.timeRangeDisplay,
-                        style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ColorTextBody)
+                        style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ColorTextBody),
                     )
                 }
 
@@ -387,12 +411,17 @@ private fun RoomLessonCard(
                     Surface(
                         shape = RoundedCornerShape(2.dp),
                         color = ColorActiveBlue,
-                        modifier = Modifier.testTag("room_lesson_current_${lesson.lessonNumber}")
+                        modifier = Modifier.testTag("room_lesson_current_${lesson.lessonNumber}"),
                     ) {
                         Text(
                             text = "СЕЙЧАС",
-                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = androidx.compose.ui.graphics.Color.White),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            style =
+                            TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = androidx.compose.ui.graphics.Color.White,
+                            ),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
                     }
                 }
@@ -404,32 +433,32 @@ private fun RoomLessonCard(
                 text = lesson.shortSubjectName,
                 style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
 
             Spacer(modifier = Modifier.height(6.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorSurfaceHighlight,
                     border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.testTag("room_lesson_group_${lesson.lessonNumber}")
+                    modifier = Modifier.testTag("room_lesson_group_${lesson.lessonNumber}"),
                 ) {
                     Text(
                         text = lesson.groupName,
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = ColorTextMuted),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     RoomTeacherChip(name = lesson.teacherFirst, onClick = onTeacherClick)
                     RoomTeacherChip(name = lesson.teacherSecond, onClick = onTeacherClick)
@@ -443,13 +472,14 @@ private fun RoomLessonCard(
                         imageVector = Icons.Default.LocationOn,
                         contentDescription = null,
                         tint = ColorBrandBlue,
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(12.dp),
                     )
-                    Spacer(modifier = Modifier.width(2.dp)
+                    Spacer(
+                        modifier = Modifier.width(2.dp),
                     )
                     Text(
                         text = "дробная: каб. ${lesson.roomFirst} / каб. ${lesson.roomSecond}",
-                        style = TextStyle(fontSize = 11.sp, color = ColorTextMuted)
+                        style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                     )
                 }
             }
@@ -461,31 +491,31 @@ private fun RoomLessonCard(
 private fun RoomTeacherChip(
     name: String,
     onClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     if (name.isBlank()) return
     Surface(
         shape = RoundedCornerShape(2.dp),
         border = BorderStroke(1.dp, ColorBrandBlue.copy(alpha = 0.4f)),
         color = ColorSurfaceHighlight,
-        modifier = modifier.bouncyClickable(scaleDown = 0.97f) { onClick(name) }
+        modifier = modifier.bouncyClickable(scaleDown = 0.97f) { onClick(name) },
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 5.dp, end = 5.dp, top = 2.dp, bottom = 2.dp)
+            modifier = Modifier.padding(start = 5.dp, end = 5.dp, top = 2.dp, bottom = 2.dp),
         ) {
             Icon(
                 imageVector = Icons.Default.Person,
                 contentDescription = null,
                 tint = ColorBrandBlue,
-                modifier = Modifier.size(12.dp)
+                modifier = Modifier.size(12.dp),
             )
             Spacer(modifier = Modifier.width(3.dp))
             Text(
                 text = name,
                 style = TextStyle(fontSize = 12.sp, color = ColorBrandBlue, fontWeight = FontWeight.SemiBold),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

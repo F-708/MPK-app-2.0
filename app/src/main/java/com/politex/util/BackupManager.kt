@@ -1,15 +1,14 @@
-﻿package com.politex.util
+package com.politex.util
 
 import android.content.Context
 import com.politex.data.local.MpkDatabase
 import com.politex.data.local.entity.StudentTaskEntity
-import com.politex.widget.WidgetUpdateHelper
 import com.politex.ui.theme.AppTheme
+import com.politex.widget.WidgetUpdateHelper
 import org.json.JSONArray
 import org.json.JSONObject
 
 object BackupManager {
-
     private const val FORMAT_VERSION = 1
 
     private const val KEY_VERSION = "version"
@@ -22,10 +21,13 @@ object BackupManager {
         val tasksRestored: Int,
         val groupRestored: String?,
         val themeRestored: Boolean,
-        val warnings: List<String>
+        val warnings: List<String>,
     )
 
-    suspend fun buildBackup(context: Context, includeTasks: Boolean = true): String {
+    suspend fun buildBackup(
+        context: Context,
+        includeTasks: Boolean = true,
+    ): String {
         val root = JSONObject()
         root.put(KEY_VERSION, FORMAT_VERSION)
         root.put(KEY_EXPORTED_AT, System.currentTimeMillis())
@@ -35,8 +37,18 @@ object BackupManager {
         settings.put("group", WidgetUpdateHelper.getSelectedGroup(context))
         settings.put("notificationsEnabled", WidgetUpdateHelper.isNotificationEnabled(context))
         settings.put("appTheme", AppThemeStore.load(context).id)
-        settings.put("notificationsStyle", com.politex.util.BellCountdownNotifier.getStyle(context).id)
-        settings.put("notificationsTheme", com.politex.util.BellCountdownNotifier.getTheme(context).id)
+        settings.put(
+            "notificationsStyle",
+            com.politex.util.BellCountdownNotifier
+                .getStyle(context)
+                .id,
+        )
+        settings.put(
+            "notificationsTheme",
+            com.politex.util.BellCountdownNotifier
+                .getTheme(context)
+                .id,
+        )
         root.put(KEY_SETTINGS, settings)
 
         if (includeTasks) {
@@ -50,7 +62,6 @@ object BackupManager {
     }
 
     private fun taskToJson(task: StudentTaskEntity): JSONObject = JSONObject().apply {
-
         put("groupName", task.groupName)
         put("course", task.course)
         put("subjectName", task.subjectName)
@@ -64,7 +75,7 @@ object BackupManager {
 
     suspend fun restoreBackup(
         context: Context,
-        json: String
+        json: String,
     ): Result<ImportResult> = try {
         val root = JSONObject(json)
         val warnings = mutableListOf<String>()
@@ -97,10 +108,11 @@ object BackupManager {
         var restored = 0
 
         if (array != null) {
-
-            val existing = dao.getAllTasks()
-                .map { it.dedupeKey() }
-                .toHashSet()
+            val existing =
+                dao
+                    .getAllTasks()
+                    .map { it.dedupeKey() }
+                    .toHashSet()
             var skipped = 0
 
             for (i in 0 until array.length()) {
@@ -110,17 +122,18 @@ object BackupManager {
                     warnings += "Задание без названия пропущено"
                     continue
                 }
-                val entity = StudentTaskEntity(
-                    groupName = item.optString("groupName"),
-                    course = item.optInt("course", 0),
-                    subjectName = item.optString("subjectName"),
-                    taskType = item.optString("taskType"),
-                    title = title,
-                    description = item.optString("description"),
-                    isCompleted = item.optBoolean("isCompleted", false),
-                    deadlineDate = item.optString("deadlineDate"),
-                    createdAt = item.optLong("createdAt", System.currentTimeMillis())
-                )
+                val entity =
+                    StudentTaskEntity(
+                        groupName = item.optString("groupName"),
+                        course = item.optInt("course", 0),
+                        subjectName = item.optString("subjectName"),
+                        taskType = item.optString("taskType"),
+                        title = title,
+                        description = item.optString("description"),
+                        isCompleted = item.optBoolean("isCompleted", false),
+                        deadlineDate = item.optString("deadlineDate"),
+                        createdAt = item.optLong("createdAt", System.currentTimeMillis()),
+                    )
                 if (!existing.add(entity.dedupeKey())) {
                     skipped++
                     continue
@@ -136,24 +149,25 @@ object BackupManager {
                 tasksRestored = restored,
                 groupRestored = groupRestored,
                 themeRestored = themeRestored,
-                warnings = warnings
-            )
+                warnings = warnings,
+            ),
         )
     } catch (e: Exception) {
         Result.failure(e)
     }
 }
 
-private fun StudentTaskEntity.dedupeKey(): String =
-    listOf(groupName, subjectName, title, deadlineDate).joinToString("|").lowercase()
+private fun StudentTaskEntity.dedupeKey(): String = listOf(groupName, subjectName, title, deadlineDate).joinToString("|").lowercase()
 
 fun defaultBackupFileName(context: Context): String {
     val cal = java.util.Calendar.getInstance()
-    val stamp = String.format(
-        java.util.Locale.ROOT, "%04d-%02d-%02d",
-        cal.get(java.util.Calendar.YEAR),
-        cal.get(java.util.Calendar.MONTH) + 1,
-        cal.get(java.util.Calendar.DAY_OF_MONTH)
-    )
+    val stamp =
+        String.format(
+            java.util.Locale.ROOT,
+            "%04d-%02d-%02d",
+            cal.get(java.util.Calendar.YEAR),
+            cal.get(java.util.Calendar.MONTH) + 1,
+            cal.get(java.util.Calendar.DAY_OF_MONTH),
+        )
     return "moy-politech-backup-$stamp.json"
 }

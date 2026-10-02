@@ -10,8 +10,9 @@ import android.content.Context
  * но НЕ должен видеть ФИО — список выгружен из базы учащихся без персональных колонок.
  * Источник данных — та же выгрузка, что и `app/src/admin/assets/students.csv` (O8).
  */
-class GroupCatalog(private val codes: List<String>) {
-
+class GroupCatalog(
+    private val codes: List<String>,
+) {
     /** Полный список кодов в порядке курс → номер → буква. */
     fun all(): List<String> = codes
 
@@ -26,22 +27,23 @@ class GroupCatalog(private val codes: List<String>) {
     }
 
     companion object {
-
         private const val ASSET = "group_codes.csv"
 
         fun load(context: Context): GroupCatalog = try {
-            context.assets.open(ASSET).bufferedReader(Charsets.UTF_8).readLines()
+            context.assets
+                .open(ASSET)
+                .bufferedReader(Charsets.UTF_8)
+                .readLines()
                 .let(::parse)
         } catch (_: Exception) {
             GroupCatalog(emptyList())
         }
 
-        fun parse(lines: List<String>): GroupCatalog =
-            GroupCatalog(
-                lines
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
-            )
+        fun parse(lines: List<String>): GroupCatalog = GroupCatalog(
+            lines
+                .map { it.trim() }
+                .filter { it.isNotBlank() },
+        )
 
         /**
          * Нормализация кода группы: убирает пробелы и дефисы, переводит латинские
@@ -49,10 +51,12 @@ class GroupCatalog(private val codes: List<String>) {
          * Курс/номер остаются как есть — «4 курс» это не про код группы.
          */
         fun normalize(input: String): String? {
-            val s = input.trim()
-                .replace(" ", "")
-                .replace("-", "")
-                .replace("_", "")
+            val s =
+                input
+                    .trim()
+                    .replace(" ", "")
+                    .replace("-", "")
+                    .replace("_", "")
             if (s.length < 3) return null
             val course = s[0] - '0'
             val number = s[1] - '0'

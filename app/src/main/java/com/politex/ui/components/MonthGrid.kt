@@ -1,8 +1,7 @@
-﻿package com.politex.ui.components
+package com.politex.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTopBar
@@ -36,7 +34,7 @@ fun MonthGrid(
     month: Int,
     selectedDateIso: String?,
     onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val days = remember(year, month) { calculateMonthDays(year, month) }
 
@@ -47,12 +45,13 @@ fun MonthGrid(
                 Text(
                     text = day,
                     textAlign = TextAlign.Center,
-                    style = TextStyle(
+                    style =
+                    TextStyle(
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = ColorTextMuted
+                        color = ColorTextMuted,
                     ),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
@@ -63,7 +62,8 @@ fun MonthGrid(
             Row(modifier = Modifier.fillMaxWidth()) {
                 week.forEach { day ->
                     Box(
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .weight(1f)
                             .aspectRatio(1.1f)
                             // D6: клик — вся ячейка (~42×46dp), видимый круг 32dp тот же
@@ -71,27 +71,31 @@ fun MonthGrid(
                                 if (day != null) {
                                     val dateIso = String.format(Locale.ROOT, "%04d-%02d-%02d", year, month + 1, day)
                                     m.clickable { onSelect(dateIso) }
-                                } else m
+                                } else {
+                                    m
+                                }
                             },
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         if (day != null) {
                             val dateIso = String.format(Locale.ROOT, "%04d-%02d-%02d", year, month + 1, day)
                             val isSelected = selectedDateIso == dateIso
                             Box(
-                                modifier = Modifier
+                                modifier =
+                                Modifier
                                     .size(32.dp)
                                     .clip(CircleShape)
                                     .background(if (isSelected) ColorTopBar else androidx.compose.ui.graphics.Color.Transparent),
-                                contentAlignment = Alignment.Center
+                                contentAlignment = Alignment.Center,
                             ) {
                                 Text(
                                     text = "$day",
-                                    style = TextStyle(
+                                    style =
+                                    TextStyle(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                         fontSize = 13.sp,
-                                        color = if (isSelected) androidx.compose.ui.graphics.Color.White else ColorTextBody
-                                    )
+                                        color = if (isSelected) androidx.compose.ui.graphics.Color.White else ColorTextBody,
+                                    ),
                                 )
                             }
                         }
@@ -106,23 +110,28 @@ fun MonthGrid(
     }
 }
 
-fun calculateMonthDays(year: Int, month: Int): List<Int?> {
-    val cal = Calendar.getInstance().apply {
-        set(Calendar.YEAR, year)
-        set(Calendar.MONTH, month)
-        set(Calendar.DAY_OF_MONTH, 1)
-    }
+fun calculateMonthDays(
+    year: Int,
+    month: Int,
+): List<Int?> {
+    val cal =
+        Calendar.getInstance().apply {
+            set(Calendar.YEAR, year)
+            set(Calendar.MONTH, month)
+            set(Calendar.DAY_OF_MONTH, 1)
+        }
 
-    val offset = when (cal.get(Calendar.DAY_OF_WEEK)) {
-        Calendar.MONDAY -> 0
-        Calendar.TUESDAY -> 1
-        Calendar.WEDNESDAY -> 2
-        Calendar.THURSDAY -> 3
-        Calendar.FRIDAY -> 4
-        Calendar.SATURDAY -> 5
-        Calendar.SUNDAY -> 6
-        else -> 0
-    }
+    val offset =
+        when (cal.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.MONDAY -> 0
+            Calendar.TUESDAY -> 1
+            Calendar.WEDNESDAY -> 2
+            Calendar.THURSDAY -> 3
+            Calendar.FRIDAY -> 4
+            Calendar.SATURDAY -> 5
+            Calendar.SUNDAY -> 6
+            else -> 0
+        }
 
     return buildList {
         repeat(offset) { add(null) }
@@ -130,12 +139,34 @@ fun calculateMonthDays(year: Int, month: Int): List<Int?> {
     }
 }
 
-val MONTH_NAMES_GENITIVE = listOf(
-    "января", "февраля", "марта", "апреля", "мая", "июня",
-    "июля", "августа", "сентября", "октября", "ноября", "декабря"
-)
+val MONTH_NAMES_GENITIVE =
+    listOf(
+        "января",
+        "февраля",
+        "марта",
+        "апреля",
+        "мая",
+        "июня",
+        "июля",
+        "августа",
+        "сентября",
+        "октября",
+        "ноября",
+        "декабря",
+    )
 
-val MONTH_NAMES_NOMINATIVE = listOf(
-    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
-)
+val MONTH_NAMES_NOMINATIVE =
+    listOf(
+        "Январь",
+        "Февраль",
+        "Март",
+        "Апрель",
+        "Май",
+        "Июнь",
+        "Июль",
+        "Август",
+        "Сентябрь",
+        "Октябрь",
+        "Ноябрь",
+        "Декабрь",
+    )

@@ -1,13 +1,7 @@
-﻿package com.politex.data.network
+package com.politex.data.network
 
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.SyncDiagnosticInfo
-import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +11,12 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 /**
  * N1: результат «рукопожатия» с сайтом — быстрый ответ на вопрос «есть ли вообще
@@ -58,7 +58,9 @@ class MpkNetworkClient {
         const val SCHEDULE_PORTAL_URL = "https://guo-mpk.by/raspisanie/"
         const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         const val BROWSER_USER_AGENT = USER_AGENT
-        const val BROWSER_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*;q=0.8"
+        const val BROWSER_ACCEPT =
+            "text/html,application/xhtml+xml,application/xml;q=0.9,application/msword," +
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*;q=0.8"
 
         private val client: OkHttpClient by lazy {
             OkHttpClient.Builder()
@@ -92,7 +94,7 @@ class MpkNetworkClient {
      */
     fun generateCandidateDirectUrls(
         calendar: Calendar,
-        nameBase: String = "raspisanie-uchashhihsya"
+        nameBase: String = "raspisanie-uchashhihsya",
     ): List<Pair<String, String>> {
         val ddMmYyyy = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(calendar.time)
         val dd = SimpleDateFormat("dd", Locale.ROOT).format(calendar.time)
@@ -102,7 +104,7 @@ class MpkNetworkClient {
             SimpleDateFormat("yyyy", Locale.ROOT).format(calendar.time) to
                 SimpleDateFormat("MM", Locale.ROOT).format(calendar.time),
             SimpleDateFormat("yyyy", Locale.ROOT).format(prevMonth.time) to
-                SimpleDateFormat("MM", Locale.ROOT).format(prevMonth.time)
+                SimpleDateFormat("MM", Locale.ROOT).format(prevMonth.time),
         )
 
         val result = mutableListOf<Pair<String, String>>()
@@ -134,7 +136,7 @@ class MpkNetworkClient {
      */
     fun generateCandidateEventUrls(
         calendar: Calendar,
-        nameBase: String = "raspisanie-uchashhihsya"
+        nameBase: String = "raspisanie-uchashhihsya",
     ): List<Pair<String, String>> {
         val yyyy = SimpleDateFormat("yyyy", Locale.ROOT).format(calendar.time)
         val mm = SimpleDateFormat("MM", Locale.ROOT).format(calendar.time)
@@ -145,19 +147,20 @@ class MpkNetworkClient {
         return slugs.flatMap { slugSuffix ->
             listOf(
                 Pair("https://guo-mpk.by/raspisanie/$dateStr-$nameBase$slugSuffix/?occurrence=$occStr", "$dd.$mm.$yyyy"),
-                Pair("https://guo-mpk.by/$dateStr-$nameBase$slugSuffix/", "$dd.$mm.$yyyy")
+                Pair("https://guo-mpk.by/$dateStr-$nameBase$slugSuffix/", "$dd.$mm.$yyyy"),
             )
         }
     }
 
     /** Ссылки event-страниц конкретной даты из HTML портала. */
-    fun extractEventPageUrls(html: String, dateStr: String): List<String> =
-        Regex("(?i)https?://guo-mpk\\.by/(?:raspisanie/)?" + Regex.escape(dateStr) +
-            "-raspisanie-(?:uchashhihsya|prepodavatelej)[a-z0-9-]*/?")
-            .findAll(html)
-            .map { it.value }
-            .distinct()
-            .toList()
+    fun extractEventPageUrls(html: String, dateStr: String): List<String> = Regex(
+        "(?i)https?://guo-mpk\\.by/(?:raspisanie/)?" + Regex.escape(dateStr) +
+            "-raspisanie-(?:uchashhihsya|prepodavatelej)[a-z0-9-]*/?",
+    )
+        .findAll(html)
+        .map { it.value }
+        .distinct()
+        .toList()
 
     /**
      * SCH-01, общий резолвер документов расписания. Порядок:
@@ -171,7 +174,7 @@ class MpkNetworkClient {
     suspend fun forEachDocumentUrl(
         calendar: Calendar,
         nameBase: String = "raspisanie-uchashhihsya",
-        visit: suspend (String) -> Boolean
+        visit: suspend (String) -> Boolean,
     ) = withContext(Dispatchers.IO) {
         val tried = LinkedHashSet<String>()
 
@@ -209,9 +212,11 @@ class MpkNetworkClient {
 
         // (б) event-страницы даты — сгенерированные и найденные на портале
         if (phaseEventPages(
-                generateCandidateEventUrls(calendar, nameBase).map { it.first } + portalEventPages
+                generateCandidateEventUrls(calendar, nameBase).map { it.first } + portalEventPages,
             )
-        ) return@withContext
+        ) {
+            return@withContext
+        }
 
         // (в) прямые .doc-ссылки портала (нестандартные имена документов)
         phaseUrls(portalDocs)
@@ -220,7 +225,7 @@ class MpkNetworkClient {
     suspend fun fetchScheduleForGroup(
         targetGroup: String,
         targetCalendar: Calendar = calculateTargetCalendar(),
-        maxRetries: Int = 2
+        maxRetries: Int = 2,
     ): Result<List<LessonEntity>> = withContext(Dispatchers.IO) {
         val timeFormat = SimpleDateFormat("HH:mm:ss (dd.MM.yyyy)", Locale.ROOT)
         val nowStr = timeFormat.format(Date())
@@ -228,7 +233,7 @@ class MpkNetworkClient {
 
         _diagnosticInfo.value = _diagnosticInfo.value.copy(
             isSyncing = true,
-            statusMessage = "Запрос расписания на $dateDotStr..."
+            statusMessage = "Запрос расписания на $dateDotStr...",
         )
 
         var lastCheckedUrl = buildDirectScheduleUrl(targetCalendar)
@@ -246,7 +251,6 @@ class MpkNetworkClient {
         var lastTextPreview = ""
 
         fun rememberResponsePreview(bytes: ByteArray) {
-
             lastResponsePreview = String(bytes.copyOfRange(0, minOf(100, bytes.size)), Charsets.UTF_8)
                 .replace(Regex("\\s+"), " ")
                 .take(100)
@@ -281,7 +285,9 @@ class MpkNetworkClient {
                         if (parsed.isNotEmpty()) {
                             allLessons += parsed
                             true
-                        } else false
+                        } else {
+                            false
+                        }
                     }
                 }
 
@@ -295,8 +301,9 @@ class MpkNetworkClient {
                     receivedBytes = totalBytesReceived,
                     lessonsFound = distinctLessons.size,
                     statusMessage = when {
-                        distinctLessons.isNotEmpty() -> "Успешно: загружено ${distinctLessons.size} уроков" +
-                            (if (lastParseError.isNotBlank()) " (с ошибкой разбора: $lastParseError)" else "")
+                        distinctLessons.isNotEmpty() ->
+                            "Успешно: загружено ${distinctLessons.size} уроков" +
+                                (if (lastParseError.isNotBlank()) " (с ошибкой разбора: $lastParseError)" else "")
 
                         totalBytesReceived > 0L && lastParseError.isNotBlank() ->
                             "Документ получен (${totalBytesReceived / 1024} КБ), ошибка разбора: $lastParseError"
@@ -311,7 +318,7 @@ class MpkNetworkClient {
                     parseRuns = lastParseRuns,
                     groupFound = groupWasFound,
                     parseError = lastParseError,
-                    textPreview = lastTextPreview
+                    textPreview = lastTextPreview,
                 )
 
                 return@withContext Result.success(distinctLessons)
@@ -337,7 +344,7 @@ class MpkNetworkClient {
             parseRuns = lastParseRuns,
             groupFound = groupWasFound,
             parseError = lastParseError,
-            textPreview = lastTextPreview
+            textPreview = lastTextPreview,
         )
 
         Result.failure(lastException ?: IOException(errMsg))
@@ -366,7 +373,7 @@ class MpkNetworkClient {
     }
 
     suspend fun fetchTeacherSchedule(
-        targetCalendar: Calendar = Calendar.getInstance()
+        targetCalendar: Calendar = Calendar.getInstance(),
     ): Result<Map<String, List<TeacherSlot>>> = withContext(Dispatchers.IO) {
         val ddMmYyyy = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(targetCalendar.time)
         var lastUrl = ""
@@ -387,10 +394,13 @@ class MpkNetworkClient {
                 val text = TeacherScheduleParser.extractText(bytes)
                 if (text.isNotBlank() && !TeacherScheduleParser.matchesRequestedDate(text, targetCalendar)) {
                     val inDoc = TeacherScheduleParser.dateFromHeaderText(
-                        TeacherScheduleParser.findHeaderLine(text).orEmpty()
+                        TeacherScheduleParser.findHeaderLine(text).orEmpty(),
                     )
-                    lastMismatch = if (inDoc == null) "Дата не найдена в документе: $url"
-                    else "Документ за $inDoc вместо $ddMmYyyy: $url"
+                    lastMismatch = if (inDoc == null) {
+                        "Дата не найдена в документе: $url"
+                    } else {
+                        "Документ за $inDoc вместо $ddMmYyyy: $url"
+                    }
                     return@forEachDocumentUrl false
                 }
 
@@ -424,31 +434,28 @@ class MpkNetworkClient {
     }
 
     /** N1: HEAD-запрос (дёшево, без тела). Некоторые серверы не любят HEAD — см. probeDocument. */
-    private fun executeHead(url: String): Response =
-        client.newCall(
-            Request.Builder().url(url).head()
-                .header("User-Agent", USER_AGENT)
-                .header("Accept", BROWSER_ACCEPT)
-                .build()
-        ).execute()
+    private fun executeHead(url: String): Response = client.newCall(
+        Request.Builder().url(url).head()
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", BROWSER_ACCEPT)
+            .build(),
+    ).execute()
 
     /** N1: GET первого байта (Range) — фолбэк, когда HEAD не дал внятного ответа. */
-    private fun executeRangeGet(url: String): Response =
-        client.newCall(
-            Request.Builder().url(url).get()
-                .header("User-Agent", USER_AGENT)
-                .header("Accept", BROWSER_ACCEPT)
-                .header("Range", "bytes=0-0")
-                .build()
-        ).execute()
+    private fun executeRangeGet(url: String): Response = client.newCall(
+        Request.Builder().url(url).get()
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", BROWSER_ACCEPT)
+            .header("Range", "bytes=0-0")
+            .build(),
+    ).execute()
 
     /** N1: HTTP-код запроса; [PROBE_NET_FAIL] при IOException (сайт недоступен). */
-    private fun safeCode(block: () -> Response): Int =
-        try {
-            block().use { it.code }
-        } catch (_: IOException) {
-            PROBE_NET_FAIL
-        }
+    private fun safeCode(block: () -> Response): Int = try {
+        block().use { it.code }
+    } catch (_: IOException) {
+        PROBE_NET_FAIL
+    }
 
     /**
      * N1: «рукопожатие» — есть ли вообще файл расписания, БЕЗ полной загрузки.
@@ -466,7 +473,7 @@ class MpkNetworkClient {
      */
     suspend fun probeDocument(
         calendar: Calendar,
-        nameBase: String = "raspisanie-uchashhihsya"
+        nameBase: String = "raspisanie-uchashhihsya",
     ): ProbeResult = withContext(Dispatchers.IO) {
         val candidates = generateCandidateDirectUrls(calendar, nameBase).map { it.first } +
             generateCandidateEventUrls(calendar, nameBase).map { it.first }
@@ -494,7 +501,7 @@ class MpkNetworkClient {
         val current = _diagnosticInfo.value
         _diagnosticInfo.value = current.copy(
             statusMessage = statusMessage ?: current.statusMessage,
-            isSyncing = isSyncing ?: current.isSyncing
+            isSyncing = isSyncing ?: current.isSyncing,
         )
     }
 }

@@ -9,7 +9,7 @@ import java.util.zip.ZipInputStream
 data class DocxParagraph(
     val text: String,
     val bold: Boolean = false,
-    val heading: Boolean = false
+    val heading: Boolean = false,
 )
 
 /**
@@ -30,7 +30,6 @@ data class DocxParagraph(
  * («w:t»); локальное имя берётся через [localName] — работает и с префиксом, и без него.
  */
 object DocxTextExtractor {
-
     /** Путь внутри OOXML-пакета, где лежит тело документа. */
     private const val DOCUMENT_ENTRY = "word/document.xml"
 
@@ -59,8 +58,7 @@ object DocxTextExtractor {
     }
 
     /** Абзацы одной строкой через перевод — то, что кладётся в `textContent` для поиска. */
-    fun toPlainText(paragraphs: List<DocxParagraph>): String =
-        paragraphs.joinToString("\n") { it.text }
+    fun toPlainText(paragraphs: List<DocxParagraph>): String = paragraphs.joinToString("\n") { it.text }
 
     private fun parseDocumentXml(stream: InputStream): List<DocxParagraph> {
         val parser = XmlPullParserFactory.newInstance().apply { isNamespaceAware = false }.newPullParser()
@@ -110,8 +108,7 @@ object DocxTextExtractor {
     }
 
     /** `<w:b w:val="false"/>` / `w:val="0"` / `w:val="none"` — свойство ВЫКЛЮЧЕНО, а не включено. */
-    private fun isSwitchedOff(value: String?): Boolean =
-        value.equals("false", ignoreCase = true) || value == "0" || value.equals("none", ignoreCase = true)
+    private fun isSwitchedOff(value: String?): Boolean = value.equals("false", ignoreCase = true) || value == "0" || value.equals("none", ignoreCase = true)
 
     private fun localName(parser: XmlPullParser): String = parser.name.substringAfterLast(':')
 

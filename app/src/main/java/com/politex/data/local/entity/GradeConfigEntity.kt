@@ -13,5 +13,5 @@ import androidx.room.PrimaryKey
 data class GradeConfigEntity(
     @PrimaryKey
     val subjectName: String,
-    val priorityJson: String
+    val priorityJson: String,
 )

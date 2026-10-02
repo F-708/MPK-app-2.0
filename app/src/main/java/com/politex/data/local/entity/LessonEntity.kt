@@ -1,4 +1,4 @@
-﻿package com.politex.data.local.entity
+package com.politex.data.local.entity
 
 import androidx.room.Entity
 import androidx.room.Ignore
@@ -19,8 +19,8 @@ import com.politex.util.SubjectFormatter
         Index("groupName", "dateString"),
         Index("dateString"),
         Index("roomFirst"),
-        Index("roomSecond")
-    ]
+        Index("roomSecond"),
+    ],
 )
 data class LessonEntity(
     @PrimaryKey(autoGenerate = true)
@@ -36,9 +36,8 @@ data class LessonEntity(
     val roomSecond: String = "",
     val teacherSecond: String = "",
     val isSplit: Boolean = false,
-    val dateString: String = ""
+    val dateString: String = "",
 ) {
-
     @delegate:Ignore
     val shortSubjectName: String by lazy {
         SubjectFormatter.getShortName(subjectRaw)

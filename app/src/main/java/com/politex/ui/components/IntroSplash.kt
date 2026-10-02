@@ -1,5 +1,6 @@
-﻿package com.politex.ui.components
+package com.politex.ui.components
 
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,7 +32,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.provider.Settings
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorTextMuted
@@ -43,20 +42,21 @@ fun IntroSplash(
     onFinished: () -> Unit,
     modifier: Modifier = Modifier,
     // N16: вход из виджета/уведомления — без анимации, сразу к месту тапа
-    skip: Boolean = false
+    skip: Boolean = false,
 ) {
     val context = LocalContext.current
-    val reducedMotion = remember {
-        try {
-            Settings.Global.getFloat(
-                context.contentResolver,
-                Settings.Global.ANIMATOR_DURATION_SCALE,
-                1f
-            ) == 0f
-        } catch (_: Exception) {
-            false
+    val reducedMotion =
+        remember {
+            try {
+                Settings.Global.getFloat(
+                    context.contentResolver,
+                    Settings.Global.ANIMATOR_DURATION_SCALE,
+                    1f,
+                ) == 0f
+            } catch (_: Exception) {
+                false
+            }
         }
-    }
 
     var appearing by remember { mutableStateOf(false) }
     var progressPlaying by remember { mutableStateOf(false) }
@@ -83,33 +83,35 @@ fun IntroSplash(
     val emblemScale by animateFloatAsState(
         targetValue = if (appearing) 1f else 0.6f,
         animationSpec = tween(durationMillis = 250),
-        label = "IntroScale"
+        label = "IntroScale",
     )
     val emblemAlpha by animateFloatAsState(
         targetValue = if (appearing) 1f else 0f,
         animationSpec = tween(durationMillis = 250),
-        label = "IntroAlpha"
+        label = "IntroAlpha",
     )
     val barProgress by animateFloatAsState(
         targetValue = if (progressPlaying) 1f else 0.05f,
         animationSpec = tween(durationMillis = 480, easing = LinearEasing),
-        label = "IntroBar"
+        label = "IntroBar",
     )
 
     Box(
-        modifier = modifier
+        modifier =
+        modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(Color.White),
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.align(Alignment.Center)
+            modifier = Modifier.align(Alignment.Center),
         ) {
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .size(96.dp)
                     .scale(emblemScale)
-                    .alpha(emblemAlpha)
+                    .alpha(emblemAlpha),
             ) {
                 CollegePorticoIcon(color = ColorBrandBlue, modifier = Modifier.fillMaxSize())
             }
@@ -122,39 +124,45 @@ fun IntroSplash(
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 1.5.sp,
                 color = ColorBrandBlue,
-                modifier = Modifier.alpha(emblemAlpha)
+                modifier = Modifier.alpha(emblemAlpha),
             )
 
             Text(
                 text = "Минский государственный политехнический колледж",
                 fontSize = 11.sp,
                 color = ColorTextMuted,
-                modifier = Modifier
+                modifier =
+                Modifier
                     .alpha(emblemAlpha)
-                    .padding(horizontal = 32.dp)
+                    .padding(horizontal = 32.dp),
             )
         }
 
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = 64.dp, vertical = 64.dp)
                 .fillMaxWidth()
                 .height(3.dp)
-                .background(Color(0xFFE2E8F0))
+                .background(Color(0xFFE2E8F0)),
         ) {
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxWidth(barProgress)
                     .height(3.dp)
-                    .background(ColorActiveBlue)
+                    .background(ColorActiveBlue),
             )
         }
     }
 }
 
 @Composable
-fun IntroSplashOverlay(modifier: Modifier = Modifier, skip: Boolean = false) {
+fun IntroSplashOverlay(
+    modifier: Modifier = Modifier,
+    skip: Boolean = false,
+) {
     // N16: при skip не компонуем оверлей вовсе — ни одного кадра белого сплэша
     var visible by remember { mutableStateOf(!skip) }
     if (visible) {
@@ -162,7 +170,7 @@ fun IntroSplashOverlay(modifier: Modifier = Modifier, skip: Boolean = false) {
             visible = visible,
             enter = fadeIn(),
             exit = fadeOut(),
-            modifier = modifier
+            modifier = modifier,
         ) {
             IntroSplash(onFinished = { visible = false }, skip = skip)
         }

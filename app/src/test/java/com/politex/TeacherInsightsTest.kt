@@ -1,4 +1,4 @@
-﻿package com.politex
+package com.politex
 
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.repository.Teacher
@@ -10,23 +10,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TeacherInsightsTest {
-
     private fun teacher(fullName: String) = Teacher(name = fullName)
 
-    private val base = listOf(
-        teacher("Зыбин Олег Львович"),
-        teacher("Купрейчик Наталья Андреевна"),
-        teacher("Мешалкина Ирина Владимировна"),
-        teacher("Дубатовка Екатерина Анатольевна"),
-        teacher("Березовская Нелли Викторовна"),
-        teacher("Савицкая Ольга Владимировна"),
-        teacher("Савицкая Татьяна Владимировна"),
-        teacher("Будай Инесса Николаевна"),
-        teacher("Кривошей Дмитрий Александрович"),
-    )
+    private val base =
+        listOf(
+            teacher("Зыбин Олег Львович"),
+            teacher("Купрейчик Наталья Андреевна"),
+            teacher("Мешалкина Ирина Владимировна"),
+            teacher("Дубатовка Екатерина Анатольевна"),
+            teacher("Березовская Нелли Викторовна"),
+            teacher("Савицкая Ольга Владимировна"),
+            teacher("Савицкая Татьяна Владимировна"),
+            teacher("Будай Инесса Николаевна"),
+            teacher("Кривошей Дмитрий Александрович"),
+        )
 
-    private fun insights(lessons: List<LessonEntity> = emptyList()) =
-        TeacherInsights(base, lessons)
+    private fun insights(lessons: List<LessonEntity> = emptyList()) = TeacherInsights(base, lessons)
 
     private fun lesson(
         teacherFirst: String,
@@ -34,7 +33,7 @@ class TeacherInsightsTest {
         roomFirst: String = "",
         roomSecond: String = "",
         subject: String = "",
-        date: String = ""
+        date: String = "",
     ) = LessonEntity(
         groupName = "41О",
         dayOfWeek = 2,
@@ -46,7 +45,7 @@ class TeacherInsightsTest {
         teacherFirst = teacherFirst,
         roomSecond = roomSecond,
         teacherSecond = teacherSecond,
-        dateString = date
+        dateString = date,
     )
 
     @Test
@@ -59,14 +58,12 @@ class TeacherInsightsTest {
 
     @Test
     fun `фамилия без инициалов сопоставляется однозначно`() {
-
         assertEquals("Кривошей Дмитрий Александрович", insights().matchTeacher("Кривошей Д")?.name)
         assertEquals("Кривошей Дмитрий Александрович", insights().matchTeacher("Кривошей")?.name)
     }
 
     @Test
     fun `обрезанная фамилия ищется по префиксу`() {
-
         assertEquals("Березовская Нелли Викторовна", insights().matchTeacher("Березовска")?.name)
         assertEquals("Березовская Нелли Викторовна", insights().matchTeacher("Березовск")?.name)
     }
@@ -98,7 +95,6 @@ class TeacherInsightsTest {
 
     @Test
     fun `строки из реального расписания парсятся полностью`() {
-
         val raw = "Серединов А/Будай И.Н."
         val names = TeacherInsights.splitTeacherNames(raw)
         assertEquals(2, names.size)
@@ -109,11 +105,12 @@ class TeacherInsightsTest {
 
     @Test
     fun `активные преподаватели определяются из уроков группы`() {
-        val lessons = listOf(
-            lesson(teacherFirst = "Зыбин О.Л. /Купрейчик Н.А.", roomFirst = "249", roomSecond = "112"),
-            lesson(teacherFirst = "Дубатовка Е.А.", roomFirst = "242"),
-            lesson(teacherFirst = "Посторонний П.П.", roomFirst = "999")
-        )
+        val lessons =
+            listOf(
+                lesson(teacherFirst = "Зыбин О.Л. /Купрейчик Н.А.", roomFirst = "249", roomSecond = "112"),
+                lesson(teacherFirst = "Дубатовка Е.А.", roomFirst = "242"),
+                lesson(teacherFirst = "Посторонний П.П.", roomFirst = "999"),
+            )
         val ti = insights(lessons)
 
         assertEquals(3, ti.activeNames.size)
@@ -125,22 +122,24 @@ class TeacherInsightsTest {
 
     @Test
     fun `кабинеты преподавателя собираются из расписания по частоте`() {
-        val lessons = listOf(
-            lesson(teacherFirst = "Зыбин О.Л.", roomFirst = "249"),
-            lesson(teacherFirst = "Зыбин О.Л.", roomFirst = "249"),
-            lesson(teacherFirst = "Зыбин О.Л.", roomFirst = "112")
-        )
+        val lessons =
+            listOf(
+                lesson(teacherFirst = "Зыбин О.Л.", roomFirst = "249"),
+                lesson(teacherFirst = "Зыбин О.Л.", roomFirst = "249"),
+                lesson(teacherFirst = "Зыбин О.Л.", roomFirst = "112"),
+            )
         val rooms = insights(lessons).rooms("Зыбин Олег Львович")
         assertEquals(listOf("249", "112"), rooms)
     }
 
     @Test
     fun `дисциплины преподавателя определяются из его уроков`() {
-        val lessons = listOf(
-            lesson(teacherFirst = "Дубатовка Е.А.", subject = "Системы технологий"),
-            lesson(teacherFirst = "Дубатовка Е.А.", subject = "Охрана труда"),
-            lesson(teacherFirst = "Дубатовка Е.А.", subject = "Системы технологий")
-        )
+        val lessons =
+            listOf(
+                lesson(teacherFirst = "Дубатовка Е.А.", subject = "Системы технологий"),
+                lesson(teacherFirst = "Дубатовка Е.А.", subject = "Охрана труда"),
+                lesson(teacherFirst = "Дубатовка Е.А.", subject = "Системы технологий"),
+            )
         val subjects = insights(lessons).subjects("Дубатовка Екатерина Анатольевна")
         assertTrue(subjects.contains("Системы технологий"))
         assertTrue(subjects.contains("Охрана труда"))
@@ -149,10 +148,10 @@ class TeacherInsightsTest {
 
     @Test
     fun `преподаватели с историей расписания подсвечиваются как активные`() {
-
-        val lessons = listOf(
-            lesson(teacherFirst = "Мешалкина И.В.", roomFirst = "339", date = "2026-09-15")
-        )
+        val lessons =
+            listOf(
+                lesson(teacherFirst = "Мешалкина И.В.", roomFirst = "339", date = "2026-09-15"),
+            )
         val ti = insights(lessons)
         assertTrue(ti.isActive("Мешалкина Ирина Владимировна"))
         assertEquals(1, ti.lessonCount("Мешалкина Ирина Владимировна"))
@@ -161,14 +160,15 @@ class TeacherInsightsTest {
 
     @Test
     fun `сопоставление через второй преподаватель в подгруппе`() {
-        val lessons = listOf(
-            lesson(
-                teacherFirst = "Зыбин О.Л.",
-                teacherSecond = "Купрейчик Н.А.",
-                roomFirst = "249",
-                roomSecond = "112"
+        val lessons =
+            listOf(
+                lesson(
+                    teacherFirst = "Зыбин О.Л.",
+                    teacherSecond = "Купрейчик Н.А.",
+                    roomFirst = "249",
+                    roomSecond = "112",
+                ),
             )
-        )
         val ti = insights(lessons)
 
         assertNotNull(ti.rooms("Зыбин Олег Львович"))

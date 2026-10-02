@@ -44,26 +44,49 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w360dp-h720dp")
 class N15BackStackTest {
-
     @get:Rule
     val composeRule = createComposeRule()
 
     private lateinit var nav: NavHostController
 
-    private val scrollArgs = listOf(
-        navArgument(ARG_SCROLL) { type = NavType.StringType; defaultValue = "" }
-    )
-    private val mapArgs = listOf(
-        navArgument("room") { type = NavType.StringType; nullable = true; defaultValue = null },
-        navArgument("from") { type = NavType.StringType; nullable = true; defaultValue = null },
-        navArgument("route") { type = NavType.BoolType; defaultValue = false }
-    )
-    private val teacherArgs = listOf(
-        navArgument("name") { type = NavType.StringType; defaultValue = "" }
-    )
-    private val groupArgs = listOf(
-        navArgument("group") { type = NavType.StringType; defaultValue = "" }
-    )
+    private val scrollArgs =
+        listOf(
+            navArgument(ARG_SCROLL) {
+                type = NavType.StringType
+                defaultValue = ""
+            },
+        )
+    private val mapArgs =
+        listOf(
+            navArgument("room") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            },
+            navArgument("from") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            },
+            navArgument("route") {
+                type = NavType.BoolType
+                defaultValue = false
+            },
+        )
+    private val teacherArgs =
+        listOf(
+            navArgument("name") {
+                type = NavType.StringType
+                defaultValue = ""
+            },
+        )
+    private val groupArgs =
+        listOf(
+            navArgument("group") {
+                type = NavType.StringType
+                defaultValue = ""
+            },
+        )
 
     @Before
     fun setUp() {
@@ -96,21 +119,21 @@ class N15BackStackTest {
     @Test
     fun `N15 - расписание группы - кабинет - карта - назад возвращает ТУ ЖЕ группу`() {
         go { navigateToTab(ROUTE_COLLEGE) }
-        go { navigate(buildGroupScheduleRoute(null)) }        // меню → выбор группы
-        go { navigate(buildGroupScheduleRoute("41О")) }       // выбрана группа 41О
-        go { navigate(buildMapRoute("214", "", false)) }      // тап по кабинету → карта с маршрутом
+        go { navigate(buildGroupScheduleRoute(null)) } // меню → выбор группы
+        go { navigate(buildGroupScheduleRoute("41О")) } // выбрана группа 41О
+        go { navigate(buildMapRoute("214", "", false)) } // тап по кабинету → карта с маршрутом
 
         assertEquals(ROUTE_MAP, current()?.destination?.route)
 
-        go { popBackStack() }                                 // системное «назад» с карты
+        go { popBackStack() } // системное «назад» с карты
         val restored = current()
         assertEquals(ROUTE_GROUP_SCHEDULE, restored?.destination?.route)
         assertEquals("41О", restored?.arguments?.getString("group"))
 
-        go { popBackStack() }                                 // назад → снова выбор группы
+        go { popBackStack() } // назад → снова выбор группы
         assertEquals("", current()?.arguments?.getString("group"))
 
-        go { popBackStack() }                                 // назад → меню «Другое»
+        go { popBackStack() } // назад → меню «Другое»
         assertEquals(ROUTE_COLLEGE, current()?.destination?.route)
     }
 
@@ -121,7 +144,7 @@ class N15BackStackTest {
         assertEquals(ROUTE_TEACHER, current()?.destination?.route)
         assertEquals(
             "Иванова Мария Петровна",
-            current()?.arguments?.getString("name")
+            current()?.arguments?.getString("name"),
         )
 
         go { popBackStack() }
@@ -134,8 +157,8 @@ class N15BackStackTest {
     @Test
     fun `переключение вкладок не плодит хвост - назад со стартового таба выходит из приложения`() {
         go { navigateToTab(ROUTE_BELLS) }
-        go { navigate(buildMapRoute("214", null, false)) }    // глубокий экран с «Звонков»
-        go { navigateToTab(ROUTE_COLLEGE) }                   // таб гасит map+bells (saveState)
+        go { navigate(buildMapRoute("214", null, false)) } // глубокий экран с «Звонков»
+        go { navigateToTab(ROUTE_COLLEGE) } // таб гасит map+bells (saveState)
         go { navigateToTab(ROUTE_SCHEDULE) }
 
         assertEquals(scrollRoutePattern(ROUTE_SCHEDULE), current()?.destination?.route)

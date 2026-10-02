@@ -12,7 +12,6 @@ import org.robolectric.RuntimeEnvironment
 
 @RunWith(RobolectricTestRunner::class)
 class GroupCatalogTest {
-
     private val catalog = GroupCatalog.load(RuntimeEnvironment.getApplication())
 
     @Test

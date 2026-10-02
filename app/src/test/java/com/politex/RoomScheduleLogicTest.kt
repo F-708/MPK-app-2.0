@@ -9,7 +9,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RoomScheduleLogicTest {
-
     private fun lesson(
         lessonNumber: Int,
         roomFirst: String,
@@ -18,7 +17,7 @@ class RoomScheduleLogicTest {
         dateString: String = "",
         dayOfWeek: Int = 1,
         teacherFirst: String = "Иванова А.А.",
-        teacherSecond: String = ""
+        teacherSecond: String = "",
     ) = LessonEntity(
         groupName = groupName,
         dayOfWeek = dayOfWeek,
@@ -31,38 +30,41 @@ class RoomScheduleLogicTest {
         roomSecond = roomSecond,
         teacherSecond = teacherSecond,
         isSplit = roomSecond.isNotBlank(),
-        dateString = dateString
+        dateString = dateString,
     )
 
     @Test
     fun `фильтр по кабинету roomFirst и roomSecond (дробные пары)`() {
-        val lessons = listOf(
-            lesson(1, roomFirst = "215"),
-            lesson(2, roomFirst = "101"),
-            lesson(3, roomFirst = "101", roomSecond = "215"), // дробная пара — 215 вторая подгруппа
-            lesson(4, roomFirst = "302")
-        )
+        val lessons =
+            listOf(
+                lesson(1, roomFirst = "215"),
+                lesson(2, roomFirst = "101"),
+                lesson(3, roomFirst = "101", roomSecond = "215"), // дробная пара — 215 вторая подгруппа
+                lesson(4, roomFirst = "302"),
+            )
         val result = filterRoomLessonsForDate(lessons, "215", "22.09.2026")
         assertEquals(listOf(1, 3), result.map { it.lessonNumber })
     }
 
     @Test
     fun `точная дата приоритетнее пустого dateString`() {
-        val lessons = listOf(
-            lesson(1, roomFirst = "215", dateString = "22.09.2026"),
-            lesson(2, roomFirst = "215", dateString = ""), // шаблон дня недели
-            lesson(3, roomFirst = "215", dateString = "25.09.2026") // другая дата — игнорируется
-        )
+        val lessons =
+            listOf(
+                lesson(1, roomFirst = "215", dateString = "22.09.2026"),
+                lesson(2, roomFirst = "215", dateString = ""), // шаблон дня недели
+                lesson(3, roomFirst = "215", dateString = "25.09.2026"), // другая дата — игнорируется
+            )
         val result = filterRoomLessonsForDate(lessons, "215", "22.09.2026")
         assertEquals(listOf(1), result.map { it.lessonNumber })
     }
 
     @Test
     fun `фолбэк на пустой dateString когда точных нет`() {
-        val lessons = listOf(
-            lesson(2, roomFirst = "215", dateString = ""),
-            lesson(1, roomFirst = "215", dateString = "")
-        )
+        val lessons =
+            listOf(
+                lesson(2, roomFirst = "215", dateString = ""),
+                lesson(1, roomFirst = "215", dateString = ""),
+            )
         val result = filterRoomLessonsForDate(lessons, "215", "22.09.2026")
         // сортировка по lessonNumber
         assertEquals(listOf(1, 2), result.map { it.lessonNumber })
@@ -75,15 +77,15 @@ class RoomScheduleLogicTest {
             filterRoomLessonsForDate(
                 listOf(lesson(1, roomFirst = "101")),
                 "215",
-                "22.09.2026"
-            ).isEmpty()
+                "22.09.2026",
+            ).isEmpty(),
         )
         assertTrue(
             filterRoomLessonsForDate(
                 listOf(lesson(1, roomFirst = "215")),
                 "",
-                "22.09.2026"
-            ).isEmpty()
+                "22.09.2026",
+            ).isEmpty(),
         )
     }
 

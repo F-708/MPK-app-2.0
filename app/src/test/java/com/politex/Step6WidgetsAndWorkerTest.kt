@@ -1,4 +1,4 @@
-﻿package com.politex
+package com.politex
 
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
@@ -13,10 +13,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class Step6WidgetsAndWorkerTest {
-
     @Test
     fun testNextStudyDayTransition_1stCourse_Vs_HigherCourses() {
-
         val group1stCourse = GroupParser.parse("11Т")
         assertNotNull(group1stCourse)
         assertEquals(1, group1stCourse?.course)
@@ -45,19 +43,20 @@ class Step6WidgetsAndWorkerTest {
 
     @Test
     fun testLessonSplitAndRoomDisplay() {
-        val splitLesson = LessonEntity(
-            groupName = "41О",
-            dayOfWeek = 1,
-            lessonNumber = 1,
-            timeStart = "08:15",
-            timeEnd = "09:55",
-            subjectRaw = "Иностранный язык (профессиональная лексика)",
-            roomFirst = "215",
-            teacherFirst = "Иванова А.А.",
-            roomSecond = "308",
-            teacherSecond = "Петрова Б.Б.",
-            isSplit = true
-        )
+        val splitLesson =
+            LessonEntity(
+                groupName = "41О",
+                dayOfWeek = 1,
+                lessonNumber = 1,
+                timeStart = "08:15",
+                timeEnd = "09:55",
+                subjectRaw = "Иностранный язык (профессиональная лексика)",
+                roomFirst = "215",
+                teacherFirst = "Иванова А.А.",
+                roomSecond = "308",
+                teacherSecond = "Петрова Б.Б.",
+                isSplit = true,
+            )
 
         assertTrue(splitLesson.isSplit)
         assertEquals("215", splitLesson.roomFirst)
@@ -66,7 +65,6 @@ class Step6WidgetsAndWorkerTest {
 
     @Test
     fun testBellTimesForDayOfWeek() {
-
         val (monStart, monEnd) = CollegeBellSchedule.getTimeForNumber(1, 1)
         assertEquals("08:15", monStart)
         assertEquals("09:55", monEnd)
@@ -94,7 +92,10 @@ class Step6WidgetsAndWorkerTest {
 
     // WID-01: виджет «СЕГОДНЯ» не должен показывать чужой день
 
-    private fun lesson(number: Int, date: String) = LessonEntity(
+    private fun lesson(
+        number: Int,
+        date: String,
+    ) = LessonEntity(
         groupName = "41О",
         dayOfWeek = 1,
         lessonNumber = number,
@@ -103,34 +104,42 @@ class Step6WidgetsAndWorkerTest {
         subjectRaw = "Математика",
         roomFirst = "215",
         teacherFirst = "Иванова А.А.",
-        dateString = date
+        dateString = date,
     )
 
     @Test
     fun testFilterTodayLessons_prefersExactToday() {
-        val all = listOf(
-            lesson(1, "21.09.2026"),
-            lesson(2, ""),          // недельный шаблон
-            lesson(3, "28.09.2026") // сегодня
-        )
-        val result = com.politex.widget.WidgetData.filterTodayLessons(all, "28.09.2026")
+        val all =
+            listOf(
+                lesson(1, "21.09.2026"),
+                lesson(2, ""), // недельный шаблон
+                lesson(3, "28.09.2026"), // сегодня
+            )
+        val result =
+            com.politex.widget.WidgetData
+                .filterTodayLessons(all, "28.09.2026")
         assertEquals(listOf(3), result.map { it.lessonNumber })
     }
 
     @Test
     fun testFilterTodayLessons_fallsBackToWeeklyTemplate() {
-        val all = listOf(
-            lesson(2, "21.09.2026"), // только прошлая дата
-            lesson(1, "")            // недельный шаблон
-        )
-        val result = com.politex.widget.WidgetData.filterTodayLessons(all, "28.09.2026")
+        val all =
+            listOf(
+                lesson(2, "21.09.2026"), // только прошлая дата
+                lesson(1, ""), // недельный шаблон
+            )
+        val result =
+            com.politex.widget.WidgetData
+                .filterTodayLessons(all, "28.09.2026")
         assertEquals(listOf(1), result.map { it.lessonNumber })
     }
 
     @Test
     fun testFilterTodayLessons_onlyPastDate_noTemplate_returnsEmpty() {
         val all = listOf(lesson(1, "21.09.2026"), lesson(2, "22.09.2026"))
-        val result = com.politex.widget.WidgetData.filterTodayLessons(all, "28.09.2026")
+        val result =
+            com.politex.widget.WidgetData
+                .filterTodayLessons(all, "28.09.2026")
         assertTrue(result.isEmpty())
     }
 }

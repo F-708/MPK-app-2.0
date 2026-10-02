@@ -2,19 +2,24 @@ package com.politex.data.repository
 
 import com.politex.data.local.entity.LessonEntity
 import com.politex.util.HomeworkMarkers
-import java.util.Calendar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Calendar
 
 class ScheduleArchiveTest {
-
-    private fun ms(y: Int, m: Int, d: Int): Long = Calendar.getInstance().apply {
-        clear()
-        set(y, m - 1, d)
-    }.timeInMillis
+    private fun ms(
+        y: Int,
+        m: Int,
+        d: Int,
+    ): Long = Calendar
+        .getInstance()
+        .apply {
+            clear()
+            set(y, m - 1, d)
+        }.timeInMillis
 
     private val cutoff = ms(2026, 1, 1)
 
@@ -32,7 +37,6 @@ class ScheduleArchiveTest {
 
     @Test
     fun `не-даты не удаляются`() {
-
         assertFalse(isStaleDate("", cutoff))
         assertFalse(isStaleDate("2025-09-01", cutoff))
         assertFalse(isStaleDate("1.9.2025", cutoff))
@@ -55,21 +59,33 @@ class ScheduleArchiveTest {
     @Test
     fun `граница месяца и года при штамповке дат`() {
         // Понедельник 28.09.2026 ( ISO: 2026-09-28 понедельник) — суббота будет 03.10.2026
-        val monday = Calendar.getInstance().apply { clear(); set(2026, Calendar.SEPTEMBER, 28) }
+        val monday =
+            Calendar.getInstance().apply {
+                clear()
+                set(2026, Calendar.SEPTEMBER, 28)
+            }
         assertEquals(Calendar.MONDAY, monday.get(Calendar.DAY_OF_WEEK))
         val saturday = (monday.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 5) }
         assertEquals(3, saturday.get(Calendar.DAY_OF_MONTH))
         assertEquals(Calendar.OCTOBER, saturday.get(Calendar.MONTH))
 
         // Понедельник 28.12.2026 — среда будет 30.12, суббота 02.01.2027 (граница года)
-        val decMonday = Calendar.getInstance().apply { clear(); set(2026, Calendar.DECEMBER, 28) }
+        val decMonday =
+            Calendar.getInstance().apply {
+                clear()
+                set(2026, Calendar.DECEMBER, 28)
+            }
         assertEquals(Calendar.MONDAY, decMonday.get(Calendar.DAY_OF_WEEK))
         val nextYearSat = (decMonday.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 5) }
         assertEquals(2027, nextYearSat.get(Calendar.YEAR))
         assertEquals(2, nextYearSat.get(Calendar.DAY_OF_MONTH))
     }
 
-    private fun lesson(date: String, dow: Int, number: Int) = LessonEntity(
+    private fun lesson(
+        date: String,
+        dow: Int,
+        number: Int,
+    ) = LessonEntity(
         groupName = "41О",
         dayOfWeek = dow,
         lessonNumber = number,
@@ -78,7 +94,7 @@ class ScheduleArchiveTest {
         subjectRaw = "Тест",
         roomFirst = "1",
         teacherFirst = "",
-        dateString = date
+        dateString = date,
     )
 
     @Test
@@ -101,11 +117,12 @@ class ScheduleArchiveTest {
 
     @Test
     fun `dedupeByLatestDate берёт позднюю дату по Calendar`() {
-        val rows = listOf(
-            lesson("28.09.2026", 1, 8),
-            lesson("05.10.2026", 1, 6),
-            lesson("", 1, 3)
-        )
+        val rows =
+            listOf(
+                lesson("28.09.2026", 1, 8),
+                lesson("05.10.2026", 1, 6),
+                lesson("", 1, 3),
+            )
         val picked = HomeworkMarkers.dedupeByLatestDate(rows)
         // Поздняя дата — 05.10.2026, а не «28.09» (лексикографический максимум)
         assertEquals(setOf("05.10.2026", ""), picked.map { it.dateString }.toSet())
@@ -113,10 +130,11 @@ class ScheduleArchiveTest {
 
     @Test
     fun `dedupeByLatestDate с ISO-датой тоже сравнивается корректно`() {
-        val rows = listOf(
-            lesson("2026-09-28", 1, 8),
-            lesson("05.10.2026", 1, 6)
-        )
+        val rows =
+            listOf(
+                lesson("2026-09-28", 1, 8),
+                lesson("05.10.2026", 1, 6),
+            )
         val picked = HomeworkMarkers.dedupeByLatestDate(rows)
         assertEquals(listOf(6), picked.map { it.lessonNumber })
     }

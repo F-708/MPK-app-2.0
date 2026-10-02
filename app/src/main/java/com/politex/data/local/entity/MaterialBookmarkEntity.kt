@@ -13,12 +13,12 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "material_bookmarks",
-    indices = [Index("itemId")]
+    indices = [Index("itemId")],
 )
 data class MaterialBookmarkEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val itemId: Long,
     val page: Int,
-    val label: String = ""
+    val label: String = "",
 )

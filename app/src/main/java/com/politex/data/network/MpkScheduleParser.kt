@@ -1,22 +1,22 @@
-﻿package com.politex.data.network
+package com.politex.data.network
 
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.util.GroupParser
 import com.politex.util.SubjectFormatter
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.net.URLDecoder
 import java.nio.charset.Charset
 import java.util.Locale
 import java.util.zip.ZipInputStream
-import org.xmlpull.v1.XmlPullParser
-import org.xmlpull.v1.XmlPullParserFactory
 
 data class SchedulePostLink(
     val url: String,
     val title: String,
-    val dateString: String = ""
+    val dateString: String = "",
 )
 
 data class ParseStats(
@@ -28,7 +28,7 @@ data class ParseStats(
 
     val parseError: String = "",
 
-    val textPreview: String = ""
+    val textPreview: String = "",
 )
 
 object MpkScheduleParser {
@@ -48,28 +48,28 @@ object MpkScheduleParser {
         "среда" to 3,
         "четверг" to 4,
         "пятница" to 5,
-        "суббота" to 6
+        "суббота" to 6,
     )
 
     private val POST_LINK_REGEX = Regex(
         "<a[^>]+href=[\"']([^\"']*(?:raspisanie|uchashhihsya|[0-9]{2}[.-][0-9]{2}[.-][0-9]{4})[^\"']*)[\"'][^>]*>(.*?)</a>",
-        RegexOption.IGNORE_CASE
+        RegexOption.IGNORE_CASE,
     )
 
     private val DOC_LINK_REGEX = Regex(
-        "(?i)href=[\"']([^\"']+\\.(?:docx|doc)(?:\\?[^\"']*)?)[\"']"
+        "(?i)href=[\"']([^\"']+\\.(?:docx|doc)(?:\\?[^\"']*)?)[\"']",
     )
 
     private val IFRAME_SRC_REGEX = Regex(
-        "(?i)<iframe[^>]+src=[\"']([^\"']+)[\"']"
+        "(?i)<iframe[^>]+src=[\"']([^\"']+)[\"']",
     )
 
     private val OFFICE_VIEWER_SRC_REGEX = Regex(
-        "(?i)src=(https?%3A%2F%2F[^&\"']+|https?://[^&\"']+)"
+        "(?i)src=(https?%3A%2F%2F[^&\"']+|https?://[^&\"']+)",
     )
 
     private val DATE_IN_TEXT_REGEX = Regex(
-        "([0-3]?[0-9])[.\\-/]([0-1]?[0-9])[.\\-/](202[0-9])"
+        "([0-3]?[0-9])[.\\-/]([0-1]?[0-9])[.\\-/](202[0-9])",
     )
 
     private val DOT_FORMAT = java.text.SimpleDateFormat("dd.MM.yyyy", Locale.ROOT)
@@ -113,7 +113,7 @@ object MpkScheduleParser {
     internal fun restampByDow(
         lessons: List<LessonEntity>,
         anchorCal: java.util.Calendar,
-        anchorDow: Int
+        anchorDow: Int,
     ): List<LessonEntity> = lessons.map { lesson ->
         val cal = (anchorCal.clone() as java.util.Calendar)
         cal.add(java.util.Calendar.DAY_OF_YEAR, (lesson.dayOfWeek - anchorDow).coerceIn(-6, 6))
@@ -138,14 +138,16 @@ object MpkScheduleParser {
                     val m = dateMatch.groupValues[2].padStart(2, '0')
                     val y = dateMatch.groupValues[3]
                     "$d.$m.$y"
-                } else ""
+                } else {
+                    ""
+                }
 
                 result.add(
                     SchedulePostLink(
                         url = absoluteUrl,
                         title = rawTitle.ifBlank { "Расписание учащихся" },
-                        dateString = dateString
-                    )
+                        dateString = dateString,
+                    ),
                 )
             }
         }
@@ -161,14 +163,16 @@ object MpkScheduleParser {
                     val m = dateMatch.groupValues[2].padStart(2, '0')
                     val y = dateMatch.groupValues[3]
                     "$d.$m.$y"
-                } else ""
+                } else {
+                    ""
+                }
 
                 result.add(
                     SchedulePostLink(
                         url = absoluteUrl,
                         title = "Расписание",
-                        dateString = dateString
-                    )
+                        dateString = dateString,
+                    ),
                 )
             }
         }
@@ -214,7 +218,7 @@ object MpkScheduleParser {
     fun parseFile(
         bytes: ByteArray,
         targetGroup: String,
-        targetDate: String = ""
+        targetDate: String = "",
     ): List<LessonEntity> {
         val parsed = parseFileRaw(bytes, targetGroup, targetDate)
         return applyHeaderDate(parsed, bytes, targetDate)
@@ -234,7 +238,7 @@ object MpkScheduleParser {
     fun parseFileAllGroups(
         bytes: ByteArray,
         targetDate: String = "",
-        candidateGroups: List<String> = emptyList()
+        candidateGroups: List<String> = emptyList(),
     ): List<LessonEntity> {
         if (bytes.isEmpty() || candidateGroups.isEmpty()) return emptyList()
 
@@ -255,7 +259,7 @@ object MpkScheduleParser {
     fun parseFileRaw(
         bytes: ByteArray,
         targetGroup: String,
-        targetDate: String = ""
+        targetDate: String = "",
     ): List<LessonEntity> {
         if (bytes.isEmpty()) return emptyList()
 
@@ -276,8 +280,11 @@ object MpkScheduleParser {
         val docLessons = parseDocBinary(bytes, targetGroup, targetDate)
         if (docLessons.isNotEmpty()) return docLessons
 
-        val isOleDoc = bytes.size >= 4 && bytes[0] == 0xD0.toByte() && bytes[1] == 0xCF.toByte() &&
-            bytes[2] == 0x11.toByte() && bytes[3] == 0xE0.toByte()
+        val isOleDoc = bytes.size >= 4 &&
+            bytes[0] == 0xD0.toByte() &&
+            bytes[1] == 0xCF.toByte() &&
+            bytes[2] == 0x11.toByte() &&
+            bytes[3] == 0xE0.toByte()
         if (isOleDoc) return emptyList()
 
         resetStats("text")
@@ -285,7 +292,7 @@ object MpkScheduleParser {
         val textLessons = runCatching { parsePlainTextSchedule(textUtf8, targetGroup, targetDate) }
             .onFailure {
                 lastParseStats = lastParseStats.copy(
-                    parseError = (lastParseStats.parseError + "; text:${it.javaClass.simpleName}: ${it.message}").trim(';', ' ')
+                    parseError = (lastParseStats.parseError + "; text:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '),
                 )
             }
             .getOrDefault(emptyList())
@@ -296,7 +303,7 @@ object MpkScheduleParser {
         return runCatching { parsePlainTextSchedule(textCp1251, targetGroup, targetDate) }
             .onFailure {
                 lastParseStats = lastParseStats.copy(
-                    parseError = (lastParseStats.parseError + "; cp1251-text:${it.javaClass.simpleName}: ${it.message}").trim(';', ' ')
+                    parseError = (lastParseStats.parseError + "; cp1251-text:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '),
                 )
             }
             .getOrDefault(emptyList())
@@ -310,7 +317,7 @@ object MpkScheduleParser {
     private fun applyHeaderDate(
         lessons: List<LessonEntity>,
         bytes: ByteArray,
-        targetDate: String
+        targetDate: String,
     ): List<LessonEntity> {
         if (lessons.isEmpty()) return lessons
 
@@ -330,8 +337,11 @@ object MpkScheduleParser {
 
     /** Текст заголовка: первые распознанные текстовые прогоны документа. */
     private fun extractHeaderText(bytes: ByteArray): String {
-        val fromZip = if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte() &&
-            bytes[2] == 0x03.toByte() && bytes[3] == 0x04.toByte()
+        val fromZip = if (bytes.size >= 4 &&
+            bytes[0] == 0x50.toByte() &&
+            bytes[1] == 0x4B.toByte() &&
+            bytes[2] == 0x03.toByte() &&
+            bytes[3] == 0x04.toByte()
         ) {
             try {
                 val zip = ZipInputStream(ByteArrayInputStream(bytes))
@@ -346,8 +356,12 @@ object MpkScheduleParser {
                     entry = zip.nextEntry
                 }
                 xml?.let { Regex("РАСПИСАНИЕ[^<]*", RegexOption.IGNORE_CASE).find(it)?.value }
-            } catch (_: Exception) { null }
-        } else null
+            } catch (_: Exception) {
+                null
+            }
+        } else {
+            null
+        }
         if (!fromZip.isNullOrBlank()) return fromZip
 
         val utf16Text = runCatching { extractUtf16LeRuns(bytes).joinToString("\n") }.getOrDefault("")
@@ -359,7 +373,8 @@ object MpkScheduleParser {
     }
 
     private val HEADER_DOW_REGEX = Regex(
-        "ПОНЕДЕЛЬНИК|ВТОРНИК|СРЕД[УА]|ЧЕТВЕРГ|ПЯТНИЦ[УЕ]|СУББОТ", RegexOption.IGNORE_CASE
+        "ПОНЕДЕЛЬНИК|ВТОРНИК|СРЕД[УА]|ЧЕТВЕРГ|ПЯТНИЦ[УЕ]|СУББОТ",
+        RegexOption.IGNORE_CASE,
     )
 
     private fun extractHeaderDate(headerText: String): String? {
@@ -383,7 +398,7 @@ object MpkScheduleParser {
     fun parseDocBinary(
         bytes: ByteArray,
         targetGroup: String,
-        targetDate: String = ""
+        targetDate: String = "",
     ): List<LessonEntity> {
         val utf16Runs = extractUtf16LeRuns(bytes)
         lastParseStats = lastParseStats.copy(format = "doc-utf16", runsExtracted = utf16Runs.size)
@@ -392,7 +407,7 @@ object MpkScheduleParser {
             val utf16Lessons = runCatching { parsePlainTextSchedule(utf16Text, targetGroup, targetDate) }
                 .onFailure {
                     lastParseStats = lastParseStats.copy(
-                        parseError = (lastParseStats.parseError + "; utf16:${it.javaClass.simpleName}: ${it.message}").trim(';', ' ')
+                        parseError = (lastParseStats.parseError + "; utf16:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '),
                     )
                 }
                 .getOrDefault(emptyList())
@@ -407,7 +422,7 @@ object MpkScheduleParser {
             val cp1251Lessons = runCatching { parsePlainTextSchedule(cp1251Text, targetGroup, targetDate) }
                 .onFailure {
                     lastParseStats = lastParseStats.copy(
-                        parseError = (lastParseStats.parseError + "; cp1251:${it.javaClass.simpleName}: ${it.message}").trim(';', ' ')
+                        parseError = (lastParseStats.parseError + "; cp1251:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '),
                     )
                 }
                 .getOrDefault(emptyList())
@@ -419,7 +434,7 @@ object MpkScheduleParser {
         } else if (utf16Stats.textPreview.isNotBlank()) {
             lastParseStats = lastParseStats.copy(
                 textPreview = utf16Stats.textPreview,
-                runsExtracted = utf16Stats.runsExtracted
+                runsExtracted = utf16Stats.runsExtracted,
             )
         }
 
@@ -434,13 +449,16 @@ object MpkScheduleParser {
             val unsigned = b.toInt() and 0xFF
 
             val isValid = (unsigned in 0x20..0x7E) ||
-                    (unsigned in 0xC0..0xFF) ||
-                    unsigned == 0xA8 || unsigned == 0xB8 ||
-                    unsigned == 0x09 || unsigned == 0x0A || unsigned == 0x0D || unsigned == 0x07
+                (unsigned in 0xC0..0xFF) ||
+                unsigned == 0xA8 ||
+                unsigned == 0xB8 ||
+                unsigned == 0x09 ||
+                unsigned == 0x0A ||
+                unsigned == 0x0D ||
+                unsigned == 0x07
 
             if (isValid) {
                 if (unsigned == 0x07) {
-
                     buffer.add(0x09.toByte())
                 } else {
                     buffer.add(b)
@@ -492,7 +510,8 @@ object MpkScheduleParser {
                     val decoded = String(buffer.toByteArray(), Charsets.UTF_16LE)
 
                     if (decoded.any { it in 'А'..'я' || it in 'A'..'z' || it in '0'..'9' } ||
-                        decoded.length >= 6 && decoded.all { it.isWhitespace() }
+                        decoded.length >= 6 &&
+                        decoded.all { it.isWhitespace() }
                     ) {
                         runs.add(decoded)
                     }
@@ -513,7 +532,7 @@ object MpkScheduleParser {
     fun parseDocx(
         inputStream: InputStream,
         targetGroup: String,
-        targetDate: String = ""
+        targetDate: String = "",
     ): List<LessonEntity> {
         val zip = ZipInputStream(inputStream)
         var entry = zip.nextEntry
@@ -538,7 +557,7 @@ object MpkScheduleParser {
     fun parseDocxXml(
         xmlContent: String,
         targetGroup: String,
-        targetDate: String = ""
+        targetDate: String = "",
     ): List<LessonEntity> {
         val cleanTargetGroup = GroupParser.cleanRawGroupName(targetGroup).uppercase(Locale.ROOT)
         val lessons = mutableListOf<LessonEntity>()
@@ -616,7 +635,7 @@ object MpkScheduleParser {
     private fun parseTableData(
         rows: List<List<String>>,
         targetGroup: String,
-        targetDate: String
+        targetDate: String,
     ): List<LessonEntity> {
         val result = mutableListOf<LessonEntity>()
         if (rows.isEmpty()) return result
@@ -666,7 +685,7 @@ object MpkScheduleParser {
                     dayOfWeek = currentDay,
                     lessonNumber = lessonNumber,
                     rawContent = lessonCellContent,
-                    dateString = targetDate
+                    dateString = targetDate,
                 )
                 if (lesson != null) {
                     result.add(lesson)
@@ -696,7 +715,7 @@ object MpkScheduleParser {
     fun parsePlainTextSchedule(
         text: String,
         targetGroup: String,
-        targetDate: String = ""
+        targetDate: String = "",
     ): List<LessonEntity> {
         if (text.isBlank()) return emptyList()
 
@@ -751,7 +770,7 @@ object MpkScheduleParser {
         }
 
         lastParseStats = lastParseStats.copy(
-            textPreview = text.replace(Regex("\\s+"), " ").take(120)
+            textPreview = text.replace(Regex("\\s+"), " ").take(120),
         )
         val strategyErrors = mutableListOf<String>()
 
@@ -776,7 +795,7 @@ object MpkScheduleParser {
             .getOrDefault(emptyList())
         lastParseStats = lastParseStats.copy(
             strategy = if (lineLessons.isNotEmpty()) "line" else strategyErrors.joinToString("; ").ifBlank { "none" },
-            parseError = strategyErrors.joinToString("; ")
+            parseError = strategyErrors.joinToString("; "),
         )
         return lineLessons
     }
@@ -785,7 +804,7 @@ object MpkScheduleParser {
         lines: List<String>,
         targetGroup: String,
         defaultDay: Int,
-        dateString: String
+        dateString: String,
     ): List<LessonEntity> {
         val lessons = mutableListOf<LessonEntity>()
 
@@ -819,10 +838,12 @@ object MpkScheduleParser {
 
             val end = if (bIdx + 1 < blocks.size) {
                 indexOfNextHeaderStart(lines, from = block.endIdx) ?: lines.size
-            } else lines.size
+            } else {
+                lines.size
+            }
 
             lessons.addAll(
-                parseCellRunsBetween(lines, block.endIdx, end, targetCol, block.groups.size, targetGroup, defaultDay, dateString)
+                parseCellRunsBetween(lines, block.endIdx, end, targetCol, block.groups.size, targetGroup, defaultDay, dateString),
             )
         }
 
@@ -839,7 +860,8 @@ object MpkScheduleParser {
                 var j = i
                 var count = 0
                 while (j < lines.size && GroupParser.isValid(lines[j].trim()) && count < 12) {
-                    count++; j++
+                    count++
+                    j++
                 }
                 if (count >= 2) return i
                 i = j
@@ -858,7 +880,7 @@ object MpkScheduleParser {
         groupCount: Int,
         targetGroup: String,
         dayOfWeek: Int,
-        dateString: String
+        dateString: String,
     ): List<LessonEntity> {
         val result = mutableListOf<LessonEntity>()
         var i = from
@@ -870,7 +892,6 @@ object MpkScheduleParser {
             }
             val lessonNum = leadingLessonNumberOf(line)
             if (lessonNum == null) {
-
                 i++
                 continue
             }
@@ -921,7 +942,7 @@ object MpkScheduleParser {
         lines: List<String>,
         targetGroup: String,
         defaultDay: Int,
-        dateString: String
+        dateString: String,
     ): List<LessonEntity> {
         val lessons = mutableListOf<LessonEntity>()
         var currentDay = defaultDay
@@ -961,7 +982,6 @@ object MpkScheduleParser {
 
                 val validGroupCount = cells.count { GroupParser.isValid(it) }
                 if (validGroupCount >= 2 || (validGroupCount >= 1 && cells.size in 1..8 && cells.any { GroupParser.matchesGroup(it, targetGroup) })) {
-
                     currentBlockGroups = cells
                     targetColIndex = -1
                     for ((cIdx, grp) in cells.withIndex()) {
@@ -975,7 +995,6 @@ object MpkScheduleParser {
                 }
 
                 if (targetColIndex != -1 && currentBlockGroups.isNotEmpty()) {
-
                     val isBorder = line.all { it in "┌┬┐├┼┤┴└┘─|-=+\t " }
                     if (isBorder) {
                         i++
@@ -1023,7 +1042,7 @@ object MpkScheduleParser {
                                 cellTeacher = cell2,
                                 groupName = targetGroup,
                                 dayOfWeek = currentDay,
-                                dateString = dateString
+                                dateString = dateString,
                             )
                             if (parsedLesson != null && lessons.none { it.dayOfWeek == parsedLesson.dayOfWeek && it.lessonNumber == parsedLesson.lessonNumber }) {
                                 lessons.add(parsedLesson)
@@ -1059,7 +1078,7 @@ object MpkScheduleParser {
         cellTeacher: String,
         groupName: String,
         dayOfWeek: Int,
-        dateString: String
+        dateString: String,
     ): LessonEntity? {
         val cleanSubj = cellSubject.trim()
         if (cleanSubj.isBlank() || cleanSubj == "-" || cleanSubj == "—") return null
@@ -1078,10 +1097,10 @@ object MpkScheduleParser {
         val doubleRoomsMatch = doubleRoomsPattern.find(rawRest)
 
         val isExplicitSplit = doubleRoomsMatch != null ||
-                rawRest.contains("/") ||
-                cellTeacher.contains("/") ||
-                cleanSubj.contains("п/г", ignoreCase = true) ||
-                cleanSubj.contains("подгруппа", ignoreCase = true)
+            rawRest.contains("/") ||
+            cellTeacher.contains("/") ||
+            cleanSubj.contains("п/г", ignoreCase = true) ||
+            cleanSubj.contains("подгруппа", ignoreCase = true)
 
         if (isExplicitSplit) {
             var room1 = ""
@@ -1136,7 +1155,9 @@ object MpkScheduleParser {
             val normSubj1 = SubjectFormatter.normalize(subjPart1.ifBlank { rawRest })
             val normSubj2 = if (subjPart2.isNotBlank() && subjPart2 != subjPart1 && !subjPart2.contains("---")) {
                 SubjectFormatter.normalize(subjPart2)
-            } else normSubj1
+            } else {
+                normSubj1
+            }
 
             val finalSubjectName = if (normSubj1 != normSubj2 && normSubj2.isNotBlank()) {
                 "$normSubj1 / $normSubj2"
@@ -1156,10 +1177,9 @@ object MpkScheduleParser {
                 roomSecond = room2,
                 teacherSecond = teacher2,
                 isSplit = true,
-                dateString = dateString
+                dateString = dateString,
             )
         } else {
-
             var room = ""
             var subject = rawRest
             val singleRoomMatch = Regex("(?:каб\\.?|ауд\\.?)?\\s*([0-9]{1,3}[Ѐ-ӿa-zA-Z]?|СТД)$").find(rawRest)
@@ -1187,7 +1207,7 @@ object MpkScheduleParser {
                 roomSecond = "",
                 teacherSecond = "",
                 isSplit = false,
-                dateString = dateString
+                dateString = dateString,
             )
         }
     }
@@ -1217,7 +1237,7 @@ object MpkScheduleParser {
         lines: List<String>,
         targetGroup: String,
         defaultDay: Int,
-        dateString: String
+        dateString: String,
     ): List<LessonEntity> {
         val lessons = mutableListOf<LessonEntity>()
         var currentDay = defaultDay
@@ -1256,7 +1276,7 @@ object MpkScheduleParser {
                     dayOfWeek = currentDay,
                     lessonNumber = lessonNum,
                     rawContent = line,
-                    dateString = dateString
+                    dateString = dateString,
                 )
                 if (lesson != null && lessons.none { it.dayOfWeek == currentDay && it.lessonNumber == lessonNum }) {
                     lessons.add(lesson)
@@ -1272,7 +1292,7 @@ object MpkScheduleParser {
         dayOfWeek: Int,
         lessonNumber: Int,
         rawContent: String,
-        dateString: String = ""
+        dateString: String = "",
     ): LessonEntity? {
         val trimmed = rawContent.trim()
         if (trimmed.isBlank() || trimmed == "-" || trimmed == "—") return null
@@ -1281,11 +1301,11 @@ object MpkScheduleParser {
 
         val doubleRooms = extractDoubleRooms(trimmed)
         val isExplicitSplit = trimmed.contains("1 п/г", ignoreCase = true) ||
-                trimmed.contains("1п/г", ignoreCase = true) ||
-                trimmed.contains("1 пг", ignoreCase = true) ||
-                trimmed.contains("1 подгруппа", ignoreCase = true) ||
-                doubleRooms != null ||
-                (trimmed.contains("/") && trimmed.length > 15)
+            trimmed.contains("1п/г", ignoreCase = true) ||
+            trimmed.contains("1 пг", ignoreCase = true) ||
+            trimmed.contains("1 подгруппа", ignoreCase = true) ||
+            doubleRooms != null ||
+            (trimmed.contains("/") && trimmed.length > 15)
 
         if (isExplicitSplit) {
             val parts = splitSubgroupContent(trimmed)
@@ -1321,7 +1341,7 @@ object MpkScheduleParser {
                 roomSecond = finalRoom2,
                 teacherSecond = teacher2,
                 isSplit = true,
-                dateString = dateString
+                dateString = dateString,
             )
         } else {
             val (room, teacher, subject) = extractDetails(trimmed)
@@ -1339,7 +1359,7 @@ object MpkScheduleParser {
                 roomSecond = "",
                 teacherSecond = "",
                 isSplit = false,
-                dateString = dateString
+                dateString = dateString,
             )
         }
     }
@@ -1412,12 +1432,10 @@ object MpkScheduleParser {
         return Pair(raw, raw)
     }
 
-    private fun resolveAbsoluteUrl(baseUrl: String, relativeUrl: String): String {
-        return try {
-            val base = java.net.URI(baseUrl)
-            base.resolve(relativeUrl).toString()
-        } catch (_: Exception) {
-            if (relativeUrl.startsWith("http")) relativeUrl else "$baseUrl$relativeUrl"
-        }
+    private fun resolveAbsoluteUrl(baseUrl: String, relativeUrl: String): String = try {
+        val base = java.net.URI(baseUrl)
+        base.resolve(relativeUrl).toString()
+    } catch (_: Exception) {
+        if (relativeUrl.startsWith("http")) relativeUrl else "$baseUrl$relativeUrl"
     }
 }

@@ -1,4 +1,4 @@
-﻿package com.politex.ui.screens
+package com.politex.ui.screens
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,11 +21,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Campaign
@@ -48,11 +47,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.politex.util.Dow
 import com.politex.data.model.BellItem
 import com.politex.data.model.BellScheduleType
 import com.politex.data.model.CollegeBellSchedule
@@ -65,15 +63,15 @@ import com.politex.ui.theme.ColorSuccess
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
-import com.politex.ui.theme.ColorTextMuted
-import com.politex.ui.theme.ColorTextTitle
-import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.ColorTextDisabled
+import com.politex.ui.theme.ColorTextMuted
+import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
-import java.util.Calendar
+import com.politex.util.Dow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import java.util.Calendar
 
 // B2: рельса таймлайна — только токены палитры, тема доходит до последнего экрана
 private val RAIL_BLUE: Color get() = ColorActiveBlue
@@ -82,8 +80,16 @@ private val RAIL_GRAY: Color get() = ColorTextMuted.copy(alpha = 0.55f)
 private val RAIL_GRAY_SOFT: Color get() = ColorTextDisabled
 
 private sealed interface BellRow {
-    data class Lesson(val item: BellItem) : BellRow
-    data class Break(val startMinutes: Int, val endMinutes: Int, val minutes: Int, val isBig: Boolean) : BellRow
+    data class Lesson(
+        val item: BellItem,
+    ) : BellRow
+
+    data class Break(
+        val startMinutes: Int,
+        val endMinutes: Int,
+        val minutes: Int,
+        val isBig: Boolean,
+    ) : BellRow
 }
 
 @Composable
@@ -93,20 +99,24 @@ fun BellsScreen(
     scrollState: ScrollState = rememberScrollState(),
     scrollToCurrentRequested: Boolean = false,
     onScrollToCurrentConsumed: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     // SUI-01-паттерн и здесь: remember{Calendar.getInstance()} застревал на дне открытия
-    val now = com.politex.ui.util.rememberToday()
-    val todayDow = remember {
-        Dow.of(now)
-    }
+    val now =
+        com.politex.ui.util
+            .rememberToday()
+    val todayDow =
+        remember {
+            Dow.of(now)
+        }
     val todayLessons by scheduleRepository
         .getLessonsForDay(groupInfo.canonicalName, todayDow)
         .collectAsState(initial = emptyList<com.politex.data.local.entity.LessonEntity>())
-    val lastLessonToday = remember(todayLessons) {
-        todayLessons.maxOfOrNull { it.lessonNumber }
-    }
+    val lastLessonToday =
+        remember(todayLessons) {
+            todayLessons.maxOfOrNull { it.lessonNumber }
+        }
 
     val todayType = remember { CollegeBellSchedule.getTypeForDay(todayDow) }
     var selectedScheduleType by remember { mutableStateOf(todayType) }
@@ -124,38 +134,48 @@ fun BellsScreen(
     }
 
     val isTodaySelected = selectedScheduleType == todayType
-    val activeSlot = remember(currentTimeMinutes, selectedScheduleType, isTodaySelected) {
-        if (!isTodaySelected) null
-        else CollegeBellSchedule.getBellsForType(selectedScheduleType)
-            .firstOrNull { currentTimeMinutes in it.startMinutes..it.endMinutes }
-    }
-
-    val bells = CollegeBellSchedule.getBellsForType(selectedScheduleType)
-    val blueEndNum = if (isTodaySelected) {
-        lastLessonToday ?: bells.lastOrNull { !it.isInfoHour }?.lessonNumber
-    } else null
-    val blueEndMinutes = blueEndNum?.let { num ->
-        bells.lastOrNull { !it.isInfoHour && it.lessonNumber <= num }?.endMinutes
-    }
-
-    val rows = remember(selectedScheduleType) {
-        val b = CollegeBellSchedule.getBellsForType(selectedScheduleType)
-        val result = mutableListOf<BellRow>()
-        b.forEach { item ->
-            result.add(BellRow.Lesson(item))
-            if (item.breakAfterMinutes > 0) {
-                result.add(
-                    BellRow.Break(
-                        startMinutes = item.endMinutes,
-                        endMinutes = item.endMinutes + item.breakAfterMinutes,
-                        minutes = item.breakAfterMinutes,
-                        isBig = item.isBigBreak
-                    )
-                )
+    val activeSlot =
+        remember(currentTimeMinutes, selectedScheduleType, isTodaySelected) {
+            if (!isTodaySelected) {
+                null
+            } else {
+                CollegeBellSchedule
+                    .getBellsForType(selectedScheduleType)
+                    .firstOrNull { currentTimeMinutes in it.startMinutes..it.endMinutes }
             }
         }
-        result
-    }
+
+    val bells = CollegeBellSchedule.getBellsForType(selectedScheduleType)
+    val blueEndNum =
+        if (isTodaySelected) {
+            lastLessonToday ?: bells.lastOrNull { !it.isInfoHour }?.lessonNumber
+        } else {
+            null
+        }
+    val blueEndMinutes =
+        blueEndNum?.let { num ->
+            bells.lastOrNull { !it.isInfoHour && it.lessonNumber <= num }?.endMinutes
+        }
+
+    val rows =
+        remember(selectedScheduleType) {
+            val b = CollegeBellSchedule.getBellsForType(selectedScheduleType)
+            val result = mutableListOf<BellRow>()
+            b.forEach { item ->
+                result.add(BellRow.Lesson(item))
+                if (item.breakAfterMinutes > 0) {
+                    result.add(
+                        BellRow.Break(
+                            startMinutes = item.endMinutes,
+                            endMinutes = item.endMinutes + item.breakAfterMinutes,
+                            minutes = item.breakAfterMinutes,
+                            isBig = item.isBigBreak,
+                        ),
+                    )
+                }
+            }
+            result
+        }
 
     // Тап по виджету «До звонка»/«Звонки»: проскроллить к текущему звонку
     // (или к последнему, если уроки уже закончились). Одноразово.
@@ -171,9 +191,12 @@ fun BellsScreen(
     LaunchedEffect(scrollToCurrentRequested, activeSlot, rows) {
         if (!scrollToCurrentRequested) return@LaunchedEffect
         // Ждём первого лэйаута, иначе вьюпорт/maxValue ещё 0 и прокрутка невозможна
-        androidx.compose.runtime.snapshotFlow { scrollState.maxValue > 0 }.first { it }
-        val target = activeSlot
-            ?: rows.lastOrNull { it is BellRow.Lesson }?.let { (it as BellRow.Lesson).item }
+        androidx.compose.runtime
+            .snapshotFlow { scrollState.maxValue > 0 }
+            .first { it }
+        val target =
+            activeSlot
+                ?: rows.lastOrNull { it is BellRow.Lesson }?.let { (it as BellRow.Lesson).item }
         val idx = rows.indexOfFirst { (it as? BellRow.Lesson)?.item == target }
         if (idx >= 0) {
             with(density) {
@@ -193,129 +216,141 @@ fun BellsScreen(
     }
 
     Column(
-        modifier = modifier
+        modifier =
+        modifier
             .fillMaxSize()
-            .background(ColorBgMain)
+            .background(ColorBgMain),
     ) {
-
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text(
                 text = "Расписание звонков",
                 style = TextStylePageTitle,
-                maxLines = 1
+                maxLines = 1,
             )
             Text(
                 text = "Расписание уроков колледжа",
-                style = androidx.compose.ui.text.TextStyle(
+                style =
+                androidx.compose.ui.text.TextStyle(
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp,
-                    color = ColorBrandBlue
+                    color = ColorBrandBlue,
                 ),
-                maxLines = 1
+                maxLines = 1,
             )
         }
 
         Row(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             BellScheduleType.entries.forEach { type ->
                 val isSelected = selectedScheduleType == type
                 val isToday = type == todayType
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 ) {
                     Surface(
                         shape = RoundedCornerShape(2.dp),
                         border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
                         color = if (isSelected) ColorTopBar else ColorBgMain,
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .fillMaxWidth()
                             // B5: хитбокс переключателя графиков 44dp
                             .heightIn(min = 44.dp)
-                            .bouncyClickable { selectedScheduleType = type }
+                            .bouncyClickable { selectedScheduleType = type },
                     ) {
                         // O2: у material3 Surface нет contentAlignment (внутри Box с TopStart),
                         // а propagateMinConstraints=true растягивает Text на 44dp — глифы прижаты
                         // к верху. Центрируем через Box (как в TasksScreen/GroupSelectionDialog).
                         Box(
                             modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
+                            contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = when (type) {
+                                text =
+                                when (type) {
                                     BellScheduleType.STANDARD -> "ПН - ПТ"
                                     BellScheduleType.THURSDAY -> "ЧЕТВЕРГ"
                                     BellScheduleType.SATURDAY -> "СУББОТА"
                                 },
                                 softWrap = false,
                                 maxLines = 1,
-                                style = androidx.compose.ui.text.TextStyle(
+                                style =
+                                androidx.compose.ui.text.TextStyle(
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                     fontSize = 12.sp,
-                                    color = if (isSelected) Color.White else ColorTextBody
+                                    color = if (isSelected) Color.White else ColorTextBody,
                                 ),
-                                modifier = Modifier
+                                modifier =
+                                Modifier
                                     .padding(vertical = 8.dp)
-                                    .wrapContentWidth(Alignment.CenterHorizontally)
+                                    .wrapContentWidth(Alignment.CenterHorizontally),
                             )
                         }
                     }
                     Box(
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .padding(top = 3.dp)
                             .width(28.dp)
                             .height(3.dp)
                             .background(
                                 if (isToday) ColorActiveBlue else Color.Transparent,
-                                RoundedCornerShape(2.dp)
-                            )
+                                RoundedCornerShape(2.dp),
+                            ),
                     )
                 }
             }
         }
 
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(top = 5.dp)
                 .height(1.dp)
-                .background(ColorDividerLight)
+                .background(ColorDividerLight),
         )
 
         // B3 (решение владельца): контекстная карточка «СЕЙЧАС» есть ВСЕГДА —
         // слот не схлопывается, список не прыгает при смене урока.
         // До 1-го звонка: «Уроки ещё не начались», после последнего: «Уроки закончились».
         if (isTodaySelected && bells.isNotEmpty()) {
-            val breakIdx = bells.indexOfFirst { bell ->
-                val breakEnd = bell.endMinutes + bell.breakAfterMinutes
-                bell.breakAfterMinutes > 0 && currentTimeMinutes > bell.endMinutes &&
-                    currentTimeMinutes < breakEnd
-            }
-            val context: NowContext = when {
-                activeSlot != null -> NowContext.Active(activeSlot)
-                currentTimeMinutes < bells.first().startMinutes ->
-                    NowContext.Inactive("Уроки ещё не начались", "первый звонок в ${bells.first().start}")
-                breakIdx >= 0 -> {
-                    val nextStart = bells.getOrNull(breakIdx + 1)?.start ?: bells[breakIdx].end
-                    NowContext.Inactive("СЕЙЧАС: ПЕРЕМЕНА", "до $nextStart")
+            val breakIdx =
+                bells.indexOfFirst { bell ->
+                    val breakEnd = bell.endMinutes + bell.breakAfterMinutes
+                    bell.breakAfterMinutes > 0 &&
+                        currentTimeMinutes > bell.endMinutes &&
+                        currentTimeMinutes < breakEnd
                 }
-                else -> NowContext.Inactive("Уроки закончились", "последний звонок в ${bells.last().end}")
-            }
+            val context: NowContext =
+                when {
+                    activeSlot != null -> NowContext.Active(activeSlot)
+                    currentTimeMinutes < bells.first().startMinutes ->
+                        NowContext.Inactive("Уроки ещё не начались", "первый звонок в ${bells.first().start}")
+                    breakIdx >= 0 -> {
+                        val nextStart = bells.getOrNull(breakIdx + 1)?.start ?: bells[breakIdx].end
+                        NowContext.Inactive("СЕЙЧАС: ПЕРЕМЕНА", "до $nextStart")
+                    }
+                    else -> NowContext.Inactive("Уроки закончились", "последний звонок в ${bells.last().end}")
+                }
             NowContextCard(context = context)
         }
 
         Column(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .onSizeChanged { viewportPx = it.height }
                 .verticalScroll(scrollState)
                 .padding(start = 16.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             rows.forEach { row ->
                 when (row) {
@@ -327,95 +362,117 @@ fun BellsScreen(
                             railTopColor = railColor(row.item.startMinutes, blueEndMinutes, isTodaySelected),
                             railBottomColor = railColor(row.item.endMinutes, blueEndMinutes, isTodaySelected),
                             inBlue = row.item.startMinutes < (blueEndMinutes ?: -1),
-                            dotProgress = dotProgressIn(row.item, currentTimeMinutes, isTodaySelected)
+                            dotProgress = dotProgressIn(row.item, currentTimeMinutes, isTodaySelected),
                         )
-                    is BellRow.Break -> BreakRow(
-                        row = row,
-                        dotProgress = dotProgressInBreak(row, currentTimeMinutes, isTodaySelected)
-                    )
+                    is BellRow.Break ->
+                        BreakRow(
+                            row = row,
+                            dotProgress = dotProgressInBreak(row, currentTimeMinutes, isTodaySelected),
+                        )
                 }
             }
         }
     }
 }
 
-private fun railColor(minutes: Int, blueEnd: Int?, isActive: Boolean): Color {
+private fun railColor(
+    minutes: Int,
+    blueEnd: Int?,
+    isActive: Boolean,
+): Color {
     if (!isActive) return RAIL_GRAY_SOFT
     return if (blueEnd != null && minutes <= blueEnd) RAIL_BLUE else RAIL_GRAY
 }
 
 /** B3: контекст карточки «СЕЙЧАС» — активный слот либо пограничное состояние. */
 private sealed interface NowContext {
-    data class Active(val slot: BellItem) : NowContext
-    data class Inactive(val title: String, val subtitle: String) : NowContext
+    data class Active(
+        val slot: BellItem,
+    ) : NowContext
+
+    data class Inactive(
+        val title: String,
+        val subtitle: String,
+    ) : NowContext
 }
 
 @Composable
 private fun NowContextCard(context: NowContext) {
     val isActive = context is NowContext.Active
     val slot = (context as? NowContext.Active)?.slot
-    val title = when (context) {
-        is NowContext.Active ->
-            if (slot!!.isInfoHour) "СЕЙЧАС: ИНФОРМАЦИОННЫЙ ЧАС" else "СЕЙЧАС: ${slot.title.uppercase()}"
-        is NowContext.Inactive -> context.title
-    }
-    val subtitle = when (context) {
-        is NowContext.Active -> slot!!.displayRange
-        is NowContext.Inactive -> context.subtitle
-    }
+    val title =
+        when (context) {
+            is NowContext.Active ->
+                if (slot!!.isInfoHour) "СЕЙЧАС: ИНФОРМАЦИОННЫЙ ЧАС" else "СЕЙЧАС: ${slot.title.uppercase()}"
+            is NowContext.Inactive -> context.title
+        }
+    val subtitle =
+        when (context) {
+            is NowContext.Active -> slot!!.displayRange
+            is NowContext.Inactive -> context.subtitle
+        }
 
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorSurfaceHighlight,
         border = BorderStroke(1.dp, if (isActive) ColorActiveBlue else ColorBorderLight),
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .size(30.dp)
                     .background(if (isActive) ColorActiveBlue else ColorBorderLight, RoundedCornerShape(2.dp)),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = when {
+                    imageVector =
+                    when {
                         slot?.isInfoHour == true -> Icons.Default.Campaign
                         isActive -> Icons.Default.NotificationsActive
                         else -> Icons.Default.AccessTime
                     },
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(16.dp),
                 )
             }
             Spacer(modifier = Modifier.width(10.dp))
             Column {
                 Text(
                     text = title,
-                    style = androidx.compose.ui.text.TextStyle(
+                    style =
+                    androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
-                        color = if (isActive) ColorBrandBlue else ColorTextBody
-                    )
+                        color = if (isActive) ColorBrandBlue else ColorTextBody,
+                    ),
                 )
                 Text(
                     text = subtitle,
-                    style = androidx.compose.ui.text.TextStyle(
+                    style =
+                    androidx.compose.ui.text.TextStyle(
                         fontSize = 11.sp,
-                        color = ColorTextBody
-                    )
+                        color = ColorTextBody,
+                    ),
                 )
             }
         }
     }
 }
 
-private fun dotProgressIn(bell: BellItem, nowMinutes: Int, isActive: Boolean): Float? {
+private fun dotProgressIn(
+    bell: BellItem,
+    nowMinutes: Int,
+    isActive: Boolean,
+): Float? {
     if (!isActive) return null
     if (nowMinutes in bell.startMinutes..bell.endMinutes) {
         return (nowMinutes - bell.startMinutes).toFloat() /
@@ -425,7 +482,11 @@ private fun dotProgressIn(bell: BellItem, nowMinutes: Int, isActive: Boolean): F
 }
 
 /** N12: точка бежит и по строке перемены — «точка не видна во время перемен» (заказчик). */
-private fun dotProgressInBreak(row: BellRow.Break, nowMinutes: Int, isActive: Boolean): Float? {
+private fun dotProgressInBreak(
+    row: BellRow.Break,
+    nowMinutes: Int,
+    isActive: Boolean,
+): Float? {
     if (!isActive) return null
     if (nowMinutes in row.startMinutes..row.endMinutes) {
         return (nowMinutes - row.startMinutes).toFloat() /
@@ -438,19 +499,24 @@ private fun dotProgressInBreak(row: BellRow.Break, nowMinutes: Int, isActive: Bo
  * N12: бегущая точка на рельсе — общая для уроков и перемен. DrawScope сам реализует
  * Density, поэтому dp.toPx() доступен напрямую. fraction — доля высоты строки (0..1).
  */
-private fun DrawScope.drawRailDot(cx: Float, fraction: Float, pulseRadiusDp: Float, insetDp: Float) {
+private fun DrawScope.drawRailDot(
+    cx: Float,
+    fraction: Float,
+    pulseRadiusDp: Float,
+    insetDp: Float,
+) {
     val inset = insetDp.dp.toPx()
     val travel = (size.height - inset * 2).coerceAtLeast(1f)
     val y = inset + travel * fraction
     drawCircle(
         color = RAIL_BLUE_SOFT,
         radius = pulseRadiusDp.dp.toPx() + 4.dp.toPx(),
-        center = Offset(cx, y)
+        center = Offset(cx, y),
     )
     drawCircle(
         color = RAIL_BLUE,
         radius = 4.5.dp.toPx(),
-        center = Offset(cx, y)
+        center = Offset(cx, y),
     )
 }
 
@@ -466,21 +532,21 @@ private fun LessonBellCard(
     railBottomColor: Color,
     inBlue: Boolean,
     dotProgress: Float?,
-    highlight: Boolean = false
+    highlight: Boolean = false,
 ) {
     val tickColor = if (inBlue) RAIL_BLUE else RAIL_GRAY_SOFT
     // N17: вспышка-подсветка текущей строки при входе из виджета (~1.6s, гаснет)
     val flashAlpha by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (highlight) 0.16f else 0f,
         animationSpec = tween(durationMillis = if (highlight) 150 else 900),
-        label = "BellFlash"
+        label = "BellFlash",
     )
     val pulseRadius by if (dotProgress != null) {
         rememberInfiniteTransition(label = "DotPulse").animateFloat(
             initialValue = 4.5f,
             targetValue = 7f,
             animationSpec = infiniteRepeatable(tween(durationMillis = 900), RepeatMode.Reverse),
-            label = "DotPulseRadius"
+            label = "DotPulseRadius",
         )
     } else {
         remember { mutableStateOf(0f) }
@@ -489,23 +555,25 @@ private fun LessonBellCard(
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
-        border = BorderStroke(
+        border =
+        BorderStroke(
             1.dp,
             when {
                 item.isInfoHour -> ColorSuccess
                 isActive -> ColorActiveBlue
                 else -> ColorBorderLight
-            }
+            },
         ),
         shadowElevation = 0.dp,
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .drawBehind {
                 // N17: фоновая вспышка подсветки (flashAlpha гаснет до 0)
                 if (flashAlpha > 0.005f) {
                     drawRect(
                         color = ColorActiveBlue.copy(alpha = flashAlpha),
-                        size = size
+                        size = size,
                     )
                 }
                 val cx = size.width + 10.dp.toPx()
@@ -519,72 +587,74 @@ private fun LessonBellCard(
                     start = Offset(cx, -gap),
                     end = Offset(cx, size.height / 2f),
                     strokeWidth = 2.dp.toPx(),
-                    cap = StrokeCap.Round
+                    cap = StrokeCap.Round,
                 )
                 drawLine(
                     color = railBottomColor,
                     start = Offset(cx, size.height / 2f),
                     end = Offset(cx, size.height + gap),
                     strokeWidth = 2.dp.toPx(),
-                    cap = StrokeCap.Round
+                    cap = StrokeCap.Round,
                 )
 
                 drawLine(
                     color = tickColor,
                     start = Offset(cx - tickLen, 0f),
                     end = Offset(cx + tickLen, 0f),
-                    strokeWidth = 1.5.dp.toPx()
+                    strokeWidth = 1.5.dp.toPx(),
                 )
                 drawLine(
                     color = tickColor,
                     start = Offset(cx - tickLen, size.height),
                     end = Offset(cx + tickLen, size.height),
-                    strokeWidth = 1.5.dp.toPx()
+                    strokeWidth = 1.5.dp.toPx(),
                 )
 
                 if (dotProgress != null) {
                     drawRailDot(cx, dotProgress, pulseRadius, 16f)
                 }
-            }
+            },
     ) {
         Row(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
-                    color = when {
+                    color =
+                    when {
                         item.isInfoHour -> ColorSuccess
                         isActive -> ColorActiveBlue
                         else -> ColorBrandBlue
                     },
-                    contentColor = Color.White
+                    contentColor = Color.White,
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
                     ) {
                         if (item.isInfoHour) {
                             Icon(
                                 imageVector = Icons.Default.Campaign,
                                 contentDescription = null,
                                 tint = Color.White,
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(13.dp),
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                         }
                         Text(
                             text = if (item.isInfoHour) "ИНФОЧАС" else "${item.lessonNumber} УРОК",
                             softWrap = false,
-                            style = androidx.compose.ui.text.TextStyle(
+                            style =
+                            androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
+                                fontSize = 12.sp,
+                            ),
                         )
                     }
                 }
@@ -594,18 +664,19 @@ private fun LessonBellCard(
                 shape = RoundedCornerShape(2.dp),
                 border = BorderStroke(1.dp, ColorBorderLight),
                 color = ColorSurfaceVariantLight,
-                modifier = Modifier.wrapContentWidth()
+                modifier = Modifier.wrapContentWidth(),
             ) {
                 Text(
                     text = item.displayRange,
                     softWrap = false,
                     maxLines = 1,
-                    style = androidx.compose.ui.text.TextStyle(
+                    style =
+                    androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
-                        color = ColorBrandBlue
+                        color = ColorBrandBlue,
                     ),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 )
             }
         }
@@ -613,7 +684,10 @@ private fun LessonBellCard(
 }
 
 @Composable
-private fun BreakRow(row: BellRow.Break, dotProgress: Float? = null) {
+private fun BreakRow(
+    row: BellRow.Break,
+    dotProgress: Float? = null,
+) {
     val range = "${minutesToTime(row.startMinutes)} – ${minutesToTime(row.endMinutes)}"
     // N12: точка видна и во время перемены — тот же пульс, что у урока
     val pulseRadius by if (dotProgress != null) {
@@ -621,13 +695,14 @@ private fun BreakRow(row: BellRow.Break, dotProgress: Float? = null) {
             initialValue = 4.5f,
             targetValue = 7f,
             animationSpec = infiniteRepeatable(tween(durationMillis = 900), RepeatMode.Reverse),
-            label = "BreakDotPulseRadius"
+            label = "BreakDotPulseRadius",
         )
     } else {
         remember { mutableStateOf(0f) }
     }
     Row(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .drawBehind {
                 val cx = size.width + 10.dp.toPx()
@@ -637,33 +712,33 @@ private fun BreakRow(row: BellRow.Break, dotProgress: Float? = null) {
                     start = Offset(cx, -gap),
                     end = Offset(cx, size.height + gap),
                     strokeWidth = 2.dp.toPx(),
-                    cap = StrokeCap.Round
+                    cap = StrokeCap.Round,
                 )
                 if (dotProgress != null) {
                     drawRailDot(cx, dotProgress, pulseRadius, 3f)
                 }
-            }
-            .padding(start = 12.dp, end = 4.dp),
+            }.padding(start = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
             text = if (row.isBig) "перемена ${row.minutes} мин (большая)" else "перемена ${row.minutes} мин",
-            style = androidx.compose.ui.text.TextStyle(
+            style =
+            androidx.compose.ui.text.TextStyle(
                 fontSize = 11.sp,
                 fontWeight = if (row.isBig) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (row.isBig) ColorBrandBlue else ColorTextMuted
-            )
+                color = if (row.isBig) ColorBrandBlue else ColorTextMuted,
+            ),
         )
         Text(
             text = range,
-            style = androidx.compose.ui.text.TextStyle(
+            style =
+            androidx.compose.ui.text.TextStyle(
                 fontSize = 10.sp,
-                color = ColorTextMuted
-            )
+                color = ColorTextMuted,
+            ),
         )
     }
 }
 
-private fun minutesToTime(minutes: Int): String =
-    String.format(java.util.Locale.ROOT, "%02d:%02d", minutes / 60, minutes % 60)
+private fun minutesToTime(minutes: Int): String = String.format(java.util.Locale.ROOT, "%02d:%02d", minutes / 60, minutes % 60)

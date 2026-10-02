@@ -1,4 +1,4 @@
-﻿package com.politex.widget
+package com.politex.widget
 
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -9,10 +9,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.widget.RemoteViews
-import com.politex.util.Dow
 import com.politex.R
 import com.politex.data.model.BellItem
 import com.politex.data.model.CollegeBellSchedule
+import com.politex.util.Dow
 import java.util.Calendar
 
 class BellCountdownWidgetProvider : AppWidgetProvider() {
@@ -50,7 +50,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
 
         fun countdownInfo(
             context: Context,
-            mode: CountdownMode = CountdownMode.GROUP_LESSONS
+            mode: CountdownMode = CountdownMode.GROUP_LESSONS,
         ): Triple<Long, String, Int>? {
             val cal = java.util.Calendar.getInstance()
             val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
@@ -69,7 +69,9 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             // Данные считаем здесь и в цикле не матчим звонки после последнего урока группы.
             val lastGroupLesson = if (mode == CountdownMode.GROUP_LESSONS) {
                 lastGroupLessonForToday(context, cal)
-            } else null
+            } else {
+                null
+            }
 
             return countdownForMinute(minutes, dow, bells, mode, lastGroupLesson)
         }
@@ -88,7 +90,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             dayOfWeek: Int,
             bells: List<BellItem>,
             mode: CountdownMode,
-            lastGroupLesson: Int?
+            lastGroupLesson: Int?,
         ): Triple<Long, String, Int>? {
             if (dayOfWeek == 7 || bells.isEmpty()) return null
             if (minutes < SHOW_FROM_MINUTE) return null
@@ -129,7 +131,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             dayOfWeek: Int,
             bells: List<BellItem>,
             mode: CountdownMode,
-            lastGroupLesson: Int?
+            lastGroupLesson: Int?,
         ): Triple<Long, String, Int>? {
             if (dayOfWeek == 7 || bells.isEmpty()) return null
             if (minutes >= SHOW_FROM_MINUTE) return null
@@ -153,7 +155,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             dayOfWeek: Int,
             bells: List<BellItem>,
             mode: CountdownMode,
-            lastGroupLesson: Int?
+            lastGroupLesson: Int?,
         ): Triple<Long, String, Int>? {
             if (dayOfWeek == 7 || bells.isEmpty()) return null
             if (minutes < SHOW_FROM_MINUTE) return null
@@ -180,7 +182,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                     return Triple(
                         left.toLong(),
                         if (next.isInfoHour) "до инфочаса" else "до ${next.lessonNumber} урока",
-                        0
+                        0,
                     )
                 }
             }
@@ -196,23 +198,31 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
          * Последний урок группы сегодня: сначала строки с датой (dateString dd.MM.yyyy / dd-MM-yyyy),
          * при отсутствии — регулярные по dayOfWeek (graceful degradation). Пусто → null (уроков нет).
          */
+
         // O1: тот же runBlocking в Room, что и в WidgetData.todayLessons; результат
         // не зависит от appWidgetId и меняется раз в минуту → кэш по (дата+время+группа).
         // Поля @Volatile: updateAll зовётся и из будильника, и из BellTimerService.
         @Volatile private var cacheKey: String? = null
+
         @Volatile private var cacheLastLesson: Int? = null
 
         fun lastGroupLessonForToday(context: Context, cal: Calendar): Int? {
             val group = WidgetUpdateHelper.getSelectedGroup(context)
             if (group.isBlank()) return null
             val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
-                Calendar.MONDAY -> 1; Calendar.TUESDAY -> 2; Calendar.WEDNESDAY -> 3
-                Calendar.THURSDAY -> 4; Calendar.FRIDAY -> 5; Calendar.SATURDAY -> 6
+                Calendar.MONDAY -> 1
+                Calendar.TUESDAY -> 2
+                Calendar.WEDNESDAY -> 3
+                Calendar.THURSDAY -> 4
+                Calendar.FRIDAY -> 5
+                Calendar.SATURDAY -> 6
                 else -> 7
             }
             val todayString = String.format(
                 "%02d.%02d.%d",
-                cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR)
+                cal.get(Calendar.DAY_OF_MONTH),
+                cal.get(Calendar.MONTH) + 1,
+                cal.get(Calendar.YEAR),
             )
             // BEL-04/WID-04: «последний урок группы сегодня» не меняется в течение дня —
             // ключ БЕЗ минут. Раньше ключ включал HH:mm и кэш промахивался каждую минуту:
@@ -227,8 +237,11 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                         it.dateString.isNotBlank() && it.dateString.replace("-", ".") == todayString
                     }
                     // Дневные строки на сегодняшнюю дату имеют приоритет; иначе — регулярные по дню недели.
-                    if (forToday.isNotEmpty()) forToday.maxOf { it.lessonNumber }
-                    else lessons.filter { it.dateString.isBlank() }.maxOfOrNull { it.lessonNumber }
+                    if (forToday.isNotEmpty()) {
+                        forToday.maxOf { it.lessonNumber }
+                    } else {
+                        lessons.filter { it.dateString.isBlank() }.maxOfOrNull { it.lessonNumber }
+                    }
                 }
             } catch (_: Exception) {
                 null
@@ -255,7 +268,9 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             // Один read БД на обновление (countdownInfo читал бы его второй раз)
             val lastGroupLesson = if (mode == CountdownMode.GROUP_LESSONS && dow in 1..6) {
                 lastGroupLessonForToday(context, cal)
-            } else null
+            } else {
+                null
+            }
 
             // Тот же расчёт, что countdownInfo, но без повторного обращения к БД
             val info = if (dow == 7) null else countdownForMinute(minutes, dow, bells, mode, lastGroupLesson)
@@ -272,7 +287,9 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                     // читается как поломка. Показываем отсчёт до первого урока сегодня.
                     val night = if (tomorrow == null) {
                         nightFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
-                    } else null
+                    } else {
+                        null
+                    }
                     when {
                         tomorrow != null -> {
                             views.setTextViewText(R.id.tv_countdown_label, tomorrow.second)
@@ -304,7 +321,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     .putExtra("EXTRA_OPEN_TAB", "BELLS")
                     .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_BELL"),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             views.setOnClickPendingIntent(R.id.widget_countdown_root, openIntent)
             return views
@@ -332,12 +349,13 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
 enum class CountdownMode(val title: String, val description: String) {
     GROUP_LESSONS(
         "До конца моих уроков",
-        "Отсчёт заканчивается на последнем уроке вашей группы"
+        "Отсчёт заканчивается на последнем уроке вашей группы",
     ),
     ALL_BELLS(
         "До конца всех звонков",
-        "Отсчёт идёт до последнего звонка в колледже"
-    );
+        "Отсчёт идёт до последнего звонка в колледже",
+    ),
+    ;
 
     companion object {
         private const val PREF_PREFIX = "countdown_mode_"
@@ -368,24 +386,41 @@ enum class WidgetStyle(
     val highlightColor: Int,
 
     val pastColor: Int,
-    val title: String
+    val title: String,
 ) {
     LIGHT(
-        0xFFFFFFFF.toInt(), 0xFF111827.toInt(), 0xFF6B7280.toInt(),
-        0xFFE8F0FA.toInt(), 0xFF9AA3AF.toInt(), "Белый"
+        0xFFFFFFFF.toInt(),
+        0xFF111827.toInt(),
+        0xFF6B7280.toInt(),
+        0xFFE8F0FA.toInt(),
+        0xFF9AA3AF.toInt(),
+        "Белый",
     ),
     DARK(
-        0xFF001737.toInt(), 0xFFFFFFFF.toInt(), 0xFFB9C6D8.toInt(),
-        0xFF0B3564.toInt(), 0xFF5A6B85.toInt(), "Тёмно-синий"
+        0xFF001737.toInt(),
+        0xFFFFFFFF.toInt(),
+        0xFFB9C6D8.toInt(),
+        0xFF0B3564.toInt(),
+        0xFF5A6B85.toInt(),
+        "Тёмно-синий",
     ),
     BLUE(
-        0xFF0B3564.toInt(), 0xFFFFFFFF.toInt(), 0xFFAFC6E4.toInt(),
-        0xFF16457F.toInt(), 0xFF6E86A6.toInt(), "Фирменный синий"
+        0xFF0B3564.toInt(),
+        0xFFFFFFFF.toInt(),
+        0xFFAFC6E4.toInt(),
+        0xFF16457F.toInt(),
+        0xFF6E86A6.toInt(),
+        "Фирменный синий",
     ),
     SKY(
-        0xFF0072CE.toInt(), 0xFFFFFFFF.toInt(), 0xFFD5E9FA.toInt(),
-        0xFF0B3564.toInt(), 0xFF8FB8DD.toInt(), "Яркий синий"
-    );
+        0xFF0072CE.toInt(),
+        0xFFFFFFFF.toInt(),
+        0xFFD5E9FA.toInt(),
+        0xFF0B3564.toInt(),
+        0xFF8FB8DD.toInt(),
+        "Яркий синий",
+    ),
+    ;
 
     companion object {
         private const val PREF_PREFIX = "widget_style_"
@@ -418,8 +453,10 @@ object WidgetAlarm {
             action = WidgetAlarmReceiver.ACTION_TICK
         }
         return PendingIntent.getBroadcast(
-            context, 4002, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            context,
+            4002,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
 
@@ -435,7 +472,7 @@ object WidgetAlarm {
             BellCountdownWidgetProvider::class.java,
             NowNextWidgetProvider::class.java,
             TodayScheduleWidgetProvider::class.java,
-            BellsWidgetProvider::class.java
+            BellsWidgetProvider::class.java,
         ).any { manager.getAppWidgetIds(ComponentName(context, it)).isNotEmpty() }
     }
 
@@ -459,8 +496,11 @@ object WidgetAlarm {
         val pi = pendingIntent(context)
         val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
         try {
-            if (canExact) am.setExactAndAllowWhileIdle(AlarmManager.RTC, triggerAt, pi)
-            else am.setAndAllowWhileIdle(AlarmManager.RTC, triggerAt, pi)
+            if (canExact) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC, triggerAt, pi)
+            } else {
+                am.setAndAllowWhileIdle(AlarmManager.RTC, triggerAt, pi)
+            }
         } catch (_: SecurityException) {
             am.setAndAllowWhileIdle(AlarmManager.RTC, triggerAt, pi)
         }

@@ -1,4 +1,4 @@
-﻿package com.politex.util
+package com.politex.util
 
 import android.Manifest
 import android.app.NotificationChannel
@@ -11,16 +11,15 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import com.politex.util.Dow
 import com.politex.MainActivity
 import com.politex.R
 import com.politex.data.model.CollegeBellSchedule
+import com.politex.util.Dow
 import com.politex.widget.BellCountdownWidgetProvider
 import com.politex.widget.WidgetUpdateHelper
 import java.util.Calendar
 
 object BellCountdownNotifier {
-
     const val CHANNEL_ID = "mpk_bell_countdown"
     const val CHANNEL_NAME = "До звонка"
 
@@ -32,44 +31,64 @@ object BellCountdownNotifier {
     private const val PREF_SCOPE = "bell_notification_scope"
     private const val PREF_PINNED = "bell_notification_pinned"
 
-    enum class Scope(val id: String, val title: String, val description: String) {
+    enum class Scope(
+        val id: String,
+        val title: String,
+        val description: String,
+    ) {
         MY_LESSONS("my_lessons", "Мои уроки", "Счётчик заканчивается с последней парой вашей группы"),
-        COLLEGE("college", "Уроки колледжа", "Счётчик работает до последнего звонка колледжа");
+        COLLEGE("college", "Уроки колледжа", "Счётчик работает до последнего звонка колледжа"),
+        ;
 
         companion object {
             fun from(id: String?): Scope = entries.firstOrNull { it.id == id } ?: MY_LESSONS
         }
     }
 
-    enum class Theme(val id: String, val title: String, val accent: Int, val colorize: Boolean) {
+    enum class Theme(
+        val id: String,
+        val title: String,
+        val accent: Int,
+        val colorize: Boolean,
+    ) {
         SYSTEM("system", "Системная", 0, false),
         BRAND("brand", "Фирменный синий", 0xFF0B3564.toInt(), true),
         SKY("sky", "Яркий синий", 0xFF0072CE.toInt(), true),
-        DARK("dark", "Тёмная", 0xFF232527.toInt(), true);
+        DARK("dark", "Тёмная", 0xFF232527.toInt(), true),
+        ;
 
         companion object {
             fun from(id: String?): Theme = entries.firstOrNull { it.id == id } ?: SYSTEM
         }
     }
 
-    enum class Style(val id: String, val title: String) {
+    enum class Style(
+        val id: String,
+        val title: String,
+    ) {
         COMPACT("compact", "Компактный"),
         WITH_APP_NAME("app_name", "С названием приложения"),
         WITH_LESSON("lesson", "С номером урока"),
-        WITH_PROGRESS("progress", "С полосой прогресса");
+        WITH_PROGRESS("progress", "С полосой прогресса"),
+        ;
 
         companion object {
             fun from(id: String?): Style = entries.firstOrNull { it.id == id } ?: COMPACT
         }
     }
 
-    fun isEnabled(context: Context): Boolean =
-        WidgetUpdateHelper.getPrefs(context).getBoolean(PREF_ENABLED, false)
+    fun isEnabled(context: Context): Boolean = WidgetUpdateHelper.getPrefs(context).getBoolean(PREF_ENABLED, false)
 
-    fun setEnabled(context: Context, enabled: Boolean) {
-        WidgetUpdateHelper.getPrefs(context).edit().putBoolean(PREF_ENABLED, enabled).apply()
+    fun setEnabled(
+        context: Context,
+        enabled: Boolean,
+    ) {
+        WidgetUpdateHelper
+            .getPrefs(context)
+            .edit()
+            .putBoolean(PREF_ENABLED, enabled)
+            .apply()
         if (enabled) {
-
             BellTimerService.start(context)
         } else {
             BellTimerService.stop(context)
@@ -77,50 +96,75 @@ object BellCountdownNotifier {
         }
     }
 
-    fun getStyle(context: Context): Style =
-        Style.from(WidgetUpdateHelper.getPrefs(context).getString(PREF_STYLE, null))
+    fun getStyle(context: Context): Style = Style.from(WidgetUpdateHelper.getPrefs(context).getString(PREF_STYLE, null))
 
-    fun getTheme(context: Context): Theme =
-        Theme.from(WidgetUpdateHelper.getPrefs(context).getString(PREF_THEME, null))
+    fun getTheme(context: Context): Theme = Theme.from(WidgetUpdateHelper.getPrefs(context).getString(PREF_THEME, null))
 
-    fun setTheme(context: Context, theme: Theme) {
-        WidgetUpdateHelper.getPrefs(context).edit().putString(PREF_THEME, theme.id).apply()
+    fun setTheme(
+        context: Context,
+        theme: Theme,
+    ) {
+        WidgetUpdateHelper
+            .getPrefs(context)
+            .edit()
+            .putString(PREF_THEME, theme.id)
+            .apply()
         if (isEnabled(context)) show(context)
     }
 
-    fun setStyle(context: Context, style: Style) {
-        WidgetUpdateHelper.getPrefs(context).edit().putString(PREF_STYLE, style.id).apply()
+    fun setStyle(
+        context: Context,
+        style: Style,
+    ) {
+        WidgetUpdateHelper
+            .getPrefs(context)
+            .edit()
+            .putString(PREF_STYLE, style.id)
+            .apply()
         if (isEnabled(context)) show(context)
     }
 
-    fun getScope(context: Context): Scope =
-        Scope.from(WidgetUpdateHelper.getPrefs(context).getString(PREF_SCOPE, null))
+    fun getScope(context: Context): Scope = Scope.from(WidgetUpdateHelper.getPrefs(context).getString(PREF_SCOPE, null))
 
-    fun setScope(context: Context, scope: Scope) {
-        WidgetUpdateHelper.getPrefs(context).edit().putString(PREF_SCOPE, scope.id).apply()
+    fun setScope(
+        context: Context,
+        scope: Scope,
+    ) {
+        WidgetUpdateHelper
+            .getPrefs(context)
+            .edit()
+            .putString(PREF_SCOPE, scope.id)
+            .apply()
         if (isEnabled(context)) show(context)
     }
 
-    fun isPinned(context: Context): Boolean =
-        WidgetUpdateHelper.getPrefs(context).getBoolean(PREF_PINNED, true)
+    fun isPinned(context: Context): Boolean = WidgetUpdateHelper.getPrefs(context).getBoolean(PREF_PINNED, true)
 
-    fun setPinned(context: Context, pinned: Boolean) {
-        WidgetUpdateHelper.getPrefs(context).edit().putBoolean(PREF_PINNED, pinned).apply()
+    fun setPinned(
+        context: Context,
+        pinned: Boolean,
+    ) {
+        WidgetUpdateHelper
+            .getPrefs(context)
+            .edit()
+            .putBoolean(PREF_PINNED, pinned)
+            .apply()
         if (isEnabled(context)) show(context)
     }
 
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Постоянная строка «сколько осталось до звонка»"
-                setShowBadge(false)
-                enableVibration(false)
-                setSound(null, null)
-            }
+            val channel =
+                NotificationChannel(
+                    CHANNEL_ID,
+                    CHANNEL_NAME,
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = "Постоянная строка «сколько осталось до звонка»"
+                    setShowBadge(false)
+                    enableVibration(false)
+                    setSound(null, null)
+                }
             (context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)
                 ?.createNotificationChannel(channel)
         }
@@ -141,7 +185,6 @@ object BellCountdownNotifier {
         try {
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
         } catch (_: SecurityException) {
-
         }
     }
 
@@ -156,7 +199,10 @@ object BellCountdownNotifier {
      *  - сейчас > [lessonsEndedMinute] → тишина до утра.
      * [lessonsEndedMinute] == null (уроков в этот день нет) → тишина весь день. Чистая функция.
      */
-    fun isQuietWindow(nowMinutes: Int, lessonsEndedMinute: Int?): Boolean {
+    fun isQuietWindow(
+        nowMinutes: Int,
+        lessonsEndedMinute: Int?,
+    ): Boolean {
         if (nowMinutes < RESUME_MINUTE) return true
         if (lessonsEndedMinute == null) return true
         return nowMinutes > lessonsEndedMinute
@@ -168,15 +214,16 @@ object BellCountdownNotifier {
      */
     private fun lessonsEndedMinuteToday(context: Context): Int? {
         val cal = Calendar.getInstance()
-        val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
-            Calendar.MONDAY -> 1
-            Calendar.TUESDAY -> 2
-            Calendar.WEDNESDAY -> 3
-            Calendar.THURSDAY -> 4
-            Calendar.FRIDAY -> 5
-            Calendar.SATURDAY -> 6
-            else -> return null
-        }
+        val dow =
+            when (cal.get(Calendar.DAY_OF_WEEK)) {
+                Calendar.MONDAY -> 1
+                Calendar.TUESDAY -> 2
+                Calendar.WEDNESDAY -> 3
+                Calendar.THURSDAY -> 4
+                Calendar.FRIDAY -> 5
+                Calendar.SATURDAY -> 6
+                else -> return null
+            }
         val bells = CollegeBellSchedule.getBellsForDay(dow)
         return when (getScope(context)) {
             Scope.COLLEGE -> bells.lastOrNull { !it.isInfoHour }?.endMinutes
@@ -209,7 +256,7 @@ object BellCountdownNotifier {
         val cal = Calendar.getInstance()
         return isQuietWindow(
             cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE),
-            lessonsEndedMinuteToday(context)
+            lessonsEndedMinuteToday(context),
         )
     }
 
@@ -217,10 +264,11 @@ object BellCountdownNotifier {
         createChannel(context)
 
         val scope = getScope(context)
-        val mode = when (scope) {
-            Scope.MY_LESSONS -> com.politex.widget.CountdownMode.GROUP_LESSONS
-            Scope.COLLEGE -> com.politex.widget.CountdownMode.ALL_BELLS
-        }
+        val mode =
+            when (scope) {
+                Scope.MY_LESSONS -> com.politex.widget.CountdownMode.GROUP_LESSONS
+                Scope.COLLEGE -> com.politex.widget.CountdownMode.ALL_BELLS
+            }
         val info = BellCountdownWidgetProvider.countdownInfo(context, mode)
 
         // Т10: скрыто (выходной / до 07:00 / уроки закончились / нет уроков) —
@@ -245,23 +293,27 @@ object BellCountdownNotifier {
      */
     private fun eveningOrNightInfo(
         context: Context,
-        mode: com.politex.widget.CountdownMode
+        mode: com.politex.widget.CountdownMode,
     ): Triple<Long, String, Int>? {
         val cal = Calendar.getInstance()
-        val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
-            Calendar.MONDAY -> 1
-            Calendar.TUESDAY -> 2
-            Calendar.WEDNESDAY -> 3
-            Calendar.THURSDAY -> 4
-            Calendar.FRIDAY -> 5
-            Calendar.SATURDAY -> 6
-            else -> return null
-        }
+        val dow =
+            when (cal.get(Calendar.DAY_OF_WEEK)) {
+                Calendar.MONDAY -> 1
+                Calendar.TUESDAY -> 2
+                Calendar.WEDNESDAY -> 3
+                Calendar.THURSDAY -> 4
+                Calendar.FRIDAY -> 5
+                Calendar.SATURDAY -> 6
+                else -> return null
+            }
         val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
         val bells = CollegeBellSchedule.getBellsForDay(dow)
-        val lastGroupLesson = if (mode == com.politex.widget.CountdownMode.GROUP_LESSONS) {
-            BellCountdownWidgetProvider.lastGroupLessonForToday(context, cal)
-        } else null
+        val lastGroupLesson =
+            if (mode == com.politex.widget.CountdownMode.GROUP_LESSONS) {
+                BellCountdownWidgetProvider.lastGroupLessonForToday(context, cal)
+            } else {
+                null
+            }
         return BellCountdownWidgetProvider.tomorrowFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
             ?: BellCountdownWidgetProvider.nightFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
     }
@@ -269,33 +321,36 @@ object BellCountdownNotifier {
     /** O6: сборка обычной строки отсчёта — общая для основного пути и утреннего окна 06:00. */
     private fun buildVisibleNotification(
         context: Context,
-        info: Triple<Long, String, Int>
+        info: Triple<Long, String, Int>,
     ): android.app.Notification {
         val style = getStyle(context)
 
         val (title, progressPercent, hasProgress) = buildContent(info, style)
 
-        val openIntent = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val openIntent =
+            PendingIntent.getActivity(
+                context,
+                0,
+                Intent(context, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
 
         val theme = getTheme(context)
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_mpk_emblem)
-            .setContentIntent(openIntent)
-            .setOngoing(isPinned(context))
-            .setOnlyAlertOnce(true)
-            .setSilent(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setShowWhen(false)
-            // N5: кастомный вид — крупные цифры отсчёта (как в Яндекс.Погоде), а не просто
-            // заголовок+подпись. Decorated сохраняет системную шапку (иконка, время, приложение).
-            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+        val builder =
+            NotificationCompat
+                .Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_mpk_emblem)
+                .setContentIntent(openIntent)
+                .setOngoing(isPinned(context))
+                .setOnlyAlertOnce(true)
+                .setSilent(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setShowWhen(false)
+                // N5: кастомный вид — крупные цифры отсчёта (как в Яндекс.Погоде), а не просто
+                // заголовок+подпись. Decorated сохраняет системную шапку (иконка, время, приложение).
+                .setStyle(NotificationCompat.DecoratedCustomViewStyle())
 
         if (theme.accent != 0) {
             builder.color = theme.accent
@@ -324,11 +379,11 @@ object BellCountdownNotifier {
         views.setTextViewText(R.id.nbell_label, info.second)
         views.setViewVisibility(
             R.id.nbell_app,
-            if (style == Style.WITH_APP_NAME) android.view.View.VISIBLE else android.view.View.GONE
+            if (style == Style.WITH_APP_NAME) android.view.View.VISIBLE else android.view.View.GONE,
         )
         views.setViewVisibility(
             R.id.nbell_progress,
-            if (style == Style.WITH_PROGRESS && hasProgress) android.view.View.VISIBLE else android.view.View.GONE
+            if (style == Style.WITH_PROGRESS && hasProgress) android.view.View.VISIBLE else android.view.View.GONE,
         )
         if (style == Style.WITH_PROGRESS && hasProgress) {
             views.setProgressBar(R.id.nbell_progress, 100, progressPercent, false)
@@ -346,13 +401,15 @@ object BellCountdownNotifier {
      * поэтому «исчезновение» строки = замена на минимальную тихую (Т10.2).
      */
     private fun buildHiddenNotification(context: Context): android.app.Notification {
-        val openIntent = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        return NotificationCompat.Builder(context, CHANNEL_ID)
+        val openIntent =
+            PendingIntent.getActivity(
+                context,
+                0,
+                Intent(context, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        return NotificationCompat
+            .Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_mpk_emblem)
             .setContentIntent(openIntent)
             .setContentTitle("Мой Политех")
@@ -365,10 +422,9 @@ object BellCountdownNotifier {
             .build()
     }
 
-    private fun canPost(context: Context): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
+    private fun canPost(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+        PackageManager.PERMISSION_GRANTED
 
     fun cancel(context: Context) {
         NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
@@ -381,12 +437,12 @@ object BellCountdownNotifier {
     private data class Content(
         val title: String,
         val progressPercent: Int,
-        val hasProgress: Boolean
+        val hasProgress: Boolean,
     )
 
     private fun buildContent(
         info: Triple<Long, String, Int>?,
-        style: Style
+        style: Style,
     ): Content {
         if (info == null || info.first < 0) {
             return Content(title = "Уроки закончились", progressPercent = 100, hasProgress = false)
@@ -400,7 +456,7 @@ object BellCountdownNotifier {
         return Content(
             title = label.replaceFirstChar { it.uppercase() } + ": $value",
             progressPercent = progress,
-            hasProgress = style == Style.WITH_PROGRESS
+            hasProgress = style == Style.WITH_PROGRESS,
         )
     }
 

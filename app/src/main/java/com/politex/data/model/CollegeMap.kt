@@ -1,11 +1,16 @@
-﻿package com.politex.data.model
+package com.politex.data.model
 
 object CollegeMap {
-
-    enum class Floor(val id: String, val title: String, val assetFile: String, val hint: String) {
+    enum class Floor(
+        val id: String,
+        val title: String,
+        val assetFile: String,
+        val hint: String,
+    ) {
         FIRST("1", "1 этаж", "map_floor1.jpg", "Актовый зал, библиотека, столовая"),
         SECOND("2", "2 этаж", "map_floor2.jpg", "Учебная часть, приёмная, преподавательская"),
-        THIRD_FOURTH("3-4", "3 и 4 этажи", "map_floor34.jpg", "Один план на два этажа");
+        THIRD_FOURTH("3-4", "3 и 4 этажи", "map_floor34.jpg", "Один план на два этажа"),
+        ;
 
         companion object {
             fun from(id: String?): Floor = entries.firstOrNull { it.id == id } ?: FIRST
@@ -23,7 +28,5 @@ object CollegeMap {
         }
     }
 
-    fun looksLikeRoomNumber(room: String): Boolean =
-        room.trim().firstOrNull()?.isDigit() == true
-
+    fun looksLikeRoomNumber(room: String): Boolean = room.trim().firstOrNull()?.isDigit() == true
 }

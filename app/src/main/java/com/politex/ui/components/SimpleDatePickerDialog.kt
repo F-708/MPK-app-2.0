@@ -1,4 +1,4 @@
-﻿package com.politex.ui.components
+package com.politex.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -51,19 +51,29 @@ fun SimpleDatePickerDialog(
     minYear: Int,
     maxYear: Int,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
+    onConfirm: (String) -> Unit,
 ) {
     // SUI-01: «сегодня» с ключом дня и пересчётом на ON_RESUME (прежний remember{} залипал за полночь)
-    val today = com.politex.ui.util.rememberToday()
+    val today =
+        com.politex.ui.util
+            .rememberToday()
 
-    val startYear = remember(initialDateIso, today) {
-        initialDateIso?.split("-")?.getOrNull(0)?.toIntOrNull()
-            ?: today.get(Calendar.YEAR)
-    }
-    val startMonth = remember(initialDateIso, today) {
-        (initialDateIso?.split("-")?.getOrNull(1)?.toIntOrNull()?.minus(1))
-            ?: today.get(Calendar.MONTH)
-    }
+    val startYear =
+        remember(initialDateIso, today) {
+            initialDateIso?.split("-")?.getOrNull(0)?.toIntOrNull()
+                ?: today.get(Calendar.YEAR)
+        }
+    val startMonth =
+        remember(initialDateIso, today) {
+            (
+                initialDateIso
+                    ?.split("-")
+                    ?.getOrNull(1)
+                    ?.toIntOrNull()
+                    ?.minus(1)
+                )
+                ?: today.get(Calendar.MONTH)
+        }
 
     var year by remember { mutableIntStateOf(startYear.coerceIn(minYear, maxYear)) }
     var month by remember { mutableIntStateOf(startMonth.coerceIn(0, 11)) }
@@ -71,41 +81,57 @@ fun SimpleDatePickerDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(
             shape = RoundedCornerShape(2.dp),
             color = ColorBgMain,
             border = BorderStroke(1.dp, ColorBorderLight),
-            modifier = Modifier
+            modifier =
+            Modifier
                 .padding(horizontal = 16.dp)
-                .fillMaxWidth()
+                .fillMaxWidth(),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     ArrowButton(
                         forward = false,
                         enabled = !(year <= minYear && month == 0),
-                        onClick = { if (month == 0) { month = 11; year-- } else month-- }
+                        onClick = {
+                            if (month == 0) {
+                                month = 11
+                                year--
+                            } else {
+                                month--
+                            }
+                        },
                     )
 
                     Text(
                         text = MONTH_NAMES_NOMINATIVE[month] + " " + year,
-                        style = TextStyle(
+                        style =
+                        TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
-                            color = ColorTextTitle
-                        )
+                            color = ColorTextTitle,
+                        ),
                     )
 
                     ArrowButton(
                         forward = true,
                         enabled = !(year >= maxYear && month == 11),
-                        onClick = { if (month == 11) { month = 0; year++ } else month++ }
+                        onClick = {
+                            if (month == 11) {
+                                month = 0
+                                year++
+                            } else {
+                                month++
+                            }
+                        },
                     )
                 }
 
@@ -115,16 +141,17 @@ fun SimpleDatePickerDialog(
                     year = year,
                     month = month,
                     selectedDateIso = selected,
-                    onSelect = { selected = it }
+                    onSelect = { selected = it },
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Box(
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(ColorDividerLight)
+                        .background(ColorDividerLight),
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -132,14 +159,14 @@ fun SimpleDatePickerDialog(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     ActionButton(text = "ОТМЕНА", filled = false, onClick = onDismiss)
                     Spacer(modifier = Modifier.width(8.dp))
                     ActionButton(
                         text = "ГОТОВО",
                         filled = true,
-                        onClick = { selected?.let(onConfirm) }
+                        onClick = { selected?.let(onConfirm) },
                     )
                 }
             }
@@ -148,44 +175,57 @@ fun SimpleDatePickerDialog(
 }
 
 @Composable
-private fun ArrowButton(forward: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun ArrowButton(
+    forward: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
     Box(
-        modifier = Modifier
+        modifier =
+        Modifier
             // D5: хитбокс стрелки перемотки месяцев 48dp (иконка 18dp та же)
             .size(48.dp)
             .bouncyClickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = if (forward) Icons.Default.ChevronRight else Icons.Default.ChevronLeft,
             contentDescription = null,
             tint = if (enabled) ColorBrandBlue else ColorTextMuted,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(18.dp),
         )
     }
 }
 
 @Composable
-private fun ActionButton(text: String, filled: Boolean, onClick: () -> Unit) {
+private fun ActionButton(
+    text: String,
+    filled: Boolean,
+    onClick: () -> Unit,
+) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = if (filled) ColorBrandFill else ColorBgMain,
         border = BorderStroke(1.dp, if (filled) ColorBrandFill else ColorBorderLight),
-        modifier = Modifier.bouncyClickable(onClick = onClick)
+        modifier = Modifier.bouncyClickable(onClick = onClick),
     ) {
         Text(
             text = text,
             softWrap = false,
             maxLines = 1,
-            style = TextStyle(
+            style =
+            TextStyle(
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,
-                color = if (filled) Color.White else ColorTextTitle
+                color = if (filled) Color.White else ColorTextTitle,
             ),
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
         )
     }
 }
 
-internal fun isoFromParts(year: Int, monthZeroBased: Int, day: Int): String =
-    String.format(Locale.ROOT, "%04d-%02d-%02d", year, monthZeroBased + 1, day)
+internal fun isoFromParts(
+    year: Int,
+    monthZeroBased: Int,
+    day: Int,
+): String = String.format(Locale.ROOT, "%04d-%02d-%02d", year, monthZeroBased + 1, day)

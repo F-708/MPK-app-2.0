@@ -1,4 +1,4 @@
-﻿package com.politex.data.repository
+package com.politex.data.repository
 
 import com.politex.data.local.dao.LessonDao
 import com.politex.data.local.dao.TeacherLessonDao
@@ -7,12 +7,12 @@ import com.politex.data.local.entity.TeacherLessonEntity
 import com.politex.data.network.MpkNetworkClient
 import com.politex.data.network.MpkScheduleParser
 import com.politex.data.network.ProbeResult
-import java.io.IOException
-import java.util.Calendar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import java.io.IOException
+import java.util.Calendar
 
 private val DATE_DD_MM_YYYY = Regex("""\d{2}\.\d{2}\.\d{4}""")
 
@@ -23,8 +23,11 @@ private const val ARCHIVE_KEEP_DAYS = 60L
  * «день распарсен»: после обычного синка (он разбирает весь документ по каталогу)
  * повторный запрос был бы лишним, а при недоступном сайте — просто ошибкой.
  */
-internal fun shouldFetchDay(alreadyParsedGroups: Int, catalogSize: Int, force: Boolean): Boolean =
-    catalogSize > 0 && (force || alreadyParsedGroups < (catalogSize + 1) / 2)
+internal fun shouldFetchDay(
+    alreadyParsedGroups: Int,
+    catalogSize: Int,
+    force: Boolean,
+): Boolean = catalogSize > 0 && (force || alreadyParsedGroups < (catalogSize + 1) / 2)
 
 /**
  * Б3: документ признаётся «дневным расписанием всего колледжа», только если в нём
@@ -35,25 +38,32 @@ internal fun shouldFetchDay(alreadyParsedGroups: Int, catalogSize: Int, force: B
  * стёр бы уже лежащее полное расписание этих групп. Не приняли документ — откатываемся
  * на прежний путь по одной группе: своя обновится, чужие останутся нетронутыми.
  */
-internal fun isFullDayDocument(groupCount: Int, catalogSize: Int): Boolean =
-    catalogSize > 0 && groupCount >= (catalogSize + 1) / 2
+internal fun isFullDayDocument(
+    groupCount: Int,
+    catalogSize: Int,
+): Boolean = catalogSize > 0 && groupCount >= (catalogSize + 1) / 2
 
 /**
  * N2: сколько уроков ЗАПРОШЕННОЙ группы вернул синк за сегодня+завтра. Документ разбирается
  * по всему каталогу, поэтому в `finalLessons` лежат строки всех групп; тост «обновлено (N уроков)»
  * должен показывать N по своей группе, а не общее число по колледжу.
  */
-internal fun syncedCountForGroup(finalLessons: List<LessonEntity>, groupName: String): Int =
-    finalLessons.count { it.groupName == groupName }
+internal fun syncedCountForGroup(
+    finalLessons: List<LessonEntity>,
+    groupName: String,
+): Int = finalLessons.count { it.groupName == groupName }
 
-internal fun isStaleDate(date: String, cutoffMs: Long): Boolean {
+internal fun isStaleDate(
+    date: String,
+    cutoffMs: Long,
+): Boolean {
     if (!DATE_DD_MM_YYYY.matches(date)) return false
     val cal = Calendar.getInstance()
     cal.clear()
     cal.set(
         date.substring(6, 10).toInt(),
         date.substring(3, 5).toInt() - 1,
-        date.substring(0, 2).toInt()
+        date.substring(0, 2).toInt(),
     )
     return cal.timeInMillis < cutoffMs
 }
@@ -61,7 +71,6 @@ internal fun isStaleDate(date: String, cutoffMs: Long): Boolean {
 class ScheduleRepository(
     private val lessonDao: LessonDao,
     private val networkClient: MpkNetworkClient = MpkNetworkClient(),
-
     /**
      * O3-b/Б3: каталог кодов групп колледжа для разбора документа по ВСЕМ группам за один
      * проход. Пустой список (тесты, вызовы без контекста) — перебор не выполняется,
@@ -72,22 +81,19 @@ class ScheduleRepository(
      * понадобится вне Android — заменить на источник из assets-парсера.
      */
     private val catalogProvider: () -> List<String> = { emptyList() },
-
     /**
      * Расписание преподавателей живёт в своей таблице. DAO необязателен: тесты и вызовы
      * без контекста не имеют базы, и тогда офлайн-путь просто не используется.
      */
-    private val teacherLessonDao: TeacherLessonDao? = null
+    private val teacherLessonDao: TeacherLessonDao? = null,
 ) {
-
     val diagnosticInfo = networkClient.diagnosticInfo
 
     // Кэш кодов групп: ассет читается один раз на процесс, а не на каждый синк.
     @Volatile
     private var cachedCatalog: List<String>? = null
 
-    private fun catalog(): List<String> =
-        cachedCatalog ?: catalogProvider().takeIf { it.isNotEmpty() }?.also { cachedCatalog = it } ?: emptyList()
+    private fun catalog(): List<String> = cachedCatalog ?: catalogProvider().takeIf { it.isNotEmpty() }?.also { cachedCatalog = it } ?: emptyList()
 
     /**
      * Б3: один документ на дату разбирается сразу по всем группам колледжа и пишется в Room.
@@ -100,7 +106,7 @@ class ScheduleRepository(
     suspend fun syncDayAllGroupsCached(
         date: String,
         dow: Int,
-        force: Boolean = false
+        force: Boolean = false,
     ): Result<Int> = withContext(Dispatchers.IO) {
         val groups = catalog()
         if (groups.isEmpty()) return@withContext Result.failure(IOException("Каталог групп пуст"))
@@ -112,45 +118,49 @@ class ScheduleRepository(
         syncDayAllGroups(date, dow, groups)
     }
 
-    
-    fun getLessonsForDay(groupName: String, dayOfWeek: Int): Flow<List<LessonEntity>> {
-        return lessonDao.getLessonsForDay(groupName, dayOfWeek).flowOn(Dispatchers.IO)
-    }
+    fun getLessonsForDay(
+        groupName: String,
+        dayOfWeek: Int,
+    ): Flow<List<LessonEntity>> = lessonDao.getLessonsForDay(groupName, dayOfWeek).flowOn(Dispatchers.IO)
 
-    fun getLessonsForDate(groupName: String, dateString: String): Flow<List<LessonEntity>> {
-        return lessonDao.getLessonsForDate(groupName, dateString).flowOn(Dispatchers.IO)
-    }
+    fun getLessonsForDate(
+        groupName: String,
+        dateString: String,
+    ): Flow<List<LessonEntity>> = lessonDao.getLessonsForDate(groupName, dateString).flowOn(Dispatchers.IO)
 
-    fun getLessonsForDateOrDay(groupName: String, dateString: String, dayOfWeek: Int): Flow<List<LessonEntity>> {
-        return lessonDao.getLessonsForDateOrDay(groupName, dateString, dayOfWeek).flowOn(Dispatchers.IO)
-    }
+    fun getLessonsForDateOrDay(
+        groupName: String,
+        dateString: String,
+        dayOfWeek: Int,
+    ): Flow<List<LessonEntity>> = lessonDao.getLessonsForDateOrDay(groupName, dateString, dayOfWeek).flowOn(Dispatchers.IO)
 
-    fun getAllLessonsForGroup(groupName: String): Flow<List<LessonEntity>> {
-        return lessonDao.getAllLessonsForGroup(groupName).flowOn(Dispatchers.IO)
-    }
+    fun getAllLessonsForGroup(groupName: String): Flow<List<LessonEntity>> = lessonDao.getAllLessonsForGroup(groupName).flowOn(Dispatchers.IO)
 
-    fun getDistinctDates(groupName: String): Flow<List<String>> {
-        return lessonDao.getDistinctDatesForGroup(groupName).flowOn(Dispatchers.IO)
-    }
+    fun getDistinctDates(groupName: String): Flow<List<String>> = lessonDao.getDistinctDatesForGroup(groupName).flowOn(Dispatchers.IO)
 
-    fun searchLessons(groupName: String, query: String): Flow<List<LessonEntity>> {
-        return lessonDao.searchLessonsForGroup(groupName, query).flowOn(Dispatchers.IO)
-    }
+    fun searchLessons(
+        groupName: String,
+        query: String,
+    ): Flow<List<LessonEntity>> = lessonDao.searchLessonsForGroup(groupName, query).flowOn(Dispatchers.IO)
 
     /** Пары в кабинете на дату (для карты колледжа, «Подробнее» в RoomPanel). */
-    fun getLessonsForRoomOnDate(room: String, dateString: String, dayOfWeek: Int): Flow<List<LessonEntity>> {
-        return lessonDao.getLessonsForRoomOnDate(room, dateString, dayOfWeek).flowOn(Dispatchers.IO)
-    }
+    fun getLessonsForRoomOnDate(
+        room: String,
+        dateString: String,
+        dayOfWeek: Int,
+    ): Flow<List<LessonEntity>> = lessonDao.getLessonsForRoomOnDate(room, dateString, dayOfWeek).flowOn(Dispatchers.IO)
 
     /** Т5: группы с уроками сегодня (для быстрого выбора на карте колледжа). */
-    suspend fun getDistinctGroupsForDateOrDay(dateString: String, dayOfWeek: Int): List<String> =
-        withContext(Dispatchers.IO) {
-            lessonDao.getDistinctGroupsForDateOrDay(dateString, dayOfWeek)
-        }
+    suspend fun getDistinctGroupsForDateOrDay(
+        dateString: String,
+        dayOfWeek: Int,
+    ): List<String> = withContext(Dispatchers.IO) {
+        lessonDao.getDistinctGroupsForDateOrDay(dateString, dayOfWeek)
+    }
 
     suspend fun syncScheduleFromWeb(
         groupName: String,
-        force: Boolean = false
+        force: Boolean = false,
     ): Result<Int> = withContext(Dispatchers.IO) {
         val today = Calendar.getInstance()
         val tomorrow = nextSchoolDay(today)
@@ -164,7 +174,6 @@ class ScheduleRepository(
         val needTomorrow = force || tomorrowCached == 0
 
         if (!needToday && !needTomorrow) {
-
             return@withContext Result.success(todayCached + tomorrowCached)
         }
 
@@ -190,7 +199,10 @@ class ScheduleRepository(
         var probeNetworkError = false
         for ((calendar, _) in days) {
             when (networkClient.probeDocument(calendar)) {
-                is ProbeResult.Found -> { probeFound = true; break }
+                is ProbeResult.Found -> {
+                    probeFound = true
+                    break
+                }
                 ProbeResult.NetworkError -> probeNetworkError = true
                 is ProbeResult.NotFound -> Unit
             }
@@ -213,43 +225,48 @@ class ScheduleRepository(
                         // replaceForDate затрёт полные данные других групп
                         val dayGroups = dayLessons.map { it.groupName }.distinct().size
                         if (isFullDayDocument(dayGroups, allGroups.size)) fetched += dayLessons
-                    }
-                    .onFailure { fetchFailed = true }
+                    }.onFailure { fetchFailed = true }
             }
         } else {
             if (needTomorrow) {
-                networkClient.fetchScheduleForGroup(groupName, tomorrow)
+                networkClient
+                    .fetchScheduleForGroup(groupName, tomorrow)
                     .onSuccess { fetched += it }
                     .onFailure { fetchFailed = true }
             }
             if (needToday) {
-                networkClient.fetchScheduleForGroup(groupName)
+                networkClient
+                    .fetchScheduleForGroup(groupName)
                     .onSuccess { fetched += it }
                     .onFailure { fetchFailed = true }
             }
         }
 
-        val distinct = fetched
-            .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
+        val distinct =
+            fetched
+                .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
 
         // F5: документ получен, но по своей группе в нём ничего не нашлось — откат на
         // прежний путь с диагностикой (группа может стоять под другим написанием, либо
         // URL отдал не тот файл). Без этого своя группа молча оставалась без расписания.
         if (distinct.none { it.groupName == groupName } && documentFound) {
             if (needTomorrow) {
-                networkClient.fetchScheduleForGroup(groupName, tomorrow)
+                networkClient
+                    .fetchScheduleForGroup(groupName, tomorrow)
                     .onSuccess { fetched += it }
                     .onFailure { fetchFailed = true }
             }
             if (needToday) {
-                networkClient.fetchScheduleForGroup(groupName)
+                networkClient
+                    .fetchScheduleForGroup(groupName)
                     .onSuccess { fetched += it }
                     .onFailure { fetchFailed = true }
             }
         }
 
-        val finalLessons = fetched
-            .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
+        val finalLessons =
+            fetched
+                .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
         return@withContext when {
             finalLessons.isNotEmpty() -> {
                 writeByGroup(finalLessons)
@@ -289,7 +306,7 @@ class ScheduleRepository(
      */
     suspend fun syncScheduleForDate(
         groupName: String,
-        targetCalendar: Calendar
+        targetCalendar: Calendar,
     ): Result<List<LessonEntity>> = withContext(Dispatchers.IO) {
         // Б3/F2: запрошенная группа добавляется к каталогу — иначе новая группа, которой
         // ещё нет в ассете group_codes.csv, не попадёт в разбор, и воркер молча не уведомит
@@ -298,9 +315,10 @@ class ScheduleRepository(
 
         val date = formatDate(targetCalendar)
         var documentFound = false
-        val forGroup = runCatching {
-            fetchAllGroupsForDate(targetCalendar, date, allGroups) { documentFound = it }
-        }
+        val forGroup =
+            runCatching {
+                fetchAllGroupsForDate(targetCalendar, date, allGroups) { documentFound = it }
+            }
         if (forGroup.isFailure) return@withContext Result.failure(forGroup.exceptionOrNull()!!)
         val all = forGroup.getOrDefault(emptyList())
         if (all.isNotEmpty()) {
@@ -336,7 +354,7 @@ class ScheduleRepository(
         calendar: Calendar,
         date: String,
         candidateGroups: List<String>,
-        documentFound: (Boolean) -> Unit = {}
+        documentFound: (Boolean) -> Unit = {},
     ): List<LessonEntity> {
         // SCH-01: единый резолвер — прямые имена (месяц даты и предыдущий, суффиксы
         // коллизий «-1»/«-2»), event-страницы даты (документ в iframe officeapps),
@@ -350,7 +368,9 @@ class ScheduleRepository(
             if (parsed.isNotEmpty()) {
                 found = parsed
                 true
-            } else false
+            } else {
+                false
+            }
         }
         return found
     }
@@ -376,14 +396,14 @@ class ScheduleRepository(
      */
     suspend fun syncTeacherScheduleForDate(
         targetCalendar: Calendar,
-        force: Boolean = false
+        force: Boolean = false,
     ): Result<Int> = withContext(Dispatchers.IO) {
         val dao = teacherLessonDao ?: return@withContext Result.success(0)
         val date = formatDate(targetCalendar)
 
         if (!force && dao.getPresentDates(listOf(date)).contains(date)) {
             return@withContext Result.success(
-                dao.getTeachersOnDate(date).size
+                dao.getTeachersOnDate(date).size,
             )
         }
 
@@ -395,29 +415,38 @@ class ScheduleRepository(
         // запрошенной даты — иначе строки легли бы под dayOfWeek = 0 и вкладка
         // «Расписание» показывала бы их под любой датой (это чинил O7).
         val requestedDow = MpkScheduleParser.dowOfCalendar(targetCalendar)
-        val docDow = parsedAll.values.firstOrNull()?.firstOrNull()?.dayOfWeek ?: 0
+        val docDow =
+            parsedAll.values
+                .firstOrNull()
+                ?.firstOrNull()
+                ?.dayOfWeek ?: 0
         // Документ другого дня в базу не пишем: иначе под запрошенной датой окажется
         // расписание чужого дня
         if (docDow != 0 && docDow != requestedDow) {
             return@withContext Result.failure(IOException("Документ за другой день"))
         }
 
-        val rows = parsedAll.flatMap { (rawName, slots) ->
-            val surname = TeacherInsights.surnameOf(rawName)
-            if (surname.isBlank()) emptyList()
-            else slots.map { slot ->
-                TeacherLessonEntity(
-                    teacherName = rawName.trim(),
-                    surnameKey = surname,
-                    dateString = date,
-                    dayOfWeek = if (slot.dayOfWeek != 0) slot.dayOfWeek else requestedDow,
-                    lessonNumber = slot.lessonNumber,
-                    groups = slot.groups.joinToString(", "),
-                    subject = slot.subject,
-                    room = slot.room
-                )
-            }
-        }.distinctBy { "${it.surnameKey}_${it.lessonNumber}_${it.room}_${it.subject}" }
+        val rows =
+            parsedAll
+                .flatMap { (rawName, slots) ->
+                    val surname = TeacherInsights.surnameOf(rawName)
+                    if (surname.isBlank()) {
+                        emptyList()
+                    } else {
+                        slots.map { slot ->
+                            TeacherLessonEntity(
+                                teacherName = rawName.trim(),
+                                surnameKey = surname,
+                                dateString = date,
+                                dayOfWeek = if (slot.dayOfWeek != 0) slot.dayOfWeek else requestedDow,
+                                lessonNumber = slot.lessonNumber,
+                                groups = slot.groups.joinToString(", "),
+                                subject = slot.subject,
+                                room = slot.room,
+                            )
+                        }
+                    }
+                }.distinctBy { "${it.surnameKey}_${it.lessonNumber}_${it.room}_${it.subject}" }
 
         if (rows.isNotEmpty()) dao.replaceForDate(date, rows)
         Result.success(rows.size)
@@ -426,7 +455,7 @@ class ScheduleRepository(
     /** Занятия преподавателя на дату из офлайн-кэша (пусто — нет данных этого дня). */
     suspend fun getTeacherLessonsForDate(
         teacherSurname: String,
-        dateString: String
+        dateString: String,
     ): List<TeacherLessonEntity> = withContext(Dispatchers.IO) {
         val dao = teacherLessonDao ?: return@withContext emptyList()
         dao.getForSurnameOnDate(teacherSurname, dateString)
@@ -447,28 +476,33 @@ class ScheduleRepository(
     suspend fun syncDayAllGroups(
         date: String,
         dow: Int,
-        candidateGroups: List<String> = emptyList()
+        candidateGroups: List<String> = emptyList(),
     ): Result<Int> = withContext(Dispatchers.IO) {
         if (candidateGroups.isEmpty()) return@withContext Result.success(0)
         val calendar = parseCalendarDate(date) ?: return@withContext Result.success(0)
 
         var documentFound = false
-        val fetched = try {
-            fetchAllGroupsForDate(calendar, date, candidateGroups) { documentFound = it }
-        } catch (e: Exception) {
-            return@withContext Result.failure(e)
-        }
+        val fetched =
+            try {
+                fetchAllGroupsForDate(calendar, date, candidateGroups) { documentFound = it }
+            } catch (e: Exception) {
+                return@withContext Result.failure(e)
+            }
 
         if (fetched.isEmpty()) {
-            return@withContext if (documentFound) Result.success(0)
-            else Result.failure(IOException("Расписание на $date не опубликовано"))
+            return@withContext if (documentFound) {
+                Result.success(0)
+            } else {
+                Result.failure(IOException("Расписание на $date не опубликовано"))
+            }
         }
 
         // Ключ перезаписи — группа + дата (replaceForDate внутри replaceSyncedLessons)
-        val forDate = fetched
-            .filter { it.dateString == date }
-            .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
-            .groupBy { it.groupName }
+        val forDate =
+            fetched
+                .filter { it.dateString == date }
+                .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
+                .groupBy { it.groupName }
 
         var written = 0
         for ((group, lessons) in forDate) {
@@ -504,14 +538,16 @@ class ScheduleRepository(
         return cal
     }
 
-    private fun formatDate(calendar: Calendar): String =
-        "%02d.%02d.%04d".format(
-            calendar.get(Calendar.DAY_OF_MONTH),
-            calendar.get(Calendar.MONTH) + 1,
-            calendar.get(Calendar.YEAR)
-        )
+    private fun formatDate(calendar: Calendar): String = "%02d.%02d.%04d".format(
+        calendar.get(Calendar.DAY_OF_MONTH),
+        calendar.get(Calendar.MONTH) + 1,
+        calendar.get(Calendar.YEAR),
+    )
 
-    suspend fun replaceSyncedLessons(groupName: String, lessons: List<LessonEntity>) = withContext(Dispatchers.IO) {
+    suspend fun replaceSyncedLessons(
+        groupName: String,
+        lessons: List<LessonEntity>,
+    ) = withContext(Dispatchers.IO) {
         // O7: замена одной транзакцией на дату — DELETE и INSERT неразделимы, иначе Flow
         // эмитит пустой список и в UI мелькает «расписание не опубликовано».
         lessons.groupBy { it.dateString }.forEach { (dateString, dayLessons) ->
@@ -528,7 +564,10 @@ class ScheduleRepository(
         lessonDao.insertLessons(lessons)
     }
 
-    suspend fun replaceSchedule(groupName: String, lessons: List<LessonEntity>) = withContext(Dispatchers.IO) {
+    suspend fun replaceSchedule(
+        groupName: String,
+        lessons: List<LessonEntity>,
+    ) = withContext(Dispatchers.IO) {
         lessonDao.replaceScheduleForGroup(groupName, lessons)
     }
 

@@ -1,27 +1,27 @@
-﻿package com.politex
+package com.politex
 
 import com.politex.data.network.MpkNetworkClient
 import com.politex.data.network.MpkScheduleParser
 import com.politex.util.GroupParser
-import java.util.Calendar
-import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Calendar
+import java.util.TimeZone
 
 class Step7BannerAndIconTest {
-
     @Test
     fun testDirectUrlGenerationForSpecificDate() {
         val networkClient = MpkNetworkClient()
 
-        val cal = Calendar.getInstance(TimeZone.getTimeZone("GMT+3")).apply {
-            set(Calendar.YEAR, 2026)
-            set(Calendar.MONTH, Calendar.SEPTEMBER)
-            set(Calendar.DAY_OF_MONTH, 15)
-            set(Calendar.HOUR_OF_DAY, 10)
-        }
+        val cal =
+            Calendar.getInstance(TimeZone.getTimeZone("GMT+3")).apply {
+                set(Calendar.YEAR, 2026)
+                set(Calendar.MONTH, Calendar.SEPTEMBER)
+                set(Calendar.DAY_OF_MONTH, 15)
+                set(Calendar.HOUR_OF_DAY, 10)
+            }
 
         val directUrls = networkClient.generateCandidateDirectUrls(cal)
         assertTrue(directUrls.isNotEmpty())
@@ -31,7 +31,7 @@ class Step7BannerAndIconTest {
         val expectedDirectUrl = "https://guo-mpk.by/wp-content/uploads/2026/09/15.09.2026-raspisanie-uchashhihsya.doc"
         assertTrue(
             "Список URL должен содержать $expectedDirectUrl, получено: $urlsOnly",
-            urlsOnly.contains(expectedDirectUrl)
+            urlsOnly.contains(expectedDirectUrl),
         )
     }
 
@@ -39,11 +39,12 @@ class Step7BannerAndIconTest {
     fun testEventUrlGenerationForSpecificDate() {
         val networkClient = MpkNetworkClient()
 
-        val cal = Calendar.getInstance(TimeZone.getTimeZone("GMT+3")).apply {
-            set(Calendar.YEAR, 2026)
-            set(Calendar.MONTH, Calendar.SEPTEMBER)
-            set(Calendar.DAY_OF_MONTH, 15)
-        }
+        val cal =
+            Calendar.getInstance(TimeZone.getTimeZone("GMT+3")).apply {
+                set(Calendar.YEAR, 2026)
+                set(Calendar.MONTH, Calendar.SEPTEMBER)
+                set(Calendar.DAY_OF_MONTH, 15)
+            }
 
         val eventUrls = networkClient.generateCandidateEventUrls(cal)
         assertTrue(eventUrls.isNotEmpty())
@@ -52,7 +53,7 @@ class Step7BannerAndIconTest {
         val expectedEventUrl = "https://guo-mpk.by/raspisanie/15-09-2026-raspisanie-uchashhihsya/?occurrence=2026-09-15"
         assertTrue(
             "Список URL событий должен содержать $expectedEventUrl, получено: $urlsOnly",
-            urlsOnly.contains(expectedEventUrl)
+            urlsOnly.contains(expectedEventUrl),
         )
     }
 
@@ -60,7 +61,7 @@ class Step7BannerAndIconTest {
     fun testUserAgentHeader() {
         assertEquals(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-            MpkNetworkClient.BROWSER_USER_AGENT
+            MpkNetworkClient.BROWSER_USER_AGENT,
         )
     }
 
@@ -73,13 +74,14 @@ class Step7BannerAndIconTest {
         assertEquals('О', group?.specialtyCode)
         assertEquals("41О", group?.canonicalName)
 
-        val rawSchedule = """
+        val rawSchedule =
+            """
             Расписание на вторник 15.09.2026
             Группа 41О
             1 пара Математика каб. 314
             2 пара 1 п/г Иностранный язык 215 / 2 п/г Информационные технологии 308
             3 пара Физическая культура и здоровье
-        """.trimIndent()
+            """.trimIndent()
 
         val lessons = MpkScheduleParser.parsePlainTextSchedule(rawSchedule, "41О", "15.09.2026")
         assertEquals(3, lessons.size)
