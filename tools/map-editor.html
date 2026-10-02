@@ -103,9 +103,14 @@
     <button class="tool" data-tool="select" title="Клик — выбрать, тянуть — двигать, углы рамки — размер">Выбор</button>
     <button class="tool" data-tool="room" title="Растяните прямоугольник на плане — появится новая комната">＋ Комната</button>
     <button class="tool" data-tool="corridor" title="Клик — точка прохода, двойной клик или Enter — завершить, Esc — отмена">～ Коридор</button>
+    <select id="corridorMode" title="Режим инструмента «Коридор»: линия кликами или прямоугольник протяжкой">
+      <option value="line" selected>линия</option>
+      <option value="rect">прямоугольник</option>
+    </select>
     <button class="tool" data-tool="node" title="Клик — поставить узел графа маршрутов">● Узел</button>
     <button class="tool" data-tool="marker" title="Клик — поставить вход / лестницу (тип — в списке рядом)">▲ Маркер</button>
     <button class="tool" data-tool="door" title="Клик по любой точке кабинета — дверь встанет на ближайший край этого кабинета (повторный клик по этой же комнате — перенести дверь)">🚪 Двери</button>
+    <button class="tool" data-tool="route" title="Клик — точка A, клик — точка B: путь по графу, как в приложении. Esc — очистить">🧭 Маршрут</button>
     <select id="markerKind" title="Тип маркера для инструмента «Маркер»">
       <option value="main">вход основной</option>
       <option value="backup">вход запасной</option>
@@ -160,13 +165,19 @@
 </main>
 
 <details class="help">
-  <summary>Как пользоваться (5 шагов)</summary>
+  <summary>Как пользоваться</summary>
   <ol>
     <li><b>Фоны всех трёх этажей уже встроены</b> — просто откройте файл и редактируйте. (Кнопка «Фон этажа» остаётся для замены фона своей картинкой.)</li>
     <li><b>Откройте карту:</b> кнопка «Открыть карту» → выберите <kbd>college_map.json</kbd> из приложения. Все комнаты, коридоры, узлы и лестницы появятся на плане.</li>
     <li><b>Правьте:</b> клик — выбрать объект (свойства справа), перетаскивание — двигать, угловые квадратики — менять размер комнаты. «Снап» помогает выравнивать комнаты вплотную. Инструменты сверху добавляют комнаты / коридоры (кликами по точкам) / узлы / входы и лестницы. Двери: выберите комнату → «Добавить дверь» → клик по краю комнаты.</li>
     <li><b>Сохраните:</b> кнопка «Сохранить карту» скачает <kbd>college_map.json</kbd> — отдайте файл разработчику, он встанет в приложение без изменений.</li>
     <li><b>Страховка:</b> <kbd>Ctrl+Z</kbd> — отмена (до 50 шагов), правая кнопка мыши или пробел + тянуть — двигать вид, колесо — зум. Автосохранение в браузере — кнопка «Восстановить».</li>
+  </ol>
+  <p style="margin:10px 0 2px"><b>Новое в этой версии</b></p>
+  <ol>
+    <li><b>Коридоры-прямоугольники:</b> рядом с кнопкой «～ Коридор» есть список «линия / прямоугольник». В режиме «прямоугольник» зажмите кнопку мыши и протяните область — пунктирная осевая внутри покажет, что уйдёт в приложение: при сохранении прямоугольник превращается в обычный коридор (линия по центру вдоль длинной стороны, ширина = короткая сторона). Прямоугольник можно двигать и менять размер, как комнату.</li>
+    <li><b>Снап точек коридора:</b> при перетаскивании точки коридора она прилипает к дверям кабинетов, узлам графа и краям соседних комнат — зелёный кружок-магнит показывает цель. Двойной клик по точке — удалить её.</li>
+    <li><b>Превью маршрута (🧭 Маршрут):</b> кликните точку A, затем точку B — редактор построит путь по графу ровно так же, как приложение (узлы + коридоры + склейка пересечений). Путь только показывается и в карту НЕ сохраняется; Esc — очистить.</li>
   </ol>
 </details>
 
@@ -184,7 +195,7 @@ const cv = $('cv'), ctx = cv.getContext('2d');
 let cssW = 0, cssH = 0, dpr = 1;
 
 /* W4b: стартовая карта = боевой college_map.json — комнаты уже на месте, правь сразу */
-const EMBEDDED_MAP = {"version":1,"scaleMeters":null,"floors":{"1":{"rooms":[{"id":"room_f5ozkcf","number":"101","title":"","note":"","status":"normal","x":0.4985,"y":0.237,"w":0.0145,"h":0.0599,"door":[0.4995,0.2669]},{"id":"room_58s37zs","number":"102","title":"","note":"","status":"normal","x":0.5174,"y":0.2702,"w":0.0232,"h":0.0482,"door":[0.5058,0.2728]},{"id":"room_ge91t0x","number":"103","title":"","note":"","status":"normal","x":0.5389,"y":0.4264,"w":0.0196,"h":0.0768,"door":[0.5393,0.4648]},{"id":"room_ip6a9qn","number":"104","title":"","note":"","status":"normal","x":0.6457,"y":0.4264,"w":0.0836,"h":0.0768,"door":[0.63,0.4648]},{"id":"room_cvm8jsd","number":"105","title":"","note":"","status":"normal","x":0.7118,"y":0.4264,"w":0.0487,"h":0.0768,"door":[0.7295,0.4648]},{"id":"room_ox7c51o","number":"106","title":"","note":"","status":"normal","x":0.7576,"y":0.4264,"w":0.0429,"h":0.0768,"door":[0.773,0.4648]},{"id":"room_ery7gsd","number":"107-1","title":"","note":"","status":"normal","x":0.7883,"y":0.4264,"w":0.0185,"h":0.0768,"door":null},{"id":"room_bsgbyyh","number":"107","title":"","note":"","status":"normal","x":0.8259,"y":0.4264,"w":0.0574,"h":0.0768,"door":null},{"id":"room_exrrc54","number":"108","title":"","note":"","status":"normal","x":0.8735,"y":0.4538,"w":0.0378,"h":0.0221,"door":null},{"id":"room_83a20uy","number":"109","title":"","note":"","status":"normal","x":0.8735,"y":0.4056,"w":0.0378,"h":0.0742,"door":null},{"id":"room_yg4957a","number":"110","title":"","note":"","status":"normal","x":0.8735,"y":0.3522,"w":0.0378,"h":0.0326,"door":null},{"id":"room_htec76v","number":"111","title":"","note":"","status":"normal","x":0.8732,"y":0.2956,"w":0.0385,"h":0.0781,"door":null},{"id":"room_cz62ow4","number":"112","title":"","note":"","status":"normal","x":0.931,"y":0.3125,"w":0.0378,"h":0.112,"door":null},{"id":"room_48q1sk6","number":"113","title":"","note":"","status":"normal","x":0.931,"y":0.4056,"w":0.0378,"h":0.0742,"door":null},{"id":"room_x43c9q8","number":"114","title":"","note":"","status":"normal","x":0.931,"y":0.4609,"w":0.0378,"h":0.0365,"door":null},{"id":"room_oytpz89","number":"115","title":"","note":"","status":"normal","x":0.931,"y":0.515,"w":0.0378,"h":0.0716,"door":null},{"id":"room_50hplb3","number":"116","title":"","note":"","status":"normal","x":0.931,"y":0.61,"w":0.0378,"h":0.1185,"door":null},{"id":"room_qhaqimd","number":"117-1","title":"","note":"","status":"normal","x":0.931,"y":0.6895,"w":0.0378,"h":0.0404,"door":null},{"id":"room_ev5nn2b","number":"117","title":"","note":"","status":"normal","x":0.931,"y":0.763,"w":0.0378,"h":0.1068,"door":null},{"id":"room_gbkirpj","number":"118","title":"","note":"","status":"normal","x":0.931,"y":0.8385,"w":0.0378,"h":0.0443,"door":null},{"id":"room_1zijeyd","number":"118","title":"","note":"","status":"normal","x":0.8742,"y":0.8483,"w":0.0364,"h":0.0247,"door":null},{"id":"room_bmw35ld","number":"120","title":"","note":"","status":"normal","x":0.8735,"y":0.7912,"w":0.0378,"h":0.0406,"door":null},{"id":"room_o8eieyz","number":"121","title":"","note":"","status":"normal","x":0.8732,"y":0.681,"w":0.0385,"h":0.1797,"door":null},{"id":"room_3ctqxde","number":"122","title":"","note":"","status":"normal","x":0.7576,"y":0.5521,"w":0.0429,"h":0.0781,"door":[0.7705,0.5131]},{"id":"room_f6hhooa","number":"123","title":"","note":"","status":"normal","x":0.7209,"y":0.5521,"w":0.0305,"h":0.0781,"door":[0.7297,0.5131]},{"id":"room_9hulkzp","number":"127","title":"","note":"","status":"normal","x":0.6137,"y":0.5521,"w":0.0196,"h":0.0781,"door":[0.6179,0.5131]},{"id":"room_vpqjwjn","number":"124","title":"","note":"","status":"normal","x":0.6947,"y":0.5522,"w":0.0219,"h":0.0779,"door":[0.6928,0.5133]},{"id":"room_wgi4qgl","number":"125","title":"","note":"","status":"normal","x":0.6637,"y":0.5518,"w":0.0397,"h":0.0787,"door":[0.6631,0.5125]},{"id":"room_zn7aesg","number":"126","title":"","note":"","status":"normal","x":0.6337,"y":0.5521,"w":0.0203,"h":0.0781,"door":[0.6305,0.5131]},{"id":"room_92a1j50","number":"128","title":"","note":"","status":"normal","x":0.4829,"y":0.7397,"w":0.0918,"h":0.2243,"door":[0.5175,0.6276]},{"id":"room_gh0bng4","number":"130","title":"","note":"","status":"normal","x":0.4873,"y":0.8828,"w":0.0371,"h":0.0625,"door":null},{"id":"room_7hhkqxi","number":"129","title":"","note":"","status":"normal","x":0.5124,"y":0.8828,"w":0.0131,"h":0.0625,"door":null},{"id":"room_1mzl46g","number":"155","title":"","note":"","status":"normal","x":0.3609,"y":0.2857,"w":0.0846,"h":0.0807,"door":[0.3186,0.2767]},{"id":"room_ouu6ze2","number":"154","title":"","note":"","status":"normal","x":0.2911,"y":0.2174,"w":0.0356,"h":0.0781,"door":[0.2916,0.2565]},{"id":"room_2id3whi","number":"153","title":"","note":"","status":"normal","x":0.2453,"y":0.2175,"w":0.056,"h":0.0781,"door":[0.256,0.2566]},{"id":"room_ipu3fc2","number":"135","title":"","note":"","status":"normal","x":0.3015,"y":0.3337,"w":0.0342,"h":0.0695,"door":[0.2848,0.299]},{"id":"room_f04mq3m","number":"136","title":"","note":"","status":"normal","x":0.2692,"y":0.3341,"w":0.0209,"h":0.0688,"door":[0.2659,0.2997]},{"id":"room_tx0foik","number":"138","title":"","note":"","status":"normal","x":0.2329,"y":0.3363,"w":0.0184,"h":0.0706,"door":[0.2364,0.301]},{"id":"room_md0yi63","number":"139","title":"","note":"","status":"normal","x":0.2049,"y":0.3359,"w":0.0378,"h":0.0703,"door":[0.1919,0.3007]},{"id":"room_4phq0q4","number":"139-1","title":"","note":"","status":"normal","x":0.1744,"y":0.3262,"w":0.0233,"h":0.0508,"door":null},{"id":"room_vy08s7n","number":"141","title":"","note":"","status":"normal","x":0.1724,"y":0.3902,"w":0.0273,"h":0.0374,"door":[0.1588,0.3892]},{"id":"room_ehlxc7w","number":"142-1","title":"","note":"","status":"normal","x":0.1788,"y":0.5906,"w":0.0142,"h":0.0546,"door":null},{"id":"room_vobc3dm","number":"142","title":"","note":"","status":"normal","x":0.1464,"y":0.4859,"w":0.079,"h":0.1524,"door":[0.1456,0.4097]},{"id":"room_rdq0twz","number":"142-2","title":"","note":"","status":"normal","x":0.1141,"y":0.5896,"w":0.0153,"h":0.055,"door":null},{"id":"room_0wlyjfx","number":"143","title":"","note":"","status":"normal","x":0.1199,"y":0.3921,"w":0.0263,"h":0.0337,"door":[0.1331,0.3892]},{"id":"room_5kd84y5","number":"144","title":"","note":"","status":"normal","x":0.1198,"y":0.3382,"w":0.0261,"h":0.0744,"door":[0.133,0.3154]},{"id":"room_9iw02vy","number":"145","title":"","note":"","status":"normal","x":0.1201,"y":0.2837,"w":0.0265,"h":0.0335,"door":[0.1208,0.267]},{"id":"room_c3g7n70","number":"146","title":"","note":"","status":"normal","x":0.0981,"y":0.2565,"w":0.016,"h":0.0208,"door":[0.1061,0.2557]},{"id":"room_l7h49yr","number":"147","title":"","note":"","status":"normal","x":0.0982,"y":0.2207,"w":0.0158,"h":0.0482,"door":[0.1061,0.2087]},{"id":"room_r1692ww","number":"148","title":"","note":"","status":"normal","x":0.0982,"y":0.166,"w":0.0164,"h":0.0612,"door":[0.1064,0.1637]},{"id":"room_8om528l","number":"150","title":"","note":"","status":"normal","x":0.1506,"y":0.0957,"w":0.0571,"h":0.0768,"door":[0.1337,0.1341]},{"id":"room_ez2fmok","number":"151","title":"","note":"","status":"normal","x":0.1692,"y":0.2166,"w":0.0207,"h":0.0798,"door":[0.1681,0.2565]},{"id":"room_yc2xwok","number":"152","title":"","note":"","status":"normal","x":0.1984,"y":0.2174,"w":0.0378,"h":0.0781,"door":[0.2088,0.2565]},{"id":"room_c2wd7g0","number":"137","title":"","note":"","status":"normal","x":0.2371,"y":0.39,"w":0.0098,"h":0.0378,"door":null},{"id":"room_lbsaus8","number":"131","title":"","note":"","status":"normal","x":0.4917,"y":0.5687,"w":0.0282,"h":0.0267,"door":[0.5058,0.5609]},{"id":"room_rowy7ye","number":"132","title":"","note":"","status":"normal","x":0.4646,"y":0.5467,"w":0.013,"h":0.0696,"door":[0.4631,0.5119]},{"id":"room_dhle8dv","number":"133","title":"","note":"","status":"normal","x":0.4473,"y":0.5469,"w":0.0211,"h":0.0703,"door":[0.4525,0.5118]},{"id":"room_lipumaq","number":"128-1","title":"","note":"","status":"normal","x":0.4473,"y":0.6048,"w":0.0211,"h":0.0456,"door":[0.4454,0.6276]},{"id":"room_743xdag","number":"134","title":"","note":"","status":"normal","x":0.4539,"y":0.3794,"w":0.0354,"h":0.2028,"door":[0.4526,0.4808]},{"id":"room_cgs5gw9","number":"104-1","title":"","note":"","status":"normal","x":0.5763,"y":0.4264,"w":0.0552,"h":0.0768,"door":null},{"id":"room_t4pnmh3","number":"149","title":"","note":"","status":"normal","x":0.1061,"y":0.0957,"w":0.032,"h":0.0768,"door":[0.1121,0.1341]},{"id":"room_3nr14fa","number":"","title":"","note":"","status":"nonexistent","x":0.4197,"y":0.2858,"w":0.0327,"h":0.0794,"door":null}],"corridors":[{"id":"cor_1dcfggs","points":[[0.5292358271446279,0.4915181496963718],[0.5290488584458792,0.48828128367693563],[0.9004894105101376,0.492716277029663],[0.9016617033340285,0.2745825670123119]],"width":0.012},{"id":"cor_sbz9okv","points":[[0.8792726613678196,0.49351206738673264],[0.8798738941998787,0.491716719346556],[0.8782706066477209,0.5287008889741959],[0.9039232074822456,0.5326506546625847],[0.9028167323933824,0.8483264622779197]],"width":0.012},{"id":"cor_fvdx4re","points":[[0.5298879807570994,0.4899814714834325],[0.44233423824947715,0.4937523157621062],[0.5172600371261923,0.49148980919490204],[0.518522831489283,0.31199762153003713],[0.48232272641401613,0.30822677725136355],[0.4827436578683797,0.2637308147630147],[0.4806390005965619,0.5239190699914952],[0.481480863505289,0.4907356403391672],[0.5172600371261923,0.49224397805063674],[0.518522831489283,0.5646441882011705]],"width":0.012},{"id":"cor_t1bupdp","points":[[0.3126739995934274,0.27602700786907897],[0.14472234930236372,0.2790436832920179],[0.14556421221109084,0.15988500408593115],[0.12199205076673104,0.16063917294166588],[0.12199205076673104,0.19080592717105493],[0.143459554939273,0.19457677144972854],[0.14598514366545443,0.39141484279649214]],"width":0.012},{"id":"cor_v1hall","points":[[0.122,0.3],[0.19,0.49],[0.481,0.491]],"width":0.012}],"nodes":[{"id":"n_wdlc8sw","x":0.4811,"y":0.4907,"links":["n_whuzho1"]},{"id":"n_whuzho1","x":0.5173,"y":0.4922,"links":["n_wdlc8sw","n_o8ksc69"]},{"id":"n_o8ksc69","x":0.8788,"y":0.4915,"links":["n_whuzho1","n_xt7ij55"]},{"id":"n_xt7ij55","x":0.8801,"y":0.5307,"links":["n_o8ksc69"]},{"id":"n_pg7dx3h","x":0.3114,"y":0.2795,"links":["n_uz7wsuu"]},{"id":"n_uz7wsuu","x":0.1456,"y":0.2788,"links":["n_pg7dx3h","n_isg7niu"]},{"id":"n_isg7niu","x":0.1469,"y":0.3904,"links":["n_uz7wsuu","n_w9qmm5u"]},{"id":"n_w9qmm5u","x":0.1431,"y":0.1777,"links":["n_isg7niu"]}],"labels":[{"id":"l_p9l72ta","x":0.6128,"y":0.5701,"text":"М","size":16},{"id":"l_ys1fpeh","x":0.6361,"y":0.5707,"text":"Ж","size":16},{"id":"l_vdzz4db","x":0.4476,"y":0.3386,"text":"Гардероб","size":16},{"id":"l_uyd06dn","x":0.4895,"y":0.3715,"text":"Фойе","size":16},{"id":"l_4ie4ig2","x":0.2694,"y":0.3505,"text":"М","size":16},{"id":"l_z6kyw6j","x":0.2332,"y":0.3411,"text":"Ж","size":16},{"id":"l_681nduh","x":0.929,"y":0.8402,"text":"Ж","size":16}],"callouts":[{"id":"c_upvq497","x":0.5882,"y":0.3524,"text":"Библиотека","targetId":"room_cgs5gw9"},{"id":"c_sny8ebw","x":0.6651,"y":0.3503,"text":"Библиотека","targetId":"room_ip6a9qn"},{"id":"c_mq87830","x":0.812,"y":0.71,"text":"Буфет","targetId":"room_o8eieyz"},{"id":"c_fjrltq8","x":0.5723,"y":0.2337,"text":"Медицинский пункт","targetId":"room_58s37zs"},{"id":"c_0ww8qex","x":0.4803,"y":0.786,"text":"Актовый зал","targetId":"room_92a1j50"},{"id":"c_l6bqwtr","x":0.1444,"y":0.5231,"text":"Спорт зал","targetId":"room_vobc3dm"},{"id":"c_3lop6gl","x":0.1035,"y":0.1175,"text":"Буфет","targetId":"room_t4pnmh3"}],"routes":[],"entrances":[{"id":"e_ovibvue","x":0.4809,"y":0.2031,"kind":"main","dir":90,"title":"Главный вход"},{"id":"e_fk3i3z7","x":0.4242,"y":0.7331,"kind":"backup","dir":180,"title":"Запасной выход"},{"id":"e_a0hsom8","x":0.5199,"y":0.7296,"kind":"backup","dir":0,"title":"Запасной выход"},{"id":"e_911i0e0","x":0.2503,"y":0.4211,"kind":"backup","dir":90,"title":"Запасной выход"},{"id":"e_nyqrp20","x":0.1855,"y":0.1555,"kind":"main","dir":0,"title":"Главный выход"},{"id":"e_blpt6ev","x":0.9019,"y":0.2346,"kind":"main","dir":270,"title":"Главный выход"},{"id":"e_duc5a38","x":0.249,"y":0.3128,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"138"},{"id":"e_2fxxde6","x":0.4836,"y":0.5165,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"132"},{"id":"e_hgg9r5w","x":0.8752,"y":0.5459,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"115"},{"id":"e_9kyra5x","x":0.8811,"y":0.8273,"kind":"stairs","dir":180,"title":"Лестница","usable":false,"nearRoom":"118"},{"id":"e_o4hfotf","x":0.1222,"y":0.2292,"kind":"stairs","dir":180,"title":"Лестница","usable":true,"nearRoom":"147"}]},"2":{"rooms":[{"id":"room_6t11u49","number":"201-1","title":"","note":"","status":"normal","x":0.5323,"y":0.2543,"w":0.0342,"h":0.0358,"door":null},{"id":"room_hs1t4ps","number":"201","title":"","note":"","status":"normal","x":0.5323,"y":0.2918,"w":0.0342,"h":0.0393,"door":null},{"id":"room_yws9hsd","number":"201-2","title":"","note":"","status":"normal","x":0.5323,"y":0.347,"w":0.0342,"h":0.0716,"door":null},{"id":"room_pvted36","number":"202","title":"","note":"","status":"normal","x":0.5323,"y":0.4432,"w":0.0342,"h":0.0412,"door":null},{"id":"room_6528ya5","number":"234","title":"","note":"","status":"normal","x":0.4793,"y":0.4443,"w":0.0297,"h":0.0391,"door":null},{"id":"room_po2mfqr","number":"235","title":"","note":"","status":"normal","x":0.4794,"y":0.4087,"w":0.0302,"h":0.0309,"door":null},{"id":"room_kf7ck7r","number":"203","title":"","note":"","status":"normal","x":0.5581,"y":0.4284,"w":0.0174,"h":0.0703,"door":null},{"id":"room_k8ibjc7","number":"204","title":"","note":"","status":"normal","x":0.5905,"y":0.4284,"w":0.0472,"h":0.0703,"door":null},{"id":"room_j434tfu","number":"205","title":"","note":"","status":"normal","x":0.6337,"y":0.4284,"w":0.0392,"h":0.0703,"door":null},{"id":"room_mp5xe6a","number":"206","title":"","note":"","status":"normal","x":0.6744,"y":0.4284,"w":0.0422,"h":0.0703,"door":null},{"id":"room_q9tl4lg","number":"207","title":"","note":"","status":"normal","x":0.7028,"y":0.4284,"w":0.0145,"h":0.0703,"door":null},{"id":"room_yxbviup","number":"208","title":"","note":"","status":"normal","x":0.7264,"y":0.4284,"w":0.0327,"h":0.0703,"door":null},{"id":"room_7nuo8fc","number":"209","title":"","note":"","status":"normal","x":0.7627,"y":0.4284,"w":0.04,"h":0.0703,"door":null},{"id":"room_hieekuk","number":"210","title":"","note":"","status":"normal","x":0.81,"y":0.4284,"w":0.0545,"h":0.0703,"door":null},{"id":"room_6c1knas","number":"211","title":"","note":"","status":"normal","x":0.8448,"y":0.4284,"w":0.0153,"h":0.0703,"door":null},{"id":"room_hxidz8j","number":"212","title":"","note":"","status":"normal","x":0.8692,"y":0.4499,"w":0.0276,"h":0.0299,"door":null},{"id":"room_assw545","number":"213","title":"","note":"","status":"normal","x":0.8717,"y":0.3814,"w":0.0326,"h":0.1066,"door":null},{"id":"room_vf7g62n","number":"214","title":"","note":"","status":"normal","x":0.8703,"y":0.308,"w":0.0357,"h":0.0403,"door":null},{"id":"room_85vr3qe","number":"215","title":"","note":"","status":"normal","x":0.8713,"y":0.2702,"w":0.0318,"h":0.035,"door":null},{"id":"room_ma5tfoh","number":"216","title":"","note":"","status":"normal","x":0.9226,"y":0.2904,"w":0.0298,"h":0.0755,"door":null},{"id":"room_97q79l9","number":"217","title":"","note":"","status":"normal","x":0.9226,"y":0.3763,"w":0.0298,"h":0.0964,"door":null},{"id":"room_5ve038a","number":"218","title":"","note":"","status":"normal","x":0.9226,"y":0.4499,"w":0.0298,"h":0.0299,"door":null},{"id":"room_q8jg4s2","number":"219","title":"","note":"","status":"normal","x":0.9226,"y":0.502,"w":0.0298,"h":0.0742,"door":null},{"id":"room_4jl15kr","number":"220","title":"","note":"","status":"normal","x":0.9226,"y":0.5553,"w":0.0298,"h":0.0326,"door":null},{"id":"room_sfoaamv","number":"221","title":"","note":"","status":"normal","x":0.9226,"y":0.6536,"w":0.0298,"h":0.1641,"door":null},{"id":"room_yc9f4j3","number":"222","title":"","note":"","status":"normal","x":0.9226,"y":0.7676,"w":0.0298,"h":0.0638,"door":null},{"id":"room_zgii5c5","number":"223","title":"","note":"","status":"normal","x":0.9226,"y":0.8262,"w":0.0298,"h":0.0534,"door":null},{"id":"room_xossbq5","number":"224","title":"","note":"","status":"normal","x":0.8708,"y":0.7816,"w":0.0328,"h":0.0983,"door":null},{"id":"room_68io4ij","number":"225-1","title":"","note":"","status":"normal","x":0.8706,"y":0.7118,"w":0.0331,"h":0.0405,"door":null},{"id":"room_fu6u35b","number":"225","title":"","note":"","status":"normal","x":0.8703,"y":0.6412,"w":0.0336,"h":0.1007,"door":null},{"id":"room_2ej9cok","number":"226","title":"","note":"","status":"normal","x":0.7631,"y":0.5541,"w":0.0392,"h":0.0743,"door":null},{"id":"room_i5i6mu4","number":"227","title":"","note":"","status":"normal","x":0.7265,"y":0.5539,"w":0.0341,"h":0.0739,"door":null},{"id":"room_4z42mr3","number":"228","title":"","note":"","status":"normal","x":0.6906,"y":0.5539,"w":0.0389,"h":0.0739,"door":null},{"id":"room_bj3cdo7","number":"228-1","title":"","note":"","status":"normal","x":0.664,"y":0.5537,"w":0.0136,"h":0.0735,"door":null},{"id":"room_a6q94o3","number":"229","title":"","note":"","status":"normal","x":0.6481,"y":0.5536,"w":0.0183,"h":0.0729,"door":null},{"id":"room_tpe6du6","number":"230","title":"","note":"","status":"normal","x":0.6293,"y":0.5535,"w":0.0194,"h":0.0731,"door":null},{"id":"room_sxt9v5x","number":"231","title":"","note":"","status":"normal","x":0.5369,"y":0.5767,"w":0.0258,"h":0.0407,"door":null},{"id":"room_1243lh8","number":"233","title":"","note":"","status":"normal","x":0.4779,"y":0.5774,"w":0.0272,"h":0.0421,"door":null},{"id":"room_bo2ja2b","number":"232","title":"","note":"","status":"normal","x":0.5079,"y":0.8755,"w":0.0322,"h":0.0641,"door":null},{"id":"room_ys6eob6","number":"236","title":"","note":"","status":"normal","x":0.4795,"y":0.3487,"w":0.0302,"h":0.089,"door":null},{"id":"room_w8vrsfx","number":"237","title":"","note":"","status":"normal","x":0.3252,"y":0.3203,"w":0.0531,"h":0.0651,"door":null},{"id":"room_62j0np2","number":"238","title":"","note":"","status":"normal","x":0.2725,"y":0.3203,"w":0.016,"h":0.0651,"door":null},{"id":"room_l1x7pxs","number":"239","title":"","note":"","status":"normal","x":0.2358,"y":0.3203,"w":0.0574,"h":0.0651,"door":null},{"id":"room_j558ukq","number":"240","title":"","note":"","status":"normal","x":0.1857,"y":0.3203,"w":0.0429,"h":0.0651,"door":null},{"id":"room_o2rk6gb","number":"241","title":"","note":"","status":"normal","x":0.1755,"y":0.2702,"w":0.0225,"h":0.0352,"door":null},{"id":"room_z873wf5","number":"242","title":"","note":"","status":"normal","x":0.1239,"y":0.2214,"w":0.0516,"h":0.0625,"door":null},{"id":"room_yc3v877","number":"242-1","title":"","note":"","status":"normal","x":0.157,"y":0.2214,"w":0.0145,"h":0.0625,"door":null},{"id":"room_6elpj3k","number":"243","title":"","note":"","status":"normal","x":0.0698,"y":0.2214,"w":0.0233,"h":0.0625,"door":null},{"id":"room_uh1lwrv","number":"244","title":"","note":"","status":"normal","x":0.0432,"y":0.2214,"w":0.0298,"h":0.0625,"door":null},{"id":"room_erttj3q","number":"245","title":"","note":"","status":"normal","x":0.0448,"y":0.0968,"w":0.033,"h":0.0746,"door":null},{"id":"room_120vu08","number":"246","title":"","note":"","status":"normal","x":0.0809,"y":0.0966,"w":0.0389,"h":0.075,"door":null},{"id":"room_kub628n","number":"247","title":"","note":"","status":"normal","x":0.1175,"y":0.0963,"w":0.0342,"h":0.0754,"door":null},{"id":"room_la1ms3x","number":"248","title":"","note":"","status":"normal","x":0.1586,"y":0.0963,"w":0.048,"h":0.0757,"door":null},{"id":"room_rat35sc","number":"249","title":"","note":"","status":"normal","x":0.2038,"y":0.0916,"w":0.0425,"h":0.0631,"door":null},{"id":"room_vpafq7e","number":"250","title":"","note":"","status":"normal","x":0.2143,"y":0.149,"w":0.022,"h":0.0506,"door":null},{"id":"room_thit0uv","number":"251","title":"","note":"","status":"normal","x":0.2303,"y":0.2135,"w":0.054,"h":0.0781,"door":null},{"id":"room_c5ckgm5","number":"252","title":"","note":"","status":"normal","x":0.2835,"y":0.2134,"w":0.053,"h":0.0784,"door":null},{"id":"room_cm4bak6","number":"253","title":"","note":"","status":"normal","x":0.3275,"y":0.2129,"w":0.0349,"h":0.0794,"door":null},{"id":"room_wctpyyr","number":"254","title":"","note":"","status":"normal","x":0.3553,"y":0.2344,"w":0.0208,"h":0.0364,"door":null},{"id":"room_2sxwjtz","number":"256","title":"","note":"","status":"normal","x":0.4003,"y":0.2624,"w":0.0305,"h":0.0508,"door":null},{"id":"room_hodqc0t","number":"255","title":"","note":"","status":"normal","x":0.3746,"y":0.2624,"w":0.0211,"h":0.0508,"door":null},{"id":"room_f3i62t7","number":"257","title":"","note":"","status":"normal","x":0.4264,"y":0.2624,"w":0.0215,"h":0.0508,"door":null},{"id":"room_hyezdvr","number":"258","title":"","note":"","status":"normal","x":0.4517,"y":0.2546,"w":0.0283,"h":0.0352,"door":null},{"id":"room_yx98ld1","number":"259","title":"","note":"","status":"normal","x":0.4804,"y":0.2546,"w":0.0291,"h":0.0352,"door":null},{"id":"room_yrzmq9q","number":"","title":"","note":"","status":"nonexistent","x":0.1948,"y":0.4727,"w":0.061,"h":0.2396,"door":null},{"id":"room_vfvldqs","number":"","title":"","note":"","status":"nonexistent","x":0.5076,"y":0.7116,"w":0.0836,"h":0.2383,"door":null},{"id":"room_sb86niu","number":"","title":"","note":"","status":"normal","x":0.5323,"y":0.403,"w":0.0342,"h":0.0404,"door":null}],"corridors":[{"id":"cor_6hgraf1","points":[[0.03613666228646518,0.15979522558037676],[0.03745072273324573,0.16097240473061766],[0.19382391590013137,0.16097240473061766],[0.19579500657030222,0.26691852825229967],[0.3574244415243101,0.2704500657030224],[0.35873850197109064,0.29987954445904513],[0.4520367936925098,0.3034110819097679],[0.45072273324572926,0.28104467805519057],[0.5039421813403416,0.28457621550591333],[0.5059132720105125,0.2586782742006133],[0.5032851511169514,0.4823423127463864],[0.47437582128777916,0.47998795444590453],[0.4770039421813403,0.5247207621550591],[0.4750328515111695,0.4823423127463864],[0.5006570302233903,0.4835194918966273],[0.8909329829172141,0.49058256679807277],[0.8981603153745071,0.26691852825229967],[0.895532194480946,0.8378504161191415]],"width":0.012},{"id":"cor_v210322","points":[[0.176,0.221],[0.176,0.267],[0.196,0.267]],"width":0.012},{"id":"cor_v14b754","points":[[0.29,0.311],[0.29,0.27]],"width":0.012},{"id":"cor_v21e4fe","points":[[0.598,0.578],[0.598,0.485]],"width":0.012},{"id":"cor_v732501","points":[[0.089,0.215],[0.089,0.161]],"width":0.012},{"id":"cor_v7e549e","points":[[0.504,0.524],[0.504,0.484]],"width":0.012},{"id":"cor_vb72589","points":[[0.869,0.546],[0.896,0.546]],"width":0.012},{"id":"cor_v53151b","points":[[0.871,0.843],[0.896,0.838]],"width":0.012},{"id":"cor_v59e5c8","points":[[0.504,0.524],[0.509,0.88]],"width":0.012}],"nodes":[{"id":"n_nb6ek1h","x":0.1938,"y":0.1645,"links":["n_lo3c9rv"]},{"id":"n_lo3c9rv","x":0.1951,"y":0.2669,"links":["n_nb6ek1h","n_he9c7aj"]},{"id":"n_he9c7aj","x":0.3587,"y":0.274,"links":["n_lo3c9rv","n_y23p099"]},{"id":"n_y23p099","x":0.3601,"y":0.3022,"links":["n_he9c7aj","n_mbu7i9a"]},{"id":"n_mbu7i9a","x":0.4527,"y":0.3022,"links":["n_y23p099","n_j7i9gxh"]},{"id":"n_j7i9gxh","x":0.4501,"y":0.2858,"links":["n_mbu7i9a","n_88ier3h"]},{"id":"n_88ier3h","x":0.5059,"y":0.2893,"links":["n_j7i9gxh","n_b87bizb"]},{"id":"n_b87bizb","x":0.5079,"y":0.4823,"links":["n_88ier3h","n_o8bfb1m"]},{"id":"n_o8bfb1m","x":0.8949,"y":0.4929,"links":["n_b87bizb"]},{"id":"n_st241","x":0.176,"y":0.221,"links":["n_j241"]},{"id":"n_j241","x":0.176,"y":0.267,"links":["n_st241","n_lo3c9rv"]},{"id":"n_st238","x":0.29,"y":0.311,"links":["n_lo3c9rv","n_he9c7aj"]},{"id":"n_st230","x":0.598,"y":0.578,"links":["n_j230"]},{"id":"n_j230","x":0.598,"y":0.485,"links":["n_st230","n_b87bizb","n_o8bfb1m"]},{"id":"n_st243","x":0.089,"y":0.215,"links":["n_nb6ek1h"]},{"id":"n_st234","x":0.504,"y":0.524,"links":["n_b87bizb","n_232"]},{"id":"n_232","x":0.509,"y":0.88,"links":["n_st234"]},{"id":"n_st225","x":0.869,"y":0.546,"links":["n_o8bfb1m"]},{"id":"n_st223","x":0.871,"y":0.843,"links":["n_o8bfb1m"]}],"labels":[{"id":"l_chk70me","x":0.6452,"y":0.5542,"text":"Ж","size":16},{"id":"l_yzym3ic","x":0.9225,"y":0.8296,"text":"М","size":16}],"callouts":[{"id":"c_rzp62hr","x":0.341,"y":0.1304,"text":"Бухгалтерия","targetId":"room_cm4bak6"},{"id":"c_6uc2yo7","x":0.4047,"y":0.3764,"text":"Конференц. зал","targetId":"room_ys6eob6"},{"id":"c_ujxiia1","x":0.3791,"y":0.4117,"text":"Учебная часть","targetId":"room_po2mfqr"},{"id":"c_bzf0vji","x":0.5795,"y":0.3175,"text":"Архив","targetId":"room_sb86niu"},{"id":"c_x91vylj","x":0.5992,"y":0.274,"text":"Приемная","targetId":"room_hs1t4ps"},{"id":"c_wcms7h0","x":0.6137,"y":0.3411,"text":"Преподавательская","targetId":"room_k8ibjc7"}],"routes":[],"entrances":[{"id":"e_3gyd21f","x":0.1761,"y":0.221,"kind":"stairs","dir":180,"title":"Лестница","usable":true,"nearRoom":"242-1"},{"id":"e_eztq0l0","x":0.8706,"y":0.8426,"kind":"stairs","dir":180,"title":"Лестница","usable":false,"nearRoom":"223"},{"id":"e_akbxwvr","x":0.2898,"y":0.3105,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"238"},{"id":"e_28htffa","x":0.5039,"y":0.5235,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"233"},{"id":"e_nrfdbcb","x":0.8686,"y":0.5459,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"220"},{"id":"e_oisdafs","x":0.0894,"y":0.2151,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"243"},{"id":"e_st230","x":0.598,"y":0.578,"kind":"stairs","dir":0,"title":"Лестница","usable":true,"note":"Добавлена vision-разметкой 2026-10-02 (каб.230). Координаты ±0.01, LOW confidence — перепроверить.","nearRoom":"230"}]},"3-4":{"rooms":[{"id":"room_x3gy5bq","number":"301","title":"","note":"","status":"normal","x":0.4877,"y":0.5599,"w":0.0186,"h":0.1172,"door":null},{"id":"room_3v80l0e","number":"302","title":"","note":"","status":"normal","x":0.4938,"y":0.4616,"w":0.0312,"h":0.0794,"door":null},{"id":"room_g7valv8","number":"303","title":"","note":"","status":"normal","x":0.4938,"y":0.3809,"w":0.0312,"h":0.082,"door":null},{"id":"room_zcubj49","number":"304","title":"","note":"","status":"normal","x":0.4938,"y":0.3014,"w":0.0312,"h":0.0768,"door":null},{"id":"room_s6fggng","number":"305","title":"","note":"","status":"normal","x":0.5451,"y":0.3014,"w":0.0305,"h":0.0768,"door":null},{"id":"room_tzd5itn","number":"306","title":"","note":"","status":"normal","x":0.5451,"y":0.3737,"w":0.0305,"h":0.0677,"door":null},{"id":"room_blrhohz","number":"307","title":"","note":"","status":"normal","x":0.5451,"y":0.4544,"w":0.0305,"h":0.0938,"door":null},{"id":"room_6vvzfoh","number":"308","title":"","note":"","status":"normal","x":0.5698,"y":0.4544,"w":0.0189,"h":0.0938,"door":null},{"id":"room_zrpqfi4","number":"309","title":"","note":"","status":"normal","x":0.6057,"y":0.4544,"w":0.0531,"h":0.0938,"door":null},{"id":"room_cl9ug0v","number":"310","title":"","note":"","status":"normal","x":0.6526,"y":0.4544,"w":0.0407,"h":0.0938,"door":null},{"id":"room_6sj0rgb","number":"311-1","title":"","note":"","status":"normal","x":0.6831,"y":0.4544,"w":0.0203,"h":0.0938,"door":null},{"id":"room_b0okism","number":"311","title":"","note":"","status":"normal","x":0.7082,"y":0.4544,"w":0.0298,"h":0.0938,"door":null},{"id":"room_vv65qpv","number":"312","title":"","note":"","status":"normal","x":0.7442,"y":0.4544,"w":0.0422,"h":0.0938,"door":null},{"id":"room_71wsfgv","number":"313","title":"","note":"","status":"normal","x":0.782,"y":0.4544,"w":0.0334,"h":0.0938,"door":null},{"id":"room_r5s03mq","number":"314","title":"","note":"","status":"normal","x":0.8147,"y":0.4544,"w":0.032,"h":0.0938,"door":null},{"id":"room_nkdaskc","number":"315","title":"","note":"","status":"normal","x":0.8463,"y":0.4544,"w":0.0313,"h":0.0938,"door":null},{"id":"room_6cfjmya","number":"316","title":"","note":"","status":"normal","x":0.907,"y":0.3661,"w":0.014,"h":0.1696,"door":null},{"id":"room_zz74obh","number":"316-1","title":"","note":"","status":"normal","x":0.8805,"y":0.3822,"w":0.0372,"h":0.1367,"door":null},{"id":"room_5w2kjn1","number":"316-2","title":"","note":"","status":"normal","x":0.8807,"y":0.2958,"w":0.0378,"h":0.036,"door":null},{"id":"room_d2gbf8n","number":"316-3","title":"","note":"","status":"normal","x":0.9306,"y":0.2975,"w":0.0327,"h":0.0326,"door":null},{"id":"room_h013lpl","number":"316-4","title":"","note":"","status":"normal","x":0.9311,"y":0.3298,"w":0.032,"h":0.0321,"door":null},{"id":"room_bii9p62","number":"316-5","title":"","note":"","status":"normal","x":0.9309,"y":0.3631,"w":0.0322,"h":0.0341,"door":null},{"id":"room_pmp5h2x","number":"316-6","title":"","note":"","status":"normal","x":0.9308,"y":0.4159,"w":0.0324,"h":0.0715,"door":null},{"id":"room_ecvra5p","number":"316-7","title":"","note":"","status":"normal","x":0.9307,"y":0.4679,"w":0.0327,"h":0.0325,"door":null},{"id":"room_w7twc48","number":"317","title":"","note":"","status":"normal","x":0.9307,"y":0.5181,"w":0.0325,"h":0.068,"door":null},{"id":"room_pzj4xro","number":"318","title":"","note":"","status":"normal","x":0.9308,"y":0.5916,"w":0.0336,"h":0.079,"door":null},{"id":"room_v5qx6jg","number":"318-1","title":"","note":"","status":"normal","x":0.9311,"y":0.6458,"w":0.0342,"h":0.0304,"door":null},{"id":"room_d9rrz20","number":"319","title":"","note":"","status":"normal","x":0.9314,"y":0.7296,"w":0.0335,"h":0.1372,"door":null},{"id":"room_tzpsl7p","number":"320","title":"","note":"","status":"normal","x":0.9306,"y":0.821,"w":0.0327,"h":0.0456,"door":null},{"id":"room_hkkpuuu","number":"321","title":"","note":"","status":"normal","x":0.8791,"y":0.7862,"w":0.0345,"h":0.0696,"door":null},{"id":"room_uf17wvt","number":"322","title":"","note":"","status":"normal","x":0.879,"y":0.7113,"w":0.0344,"h":0.0803,"door":null},{"id":"room_egu86rn","number":"323","title":"","note":"","status":"normal","x":0.879,"y":0.6323,"w":0.0342,"h":0.0771,"door":null},{"id":"room_uy843a1","number":"324","title":"","note":"","status":"normal","x":0.7741,"y":0.5771,"w":0.0395,"h":0.0686,"door":null},{"id":"room_s8g7b1r","number":"325","title":"","note":"","status":"normal","x":0.7373,"y":0.5775,"w":0.034,"h":0.0691,"door":null},{"id":"room_xxvky7l","number":"326","title":"","note":"","status":"normal","x":0.7108,"y":0.5772,"w":0.019,"h":0.0692,"door":null},{"id":"room_cte7cs8","number":"327","title":"","note":"","status":"normal","x":0.6856,"y":0.5772,"w":0.0313,"h":0.0693,"door":null},{"id":"room_wztjx3a","number":"328","title":"","note":"","status":"normal","x":0.6602,"y":0.5773,"w":0.0194,"h":0.0694,"door":null},{"id":"room_1k9plcl","number":"329","title":"","note":"","status":"normal","x":0.6414,"y":0.5774,"w":0.0183,"h":0.0692,"door":null},{"id":"room_z35wrh8","number":"330","title":"","note":"","status":"normal","x":0.5533,"y":0.5813,"w":0.0205,"h":0.0754,"door":null},{"id":"room_e5cj3qd","number":"331","title":"","note":"","status":"normal","x":0.3466,"y":0.3435,"w":0.0332,"h":0.0744,"door":null},{"id":"room_5geuq2n","number":"331-1","title":"","note":"","status":"normal","x":0.323,"y":0.3546,"w":0.0119,"h":0.0541,"door":null},{"id":"room_4tx0r27","number":"332","title":"","note":"","status":"normal","x":0.2907,"y":0.3418,"w":0.0174,"h":0.0716,"door":null},{"id":"room_4xsmpc3","number":"333","title":"","note":"","status":"normal","x":0.2551,"y":0.3418,"w":0.0538,"h":0.0716,"door":null},{"id":"room_lodujbh","number":"334","title":"","note":"","status":"normal","x":0.2057,"y":0.3418,"w":0.0451,"h":0.0716,"door":null},{"id":"room_iiexexu","number":"335","title":"","note":"","status":"normal","x":0.1952,"y":0.2897,"w":0.0253,"h":0.0348,"door":null},{"id":"room_tdq1hd7","number":"336-1","title":"","note":"","status":"normal","x":0.1745,"y":0.246,"w":0.0174,"h":0.0618,"door":null},{"id":"room_mo9qjzd","number":"336","title":"","note":"","status":"normal","x":0.1432,"y":0.2461,"w":0.0451,"h":0.0625,"door":null},{"id":"room_svfxh60","number":"337","title":"","note":"","status":"normal","x":0.093,"y":0.2431,"w":0.0218,"h":0.0573,"door":null},{"id":"room_4629uw1","number":"338","title":"","note":"","status":"normal","x":0.0674,"y":0.2433,"w":0.0294,"h":0.0578,"door":null},{"id":"room_uarkr5l","number":"339","title":"","note":"","status":"normal","x":0.0689,"y":0.1262,"w":0.03,"h":0.0727,"door":[0.0749,0.1626]},{"id":"room_033lozg","number":"340","title":"","note":"","status":"normal","x":0.1125,"y":0.1265,"w":0.0572,"h":0.0733,"door":[0.1136,0.1632]},{"id":"room_ewnw0lz","number":"341","title":"","note":"","status":"normal","x":0.1549,"y":0.1258,"w":0.0277,"h":0.0719,"door":null},{"id":"room_q248ytt","number":"342","title":"","note":"","status":"normal","x":0.1862,"y":0.1199,"w":0.0355,"h":0.0636,"door":null},{"id":"room_03ebpij","number":"343","title":"","note":"","status":"normal","x":0.2238,"y":0.1204,"w":0.0392,"h":0.0638,"door":null},{"id":"room_t5zy0bz","number":"344","title":"","note":"","status":"normal","x":0.234,"y":0.177,"w":0.0261,"h":0.0492,"door":null},{"id":"room_h54hlqo","number":"345","title":"","note":"","status":"normal","x":0.2322,"y":0.237,"w":0.0225,"h":0.0703,"door":null},{"id":"room_okp5k3m","number":"346","title":"","note":"","status":"normal","x":0.2594,"y":0.2395,"w":0.0354,"h":0.0769,"door":null},{"id":"room_vqvum6s","number":"347","title":"","note":"","status":"normal","x":0.3031,"y":0.2363,"w":0.0523,"h":0.0716,"door":null},{"id":"room_4an8hki","number":"348","title":"","note":"","status":"normal","x":0.3463,"y":0.2363,"w":0.0342,"h":0.0716,"door":null},{"id":"room_dtkafik","number":"401","title":"","note":"","status":"normal","x":0.6681,"y":0.2177,"w":0.0413,"h":0.0777,"door":null},{"id":"room_im5f273","number":"402","title":"","note":"","status":"normal","x":0.6798,"y":0.1413,"w":0.0646,"h":0.0736,"door":null},{"id":"room_cpghrpk","number":"403","title":"","note":"","status":"normal","x":0.7411,"y":0.1415,"w":0.0573,"h":0.074,"door":null},{"id":"room_67wi0iz","number":"404","title":"","note":"","status":"normal","x":0.7552,"y":0.2183,"w":0.0291,"h":0.0765,"door":null},{"id":"room_8rc2fe6","number":"405","title":"","note":"","status":"normal","x":0.7464,"y":0.3071,"w":0.0467,"h":0.0516,"door":null},{"id":"room_fs6ui4g","number":"","title":"","note":"","status":"nonexistent","x":0.4208,"y":0.2982,"w":0.1148,"h":0.0833,"door":null},{"id":"room_utv4a48","number":"","title":"","note":"","status":"nonexistent","x":0.2148,"y":0.498,"w":0.0647,"h":0.2409,"door":null},{"id":"room_mzrfmlc","number":"","title":"","note":"","status":"nonexistent","x":0.5214,"y":0.7343,"w":0.09,"h":0.2307,"door":null}],"corridors":[{"id":"cor_h8hnn0x","points":[[0.06044678055190538,0.1856931668856768],[0.06044678055190538,0.1856931668856768],[0.05978975032851511,0.1880475251861586],[0.2128777923784494,0.18098445028471313],[0.21353482260183967,0.29163929040735875],[0.35348226018396844,0.2928164695575997]],"width":0.012},{"id":"cor_of2gowy","points":[[0.5203679369250985,0.27515878230398605],[0.5170827858081471,0.27398160315374515],[0.5190538764783179,0.5211892247043365],[0.8764783180026281,0.5282522996057819],[0.8784494086727989,0.4811651335961455],[0.9067017082785808,0.4811651335961455],[0.9067017082785808,0.8319645203679369]],"width":0.012},{"id":"cor_v34bridge","points":[[0.355,0.295],[0.518,0.279]],"width":0.012},{"id":"cor_v4wing","points":[[0.519,0.29],[0.6,0.292],[0.679,0.294]],"width":0.012},{"id":"cor_v4loop","points":[[0.679,0.294],[0.668,0.218],[0.68,0.143],[0.738,0.143],[0.753,0.217],[0.744,0.305],[0.679,0.294]],"width":0.012}],"nodes":[{"id":"n_ydfkdds","x":0.2083,"y":0.1786,"links":["n_0oe6eod"]},{"id":"n_0oe6eod","x":0.2162,"y":0.2881,"links":["n_ydfkdds","n_5m6w5o0"]},{"id":"n_5m6w5o0","x":0.3555,"y":0.2952,"links":["n_0oe6eod"]},{"id":"n_vtmv14l","x":0.5177,"y":0.2787,"links":["n_s7lrbya"]},{"id":"n_s7lrbya","x":0.523,"y":0.5177,"links":["n_vtmv14l","n_rklu3kf"]},{"id":"n_rklu3kf","x":0.9054,"y":0.5082,"links":["n_s7lrbya","n_0e2air1"]},{"id":"n_0e2air1","x":0.906,"y":0.8225,"links":["n_rklu3kf"]}],"labels":[],"callouts":[],"routes":[],"entrances":[{"id":"e_fpnizbg","x":0.3062,"y":0.3411,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"332"},{"id":"e_y89ai9i","x":0.5171,"y":0.553,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"301"},{"id":"e_rdshl17","x":0.8817,"y":0.56,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"318"},{"id":"e_wf8mlfr","x":0.1958,"y":0.2398,"kind":"stairs","dir":180,"title":"Лестница","usable":true,"nearRoom":"336-1"},{"id":"e_0jof8nz","x":0.8837,"y":0.8343,"kind":"stairs","dir":180,"title":"Лестница","usable":false,"nearRoom":"320"},{"id":"e_4qufx10","x":0.1104,"y":0.2387,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"337"},{"id":"e_8yy3eev","x":0.6787,"y":0.294,"kind":"stairs","dir":180,"title":"Лестница","usable":true,"nearRoom":"405"}]}}};
+const EMBEDDED_MAP = {"version":1,"scaleMeters":null,"floors":{"1":{"rooms":[{"id":"room_f5ozkcf","number":"101","title":"","note":"","status":"normal","x":0.4985,"y":0.237,"w":0.0145,"h":0.0599,"door":[0.4995,0.2669]},{"id":"room_58s37zs","number":"102","title":"","note":"","status":"normal","x":0.5174,"y":0.2702,"w":0.0232,"h":0.0482,"door":[0.5058,0.2728]},{"id":"room_ge91t0x","number":"103","title":"","note":"","status":"normal","x":0.5389,"y":0.4264,"w":0.0196,"h":0.0768,"door":[0.5393,0.4648]},{"id":"room_ip6a9qn","number":"104","title":"","note":"","status":"normal","x":0.6457,"y":0.4264,"w":0.0836,"h":0.0768,"door":[0.63,0.4648]},{"id":"room_cvm8jsd","number":"105","title":"","note":"","status":"normal","x":0.7118,"y":0.4264,"w":0.0487,"h":0.0768,"door":[0.7295,0.4648]},{"id":"room_ox7c51o","number":"106","title":"","note":"","status":"normal","x":0.7576,"y":0.4264,"w":0.0429,"h":0.0768,"door":[0.773,0.4648]},{"id":"room_ery7gsd","number":"107-1","title":"","note":"","status":"normal","x":0.7883,"y":0.4264,"w":0.0185,"h":0.0768,"door":null},{"id":"room_bsgbyyh","number":"107","title":"","note":"","status":"normal","x":0.8259,"y":0.4264,"w":0.0574,"h":0.0768,"door":[0.8107,0.4648]},{"id":"room_exrrc54","number":"108","title":"","note":"","status":"normal","x":0.8735,"y":0.4538,"w":0.0378,"h":0.0221,"door":[0.8924,0.4564]},{"id":"room_83a20uy","number":"109","title":"","note":"","status":"normal","x":0.8735,"y":0.4056,"w":0.0378,"h":0.0742,"door":[0.8924,0.3847]},{"id":"room_yg4957a","number":"110","title":"","note":"","status":"normal","x":0.8735,"y":0.3522,"w":0.0378,"h":0.0326,"door":[0.8924,0.3512]},{"id":"room_htec76v","number":"111","title":"","note":"","status":"normal","x":0.8732,"y":0.2956,"w":0.0385,"h":0.0781,"door":[0.8925,0.3185]},{"id":"room_cz62ow4","number":"112","title":"","note":"","status":"normal","x":0.931,"y":0.3125,"w":0.0378,"h":0.112,"door":[0.9121,0.3176]},{"id":"room_48q1sk6","number":"113","title":"","note":"","status":"normal","x":0.931,"y":0.4056,"w":0.0378,"h":0.0742,"door":[0.9121,0.4245]},{"id":"room_x43c9q8","number":"114","title":"","note":"","status":"normal","x":0.931,"y":0.4609,"w":0.0378,"h":0.0365,"door":[0.9121,0.4617]},{"id":"room_oytpz89","number":"115","title":"","note":"","status":"normal","x":0.931,"y":0.515,"w":0.0378,"h":0.0716,"door":[0.9121,0.5015]},{"id":"room_50hplb3","number":"116","title":"","note":"","status":"normal","x":0.931,"y":0.61,"w":0.0378,"h":0.1185,"door":[0.9121,0.6096]},{"id":"room_qhaqimd","number":"117-1","title":"","note":"","status":"normal","x":0.931,"y":0.6895,"w":0.0378,"h":0.0404,"door":[0.9121,0.685]},{"id":"room_ev5nn2b","number":"117","title":"","note":"","status":"normal","x":0.931,"y":0.763,"w":0.0378,"h":0.1068,"door":[0.9121,0.7977]},{"id":"room_gbkirpj","number":"118","title":"","note":"","status":"normal","x":0.931,"y":0.8385,"w":0.0378,"h":0.0443,"door":[0.9121,0.8524]},{"id":"room_1zijeyd","number":"118","title":"","note":"","status":"normal","x":0.8742,"y":0.8483,"w":0.0364,"h":0.0247,"door":[0.8924,0.8488]},{"id":"room_bmw35ld","number":"120","title":"","note":"","status":"normal","x":0.8735,"y":0.7912,"w":0.0378,"h":0.0406,"door":[0.8924,0.7767]},{"id":"room_o8eieyz","number":"121","title":"","note":"","status":"normal","x":0.8732,"y":0.681,"w":0.0385,"h":0.1797,"door":[0.8925,0.7168]},{"id":"room_3ctqxde","number":"122","title":"","note":"","status":"normal","x":0.7576,"y":0.5521,"w":0.0429,"h":0.0781,"door":[0.7705,0.5131]},{"id":"room_f6hhooa","number":"123","title":"","note":"","status":"normal","x":0.7209,"y":0.5521,"w":0.0305,"h":0.0781,"door":[0.7297,0.5131]},{"id":"room_9hulkzp","number":"127","title":"","note":"","status":"normal","x":0.6137,"y":0.5521,"w":0.0196,"h":0.0781,"door":[0.6179,0.5131]},{"id":"room_vpqjwjn","number":"124","title":"","note":"","status":"normal","x":0.6947,"y":0.5522,"w":0.0219,"h":0.0779,"door":[0.6928,0.5133]},{"id":"room_wgi4qgl","number":"125","title":"","note":"","status":"normal","x":0.6637,"y":0.5518,"w":0.0397,"h":0.0787,"door":[0.6631,0.5125]},{"id":"room_zn7aesg","number":"126","title":"","note":"","status":"normal","x":0.6337,"y":0.5521,"w":0.0203,"h":0.0781,"door":[0.6305,0.5131]},{"id":"room_92a1j50","number":"128","title":"","note":"","status":"normal","x":0.4829,"y":0.7397,"w":0.0918,"h":0.2243,"door":[0.5175,0.6276]},{"id":"room_gh0bng4","number":"130","title":"","note":"","status":"normal","x":0.4873,"y":0.8828,"w":0.0371,"h":0.0625,"door":null},{"id":"room_7hhkqxi","number":"129","title":"","note":"","status":"normal","x":0.5124,"y":0.8828,"w":0.0131,"h":0.0625,"door":null},{"id":"room_1mzl46g","number":"155","title":"","note":"","status":"normal","x":0.3609,"y":0.2857,"w":0.0846,"h":0.0807,"door":[0.3186,0.2767]},{"id":"room_ouu6ze2","number":"154","title":"","note":"","status":"normal","x":0.2911,"y":0.2174,"w":0.0356,"h":0.0781,"door":[0.2916,0.2565]},{"id":"room_2id3whi","number":"153","title":"","note":"","status":"normal","x":0.2453,"y":0.2175,"w":0.056,"h":0.0781,"door":[0.256,0.2566]},{"id":"room_ipu3fc2","number":"135","title":"","note":"","status":"normal","x":0.3015,"y":0.3337,"w":0.0342,"h":0.0695,"door":[0.2848,0.299]},{"id":"room_f04mq3m","number":"136","title":"","note":"","status":"normal","x":0.2692,"y":0.3341,"w":0.0209,"h":0.0688,"door":[0.2659,0.2997]},{"id":"room_tx0foik","number":"138","title":"","note":"","status":"normal","x":0.2329,"y":0.3363,"w":0.0184,"h":0.0706,"door":[0.2364,0.301]},{"id":"room_md0yi63","number":"139","title":"","note":"","status":"normal","x":0.2049,"y":0.3359,"w":0.0378,"h":0.0703,"door":[0.1919,0.3007]},{"id":"room_4phq0q4","number":"139-1","title":"","note":"","status":"normal","x":0.1744,"y":0.3262,"w":0.0233,"h":0.0508,"door":null},{"id":"room_vy08s7n","number":"141","title":"","note":"","status":"normal","x":0.1724,"y":0.3902,"w":0.0273,"h":0.0374,"door":[0.1588,0.3892]},{"id":"room_ehlxc7w","number":"142-1","title":"","note":"","status":"normal","x":0.1788,"y":0.5906,"w":0.0142,"h":0.0546,"door":null},{"id":"room_vobc3dm","number":"142","title":"","note":"","status":"normal","x":0.1464,"y":0.4859,"w":0.079,"h":0.1524,"door":[0.1456,0.4097]},{"id":"room_rdq0twz","number":"142-2","title":"","note":"","status":"normal","x":0.1141,"y":0.5896,"w":0.0153,"h":0.055,"door":null},{"id":"room_0wlyjfx","number":"143","title":"","note":"","status":"normal","x":0.1199,"y":0.3921,"w":0.0263,"h":0.0337,"door":[0.1331,0.3892]},{"id":"room_5kd84y5","number":"144","title":"","note":"","status":"normal","x":0.1198,"y":0.3382,"w":0.0261,"h":0.0744,"door":[0.133,0.3154]},{"id":"room_9iw02vy","number":"145","title":"","note":"","status":"normal","x":0.1201,"y":0.2837,"w":0.0265,"h":0.0335,"door":[0.1208,0.267]},{"id":"room_c3g7n70","number":"146","title":"","note":"","status":"normal","x":0.0981,"y":0.2565,"w":0.016,"h":0.0208,"door":[0.1061,0.2557]},{"id":"room_l7h49yr","number":"147","title":"","note":"","status":"normal","x":0.0982,"y":0.2207,"w":0.0158,"h":0.0482,"door":[0.1061,0.2087]},{"id":"room_r1692ww","number":"148","title":"","note":"","status":"normal","x":0.0982,"y":0.166,"w":0.0164,"h":0.0612,"door":[0.1064,0.1637]},{"id":"room_8om528l","number":"150","title":"","note":"","status":"normal","x":0.1506,"y":0.0957,"w":0.0571,"h":0.0768,"door":[0.1337,0.1341]},{"id":"room_ez2fmok","number":"151","title":"","note":"","status":"normal","x":0.1692,"y":0.2166,"w":0.0207,"h":0.0798,"door":[0.1681,0.2565]},{"id":"room_yc2xwok","number":"152","title":"","note":"","status":"normal","x":0.1984,"y":0.2174,"w":0.0378,"h":0.0781,"door":[0.2088,0.2565]},{"id":"room_c2wd7g0","number":"137","title":"","note":"","status":"normal","x":0.2371,"y":0.39,"w":0.0098,"h":0.0378,"door":null},{"id":"room_lbsaus8","number":"131","title":"","note":"","status":"normal","x":0.4917,"y":0.5687,"w":0.0282,"h":0.0267,"door":[0.5058,0.5609]},{"id":"room_rowy7ye","number":"132","title":"","note":"","status":"normal","x":0.4646,"y":0.5467,"w":0.013,"h":0.0696,"door":[0.4631,0.5119]},{"id":"room_dhle8dv","number":"133","title":"","note":"","status":"normal","x":0.4473,"y":0.5469,"w":0.0211,"h":0.0703,"door":[0.4525,0.5118]},{"id":"room_lipumaq","number":"128-1","title":"","note":"","status":"normal","x":0.4473,"y":0.6048,"w":0.0211,"h":0.0456,"door":[0.4454,0.6276]},{"id":"room_743xdag","number":"134","title":"","note":"","status":"normal","x":0.4539,"y":0.3794,"w":0.0354,"h":0.2028,"door":[0.4526,0.4808]},{"id":"room_cgs5gw9","number":"104-1","title":"","note":"","status":"normal","x":0.5763,"y":0.4264,"w":0.0552,"h":0.0768,"door":null},{"id":"room_t4pnmh3","number":"149","title":"","note":"","status":"normal","x":0.1061,"y":0.0957,"w":0.032,"h":0.0768,"door":[0.1121,0.1341]},{"id":"room_3nr14fa","number":"","title":"","note":"","status":"nonexistent","x":0.4197,"y":0.2858,"w":0.0327,"h":0.0794,"door":null}],"corridors":[],"nodes":[{"id":"n_xt7ij55","x":0.8801,"y":0.5307,"links":[]}],"labels":[{"id":"l_p9l72ta","x":0.6128,"y":0.5701,"text":"М","size":16},{"id":"l_ys1fpeh","x":0.6361,"y":0.5707,"text":"Ж","size":16},{"id":"l_vdzz4db","x":0.4476,"y":0.3386,"text":"Гардероб","size":16},{"id":"l_uyd06dn","x":0.4895,"y":0.3715,"text":"Фойе","size":16},{"id":"l_4ie4ig2","x":0.2694,"y":0.3505,"text":"М","size":16},{"id":"l_z6kyw6j","x":0.2332,"y":0.3411,"text":"Ж","size":16},{"id":"l_681nduh","x":0.929,"y":0.8402,"text":"Ж","size":16}],"callouts":[{"id":"c_upvq497","x":0.5882,"y":0.3524,"text":"Библиотека","targetId":"room_cgs5gw9"},{"id":"c_sny8ebw","x":0.6651,"y":0.3503,"text":"Библиотека","targetId":"room_ip6a9qn"},{"id":"c_mq87830","x":0.812,"y":0.71,"text":"Буфет","targetId":"room_o8eieyz"},{"id":"c_fjrltq8","x":0.5723,"y":0.2337,"text":"Медицинский пункт","targetId":"room_58s37zs"},{"id":"c_0ww8qex","x":0.4803,"y":0.786,"text":"Актовый зал","targetId":"room_92a1j50"},{"id":"c_l6bqwtr","x":0.1444,"y":0.5231,"text":"Спорт зал","targetId":"room_vobc3dm"},{"id":"c_3lop6gl","x":0.1035,"y":0.1175,"text":"Буфет","targetId":"room_t4pnmh3"}],"routes":[],"entrances":[{"id":"e_ovibvue","x":0.4809,"y":0.2031,"kind":"main","dir":90,"title":"Главный вход"},{"id":"e_fk3i3z7","x":0.4242,"y":0.7331,"kind":"backup","dir":180,"title":"Запасной выход"},{"id":"e_a0hsom8","x":0.5199,"y":0.7296,"kind":"backup","dir":0,"title":"Запасной выход"},{"id":"e_911i0e0","x":0.2503,"y":0.4211,"kind":"backup","dir":90,"title":"Запасной выход"},{"id":"e_nyqrp20","x":0.1855,"y":0.1555,"kind":"main","dir":0,"title":"Главный выход"},{"id":"e_blpt6ev","x":0.9019,"y":0.2346,"kind":"main","dir":270,"title":"Главный выход"},{"id":"e_duc5a38","x":0.249,"y":0.3128,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"138"},{"id":"e_2fxxde6","x":0.4836,"y":0.5165,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"132"},{"id":"e_hgg9r5w","x":0.8752,"y":0.5459,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"115"},{"id":"e_9kyra5x","x":0.8811,"y":0.8273,"kind":"stairs","dir":180,"title":"Лестница","usable":false,"nearRoom":"118"},{"id":"e_o4hfotf","x":0.1222,"y":0.2292,"kind":"stairs","dir":180,"title":"Лестница","usable":true,"nearRoom":"147"}]},"2":{"rooms":[{"id":"room_6t11u49","number":"201-1","title":"","note":"","status":"normal","x":0.5323,"y":0.2543,"w":0.0342,"h":0.0358,"door":[0.5234,0.2722]},{"id":"room_hs1t4ps","number":"201","title":"","note":"","status":"normal","x":0.5323,"y":0.2918,"w":0.0342,"h":0.0393,"door":[0.5152,0.2905]},{"id":"room_yws9hsd","number":"201-2","title":"","note":"","status":"normal","x":0.5323,"y":0.347,"w":0.0342,"h":0.0716,"door":[0.5217,0.3112]},{"id":"room_pvted36","number":"202","title":"","note":"","status":"normal","x":0.5323,"y":0.4432,"w":0.0342,"h":0.0412,"door":[0.5152,0.4428]},{"id":"room_6528ya5","number":"234","title":"","note":"","status":"normal","x":0.4793,"y":0.4443,"w":0.0297,"h":0.0391,"door":[0.4942,0.4455]},{"id":"room_po2mfqr","number":"235","title":"","note":"","status":"normal","x":0.4794,"y":0.4087,"w":0.0302,"h":0.0309,"door":[0.4945,0.4116]},{"id":"room_kf7ck7r","number":"203","title":"","note":"","status":"normal","x":0.5581,"y":0.4284,"w":0.0174,"h":0.0703,"door":[0.5587,0.4636]},{"id":"room_k8ibjc7","number":"204","title":"","note":"","status":"normal","x":0.5905,"y":0.4284,"w":0.0472,"h":0.0703,"door":[0.5821,0.4636]},{"id":"room_j434tfu","number":"205","title":"","note":"","status":"normal","x":0.6337,"y":0.4284,"w":0.0392,"h":0.0703,"door":[0.6468,0.4636]},{"id":"room_mp5xe6a","number":"206","title":"","note":"","status":"normal","x":0.6744,"y":0.4284,"w":0.0422,"h":0.0703,"door":[0.6874,0.4636]},{"id":"room_q9tl4lg","number":"207","title":"","note":"","status":"normal","x":0.7028,"y":0.4284,"w":0.0145,"h":0.0703,"door":[0.7018,0.4636]},{"id":"room_yxbviup","number":"208","title":"","note":"","status":"normal","x":0.7264,"y":0.4284,"w":0.0327,"h":0.0703,"door":[0.7352,0.4636]},{"id":"room_7nuo8fc","number":"209","title":"","note":"","status":"normal","x":0.7627,"y":0.4284,"w":0.04,"h":0.0703,"door":[0.7746,0.4636]},{"id":"room_hieekuk","number":"210","title":"","note":"","status":"normal","x":0.81,"y":0.4284,"w":0.0545,"h":0.0703,"door":[0.8118,0.4636]},{"id":"room_6c1knas","number":"211","title":"","note":"","status":"normal","x":0.8448,"y":0.4284,"w":0.0153,"h":0.0703,"door":[0.8445,0.4636]},{"id":"room_hxidz8j","number":"212","title":"","note":"","status":"normal","x":0.8692,"y":0.4499,"w":0.0276,"h":0.0299,"door":[0.883,0.4484]},{"id":"room_assw545","number":"213","title":"","note":"","status":"normal","x":0.8717,"y":0.3814,"w":0.0326,"h":0.1066,"door":[0.888,0.3779]},{"id":"room_vf7g62n","number":"214","title":"","note":"","status":"normal","x":0.8703,"y":0.308,"w":0.0357,"h":0.0403,"door":[0.8882,0.3069]},{"id":"room_85vr3qe","number":"215","title":"","note":"","status":"normal","x":0.8713,"y":0.2702,"w":0.0318,"h":0.035,"door":[0.8872,0.2722]},{"id":"room_ma5tfoh","number":"216","title":"","note":"","status":"normal","x":0.9226,"y":0.2904,"w":0.0298,"h":0.0755,"door":[0.9077,0.3106]},{"id":"room_97q79l9","number":"217","title":"","note":"","status":"normal","x":0.9226,"y":0.3763,"w":0.0298,"h":0.0964,"door":[0.9077,0.3591]},{"id":"room_5ve038a","number":"218","title":"","note":"","status":"normal","x":0.9226,"y":0.4499,"w":0.0298,"h":0.0299,"door":[0.9077,0.4484]},{"id":"room_q8jg4s2","number":"219","title":"","note":"","status":"normal","x":0.9226,"y":0.502,"w":0.0298,"h":0.0742,"door":[0.9077,0.492]},{"id":"room_4jl15kr","number":"220","title":"","note":"","status":"normal","x":0.9226,"y":0.5553,"w":0.0298,"h":0.0326,"door":[0.9077,0.5554]},{"id":"room_sfoaamv","number":"221","title":"","note":"","status":"normal","x":0.9226,"y":0.6536,"w":0.0298,"h":0.1641,"door":[0.9077,0.694]},{"id":"room_yc9f4j3","number":"222","title":"","note":"","status":"normal","x":0.9226,"y":0.7676,"w":0.0298,"h":0.0638,"door":[0.9077,0.7682]},{"id":"room_zgii5c5","number":"223","title":"","note":"","status":"normal","x":0.9226,"y":0.8262,"w":0.0298,"h":0.0534,"door":[0.9077,0.8239]},{"id":"room_xossbq5","number":"224","title":"","note":"","status":"normal","x":0.8708,"y":0.7816,"w":0.0328,"h":0.0983,"door":[0.8872,0.7689]},{"id":"room_68io4ij","number":"225-1","title":"","note":"","status":"normal","x":0.8706,"y":0.7118,"w":0.0331,"h":0.0405,"door":[0.8813,0.6916]},{"id":"room_fu6u35b","number":"225","title":"","note":"","status":"normal","x":0.8703,"y":0.6412,"w":0.0336,"h":0.1007,"door":[0.8871,0.6243]},{"id":"room_2ej9cok","number":"226","title":"","note":"","status":"normal","x":0.7631,"y":0.5541,"w":0.0392,"h":0.0743,"door":[0.7745,0.517]},{"id":"room_i5i6mu4","number":"227","title":"","note":"","status":"normal","x":0.7265,"y":0.5539,"w":0.0341,"h":0.0739,"door":[0.736,0.5169]},{"id":"room_4z42mr3","number":"228","title":"","note":"","status":"normal","x":0.6906,"y":0.5539,"w":0.0389,"h":0.0739,"door":[0.6778,0.5169]},{"id":"room_bj3cdo7","number":"228-1","title":"","note":"","status":"normal","x":0.664,"y":0.5537,"w":0.0136,"h":0.0735,"door":[0.6708,0.5327]},{"id":"room_a6q94o3","number":"229","title":"","note":"","status":"normal","x":0.6481,"y":0.5536,"w":0.0183,"h":0.0729,"door":[0.6466,0.5172]},{"id":"room_tpe6du6","number":"230","title":"","note":"","status":"normal","x":0.6293,"y":0.5535,"w":0.0194,"h":0.0731,"door":[0.6303,0.517]},{"id":"room_sxt9v5x","number":"231","title":"","note":"","status":"normal","x":0.5369,"y":0.5767,"w":0.0258,"h":0.0407,"door":[0.5375,0.5564]},{"id":"room_1243lh8","number":"233","title":"","note":"","status":"normal","x":0.4779,"y":0.5774,"w":0.0272,"h":0.0421,"door":[0.4758,0.5564]},{"id":"room_bo2ja2b","number":"232","title":"","note":"","status":"normal","x":0.5079,"y":0.8755,"w":0.0322,"h":0.0641,"door":null},{"id":"room_ys6eob6","number":"236","title":"","note":"","status":"normal","x":0.4795,"y":0.3487,"w":0.0302,"h":0.089,"door":[0.4946,0.3716]},{"id":"room_w8vrsfx","number":"237","title":"","note":"","status":"normal","x":0.3252,"y":0.3203,"w":0.0531,"h":0.0651,"door":[0.3081,0.2877]},{"id":"room_62j0np2","number":"238","title":"","note":"","status":"normal","x":0.2725,"y":0.3203,"w":0.016,"h":0.0651,"door":[0.2745,0.2877]},{"id":"room_l1x7pxs","number":"239","title":"","note":"","status":"normal","x":0.2358,"y":0.3203,"w":0.0574,"h":0.0651,"door":[0.233,0.2877]},{"id":"room_j558ukq","number":"240","title":"","note":"","status":"normal","x":0.1857,"y":0.3203,"w":0.0429,"h":0.0651,"door":[0.1938,0.2877]},{"id":"room_o2rk6gb","number":"241","title":"","note":"","status":"normal","x":0.1755,"y":0.2702,"w":0.0225,"h":0.0352,"door":[0.1868,0.2698]},{"id":"room_z873wf5","number":"242","title":"","note":"","status":"normal","x":0.1239,"y":0.2214,"w":0.0516,"h":0.0625,"door":[0.1099,0.1902]},{"id":"room_yc3v877","number":"242-1","title":"","note":"","status":"normal","x":0.157,"y":0.2214,"w":0.0145,"h":0.0625,"door":null},{"id":"room_6elpj3k","number":"243","title":"","note":"","status":"normal","x":0.0698,"y":0.2214,"w":0.0233,"h":0.0625,"door":[0.0702,0.1902]},{"id":"room_uh1lwrv","number":"244","title":"","note":"","status":"normal","x":0.0432,"y":0.2214,"w":0.0298,"h":0.0625,"door":[0.0441,0.1902]},{"id":"room_erttj3q","number":"245","title":"","note":"","status":"normal","x":0.0448,"y":0.0968,"w":0.033,"h":0.0746,"door":[0.051,0.1341]},{"id":"room_120vu08","number":"246","title":"","note":"","status":"normal","x":0.0809,"y":0.0966,"w":0.0389,"h":0.075,"door":[0.092,0.1341]},{"id":"room_kub628n","number":"247","title":"","note":"","status":"normal","x":0.1175,"y":0.0963,"w":0.0342,"h":0.0754,"door":[0.1268,0.134]},{"id":"room_la1ms3x","number":"248","title":"","note":"","status":"normal","x":0.1586,"y":0.0963,"w":0.048,"h":0.0757,"door":[0.1756,0.1342]},{"id":"room_rat35sc","number":"249","title":"","note":"","status":"normal","x":0.2038,"y":0.0916,"w":0.0425,"h":0.0631,"door":[0.1936,0.1232]},{"id":"room_vpafq7e","number":"250","title":"","note":"","status":"normal","x":0.2143,"y":0.149,"w":0.022,"h":0.0506,"door":[0.2033,0.1606]},{"id":"room_thit0uv","number":"251","title":"","note":"","status":"normal","x":0.2303,"y":0.2135,"w":0.054,"h":0.0781,"door":[0.2499,0.2526]},{"id":"room_c5ckgm5","number":"252","title":"","note":"","status":"normal","x":0.2835,"y":0.2134,"w":0.053,"h":0.0784,"door":[0.2957,0.2526]},{"id":"room_cm4bak6","number":"253","title":"","note":"","status":"normal","x":0.3275,"y":0.2129,"w":0.0349,"h":0.0794,"door":[0.3285,0.2526]},{"id":"room_wctpyyr","number":"254","title":"","note":"","status":"normal","x":0.3553,"y":0.2344,"w":0.0208,"h":0.0364,"door":[0.359,0.2526]},{"id":"room_2sxwjtz","number":"256","title":"","note":"","status":"normal","x":0.4003,"y":0.2624,"w":0.0305,"h":0.0508,"door":[0.3948,0.2878]},{"id":"room_hodqc0t","number":"255","title":"","note":"","status":"normal","x":0.3746,"y":0.2624,"w":0.0211,"h":0.0508,"door":[0.3755,0.2878]},{"id":"room_f3i62t7","number":"257","title":"","note":"","status":"normal","x":0.4264,"y":0.2624,"w":0.0215,"h":0.0508,"door":[0.4283,0.2878]},{"id":"room_hyezdvr","number":"258","title":"","note":"","status":"normal","x":0.4517,"y":0.2546,"w":0.0283,"h":0.0352,"door":[0.4543,0.2722]},{"id":"room_yx98ld1","number":"259","title":"","note":"","status":"normal","x":0.4804,"y":0.2546,"w":0.0291,"h":0.0352,"door":[0.4837,0.2722]},{"id":"room_yrzmq9q","number":"","title":"","note":"","status":"nonexistent","x":0.1948,"y":0.4727,"w":0.061,"h":0.2396,"door":null},{"id":"room_vfvldqs","number":"","title":"","note":"","status":"nonexistent","x":0.5076,"y":0.7116,"w":0.0836,"h":0.2383,"door":null},{"id":"room_sb86niu","number":"","title":"","note":"","status":"normal","x":0.5323,"y":0.403,"w":0.0342,"h":0.0404,"door":null}],"corridors":[{"id":"cor_6hgraf1","points":[[0.03613666228646518,0.15979522558037676],[0.03745072273324573,0.16097240473061766],[0.19382391590013137,0.16097240473061766],[0.19579500657030222,0.26691852825229967],[0.3574244415243101,0.2704500657030224],[0.35873850197109064,0.29987954445904513],[0.4520367936925098,0.3034110819097679],[0.45072273324572926,0.28104467805519057],[0.5039421813403416,0.28457621550591333],[0.5059132720105125,0.2586782742006133],[0.5032851511169514,0.4823423127463864],[0.47437582128777916,0.47998795444590453],[0.4770039421813403,0.5247207621550591],[0.4750328515111695,0.4823423127463864],[0.5006570302233903,0.4835194918966273],[0.8909329829172141,0.49058256679807277],[0.8981603153745071,0.26691852825229967],[0.895532194480946,0.8378504161191415]],"width":0.012},{"id":"cor_v210322","points":[[0.176,0.221],[0.176,0.267],[0.196,0.267]],"width":0.012},{"id":"cor_v14b754","points":[[0.29,0.311],[0.29,0.27]],"width":0.012},{"id":"cor_v21e4fe","points":[[0.598,0.578],[0.598,0.485]],"width":0.012},{"id":"cor_v732501","points":[[0.089,0.215],[0.089,0.161]],"width":0.012},{"id":"cor_v7e549e","points":[[0.504,0.524],[0.504,0.484]],"width":0.012},{"id":"cor_vb72589","points":[[0.869,0.546],[0.896,0.546]],"width":0.012},{"id":"cor_v53151b","points":[[0.871,0.843],[0.896,0.838]],"width":0.012},{"id":"cor_v59e5c8","points":[[0.504,0.524],[0.509,0.88]],"width":0.012}],"nodes":[{"id":"n_nb6ek1h","x":0.1938,"y":0.1645,"links":["n_lo3c9rv"]},{"id":"n_lo3c9rv","x":0.1951,"y":0.2669,"links":["n_nb6ek1h","n_he9c7aj"]},{"id":"n_he9c7aj","x":0.3587,"y":0.274,"links":["n_lo3c9rv","n_y23p099"]},{"id":"n_y23p099","x":0.3601,"y":0.3022,"links":["n_he9c7aj","n_mbu7i9a"]},{"id":"n_mbu7i9a","x":0.4527,"y":0.3022,"links":["n_y23p099","n_j7i9gxh"]},{"id":"n_j7i9gxh","x":0.4501,"y":0.2858,"links":["n_mbu7i9a","n_88ier3h"]},{"id":"n_88ier3h","x":0.5059,"y":0.2893,"links":["n_j7i9gxh","n_b87bizb"]},{"id":"n_b87bizb","x":0.5079,"y":0.4823,"links":["n_88ier3h","n_o8bfb1m"]},{"id":"n_o8bfb1m","x":0.8949,"y":0.4929,"links":["n_b87bizb"]},{"id":"n_st241","x":0.176,"y":0.221,"links":["n_j241"]},{"id":"n_j241","x":0.176,"y":0.267,"links":["n_st241","n_lo3c9rv"]},{"id":"n_st238","x":0.29,"y":0.311,"links":["n_lo3c9rv","n_he9c7aj"]},{"id":"n_st230","x":0.598,"y":0.578,"links":["n_j230"]},{"id":"n_j230","x":0.598,"y":0.485,"links":["n_st230","n_b87bizb","n_o8bfb1m"]},{"id":"n_st243","x":0.089,"y":0.215,"links":["n_nb6ek1h"]},{"id":"n_st234","x":0.504,"y":0.524,"links":["n_b87bizb","n_232"]},{"id":"n_232","x":0.509,"y":0.88,"links":["n_st234"]},{"id":"n_st225","x":0.869,"y":0.546,"links":["n_o8bfb1m"]},{"id":"n_st223","x":0.871,"y":0.843,"links":["n_o8bfb1m"]}],"labels":[{"id":"l_chk70me","x":0.6452,"y":0.5542,"text":"Ж","size":16},{"id":"l_yzym3ic","x":0.9225,"y":0.8296,"text":"М","size":16}],"callouts":[{"id":"c_rzp62hr","x":0.341,"y":0.1304,"text":"Бухгалтерия","targetId":"room_cm4bak6"},{"id":"c_6uc2yo7","x":0.4047,"y":0.3764,"text":"Конференц. зал","targetId":"room_ys6eob6"},{"id":"c_ujxiia1","x":0.3791,"y":0.4117,"text":"Учебная часть","targetId":"room_po2mfqr"},{"id":"c_bzf0vji","x":0.5795,"y":0.3175,"text":"Архив","targetId":"room_sb86niu"},{"id":"c_x91vylj","x":0.5992,"y":0.274,"text":"Приемная","targetId":"room_hs1t4ps"},{"id":"c_wcms7h0","x":0.6137,"y":0.3411,"text":"Преподавательская","targetId":"room_k8ibjc7"}],"routes":[],"entrances":[{"id":"e_3gyd21f","x":0.1761,"y":0.221,"kind":"stairs","dir":180,"title":"Лестница","usable":true,"nearRoom":"242-1"},{"id":"e_eztq0l0","x":0.8706,"y":0.8426,"kind":"stairs","dir":180,"title":"Лестница","usable":false,"nearRoom":"223"},{"id":"e_akbxwvr","x":0.2898,"y":0.3105,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"238"},{"id":"e_28htffa","x":0.5039,"y":0.5235,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"233"},{"id":"e_nrfdbcb","x":0.8686,"y":0.5459,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"220"},{"id":"e_oisdafs","x":0.0894,"y":0.2151,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"243"},{"id":"e_st230","x":0.598,"y":0.578,"kind":"stairs","dir":0,"title":"Лестница","usable":true,"note":"Добавлена vision-разметкой 2026-10-02 (каб.230). Координаты ±0.01, LOW confidence — перепроверить.","nearRoom":"230"}]},"3-4":{"rooms":[{"id":"room_x3gy5bq","number":"301","title":"","note":"","status":"normal","x":0.4877,"y":0.5599,"w":0.0186,"h":0.1172,"door":[0.497,0.5198]},{"id":"room_3v80l0e","number":"302","title":"","note":"","status":"normal","x":0.4938,"y":0.4616,"w":0.0312,"h":0.0794,"door":[0.5094,0.4395]},{"id":"room_g7valv8","number":"303","title":"","note":"","status":"normal","x":0.4938,"y":0.3809,"w":0.0312,"h":0.082,"door":[0.5094,0.3568]},{"id":"room_zcubj49","number":"304","title":"","note":"","status":"normal","x":0.4938,"y":0.3014,"w":0.0312,"h":0.0768,"door":[0.5094,0.32]},{"id":"room_s6fggng","number":"305","title":"","note":"","status":"normal","x":0.5451,"y":0.3014,"w":0.0305,"h":0.0768,"door":[0.5299,0.3185]},{"id":"room_tzd5itn","number":"306","title":"","note":"","status":"normal","x":0.5451,"y":0.3737,"w":0.0305,"h":0.0677,"door":[0.5299,0.3893]},{"id":"room_blrhohz","number":"307","title":"","note":"","status":"normal","x":0.5451,"y":0.4544,"w":0.0305,"h":0.0938,"door":[0.5511,0.5013]},{"id":"room_6vvzfoh","number":"308","title":"","note":"","status":"normal","x":0.5698,"y":0.4544,"w":0.0189,"h":0.0938,"door":[0.5706,0.5013]},{"id":"room_zrpqfi4","number":"309","title":"","note":"","status":"normal","x":0.6057,"y":0.4544,"w":0.0531,"h":0.0938,"door":[0.6164,0.5013]},{"id":"room_cl9ug0v","number":"310","title":"","note":"","status":"normal","x":0.6526,"y":0.4544,"w":0.0407,"h":0.0938,"door":[0.6535,0.5013]},{"id":"room_6sj0rgb","number":"311-1","title":"","note":"","status":"normal","x":0.6831,"y":0.4544,"w":0.0203,"h":0.0938,"door":[0.6933,0.4836]},{"id":"room_b0okism","number":"311","title":"","note":"","status":"normal","x":0.7082,"y":0.4544,"w":0.0298,"h":0.0938,"door":[0.704,0.5013]},{"id":"room_vv65qpv","number":"312","title":"","note":"","status":"normal","x":0.7442,"y":0.4544,"w":0.0422,"h":0.0938,"door":[0.7457,0.5013]},{"id":"room_71wsfgv","number":"313","title":"","note":"","status":"normal","x":0.782,"y":0.4544,"w":0.0334,"h":0.0938,"door":[0.7868,0.5013]},{"id":"room_r5s03mq","number":"314","title":"","note":"","status":"normal","x":0.8147,"y":0.4544,"w":0.032,"h":0.0938,"door":[0.8226,0.5013]},{"id":"room_nkdaskc","number":"315","title":"","note":"","status":"normal","x":0.8463,"y":0.4544,"w":0.0313,"h":0.0938,"door":[0.8415,0.5013]},{"id":"room_6cfjmya","number":"316","title":"","note":"","status":"normal","x":0.907,"y":0.3661,"w":0.014,"h":0.1696,"door":null},{"id":"room_zz74obh","number":"316-1","title":"","note":"","status":"normal","x":0.8805,"y":0.3822,"w":0.0372,"h":0.1367,"door":[0.8741,0.4506]},{"id":"room_5w2kjn1","number":"316-2","title":"","note":"","status":"normal","x":0.8807,"y":0.2958,"w":0.0378,"h":0.036,"door":[0.8996,0.2942]},{"id":"room_d2gbf8n","number":"316-3","title":"","note":"","status":"normal","x":0.9306,"y":0.2975,"w":0.0327,"h":0.0326,"door":[0.9143,0.2947]},{"id":"room_h013lpl","number":"316-4","title":"","note":"","status":"normal","x":0.9311,"y":0.3298,"w":0.032,"h":0.0321,"door":[0.9151,0.3279]},{"id":"room_bii9p62","number":"316-5","title":"","note":"","status":"normal","x":0.9309,"y":0.3631,"w":0.0322,"h":0.0341,"door":[0.9148,0.3639]},{"id":"room_pmp5h2x","number":"316-6","title":"","note":"","status":"normal","x":0.9308,"y":0.4159,"w":0.0324,"h":0.0715,"door":[0.9146,0.4364]},{"id":"room_ecvra5p","number":"316-7","title":"","note":"","status":"normal","x":0.9307,"y":0.4679,"w":0.0327,"h":0.0325,"door":[0.9144,0.4648]},{"id":"room_w7twc48","number":"317","title":"","note":"","status":"normal","x":0.9307,"y":0.5181,"w":0.0325,"h":0.068,"door":[0.9145,0.5349]},{"id":"room_pzj4xro","number":"318","title":"","note":"","status":"normal","x":0.9308,"y":0.5916,"w":0.0336,"h":0.079,"door":[0.914,0.6078]},{"id":"room_v5qx6jg","number":"318-1","title":"","note":"","status":"normal","x":0.9311,"y":0.6458,"w":0.0342,"h":0.0304,"door":null},{"id":"room_d9rrz20","number":"319","title":"","note":"","status":"normal","x":0.9314,"y":0.7296,"w":0.0335,"h":0.1372,"door":[0.9147,0.6757]},{"id":"room_tzpsl7p","number":"320","title":"","note":"","status":"normal","x":0.9306,"y":0.821,"w":0.0327,"h":0.0456,"door":[0.9143,0.8152]},{"id":"room_hkkpuuu","number":"321","title":"","note":"","status":"normal","x":0.8791,"y":0.7862,"w":0.0345,"h":0.0696,"door":[0.8964,0.7667]},{"id":"room_uf17wvt","number":"322","title":"","note":"","status":"normal","x":0.879,"y":0.7113,"w":0.0344,"h":0.0803,"door":[0.8962,0.7072]},{"id":"room_egu86rn","number":"323","title":"","note":"","status":"normal","x":0.879,"y":0.6323,"w":0.0342,"h":0.0771,"door":[0.8961,0.648]},{"id":"room_uy843a1","number":"324","title":"","note":"","status":"normal","x":0.7741,"y":0.5771,"w":0.0395,"h":0.0686,"door":[0.7822,0.5428]},{"id":"room_s8g7b1r","number":"325","title":"","note":"","status":"normal","x":0.7373,"y":0.5775,"w":0.034,"h":0.0691,"door":[0.7447,0.543]},{"id":"room_xxvky7l","number":"326","title":"","note":"","status":"normal","x":0.7108,"y":0.5772,"w":0.019,"h":0.0692,"door":[0.7096,0.5426]},{"id":"room_cte7cs8","number":"327","title":"","note":"","status":"normal","x":0.6856,"y":0.5772,"w":0.0313,"h":0.0693,"door":[0.692,0.5426]},{"id":"room_wztjx3a","number":"328","title":"","note":"","status":"normal","x":0.6602,"y":0.5773,"w":0.0194,"h":0.0694,"door":[0.6576,0.5426]},{"id":"room_1k9plcl","number":"329","title":"","note":"","status":"normal","x":0.6414,"y":0.5774,"w":0.0183,"h":0.0692,"door":[0.6421,0.5428]},{"id":"room_z35wrh8","number":"330","title":"","note":"","status":"normal","x":0.5533,"y":0.5813,"w":0.0205,"h":0.0754,"door":[0.5525,0.5436]},{"id":"room_e5cj3qd","number":"331","title":"","note":"","status":"normal","x":0.3466,"y":0.3435,"w":0.0332,"h":0.0744,"door":[0.3347,0.3063]},{"id":"room_5geuq2n","number":"331-1","title":"","note":"","status":"normal","x":0.323,"y":0.3546,"w":0.0119,"h":0.0541,"door":[0.329,0.3496]},{"id":"room_4tx0r27","number":"332","title":"","note":"","status":"normal","x":0.2907,"y":0.3418,"w":0.0174,"h":0.0716,"door":[0.295,0.306]},{"id":"room_4xsmpc3","number":"333","title":"","note":"","status":"normal","x":0.2551,"y":0.3418,"w":0.0538,"h":0.0716,"door":[0.2409,0.306]},{"id":"room_lodujbh","number":"334","title":"","note":"","status":"normal","x":0.2057,"y":0.3418,"w":0.0451,"h":0.0716,"door":[0.2146,0.306]},{"id":"room_iiexexu","number":"335","title":"","note":"","status":"normal","x":0.1952,"y":0.2897,"w":0.0253,"h":0.0348,"door":[0.2079,0.2915]},{"id":"room_tdq1hd7","number":"336-1","title":"","note":"","status":"normal","x":0.1745,"y":0.246,"w":0.0174,"h":0.0618,"door":[0.1658,0.2357]},{"id":"room_mo9qjzd","number":"336","title":"","note":"","status":"normal","x":0.1432,"y":0.2461,"w":0.0451,"h":0.0625,"door":[0.1328,0.2149]},{"id":"room_svfxh60","number":"337","title":"","note":"","status":"normal","x":0.093,"y":0.2431,"w":0.0218,"h":0.0573,"door":[0.0953,0.2145]},{"id":"room_4629uw1","number":"338","title":"","note":"","status":"normal","x":0.0674,"y":0.2433,"w":0.0294,"h":0.0578,"door":[0.0732,0.2144]},{"id":"room_uarkr5l","number":"339","title":"","note":"","status":"normal","x":0.0689,"y":0.1262,"w":0.03,"h":0.0727,"door":[0.0749,0.1626]},{"id":"room_033lozg","number":"340","title":"","note":"","status":"normal","x":0.1125,"y":0.1265,"w":0.0572,"h":0.0733,"door":[0.1136,0.1632]},{"id":"room_ewnw0lz","number":"341","title":"","note":"","status":"normal","x":0.1549,"y":0.1258,"w":0.0277,"h":0.0719,"door":[0.1485,0.1618]},{"id":"room_q248ytt","number":"342","title":"","note":"","status":"normal","x":0.1862,"y":0.1199,"w":0.0355,"h":0.0636,"door":[0.1945,0.1517]},{"id":"room_03ebpij","number":"343","title":"","note":"","status":"normal","x":0.2238,"y":0.1204,"w":0.0392,"h":0.0638,"door":[0.2131,0.1523]},{"id":"room_t5zy0bz","number":"344","title":"","note":"","status":"normal","x":0.234,"y":0.177,"w":0.0261,"h":0.0492,"door":[0.221,0.1854]},{"id":"room_h54hlqo","number":"345","title":"","note":"","status":"normal","x":0.2328,"y":0.2391,"w":0.0213,"h":0.0749,"door":[0.234,0.2766]},{"id":"room_okp5k3m","number":"346","title":"","note":"","status":"normal","x":0.2594,"y":0.2395,"w":0.0354,"h":0.0769,"door":null},{"id":"room_vqvum6s","number":"347","title":"","note":"","status":"normal","x":0.3031,"y":0.2363,"w":0.0523,"h":0.0716,"door":null},{"id":"room_4an8hki","number":"348","title":"","note":"","status":"normal","x":0.3463,"y":0.2363,"w":0.0342,"h":0.0716,"door":null},{"id":"room_dtkafik","number":"401","title":"","note":"","status":"normal","x":0.6681,"y":0.2177,"w":0.0413,"h":0.0777,"door":[0.6888,0.2152]},{"id":"room_im5f273","number":"402","title":"","note":"","status":"normal","x":0.6798,"y":0.1413,"w":0.0646,"h":0.0736,"door":[0.701,0.1781]},{"id":"room_cpghrpk","number":"403","title":"","note":"","status":"normal","x":0.7411,"y":0.1415,"w":0.0573,"h":0.074,"door":[0.726,0.1785]},{"id":"room_67wi0iz","number":"404","title":"","note":"","status":"normal","x":0.7552,"y":0.2183,"w":0.0291,"h":0.0765,"door":[0.7407,0.2144]},{"id":"room_8rc2fe6","number":"405","title":"","note":"","status":"normal","x":0.7464,"y":0.3071,"w":0.0467,"h":0.0516,"door":[0.7231,0.3154]},{"id":"room_fs6ui4g","number":"","title":"","note":"","status":"nonexistent","x":0.4208,"y":0.2982,"w":0.1148,"h":0.0833,"door":null},{"id":"room_utv4a48","number":"","title":"","note":"","status":"nonexistent","x":0.2148,"y":0.498,"w":0.0647,"h":0.2409,"door":null},{"id":"room_mzrfmlc","number":"","title":"","note":"","status":"nonexistent","x":0.5214,"y":0.7343,"w":0.09,"h":0.2307,"door":null}],"corridors":[{"id":"cor_h8hnn0x","points":[[0.06044678055190538,0.1856931668856768],[0.06044678055190538,0.1856931668856768],[0.05978975032851511,0.1880475251861586],[0.2128777923784494,0.18098445028471313],[0.21353482260183967,0.29163929040735875],[0.35348226018396844,0.2928164695575997]],"width":0.012},{"id":"cor_of2gowy","points":[[0.5203679369250985,0.27515878230398605],[0.5170827858081471,0.27398160315374515],[0.5190538764783179,0.5211892247043365],[0.8764783180026281,0.5282522996057819],[0.8784494086727989,0.4811651335961455],[0.9067017082785808,0.4811651335961455],[0.9067017082785808,0.8319645203679369]],"width":0.012},{"id":"cor_v34bridge","points":[[0.355,0.295],[0.518,0.279]],"width":0.012},{"id":"cor_v4wing","points":[[0.519,0.29],[0.6,0.292],[0.679,0.294]],"width":0.012},{"id":"cor_v4loop","points":[[0.679,0.294],[0.668,0.218],[0.68,0.143],[0.738,0.143],[0.753,0.217],[0.744,0.305],[0.679,0.294]],"width":0.012}],"nodes":[{"id":"n_ydfkdds","x":0.2083,"y":0.1786,"links":["n_0oe6eod"]},{"id":"n_0oe6eod","x":0.2162,"y":0.2881,"links":["n_ydfkdds","n_5m6w5o0"]},{"id":"n_5m6w5o0","x":0.3555,"y":0.2952,"links":["n_0oe6eod"]},{"id":"n_vtmv14l","x":0.5177,"y":0.2787,"links":["n_s7lrbya"]},{"id":"n_s7lrbya","x":0.523,"y":0.5177,"links":["n_vtmv14l","n_rklu3kf"]},{"id":"n_rklu3kf","x":0.9054,"y":0.5082,"links":["n_s7lrbya","n_0e2air1"]},{"id":"n_0e2air1","x":0.906,"y":0.8225,"links":["n_rklu3kf"]}],"labels":[],"callouts":[],"routes":[],"entrances":[{"id":"e_fpnizbg","x":0.3062,"y":0.3411,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"332"},{"id":"e_y89ai9i","x":0.5171,"y":0.553,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"301"},{"id":"e_rdshl17","x":0.8817,"y":0.56,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"318"},{"id":"e_wf8mlfr","x":0.1958,"y":0.2398,"kind":"stairs","dir":180,"title":"Лестница","usable":true,"nearRoom":"336-1"},{"id":"e_0jof8nz","x":0.8837,"y":0.8343,"kind":"stairs","dir":180,"title":"Лестница","usable":false,"nearRoom":"320"},{"id":"e_4qufx10","x":0.1104,"y":0.2387,"kind":"stairs","dir":90,"title":"Лестница","usable":true,"nearRoom":"337"},{"id":"e_8yy3eev","x":0.6787,"y":0.294,"kind":"stairs","dir":180,"title":"Лестница","usable":true,"nearRoom":"405"}]}}};
 let map = emptyMap();
 let curFloor = '1';
 let bg = {};                              // этаж -> {img, ready}
@@ -203,10 +214,14 @@ let mode = null;                          // активное перетаски
 let pending = null;                       // коридор в процессе: {points:[[x,y],..]}
 let linkFrom = null;                      // узел A в режиме связывания
 let doorRoom = null;                      // комната, ждущая клика для двери
+let corridorMode = 'line';                // W5: 'line' | 'rect' — режим инструмента «Коридор»
+let hoverPoint = null;                    // W5: точка коридора под курсором {obj, pi}
+let snapMark = null;                      // W5: цель снапа перетаскиваемой точки {x, y}
+let routeA = null, routePreview = null;   // W5: превью маршрута (в карту НЕ сохраняется)
 let undoStack = [], redoStack = [];
 let spaceDown = false, firstFit = true;
 
-function emptyFloor(){ return {rooms:[],corridors:[],nodes:[],entrances:[],labels:[],callouts:[],routes:[]}; }
+function emptyFloor(){ return {rooms:[],corridors:[],rectCorridors:[],nodes:[],entrances:[],labels:[],callouts:[],routes:[]}; }
 function emptyMap(){ const f={}; FLOORS.forEach(k=>f[k]=emptyFloor()); return {version:1, floors:f}; }
 function FD(){ return map.floors[curFloor]; }
 function uid(p){ return p + Math.random().toString(36).slice(2,8); }
@@ -292,6 +307,33 @@ function draw(){
     ctx.lineWidth = 1.5/cam.s;
     ctx.setLineDash([]);
     ctx.stroke();
+  }
+
+  // W5: коридоры-прямоугольники (при экспорте становятся обычными коридорами по осевой)
+  for(const rc of (fd.rectCorridors||[])){
+    const x = wx(rc.x-rc.w/2), y = wy(rc.y-rc.h/2), w = rc.w*W, h = rc.h*H;
+    ctx.fillStyle = 'rgba(56,189,248,0.13)';
+    ctx.fillRect(x,y,w,h);
+    ctx.strokeStyle = 'rgba(56,189,248,0.55)'; ctx.lineWidth = 1.2/cam.s;
+    ctx.setLineDash([6/cam.s,4/cam.s]); ctx.strokeRect(x,y,w,h); ctx.setLineDash([]);
+    // пунктирная осевая — именно она уйдёт в экспорт как обычный corridor
+    const conv = rectCorridorToCorridor(rc);
+    ctx.strokeStyle = 'rgba(34,211,238,0.85)';
+    ctx.lineWidth = Math.max(conv.width*W, 2/cam.s);
+    ctx.setLineDash([10/cam.s,7/cam.s]);
+    ctx.beginPath();
+    ctx.moveTo(wx(conv.points[0][0]), wy(conv.points[0][1]));
+    ctx.lineTo(wx(conv.points[1][0]), wy(conv.points[1][1]));
+    ctx.stroke(); ctx.setLineDash([]);
+    if(sel && sel.obj===rc && sel.kind==='rectCorridor'){
+      ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 2.5/cam.s;
+      ctx.strokeRect(x,y,w,h);
+      const hs = 7/cam.s;
+      [[x,y],[x+w,y],[x+w,y+h],[x,y+h]].forEach(p=>{
+        ctx.fillStyle = '#22d3ee';
+        ctx.fillRect(p[0]-hs/2, p[1]-hs/2, hs, hs);
+      });
+    }
   }
 
   // связи узлов
@@ -434,6 +476,38 @@ function draw(){
       ctx.strokeRect(wx(p[0])-s/2, wy(p[1])-s/2, s, s);
     });
   }
+
+  // W5: подсветка точки коридора под курсором (крупнее обычного хэндла)
+  if(hoverPoint && hoverPoint.obj.points[hoverPoint.pi]){
+    const p = hoverPoint.obj.points[hoverPoint.pi];
+    ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 2/cam.s;
+    ctx.beginPath(); ctx.arc(wx(p[0]), wy(p[1]), 9/cam.s, 0, Math.PI*2); ctx.stroke();
+  }
+  // W5: магнит — цель снапа перетаскиваемой точки коридора
+  if(snapMark){
+    ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 2.5/cam.s;
+    ctx.beginPath(); ctx.arc(wx(snapMark.x), wy(snapMark.y), 7/cam.s, 0, Math.PI*2); ctx.stroke();
+  }
+  // W5: превью маршрута — только отрисовка, в карту НЕ сохраняется
+  if(routePreview && routePreview.points.length>1){
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(wx(routePreview.points[0][0]), wy(routePreview.points[0][1]));
+    for(let i=1;i<routePreview.points.length;i++) ctx.lineTo(wx(routePreview.points[i][0]), wy(routePreview.points[i][1]));
+    ctx.strokeStyle = 'rgba(245,158,11,0.25)'; ctx.lineWidth = 8/cam.s; ctx.stroke();
+    ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 3.5/cam.s; ctx.stroke();
+    const a = routePreview.points[0], b = routePreview.points[routePreview.points.length-1];
+    [[a,'#22c55e'],[b,'#ef4444']].forEach(pair=>{
+      ctx.beginPath(); ctx.arc(wx(pair[0][0]), wy(pair[0][1]), 8/cam.s, 0, Math.PI*2);
+      ctx.fillStyle = pair[1]; ctx.fill();
+      ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2/cam.s; ctx.stroke();
+    });
+  }
+  else if(routeA){
+    ctx.beginPath(); ctx.arc(wx(routeA.x), wy(routeA.y), 8/cam.s, 0, Math.PI*2);
+    ctx.fillStyle = '#22c55e'; ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2/cam.s; ctx.stroke();
+  }
 }
 function ring(x,y,r){
   ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
@@ -471,7 +545,7 @@ function cornerRect(r){
   return { l:r.x-r.w/2, rt:r.x+r.w/2, t:r.y-r.h/2, b:r.y+r.h/2 };
 }
 function hitHandle(w){
-  if(!(sel && sel.kind==='room' && tool==='select')) return null;
+  if(!(sel && (sel.kind==='room'||sel.kind==='rectCorridor') && tool==='select')) return null;
   const r = sel.obj, c = cornerRect(r);
   const hs = 9/cam.s;
   const pts = [[c.l,c.t],[c.rt,c.t],[c.rt,c.b],[c.l,c.b]];
@@ -519,6 +593,11 @@ function hitTest(w){
   for(let i=fd.rooms.length-1;i>=0;i--){
     const r=fd.rooms[i], c=cornerRect(r);
     if(w.x>=c.l && w.x<=c.rt && w.y>=c.t && w.y<=c.b) return {kind:'room', obj:r};
+  }
+  // W5: коридоры-прямоугольники — после комнат (комната важнее при перекрытии)
+  for(let i=(fd.rectCorridors||[]).length-1;i>=0;i--){
+    const rc=fd.rectCorridors[i], c=cornerRect(rc);
+    if(w.x>=c.l && w.x<=c.rt && w.y>=c.t && w.y<=c.b) return {kind:'rectCorridor', obj:rc};
   }
   return null;
 }
@@ -587,7 +666,7 @@ function redo(){
   afterRestore('Повторено');
 }
 function afterRestore(msg){
-  sel=null; pending=null; linkFrom=null; doorRoom=null;
+  sel=null; pending=null; linkFrom=null; doorRoom=null; routeA=null; routePreview=null; hoverPoint=null; snapMark=null;
   renderPanel(); draw(); updateUndoBtns(); scheduleSave();
   if(msg) toast(msg);
 }
@@ -603,11 +682,182 @@ function scheduleSave(){
   }, 600);
 }
 
+/* ===== W5: коридоры-прямоугольники ===== */
+// Конвертация в обычный corridor (используется осевой на плане, экспортом и графом маршрута):
+// points = осевая через центр вдоль ДЛИННОЙ стороны (2 точки), width = короткая сторона.
+// Короткая сторона, нормализованная по H, переводится в X-единицы — как width у полилиний
+// (в редакторе и приложении lineWidth считается от width*W мировых пикселей).
+function rectCorridorToCorridor(rc){
+  const horiz = rc.w >= rc.h;
+  const width = r4(horiz ? rc.h*H/W : rc.w);
+  const half = (horiz ? rc.w : rc.h)/2;
+  return horiz
+    ? {id: rc.id, points: [[r4(rc.x-half), r4(rc.y)], [r4(rc.x+half), r4(rc.y)]], width}
+    : {id: rc.id, points: [[r4(rc.x), r4(rc.y-half)], [r4(rc.x), r4(rc.y+half)]], width};
+}
+
+/* ===== W5: снап точек коридора (двери/узлы/чужие точки — точное совпадение) ===== */
+function pointSnapTarget(obj, pi, w){
+  if(!snapOn) return null;
+  const fd = FD(); if(!fd) return null;
+  const r = 8/cam.s; // экранный порог в мировых пикселях
+  const near = (x,y) => Math.hypot((w.x-x)*W, (w.y-y)*H) < r;
+  for(const rm of fd.rooms) if(rm.door && near(rm.door[0], rm.door[1])) return [rm.door[0], rm.door[1]];
+  for(const nd of fd.nodes) if(near(nd.x, nd.y)) return [nd.x, nd.y];
+  for(const c of fd.corridors) for(let i=0;i<c.points.length;i++){
+    if(c===obj && i===pi) continue;
+    const p = c.points[i];
+    if(near(p[0], p[1])) return [p[0], p[1]];
+  }
+  return null;
+}
+
+/* ===== W5: превью маршрута — порт CollegeRouteFinder.kt на JS (один этаж, 1-в-1) ===== */
+const JOIN_RADIUS = 0.05, PROJECTION_RADIUS = 0.05, VDUP = 1e-4;
+function effectiveCorridors(fd){
+  return (fd.corridors||[]).concat((fd.rectCorridors||[]).map(rectCorridorToCorridor));
+}
+// buildGraph: вершины = узлы + точки коридоров + проекции; рёбра = links узлов, соседние
+// точки коридоров, концы коридоров к узлам в JOIN_RADIUS, проекции в PROJECTION_RADIUS.
+function buildGraphFloor(fd){
+  const vertices=[], adjacency=[], segments=[];
+  function addVertex(x,y){
+    for(let i=0;i<vertices.length;i++)
+      if(Math.abs(vertices[i].x-x)<VDUP && Math.abs(vertices[i].y-y)<VDUP) return i;
+    vertices.push({x,y}); adjacency.push([]);
+    return vertices.length-1;
+  }
+  function link(a,b){
+    if(a===b) return;
+    const d = Math.hypot(vertices[a].x-vertices[b].x, vertices[a].y-vertices[b].y);
+    adjacency[a].push([b,d]); adjacency[b].push([a,d]);
+  }
+  const nodeIndex = {};
+  (fd.nodes||[]).forEach(nd=>{ nodeIndex[nd.id]=addVertex(nd.x, nd.y); });
+  (fd.nodes||[]).forEach(nd=>{
+    const a = nodeIndex[nd.id]; if(a==null) return;
+    (nd.links||[]).forEach(o=>{ if(nodeIndex[o]!=null) link(a, nodeIndex[o]); });
+  });
+  effectiveCorridors(fd).forEach(c=>{
+    if(!c.points || c.points.length<2) return;
+    const idx = c.points.map(p=>addVertex(p[0], p[1]));
+    for(let i=1;i<idx.length;i++){
+      link(idx[i-1], idx[i]);
+      segments.push([vertices[idx[i-1]], vertices[idx[i]]]);
+    }
+    [idx[0], idx[idx.length-1]].forEach(end=>{
+      let best=-1, bestD=JOIN_RADIUS;
+      Object.keys(nodeIndex).forEach(k=>{
+        const ni = nodeIndex[k];
+        const d = Math.hypot(vertices[end].x-vertices[ni].x, vertices[end].y-vertices[ni].y);
+        if(d<bestD){ bestD=d; best=ni; }
+      });
+      if(best>=0) link(end, best);
+    });
+  });
+  // Проекционная склейка: снимок вершин ДО цикла — добавленные проекции сами не
+  // проецируются (как в CollegeRouteFinder.buildGraph, иначе O(n^3)).
+  const snapshot = vertices.slice();
+  for(const v of snapshot){
+    for(const seg of segments){
+      const q = projectOnSegment(v, seg[0], seg[1]);
+      if(!q) continue;
+      if(Math.hypot(v.x-q.x, v.y-q.y) < VDUP) continue; // уже на сегменте
+      const qv = addVertex(q.x, q.y);
+      link(vertices.indexOf(v), qv);
+      // проекция обязана лежать НА сегменте: соединяем и с концами сегмента
+      const ai = vertices.indexOf(seg[0]), bi = vertices.indexOf(seg[1]);
+      if(ai>=0 && vertices[ai]!==q) link(qv, ai);
+      if(bi>=0 && vertices[bi]!==q) link(qv, bi);
+    }
+  }
+  return {vertices, adjacency};
+}
+// Проекция точки p на отрезок ab; null если перпендикуляр длиннее PROJECTION_RADIUS.
+function projectOnSegment(p,a,b){
+  const dx=b.x-a.x, dy=b.y-a.y, len2=dx*dx+dy*dy;
+  if(len2===0) return null;
+  let t = ((p.x-a.x)*dx + (p.y-a.y)*dy)/len2;
+  t = Math.max(0, Math.min(1, t));
+  const q = {x:a.x+t*dx, y:a.y+t*dy};
+  return Math.hypot(p.x-q.x, p.y-q.y) <= PROJECTION_RADIUS ? q : null;
+}
+function nearestVertex(vertices,x,y){
+  let best=-1, bd=Infinity;
+  for(let i=0;i<vertices.length;i++){
+    const d = (vertices[i].x-x)*(vertices[i].x-x) + (vertices[i].y-y)*(vertices[i].y-y);
+    if(d<bd){ bd=d; best=i; }
+  }
+  return best;
+}
+// Дейкстра — точный порт shortestPath из CollegeRouteFinder.kt.
+function shortestPath(vertices, adjacency, start, finish){
+  const n = vertices.length;
+  const best = new Array(n).fill(Infinity), prev = new Array(n).fill(-1), used = new Array(n).fill(false);
+  best[start] = 0;
+  for(let k=0;k<n;k++){
+    let v=-1, bd=Infinity;
+    for(let i=0;i<n;i++) if(!used[i] && best[i]<bd){ bd=best[i]; v=i; }
+    if(v<0) break;
+    used[v]=true;
+    for(const ed of adjacency[v]){
+      if(best[v]+ed[1] < best[ed[0]]){ best[ed[0]] = best[v]+ed[1]; prev[ed[0]] = v; }
+    }
+  }
+  if(best[finish]===Infinity) return null;
+  const path=[]; let cur=finish;
+  while(cur>=0){ path.unshift(cur); if(cur===start) break; cur=prev[cur]; }
+  return path[0]===start ? path : null;
+}
+// Старт/финиш: клик внутри комнаты с дверью — старт из двери, иначе — точка клика.
+function routeEndpoint(w){
+  const fd = FD();
+  const r = (fd.rooms||[]).find(rr=>{
+    const c = cornerRect(rr);
+    return w.x>=c.l && w.x<=c.rt && w.y>=c.t && w.y<=c.b;
+  });
+  if(r && r.door) return {x:r.door[0], y:r.door[1]};
+  return {x:w.x, y:w.y};
+}
+function routeClick(w){
+  const pt = routeEndpoint(w);
+  if(!routeA){
+    routeA = pt; routePreview = null;
+    draw(); toast('Маршрут: точка A задана — кликните точку B');
+    return;
+  }
+  const fd = FD();
+  const g = buildGraphFloor(fd);
+  if(!g.vertices.length){
+    routeA=null; routePreview=null; draw();
+    toast('На этом этаже нет графа (коридоры/узлы)'); return;
+  }
+  const s = nearestVertex(g.vertices, routeA.x, routeA.y);
+  const f = nearestVertex(g.vertices, pt.x, pt.y);
+  const path = (s>=0 && f>=0) ? shortestPath(g.vertices, g.adjacency, s, f) : null;
+  if(!path){
+    routeA=null; routePreview=null; draw();
+    toast('Путь не найден: граф не связан — проверьте коридоры/узлы'); return;
+  }
+  const points = [[routeA.x, routeA.y]];
+  for(const vi of path) points.push([g.vertices[vi].x, g.vertices[vi].y]);
+  points.push([pt.x, pt.y]);
+  routePreview = {points};
+  routeA = null;
+  draw(); toast('Маршрут: ' + (points.length-1) + ' точек — превью, в карту не сохраняется (Esc — очистить)');
+}
+
 /* ===== сериализация / экспорт ===== */
 function serialize(){
   const m = JSON.parse(JSON.stringify(map));
   for(const fk of Object.keys(m.floors||{})){
     const f = m.floors[fk];
+    // W5: rectCorridors остаются в JSON (приложение их игнорирует) и конвертируются
+    // в обычные corridors по осевой; дедуп по id — повторный экспорт не удваивает
+    if(Array.isArray(f.rectCorridors)) for(const rc of f.rectCorridors){
+      if(Array.isArray(f.corridors) && f.corridors.some(c=>c.id===rc.id)) continue;
+      (f.corridors = f.corridors||[]).push(rectCorridorToCorridor(rc));
+    }
     if(Array.isArray(f.rooms)) for(const r of f.rooms){
       r.door = (Array.isArray(r.door) && r.door.length===2) ? [r.door[0], r.door[1]] : null;
     }
@@ -631,7 +881,7 @@ function loadMapText(text, name){
   }
   for(const fk of Object.keys(data.floors)){
     const f = data.floors[fk];
-    ['rooms','corridors','nodes','entrances','labels','callouts','routes'].forEach(k=>{
+    ['rooms','corridors','rectCorridors','nodes','entrances','labels','callouts','routes'].forEach(k=>{
       if(!Array.isArray(f[k])) f[k] = [];
     });
     for(const r of f.rooms){
@@ -641,7 +891,7 @@ function loadMapText(text, name){
   map = data;
   if(!map.floors[curFloor]) map.floors[curFloor] = emptyFloor();
   undoStack = []; redoStack = [];
-  sel=null; pending=null; linkFrom=null; doorRoom=null;
+  sel=null; pending=null; linkFrom=null; doorRoom=null; routeA=null; routePreview=null;
   renderPanel(); draw(); updateUndoBtns(); scheduleSave();
   const total = Object.values(data.floors).reduce((a,f)=>a+((f.rooms&&f.rooms.length)||0),0);
   toast((name?name+': ':'') + 'карта загружена, комнат всего ' + total);
@@ -666,10 +916,11 @@ cv.addEventListener('mousedown', e => {
     const h = hitHandle(w) || hitTest(w);
     if(h){
       sel = h; renderPanel();
-      if(h.kind==='room' && h.handle!=null){
+      const isRect = h.kind==='room' || h.kind==='rectCorridor'; // W5: rect-коридор двигается/ресайзится как комната
+      if(isRect && h.handle!=null){
         mode = {t:'resize', obj:h.obj, corner:h.handle, pre:snap(),
                 anchor: anchorOf(h.obj, h.handle)};
-      } else if(h.kind==='room'){
+      } else if(isRect){
         mode = {t:'moveRoom', obj:h.obj, pre:snap(), ox:h.obj.x, oy:h.obj.y, wx0:w.x, wy0:w.y};
       } else if(h.kind==='corridor' && h.pi!=null){
         mode = {t:'movePoint', obj:h.obj, pi:h.pi, pre:snap()};
@@ -686,7 +937,12 @@ cv.addEventListener('mousedown', e => {
     mode = {t:'drawRoom', x0:w.x, y0:w.y, x1:w.x, y1:w.y};
   }
   else if(tool==='corridor'){
-    addPendingPoint(w);
+    // W5: два режима — клики (линия) или протяжка (прямоугольник)
+    if(corridorMode==='rect') mode = {t:'drawRectCorridor', x0:w.x, y0:w.y, x1:w.x, y1:w.y};
+    else addPendingPoint(w);
+  }
+  else if(tool==='route'){
+    routeClick(w);
   }
   else if(tool==='node'){
     pushUndo();
@@ -739,6 +995,7 @@ cv.addEventListener('mousemove', e => {
   const w = toWorld(e);
   $('stL').textContent = 'Координаты: ' + w.x.toFixed(3) + ', ' + w.y.toFixed(3);
   if(mode){
+    hoverPoint = null;
     if(mode.t==='pan'){
       cam.ox = mode.ox + (e.clientX - mode.sx);
       cam.oy = mode.oy + (e.clientY - mode.sy);
@@ -756,7 +1013,22 @@ cv.addEventListener('mousemove', e => {
     }
     else if(mode.t==='movePoint'){
       let nx = w.x, ny = w.y;
-      if(e.shiftKey){ nx = grid(nx); ny = grid(ny); }
+      if(e.shiftKey){ nx = grid(nx); ny = grid(ny); snapMark = null; }
+      else {
+        // W5: снап точки коридора — двери/узлы/чужие точки (точное совпадение),
+        // иначе рёбра соседних комнат по осям; магнит рисуется на цели снапа
+        const t = pointSnapTarget(mode.obj, mode.pi, w);
+        if(t){ nx = t[0]; ny = t[1]; snapMark = {x:t[0], y:t[1]}; }
+        else {
+          snapMark = null;
+          const fd = FD();
+          const tolX = (8/cam.s)/W, tolY = (8/cam.s)/H;
+          const dx = bestDelta([w.x], snapTargetsX(fd, null), tolX);
+          const dy = bestDelta([w.y], snapTargetsY(fd, null), tolY);
+          if(dx!==null) nx += dx;
+          if(dy!==null) ny += dy;
+        }
+      }
       mode.obj.points[mode.pi][0] = r4(clamp01(nx));
       mode.obj.points[mode.pi][1] = r4(clamp01(ny));
     }
@@ -771,21 +1043,26 @@ cv.addEventListener('mousemove', e => {
       mode.obj.x = r4((l+rt)/2); mode.obj.w = r4(rt-l);
       mode.obj.y = r4((t+b)/2);  mode.obj.h = r4(b-t);
     }
-    else if(mode.t==='drawRoom'){
+    else if(mode.t==='drawRoom' || mode.t==='drawRectCorridor'){
       mode.x1 = w.x; mode.y1 = w.y;
     }
     draw();
     return;
   }
-  // курсор
+  // курсор + W5: подсветка точки коридора под курсором
   if(spaceDown) cv.style.cursor='grab';
-  else if(tool!=='select') cv.style.cursor='crosshair';
+  else if(tool!=='select'){ cv.style.cursor='crosshair'; hoverPoint = null; }
   else {
     const hh = hitHandle(w);
+    const ht = hh || hitTest(w);
+    const hp = (ht && ht.kind==='corridor' && ht.pi!=null) ? {obj:ht.obj, pi:ht.pi} : null;
+    const changed = JSON.stringify(hp) !== JSON.stringify(hoverPoint);
+    hoverPoint = hp;
     if(hh){
       const c = ['nwse-resize','nesw-resize','nwse-resize','nesw-resize'][hh.handle];
       cv.style.cursor = c;
-    } else cv.style.cursor = hitTest(w) ? 'move' : 'default';
+    } else cv.style.cursor = ht ? 'move' : 'default';
+    if(changed) draw();
   }
 });
 
@@ -803,6 +1080,16 @@ window.addEventListener('mouseup', () => {
       FD().rooms.push(r);
       sel = {kind:'room', obj:r};
       renderPanel(); toast('Комната создана — введите номер справа');
+    }
+  }
+  else if(mode.t==='drawRectCorridor'){
+    const wAbs = Math.abs(mode.x1-mode.x0), hAbs = Math.abs(mode.y1-mode.y0);
+    if(wAbs>0.004 && hAbs>0.002){
+      pushUndo();
+      const rc = {id: uid('rcc_'), x: r4((mode.x0+mode.x1)/2), y: r4((mode.y0+mode.y1)/2), w: r4(wAbs), h: r4(hAbs)};
+      FD().rectCorridors.push(rc);
+      sel = {kind:'rectCorridor', obj:rc};
+      renderPanel(); toast('Коридор-прямоугольник создан — пунктирная осевая уйдёт в экспорт');
     }
   }
   else if(mode.pre!=null && snap()!==mode.pre){
@@ -851,7 +1138,8 @@ window.addEventListener('keydown', e => {
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); return; }
   if((e.ctrlKey||e.metaKey) && (e.key.toLowerCase()==='y' || (e.shiftKey && e.key.toLowerCase()==='z'))){ e.preventDefault(); redo(); return; }
   if(e.key==='Escape'){
-    if(pending){ pending=null; toast('Коридор: отмена'); }
+    if(routeA || routePreview){ routeA=null; routePreview=null; toast('Маршрут: превью очищено'); }
+    else if(pending){ pending=null; toast('Коридор: отмена'); }
     else if(linkFrom){ linkFrom=null; toast('Связывание: отмена'); }
     else if(doorRoom){ doorRoom=null; toast('Установка двери: отмена'); }
     else { sel=null; renderPanel(); }
@@ -948,6 +1236,7 @@ function deleteSelected(){
   const fd = FD();
   if(sel.kind==='room')    fd.rooms = fd.rooms.filter(x=>x!==sel.obj);
   if(sel.kind==='corridor')fd.corridors = fd.corridors.filter(x=>x!==sel.obj);
+  if(sel.kind==='rectCorridor') fd.rectCorridors = (fd.rectCorridors||[]).filter(x=>x!==sel.obj);
   if(sel.kind==='node'){
     fd.nodes = fd.nodes.filter(x=>x!==sel.obj);
     for(const n of fd.nodes){
@@ -958,7 +1247,7 @@ function deleteSelected(){
   if(sel.kind==='entrance') fd.entrances = fd.entrances.filter(x=>x!==sel.obj);
   if(sel.kind==='label')    fd.labels = fd.labels.filter(x=>x!==sel.obj);
   if(sel.kind==='callout')  fd.callouts = fd.callouts.filter(x=>x!==sel.obj);
-  const kindName = ({room:'Комната', corridor:'Коридор', node:'Узел', entrance:'Маркер', label:'Надпись', callout:'Выноска'})[sel.kind];
+  const kindName = ({room:'Комната', corridor:'Коридор', rectCorridor:'Коридор-прямоугольник', node:'Узел', entrance:'Маркер', label:'Надпись', callout:'Выноска'})[sel.kind];
   sel = null;
   renderPanel(); draw();
   toast(kindName + ' удалена (Ctrl+Z вернёт)');
@@ -968,7 +1257,8 @@ function deleteSelected(){
 function updateCounts(){
   const fd = FD(); if(!fd) return;
   $('counts').textContent = 'Этаж ' + curFloor + ' — комнат: ' + fd.rooms.length +
-    ', коридоров: ' + fd.corridors.length + ', узлов: ' + fd.nodes.length +
+    ', коридоров: ' + fd.corridors.length + ((fd.rectCorridors&&fd.rectCorridors.length) ? ' (+' + fd.rectCorridors.length + ' прямоуг.)' : '') +
+    ', узлов: ' + fd.nodes.length +
     ', маркеров: ' + fd.entrances.length;
 }
 function fld(label, input){ return '<label class="f"><span>'+label+'</span>'+input+'</label>'; }
@@ -1017,6 +1307,13 @@ function renderPanel(){
       '<div class="note">Точек: '+o.points.length+'. Точки перетаскиваются инструментом «Выбор», двойной клик по точке — удалить точку.</div>' +
       '<div class="btns"><button id="p_del" class="danger">Удалить коридор</button></div>';
     bind($('p_w'), o, 'width', numParse);
+    $('p_del').onclick = deleteSelected;
+  }
+  else if(sel.kind==='rectCorridor'){
+    p.innerHTML = roId(o) +
+      '<div class="note">Размер: ' + (o.w*W).toFixed(0) + '×' + (o.h*H).toFixed(0) + ' px плана.<br>' +
+      'При сохранении станет обычным коридором: осевая вдоль длинной стороны (пунктир на плане), ширина прохода = короткая сторона (' + rectCorridorToCorridor(o).width + ').</div>' +
+      '<div class="btns"><button id="p_del" class="danger">Удалить коридор</button></div>';
     $('p_del').onclick = deleteSelected;
   }
   else if(sel.kind==='node'){
@@ -1097,7 +1394,7 @@ FLOORS.forEach(f=>{
   const b = document.querySelector('.floor[data-floor="'+f+'"]');
   b.onclick = ()=>{
     curFloor = f;
-    pending=null; linkFrom=null; doorRoom=null; sel=null;
+    pending=null; linkFrom=null; doorRoom=null; sel=null; routeA=null; routePreview=null; hoverPoint=null; snapMark=null;
     document.querySelectorAll('.floor').forEach(x=>x.classList.toggle('on', x===b));
     renderPanel(); draw();
   };
@@ -1107,6 +1404,7 @@ document.querySelectorAll('.tool').forEach(b=>{
     tool = b.dataset.tool;
     document.querySelectorAll('.tool').forEach(x=>x.classList.toggle('on', x===b));
     if(tool!=='corridor') pending = null;
+    if(tool!=='route'){ routeA=null; routePreview=null; }
     if(tool!=='select'){ linkFrom=null; doorRoom=null; }
     setHint();
     cv.style.cursor = tool==='select' ? 'default' : 'crosshair';
@@ -1117,12 +1415,23 @@ const HINTS = {
   select:'Клик — выбрать · тянуть — переместить · углы — размер · колесо — зум · правая кнопка / пробел — двигать вид',
   room:'Растяните прямоугольник для новой комнаты (номер введите справа)',
   corridor:'Клик — поставить точку · двойной клик / Enter — завершить · Esc — отмена',
+  route:'Маршрут: кликните точку A, затем B — путь построится по графу (как в приложении) · Esc — очистить',
   node:'Клик — поставить узел графа; связывайте узлы кнопкой «Связать с другим узлом»',
   marker:'Клик — поставить маркер; тип — в списке рядом с кнопками инструментов',
   door:'Клик по кабинету — дверь на ближайшем крае · повторный клик — перенести дверь'
 };
-function setHint(){ $('stR').textContent = HINTS[tool]||''; }
+function setHint(){
+  let h = HINTS[tool]||'';
+  if(tool==='corridor' && corridorMode==='rect')
+    h = 'Зажмите и протяните прямоугольник области коридора — при экспорте он станет коридором по осевой';
+  $('stR').textContent = h;
+}
 
+$('corridorMode').addEventListener('change', e=>{
+  corridorMode = e.target.value==='rect' ? 'rect' : 'line';
+  pending = null;
+  setHint(); draw();
+});
 $('tSnap').onclick = ()=>{
   snapOn = !snapOn;
   const b = $('tSnap');

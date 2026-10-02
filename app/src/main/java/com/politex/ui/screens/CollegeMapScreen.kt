@@ -164,30 +164,7 @@ fun CollegeMapScreen(
             Dow.of(today)
         }
 
-    // O3-c: группы для подсказок поиска — полный список кодов из ассета (если он уже есть)
-    // + всё, что известно из расписания (сегодняшние пары и недельный шаблон по всем дням).
-    val catalogCodes = remember(context) { loadGroupCodes(context) }
-    val knownGroups by produceState<List<String>>(
-        initialValue = catalogCodes,
-        key1 = todayDateString,
-        key2 = catalogCodes,
-    ) {
-        val fromDb =
-            runCatching {
-                val all = linkedSetOf<String>()
-                all += scheduleRepository.getDistinctGroupsForDateOrDay(todayDateString, todayDow)
-                for (dow in 1..6) {
-                    if (dow != todayDow) all += scheduleRepository.getDistinctGroupsForDateOrDay("", dow)
-                }
-                all
-            }.getOrDefault(emptySet())
-        value = (catalogCodes + fromDb).distinct().sorted()
-    }
-
     var query by rememberSaveable { mutableStateOf(initialRoom?.trim().orEmpty()) }
-    var groupQuery by rememberSaveable { mutableStateOf("") }
-    // Сообщение от поиска по группе («Сейчас уроков нет — …» / ошибка)
-    var groupMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     var searchFailed by rememberSaveable { mutableStateOf(false) }
@@ -234,7 +211,11 @@ fun CollegeMapScreen(
     val dialogDow = if (roomDialogTomorrow) tomorrowDow else todayDow
 
     LaunchedEffect(roomScheduleFor, roomDialogTomorrow, syncedToday, syncedTomorrow) {
-        if (roomScheduleFor == null || catalogCodes.isEmpty()) return@LaunchedEffect
+        // W6: гейт каталога (catalogCodes из поиска групп удалён) — заменён на проверку
+        // самого каталога репозитория: пустой = синк кабинета не имеет смысла
+        if (roomScheduleFor == null || scheduleRepository.catalog().isEmpty()) {
+            return@LaunchedEffect
+        }
         val alreadySynced = if (roomDialogTomorrow) syncedTomorrow else syncedToday
         if (alreadySynced) return@LaunchedEffect
         // Б3: force=true — кабинет открывают вручную, и пользователь ждёт ПОЛНОЕ
@@ -364,85 +345,13 @@ fun CollegeMapScreen(
                 searchFailed = false
             },
             onFound = { found ->
-                groupMessage = null
                 target = found
                 searchFailed = found.isNotBlank() && findRoomEverywhere(mapData, found) == null
             },
             notFound = searchFailed,
         )
-        Spacer(modifier = Modifier.height(6.dp))
-        GroupSearchField(
-            value = groupQuery,
-            onValueChange = {
-                groupQuery = it
-                groupMessage = null
-            },
-            onSearch = { group ->
-                groupMessage = null
-                scope.launch {
-                    val (room, msg) =
-                        searchGroupNow(
-                            group = group.trim(),
-                            scheduleRepository = scheduleRepository,
-                            todayDateString = todayDateString,
-                            todayDow = todayDow,
-                            mapData = mapData,
-                        )
-                    groupMessage = msg
-                    room?.let {
-                        target = it.number
-                        searchFailed = false
-                        // Поле поиска комнат показывает то, что нашлось по группе
-                        query = it.number
-                    }
-                }
-            },
-            message = groupMessage,
-            // O3-c: подсказки из полного списка групп колледжа (GroupCatalog), без выпадающего списка
-            suggestionsWidget = {
-                val hints =
-                    remember(groupQuery, knownGroups) {
-                        groupSuggestions(groupQuery, knownGroups)
-                    }
-                if (hints.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        hints.forEach { g ->
-                            Surface(
-                                shape = RoundedCornerShape(2.dp),
-                                color = ColorBgMain,
-                                border = BorderStroke(1.dp, ColorBorderLight),
-                                modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 44.dp)
-                                    .bouncyClickable {
-                                        groupQuery = g
-                                        groupMessage = null
-                                    },
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = g,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        style =
-                                        TextStyle(
-                                            fontWeight = FontWeight.Medium,
-                                            fontSize = 13.sp,
-                                            color = ColorBrandBlue,
-                                        ),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-        )
+        // W6: поиск по ГРУППЕ убран с карты (для этого есть вкладка «Расписание
+        // группы» — заказчик). Освободившееся место отдаётся карте.
 
         Spacer(modifier = Modifier.height(10.dp))
 
@@ -460,7 +369,6 @@ fun CollegeMapScreen(
             targetRoom = targetRoom,
             // O3-d: тап по кабинету — тот же путь, что ввод номера в поиск
             onRoomTap = { room ->
-                groupMessage = null
                 searchFailed = false
                 target = room.number
             },
@@ -907,197 +815,6 @@ private fun SearchField(
 
 // Т5: поиск по группе. Запрашивает сегодняшие пары, считает «где группа сейчас»
 // и открывает карту на этом кабинете; результат — либо кабинет, либо сообщение.
-private suspend fun searchGroupNow(
-    group: String,
-    scheduleRepository: ScheduleRepository,
-    todayDateString: String,
-    todayDow: Int,
-    mapData: CollegeMapData,
-): Pair<MapRoom?, String?> {
-    if (group.isBlank()) return null to null
-    // Ввод «41о»/«41O» приводим к каноническому виду БД («41О»)
-    val canonical =
-        com.politex.util.GroupParser
-            .cleanRawGroupName(group)
-    val lessons =
-        runCatching {
-            scheduleRepository.getLessonsForDateOrDay(canonical, todayDateString, todayDow).first()
-        }.getOrDefault(emptyList())
-    // Точная дата приоритетна, недельный шаблон — фолбэк (как в ScheduleScreen)
-    val exact = lessons.filter { it.dateString == todayDateString }
-    val effective = exact.ifEmpty { lessons.filter { it.dateString.isBlank() } }
-
-    val cal = Calendar.getInstance()
-    val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-    val result = findGroupRoomNow(effective, minutes, todayDow)
-
-    val room = result?.room?.trim().orEmpty()
-    val mapped = if (room.isBlank()) null else findRoomEverywhere(mapData, room)
-
-    return mapped to
-        when {
-            // O3-c: код не разбирается как группа колледжа (курс 1-4 + номер + код специальности)
-            com.politex.util.GroupParser
-                .parse(canonical) == null ->
-                "Группа «$group» не найдена — проверьте код"
-            effective.isEmpty() -> "У группы «$canonical» нет уроков сегодня"
-            result == null || room.isBlank() -> "Сейчас уроков нет"
-            mapped == null -> "Кабинет «$room» не найден на карте"
-            result.isNow -> null
-            else -> "Сейчас уроков нет — к ${result.lessonNumber} уроку"
-        }
-}
-
-/**
- * O3-c.1: полный список кодов групп колледжа (ассет `group_codes.csv`, готовит агент O8).
- * Ассета может ещё не быть или он может быть собран не в этом флейворе — тогда пусто,
- * и подсказки работают на группах, известных из расписания.
- */
-private fun loadGroupCodes(context: android.content.Context): List<String> = runCatching {
-    context.assets.open("group_codes.csv").bufferedReader(Charsets.UTF_8).useLines { lines ->
-        lines
-            .map { it.trim().trim('"') }
-            .filter { it.isNotBlank() && !it.equals("group", ignoreCase = true) }
-            .toList()
-    }
-}.getOrDefault(emptyList())
-
-/**
- * O3-c: подсказки для поиска группы — по группам, известным приложению (коды из ассета +
- * уроки сегодня + недельный шаблон). Совпадения по подстроке, регистр/латиница не важны.
- * Максимум [limit] штук, выпадающего списка нет — это компактные inline-чипы.
- */
-fun groupSuggestions(
-    query: String,
-    groups: List<String>,
-    limit: Int = 6,
-): List<String> {
-    val q = query.trim()
-    if (q.length < 2) return emptyList()
-    val canonical =
-        com.politex.util.GroupParser
-            .cleanRawGroupName(q)
-    return groups
-        .filter {
-            it.equals(canonical, ignoreCase = true) ||
-                com.politex.util.GroupParser
-                    .matchesGroup(it, q)
-        }.sorted()
-        .take(limit)
-}
-
-@Composable
-private fun GroupSearchField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    onSearch: (String) -> Unit,
-    message: String?,
-    // O3-c: подсказки по мере ввода — без выпадающего списка, максимум 6
-    suggestionsWidget: @Composable () -> Unit = {},
-) {
-    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Surface(
-                shape = RoundedCornerShape(3.dp),
-                color = ColorSurfaceVariantLight,
-                border = BorderStroke(1.dp, ColorBorderLight),
-                modifier =
-                Modifier
-                    .weight(1f)
-                    .height(46.dp),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.School,
-                        contentDescription = null,
-                        tint = ColorTextMuted,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                        if (value.isBlank()) {
-                            Text(
-                                text = "Группа, например 11А",
-                                style = TextStyle(fontSize = 14.sp, color = ColorTextMuted),
-                                maxLines = 1,
-                            )
-                        }
-                        BasicTextField(
-                            value = value,
-                            onValueChange = { input ->
-                                onValueChange(input.filter { it.isLetter() || it.isDigit() }.take(5))
-                            },
-                            singleLine = true,
-                            textStyle = TextStyle(fontSize = 15.sp, color = ColorTextTitle),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                    if (value.isNotBlank()) {
-                        // M6: крестик 18dp в зоне 48dp
-                        Box(
-                            modifier =
-                            Modifier
-                                .size(48.dp)
-                                .bouncyClickable { onValueChange("") },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Очистить",
-                                tint = ColorTextMuted,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    }
-                }
-            }
-
-            Surface(
-                shape = RoundedCornerShape(3.dp),
-                color = ColorBrandFill,
-                modifier =
-                Modifier
-                    .height(46.dp)
-                    .bouncyClickable { onSearch(value.trim()) },
-            ) {
-                Text(
-                    text = "ГДЕ ГРУППА",
-                    softWrap = false,
-                    maxLines = 1,
-                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-                )
-            }
-        }
-
-        suggestionsWidget()
-
-        message?.let { msg ->
-            Spacer(modifier = Modifier.height(4.dp))
-            Surface(
-                shape = RoundedCornerShape(3.dp),
-                color = ColorSurfaceVariantLight,
-                border = BorderStroke(1.dp, ColorBorderLight),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = msg,
-                    style = TextStyle(fontSize = 13.sp, color = ColorTextBody),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun FloorRow(
     current: String,

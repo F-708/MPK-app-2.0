@@ -127,7 +127,8 @@ class ScheduleRepository(
     @Volatile
     private var cachedCatalog: List<String>? = null
 
-    private fun catalog(): List<String> = cachedCatalog ?: catalogProvider().takeIf { it.isNotEmpty() }?.also { cachedCatalog = it } ?: emptyList()
+    // W6: internal — карта проверяет непустоту каталога (гейт force-синка кабинета)
+    internal fun catalog(): List<String> = cachedCatalog ?: catalogProvider().takeIf { it.isNotEmpty() }?.also { cachedCatalog = it } ?: emptyList()
 
     /**
      * Б3: один документ на дату разбирается сразу по всем группам колледжа и пишется в Room.
