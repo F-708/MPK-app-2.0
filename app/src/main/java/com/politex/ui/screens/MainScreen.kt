@@ -119,14 +119,16 @@ fun buildGroupScheduleRoute(group: String?): String {
 }
 
 /**
- * Стандартный паттерн bottom-navigation: состояние каждого таба ЖИВЁТ (saveState/restoreState),
- * повторный тап не плодит записи (launchSingleTop), «назад» с таба выходит из приложения.
+ * W2: тап по вкладке ВСЕГДА открывает КОРЕНЬ вкладки — без saveState/restoreState.
+ * Заказчик: «если я перехожу на вкладку — меня должно перекинуть на её обычное состояние,
+ * а не на карту/расписание чужой группы, которые я открывал раньше». Глубокое состояние
+ * сохраняет ТОЛЬКО системная кнопка «назад» (backstack не трогаем): повторный тап по
+ * активной вкладке из глубокого экрана pop'ает стек до корня вкладки.
  */
 fun NavController.navigateToTab(route: String) {
     navigate(route) {
-        popUpTo(graph.findStartDestination().id) { saveState = true }
+        popUpTo(graph.findStartDestination().id) { inclusive = false }
         launchSingleTop = true
-        restoreState = true
     }
 }
 

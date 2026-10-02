@@ -222,19 +222,11 @@ fun BellsScreen(
             .background(ColorBgMain),
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            // W34: двойной заголовок («Расписание звонков» + «Расписание уроков колледжа»)
+            // убран — остаётся один, место освободилось
             Text(
                 text = "Расписание звонков",
                 style = TextStylePageTitle,
-                maxLines = 1,
-            )
-            Text(
-                text = "Расписание уроков колледжа",
-                style =
-                androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    color = ColorBrandBlue,
-                ),
                 maxLines = 1,
             )
         }
@@ -595,6 +587,21 @@ private fun LessonBellCard(
                     end = Offset(cx, size.height + gap),
                     strokeWidth = 2.dp.toPx(),
                     cap = StrokeCap.Round,
+                )
+
+                // W25: «вырез» в рельсе на границе урока (фон карточки) + чёрточка поверх —
+                // рельс НЕ перекрывает чёрточки, полоса остаётся сплошной между ними
+                val cutHalf = 3.dp.toPx()
+                val cutW = tickLen * 2 + 4.dp.toPx()
+                drawRect(
+                    color = ColorBgMain,
+                    topLeft = Offset(cx - cutW / 2, -cutHalf),
+                    size = androidx.compose.ui.geometry.Size(cutW, cutHalf * 2),
+                )
+                drawRect(
+                    color = ColorBgMain,
+                    topLeft = Offset(cx - cutW / 2, size.height - cutHalf),
+                    size = androidx.compose.ui.geometry.Size(cutW, cutHalf * 2),
                 )
 
                 drawLine(

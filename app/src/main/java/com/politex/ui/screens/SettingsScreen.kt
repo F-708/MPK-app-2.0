@@ -411,14 +411,10 @@ fun SettingsScreen(
                                         textAlign = TextAlign.Center,
                                     ),
                                 )
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = ColorBrandBlue,
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                }
+                                // W30: галочка с выбранного свотча УБРАНА (меняла высоту —
+                                // масштаб ленты прыгал при скролле). Выбор виден только
+                                // синей обводкой + жирным заголовком.
+                                Spacer(modifier = Modifier.height(2.dp))
                             }
                         }
                     }
@@ -845,7 +841,11 @@ private fun BellCountdownNotificationCard() {
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                com.politex.util.BellCountdownNotifier.Style.entries.forEach { style ->
+                // W26: стиль «Мой Политех» (WITH_APP_NAME) убран из выбора по заказчику —
+                // остаются: компактный / с номером урока / с полосой прогресса
+                com.politex.util.BellCountdownNotifier.Style.entries
+                    .filter { it != com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME }
+                    .forEach { style ->
                     val isSelected = selectedStyle == style
                     Surface(
                         shape = RoundedCornerShape(2.dp),

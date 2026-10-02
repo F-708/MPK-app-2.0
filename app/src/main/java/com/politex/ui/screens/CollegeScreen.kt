@@ -897,7 +897,7 @@ private fun TeachersPage(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("Поиск: ФИО, дисциплина, кабинет...") },
+            placeholder = { Text("Поиск: ФИО, дисциплина...") },
             leadingIcon = {
                 Icon(Icons.Default.Search, contentDescription = null, tint = ColorBrandBlue, modifier = Modifier.size(18.dp))
             },

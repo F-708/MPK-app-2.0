@@ -73,7 +73,13 @@ object BellCountdownNotifier {
         ;
 
         companion object {
-            fun from(id: String?): Style = entries.firstOrNull { it.id == id } ?: COMPACT
+            // W26: WITH_APP_NAME («Мой Политех») убран из настроек; сохранённые значения
+            // маппятся на COMPACT, чтобы никто не остался на удалённом стиле
+            fun from(id: String?): Style =
+                entries
+                    .firstOrNull { it.id == id }
+                    ?.let { if (it == WITH_APP_NAME) COMPACT else it }
+                    ?: COMPACT
         }
     }
 

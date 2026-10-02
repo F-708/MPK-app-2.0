@@ -139,8 +139,11 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             val room = lesson.roomFirst.takeIf { it.isNotBlank() } ?: lesson.roomSecond
             if (showRoom && room.isNotBlank()) {
                 row.setTextViewText(R.id.row_room, "каб. $room")
-                row.setTextColor(R.id.row_room, style.mainColor)
-                row.setInt(R.id.row_room, "setBackgroundResource", R.drawable.bg_widget_room_chip)
+                // W27: текст чипа — КОНТРАСТ к фону (style.mainColor = белый на светлых
+                // стилях LIGHT/SKY → белое на белом). Фон чипа = highlightColor,
+                // текст = тёмно-синий, читаемо во всех 4 стилях.
+                row.setTextColor(R.id.row_room, 0xFF0B3564.toInt())
+                row.setInt(R.id.row_room, "setBackgroundColor", style.highlightColor)
                 val d = context.resources.displayMetrics.density
                 val ph = (7 * d + 0.5f).toInt()
                 val pv = (2 * d + 0.5f).toInt()
