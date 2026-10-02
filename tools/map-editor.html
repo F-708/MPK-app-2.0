@@ -887,6 +887,12 @@ function loadMapText(text, name){
     for(const r of f.rooms){
       if(r.door!=null && !(Array.isArray(r.door) && r.door.length===2)) r.door = null;
     }
+    // W5: коридоры, сконвертированные из rectCorridors (id совпадает) — производные,
+    // убираем: при экспорте они пересоздадутся из прямоугольников (актуальные)
+    if(f.rectCorridors.length && f.corridors.length){
+      const ids = new Set(f.rectCorridors.map(rc=>rc.id));
+      f.corridors = f.corridors.filter(c=>!ids.has(c.id));
+    }
   }
   map = data;
   if(!map.floors[curFloor]) map.floors[curFloor] = emptyFloor();
