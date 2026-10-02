@@ -1,10 +1,13 @@
 ﻿package com.politex.ui.screens
 
 import android.Manifest
+import android.app.AlarmManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -24,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,6 +52,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +69,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.politex.data.model.GroupInfo
 import com.politex.ui.components.GroupSelectionDialog
 import com.politex.ui.theme.ColorActiveBlue
@@ -89,6 +97,7 @@ import com.politex.ui.theme.ColorSuccessBg
 import com.politex.ui.theme.ColorSuccessText
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorSurfaceVariantLight
+import com.politex.ui.theme.ColorWarning
 
 @Composable
 fun SettingsScreen(
@@ -269,118 +278,8 @@ fun SettingsScreen(
                 }
             }
 
-            item {
-                SectionHeader("ТЕМА ПРИЛОЖЕНИЯ")
-            }
-            items(com.politex.ui.theme.AppTheme.entries.toList()) { theme ->
-                val isSelected = currentTheme == theme
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, if (isSelected) ColorBrandBlue else ColorBorderLight),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .bouncyClickable { onThemePicked(theme) }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(theme.palette.topBar, RoundedCornerShape(2.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(width = 22.dp, height = 8.dp)
-                                    .background(theme.palette.brandBlue, RoundedCornerShape(1.dp))
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = theme.title,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = 14.sp,
-                                    color = ColorTextTitle
-                                )
-                            )
-                            Text(
-                                text = theme.hint,
-                                style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted)
-                            )
-                        }
-                        if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = ColorBrandBlue,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                SectionHeader("ДАННЫЕ")
-            }
-            item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = "Резервная копия",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = ColorTextTitle
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Настройки и все учебные задания сохраняются в файл. " +
-                                "Файл можно перекинуть на другой телефон " +
-                                "или использовать как запасную копию.",
-                            style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            ActionChip(
-                                text = "СОХРАНИТЬ В ФАЙЛ",
-                                filled = true,
-                                modifier = Modifier.weight(1f),
-                                onClick = { exportLauncher.launch(defaultBackupFileName(context)) }
-                            )
-                            ActionChip(
-                                text = "ВОССТАНОВИТЬ",
-                                filled = false,
-                                modifier = Modifier.weight(1f),
-                                onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }
-                            )
-                        }
-                        if (backupMessage.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = backupMessage,
-                                style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorBrandBlue)
-                            )
-                        }
-                    }
-                }
-            }
-
+            // N13: порядок секций — уведомления сверху, тема компактно, резервная копия внизу
+            item { SectionHeader("УВЕДОМЛЕНИЯ") }
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -475,44 +374,68 @@ fun SettingsScreen(
             }
 
             item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth()
+                SectionHeader("ТЕМА ПРИЛОЖЕНИЯ")
+            }
+            item {
+                // N13: компактная тема — горизонтальная лента свотчей в одну строку
+                // вместо развернутой сетки на весь экран (как чипы категорий в AddTaskDialog)
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("theme_swatches"),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = "Ресурсы колледжа",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = ColorTextTitle
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        LinkItem(
-                            title = "Официальный сайт МГПК",
-                            subtitle = "guo-mpk.by",
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://guo-mpk.by"))
-                                context.startActivity(intent)
+                    items(com.politex.ui.theme.AppTheme.entries.toList()) { theme ->
+                        val isSelected = currentTheme == theme
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            color = ColorBgMain,
+                            border = BorderStroke(
+                                if (isSelected) 2.dp else 1.dp,
+                                if (isSelected) ColorBrandBlue else ColorBorderLight
+                            ),
+                            modifier = Modifier.bouncyClickable { onThemePicked(theme) }
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .width(92.dp)
+                                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                // превью темы: верхняя панель + брендовая полоса
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(theme.palette.topBar, RoundedCornerShape(2.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(width = 20.dp, height = 7.dp)
+                                            .background(theme.palette.brandBlue, RoundedCornerShape(1.dp))
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = theme.title,
+                                    maxLines = 1,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 11.sp,
+                                        color = ColorTextTitle,
+                                        textAlign = TextAlign.Center
+                                    )
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = ColorBrandBlue,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-                        HorizontalDivider(color = ColorBorderLight)
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        LinkItem(
-                            title = "Портал расписания",
-                            subtitle = "guo-mpk.by/raspisanie/",
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://guo-mpk.by/raspisanie/"))
-                                context.startActivity(intent)
-                            }
-                        )
+                        }
                     }
                 }
             }
@@ -548,6 +471,112 @@ fun SettingsScreen(
                                 color = ColorBrandBlue
                             )
                         )
+                    }
+                }
+            }
+
+            // N14: «Сайт колледжа» переехал сюда из вкладки «Другое»
+            item {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "Ресурсы колледжа",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = ColorTextTitle
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        LinkItem(
+                            title = "Сайт колледжа",
+                            subtitle = "guo-mpk.by — официальная информация",
+                            onClick = {
+                                // N14: действие скопировано из CollegeScreen (try/catch — нет браузера)
+                                try {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://guo-mpk.by/")
+                                        )
+                                    )
+                                } catch (_: Exception) {
+                                }
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        HorizontalDivider(color = ColorBorderLight)
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        LinkItem(
+                            title = "Портал расписания",
+                            subtitle = "guo-mpk.by/raspisanie/",
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://guo-mpk.by/raspisanie/"))
+                                context.startActivity(intent)
+                            }
+                        )
+                    }
+                }
+            }
+
+            // N13: резервная копия — в самом низу настроек
+            item { SectionHeader("РЕЗЕРВНАЯ КОПИЯ") }
+            item {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "Резервная копия",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = ColorTextTitle
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Настройки и все учебные задания сохраняются в файл. " +
+                                "Файл можно перекинуть на другой телефон " +
+                                "или использовать как запасную копию.",
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ActionChip(
+                                text = "СОХРАНИТЬ В ФАЙЛ",
+                                filled = true,
+                                modifier = Modifier.weight(1f),
+                                onClick = { exportLauncher.launch(defaultBackupFileName(context)) }
+                            )
+                            ActionChip(
+                                text = "ВОССТАНОВИТЬ",
+                                filled = false,
+                                modifier = Modifier.weight(1f),
+                                onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }
+                            )
+                        }
+                        if (backupMessage.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = backupMessage,
+                                style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorBrandBlue)
+                            )
+                        }
                     }
                 }
             }
@@ -660,6 +689,16 @@ private fun BellCountdownNotificationCard() {
     var selectedTheme by remember {
         mutableStateOf(com.politex.util.BellCountdownNotifier.getTheme(context))
     }
+    // C3: разрешение на точные будильники; перепроверяем на ON_RESUME (возврат из настроек системы)
+    var canExactAlarms by remember { mutableStateOf(canScheduleExactAlarms(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) canExactAlarms = canScheduleExactAlarms(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -756,6 +795,58 @@ private fun BellCountdownNotificationCard() {
                     fontSize = 11.sp
                 )
             )
+
+            // C3: нет разрешения на точные будильники — отсчёт будет с задержкой, предлагаем открыть настройки
+            if (exactAlarmHintNeeded(Build.VERSION.SDK_INT, canExactAlarms)) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorSurfaceHighlight,
+                    border = BorderStroke(1.dp, ColorWarning),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("exact_alarm_warning")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Для точного отсчёта разрешите приложению точные будильники",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 12.sp,
+                                color = ColorTextBody
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        // ST3: хитбокс кнопки 44dp
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            color = ColorBrandFill,
+                            modifier = Modifier
+                                .heightIn(min = 44.dp)
+                                .bouncyClickable { openExactAlarmSettings(context) }
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            ) {
+                                Text(
+                                    text = "РАЗРЕШИТЬ",
+                                    softWrap = false,
+                                    maxLines = 1,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             if (isOngoingEnabled) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -932,6 +1023,34 @@ private fun BellCountdownNotificationCard() {
                     }
                 }
             }
+        }
+    }
+}
+
+// C3: на SDK < 31 точные будильники разрешены всегда, на 31+ спрашиваем AlarmManager
+internal fun canScheduleExactAlarms(context: Context): Boolean =
+    Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+        (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
+
+// C3: строка-подсказка нужна только на SDK 31+ и без разрешения
+internal fun exactAlarmHintNeeded(sdkInt: Int, canScheduleExact: Boolean): Boolean =
+    sdkInt >= Build.VERSION_CODES.S && !canScheduleExact
+
+// C3: системная страница выдачи разрешения на точные будильники (intent c package URI)
+private fun openExactAlarmSettings(context: Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+    try {
+        context.startActivity(
+            Intent(
+                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                Uri.parse("package:${context.packageName}")
+            )
+        )
+    } catch (_: Exception) {
+        // нет такой страницы в прошивке — открываем общие настройки
+        try {
+            context.startActivity(Intent(Settings.ACTION_SETTINGS))
+        } catch (_: Exception) {
         }
     }
 }

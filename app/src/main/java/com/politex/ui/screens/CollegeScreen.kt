@@ -381,22 +381,7 @@ private fun OtherMenu(
                     onClick = onOpenSettings
                 )
             }
-            item {
-                MenuCard(
-                    icon = { Icon(Icons.Default.Language, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
-                    title = "Сайт колледжа",
-                    subtitle = "guo-mpk.by — официальная информация",
-                    onClick = {
-                        try {
-                            android.content.Intent(
-                                android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://guo-mpk.by/")
-                            ).let { context.startActivity(it) }
-                        } catch (_: Exception) {
-                        }
-                    }
-                )
-            }
+            // N14: пункт «Сайт колледжа» перенесён в низ экрана настроек
         }
     }
 }
