@@ -72,6 +72,7 @@ import com.politex.ui.viewmodel.ROUTE_SPECIALTY
 import com.politex.ui.viewmodel.ROUTE_STUDENTS
 import com.politex.ui.viewmodel.ROUTE_TEACHER
 import com.politex.ui.viewmodel.ROUTE_TEACHERS
+import com.politex.ui.screens.materials.ViewerMode
 import kotlinx.coroutines.flow.collectLatest
 import java.net.URLEncoder
 
@@ -184,9 +185,14 @@ fun MainScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        topBar = { MainTopBar() },
+        // W16: в режиме чтения PDF баннер и нижняя навигация скрыты — сверху остаётся синяя
+        // строка самого просмотрщика (она же рисует отступ под статусбар), снизу — текст.
+        // Scaffold пересчитает innerPadding, контент растягивается на весь экран.
+        topBar = {
+            if (!ViewerMode.active) MainTopBar()
+        },
         bottomBar = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            if (!ViewerMode.active) Column(modifier = Modifier.fillMaxWidth()) {
                 Box(
                     modifier =
                     Modifier

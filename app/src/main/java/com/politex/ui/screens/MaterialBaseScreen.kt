@@ -41,6 +41,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -76,6 +77,7 @@ import com.politex.ui.screens.materials.MaterialPdfViewer
 import com.politex.ui.screens.materials.MaterialRenameDialog
 import com.politex.ui.screens.materials.MaterialSubjectDialog
 import com.politex.ui.screens.materials.MaterialTextDialog
+import com.politex.ui.screens.materials.ViewerMode
 import com.politex.ui.screens.materials.materialIconFor
 import com.politex.ui.screens.materials.materialIconTint
 import com.politex.ui.theme.ColorBgMain
@@ -332,6 +334,14 @@ fun MaterialBaseScreen(
 
                     MaterialKind.FILE ->
                         if (viewerItem.ext == "pdf") {
+                            // W16: полноэкранное чтение — баннер и нижняя навигация скрыты,
+                            // пока жив PDF-просмотрщик. onDispose покрывает ЛЮБОЙ выход:
+                            // back из читалки, системный back, удаление материала из другого
+                            // экрана; при смерти процесса object-состояние сбрасывается само.
+                            DisposableEffect(viewerItem.id) {
+                                ViewerMode.active = true
+                                onDispose { ViewerMode.active = false }
+                            }
                             MaterialPdfViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
                         } else {
                             MaterialDocTextViewer(item = viewerItem, onBack = pop, modifier = Modifier.fillMaxSize())

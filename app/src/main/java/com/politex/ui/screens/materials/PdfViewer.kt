@@ -7,6 +7,11 @@ import android.util.LruCache
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,12 +26,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Delete
@@ -49,8 +56,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -69,6 +80,7 @@ import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
+import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.util.bouncyClickable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -77,6 +89,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.max
 import android.graphics.Color as AndroidColor
 
 /**
@@ -126,8 +139,18 @@ fun MaterialPdfViewer(
     }
 
     if (handle == null) {
-        Column(modifier = modifier.fillMaxSize().background(ColorBgMain)) {
-            MaterialViewerTopBar(title = item.title, testTag = "pdf_top_bar", onBack = onBack)
+        // W16: и в аварийном пути — полноэкранный режим (баннер/навигация уже скрыты),
+        // поэтому шапка обязана сама нарисовать отступ под статусбар
+        Column(modifier = modifier.fillMaxSize().background(ColorSurfaceHighlight)) {
+            PdfReaderBar(
+                title = item.title,
+                currentPage = 0,
+                pageCount = 0,
+                bookmarkListActive = false,
+                onBack = onBack,
+                onPageClick = {},
+                onBookmarks = {},
+            )
             UnsupportedFormatPlaque(ext = "pdf", fileName = item.fileName.ifBlank { file.name })
         }
         return
@@ -157,40 +180,17 @@ fun MaterialPdfViewer(
     val currentPage = listState.firstVisibleItemIndex.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
 
     Column(modifier = modifier.fillMaxSize().background(ColorSurfaceHighlight)) {
-        MaterialViewerTopBar(
+        // W16: сверху ВМЕСТО баннера — синяя строка: назад, «12/340» (тап = переход),
+        // закладки. Она же оставляет место под строку времени/иконок (statusBarsPadding).
+        PdfReaderBar(
             title = item.title,
-            testTag = "pdf_top_bar",
+            currentPage = currentPage,
+            pageCount = pageCount,
+            bookmarkListActive = showBookmarkList,
             onBack = onBack,
-        ) {
-            ViewerAction(
-                icon = Icons.Default.BookmarkBorder,
-                description = "Закладки",
-                testTag = "pdf_bookmarks_btn",
-                active = showBookmarkList,
-                onClick = { showBookmarkList = !showBookmarkList },
-            )
-            Spacer(modifier = Modifier.width(2.dp))
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = Color.Transparent,
-                modifier =
-                Modifier
-                    .heightIn(min = 44.dp)
-                    .bouncyClickable { showPageJump = true }
-                    .testTag("pdf_page_indicator"),
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(horizontal = 10.dp),
-                ) {
-                    Text(
-                        text = "${currentPage + 1}/$pageCount",
-                        maxLines = 1,
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White),
-                    )
-                }
-            }
-        }
+            onPageClick = { showPageJump = true },
+            onBookmarks = { showBookmarkList = !showBookmarkList },
+        )
 
         if (showBookmarkList) {
             BookmarkPanel(
@@ -224,7 +224,17 @@ fun MaterialPdfViewer(
                         renderLock = renderLock,
                         renderWidthPx = renderWidthPx,
                         bookmarked = bookmarks.any { it.page == index },
-                        onBookmarkClick = { bookmarkDraftPage = index },
+                        // W16: повторный тап по закрашенной закладке УБИРАЕТ её; по пустой —
+                        // открывает диалог с подписью (как раньше)
+                        onBookmarkClick = { bookmarked ->
+                            if (bookmarked) {
+                                scope.launch {
+                                    bookmarks.filter { it.page == index }.forEach { dao.deleteBookmarkById(it.id) }
+                                }
+                            } else {
+                                bookmarkDraftPage = index
+                            }
+                        },
                     )
                 }
             }
@@ -269,6 +279,89 @@ private fun kotlinx.coroutines.CoroutineScope.jumpToPage(
 }
 
 /**
+ * W16: синяя строка чтения ВМЕСТО баннера (просмотрщик самодостаточен, баннер и нижняя
+ * навигация в MainScreen скрыты). Состав: [стрелка назад 48dp] [«12/340» — тап открывает
+ * диалог перехода] … [кнопка списка закладок]. statusBarsPadding оставляет место под строку
+ * времени и иконок; высота строки 52dp. pageCount = 0 — аварийный путь (файл не открылся):
+ * вместо номера показываем заголовок, закладок нет.
+ */
+@Composable
+private fun PdfReaderBar(
+    title: String,
+    currentPage: Int,
+    pageCount: Int,
+    bookmarkListActive: Boolean,
+    onBack: () -> Unit,
+    onPageClick: () -> Unit,
+    onBookmarks: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorTopBar,
+        modifier = Modifier.fillMaxWidth().testTag("pdf_top_bar"),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .height(52.dp)
+                .padding(horizontal = 4.dp),
+        ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.size(48.dp).testTag("pdf_top_bar_back"),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Назад",
+                    tint = Color.White,
+                )
+            }
+            if (pageCount > 0) {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = Color.Transparent,
+                    modifier =
+                    Modifier
+                        .heightIn(min = 44.dp)
+                        .bouncyClickable(onClick = onPageClick)
+                        .testTag("pdf_page_indicator"),
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.padding(horizontal = 10.dp),
+                    ) {
+                        Text(
+                            text = "${currentPage + 1}/$pageCount",
+                            maxLines = 1,
+                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White),
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                ViewerAction(
+                    icon = Icons.Default.Bookmark,
+                    description = "Закладки",
+                    testTag = "pdf_bookmarks_btn",
+                    active = bookmarkListActive,
+                    onClick = onBookmarks,
+                )
+            } else {
+                Text(
+                    text = title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White),
+                )
+            }
+        }
+    }
+}
+
+/**
  * Кэш растров страниц: 1/8 кучи приложения, размер считается в байтах битмапа.
  * На типовом телефоне это 3–5 страниц A4 — ровно диапазон из задания.
  */
@@ -285,6 +378,11 @@ private fun newPageBitmapCache(): LruCache<Int, Bitmap> {
 /**
  * Одна страница: растр из кэша или рендер по мере появления. Плейсхолдер пропорций A4 —
  * иначе высота элемента скачет при дорисовке и список «прыгает» под пальцем.
+ *
+ * W16: pinch-to-zoom 1..4× с паном и двойным тапом-сбросом. Пан обрабатываем ТОЛЬКО когда
+ * страница уже приближена (или пальцев ≥ 2): одиночный палец при zoom=1 остаётся скроллом
+ * списка — потребляем события лишь в приближённом состоянии, иначе читалка перестала бы
+ * листаться. Границы пана — габариты страницы (как в MaterialImageViewer).
  */
 @Composable
 private fun PdfPageRow(
@@ -294,9 +392,11 @@ private fun PdfPageRow(
     renderLock: Mutex,
     renderWidthPx: Int,
     bookmarked: Boolean,
-    onBookmarkClick: () -> Unit,
+    onBookmarkClick: (bookmarked: Boolean) -> Unit,
 ) {
     var bitmap by remember(pageIndex) { mutableStateOf(cache.get(pageIndex)) }
+    var zoom by remember(pageIndex) { mutableStateOf(1f) }
+    var pan by remember(pageIndex) { mutableStateOf(Offset.Zero) }
 
     LaunchedEffect(pageIndex, renderer) {
         if (bitmap != null) return@LaunchedEffect
@@ -315,7 +415,48 @@ private fun PdfPageRow(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp)
-            .testTag("pdf_page_$pageIndex"),
+            .testTag("pdf_page_$pageIndex")
+            .pointerInput(pageIndex) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    // уже приближена — одиночный палец двигает страницу, а не список
+                    var handled = zoom > 1.01f
+                    do {
+                        val event = awaitPointerEvent()
+                        if (!handled && event.changes.count { it.pressed } >= 2) handled = true
+                        if (!handled) continue
+                        val zoomChange = event.calculateZoom()
+                        val panChange = event.calculatePan()
+                        if (zoomChange != 1f || panChange != Offset.Zero) {
+                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                            val newZoom = (zoom * zoomChange).coerceIn(1f, 4f)
+                            val maxX = max(0f, (newZoom - 1f) * size.width / 2f)
+                            val maxY = max(0f, (newZoom - 1f) * size.height / 2f)
+                            zoom = newZoom
+                            pan =
+                                Offset(
+                                    (pan.x + panChange.x).coerceIn(-maxX, maxX),
+                                    (pan.y + panChange.y).coerceIn(-maxY, maxY),
+                                )
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
+            .pointerInput(pageIndex) {
+                // W16: двойной тап — сброс зума (жест заметнее кнопки, кнопку не дублируем)
+                detectTapGestures(
+                    onDoubleTap = {
+                        zoom = 1f
+                        pan = Offset.Zero
+                    },
+                )
+            }
+            .graphicsLayer {
+                scaleX = zoom
+                scaleY = zoom
+                translationX = pan.x
+                translationY = pan.y
+            },
     ) {
         val bmp = bitmap
         if (bmp != null) {
@@ -344,48 +485,49 @@ private fun PdfPageRow(
             }
         }
 
-        // Номер страницы + закладка поверх: хитбокс 44dp, палец попадает без прицеливания
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+        // W16: закладка — ВДВОЕ меньше прежней (22dp) и в ЛЕВОМ верхнем углу; повторный тап
+        // по закрашенной убирает её (см. onBookmarkClick в MaterialPdfViewer)
+        Surface(
+            shape = RoundedCornerShape(2.dp),
+            color = if (bookmarked) ColorBrandBlue else ColorBgMain.copy(alpha = 0.85f),
+            border = BorderStroke(1.dp, ColorBorderLight),
+            modifier =
+            Modifier
+                .align(Alignment.TopStart)
+                .padding(4.dp)
+                .size(22.dp)
+                .bouncyClickable(onClick = { onBookmarkClick(bookmarked) })
+                .testTag("pdf_bookmark_add_$pageIndex"),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                    contentDescription = "Закладка на странице ${pageIndex + 1}",
+                    tint = if (bookmarked) Color.White else ColorBrandBlue,
+                    modifier = Modifier.size(12.dp),
+                )
+            }
+        }
+
+        // Номер страницы — в правом верхнем углу (чтобы не пересекаться с закладкой)
+        Surface(
+            shape = RoundedCornerShape(2.dp),
+            color = ColorBgMain.copy(alpha = 0.85f),
+            border = BorderStroke(1.dp, ColorBorderLight),
             modifier =
             Modifier
                 .align(Alignment.TopEnd)
-                .padding(4.dp),
+                .padding(4.dp)
+                .testTag("pdf_page_num_$pageIndex"),
         ) {
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorBgMain.copy(alpha = 0.85f),
-                border = BorderStroke(1.dp, ColorBorderLight),
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Text(
-                        text = "${pageIndex + 1}",
-                        style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ColorTextBody),
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(4.dp))
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = if (bookmarked) ColorBrandBlue else ColorBgMain.copy(alpha = 0.85f),
-                border = BorderStroke(1.dp, ColorBorderLight),
-                modifier =
-                Modifier
-                    .size(44.dp)
-                    .bouncyClickable(onClick = onBookmarkClick)
-                    .testTag("pdf_bookmark_add_$pageIndex"),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                        contentDescription = "Закладка на странице ${pageIndex + 1}",
-                        tint = if (bookmarked) Color.White else ColorBrandBlue,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
+                Text(
+                    text = "${pageIndex + 1}",
+                    style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ColorTextBody),
+                )
             }
         }
     }

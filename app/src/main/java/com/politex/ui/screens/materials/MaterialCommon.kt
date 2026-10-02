@@ -25,6 +25,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,6 +47,18 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.util.bouncyClickable
+
+/**
+ * W16: полноэкранный режим чтения PDF. `MaterialBaseScreen` ставит active=true, когда открыт
+ * PDF-просмотрщик (и сбрасывает в onDispose), а `MainScreen` прячет баннер и нижнюю навигацию —
+ * максимум места для чтения. Глобальный object, а не CompositionLocal: нижняя панель рисуется
+ * в MainScreen, читалка — глубоко внутри lessons-вкладки, и тянуть состояние через пять уровней
+ * композиции дороже одной строки. Флаг — не rememberSaveable: смерть процесса обязана его
+ * сбрасывать (панель обязана вернуться при холодном старте).
+ */
+object ViewerMode {
+    var active by mutableStateOf(false)
+}
 
 /**
  * M2/M4/M5: общие куски просмотрщиков — тёмная шапка (фирменный ColorTopBar, как в остальном
