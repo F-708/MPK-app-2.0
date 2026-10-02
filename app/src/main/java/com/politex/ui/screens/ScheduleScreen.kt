@@ -688,12 +688,14 @@ fun ScheduleScreen(
                 }
             } else {
 
-                val fromRoom = remember(lessons, currentLessonNumber) {
-                    currentLessonNumber?.let { n ->
-                        lessons.firstOrNull { it.lessonNumber == n }
-                            ?.let { listOf(it.roomFirst, it.roomSecond) }
-                            ?.firstOrNull { it.isNotBlank() }
-                    }
+                // R2: старт маршрута — кабинет текущей/предыдущей пары (наибольший lessonNumber
+                // среди начавшихся сегодня). "" (НЕ null) = ничего не началось → маршрут от
+                // главного входа: непустой fromRoom — маркер «запрос из расписания, с маршрутом».
+                // Не сегодня (завтра/архив) → null: физическая позиция неизвестна, без маршрута.
+                val fromRoom = remember(lessons, nowMinutes, isViewingToday) {
+                    if (isViewingToday) {
+                        com.politex.ui.util.RouteStartResolver.previousRoomNow(lessons, nowMinutes) ?: ""
+                    } else null
                 }
 
                 val slots = remember(lessons) {

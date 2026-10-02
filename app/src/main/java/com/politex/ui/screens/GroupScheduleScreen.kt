@@ -237,11 +237,13 @@ fun GroupScheduleScreen(
         pickForeignGroupLessons(lessonsState ?: emptyList(), activeDateString)
     }
 
-    val fromRoom = remember(lessons, currentLessonNumber) {
-        currentLessonNumber?.let { n ->
-            lessons.firstOrNull { it.lessonNumber == n }
-                ?.let { listOf(it.roomFirst, it.roomSecond).firstOrNull { r -> r.isNotBlank() } }
-        }
+    // R2: старт маршрута — кабинет текущей/предыдущей пары (см. RouteStartResolver).
+    // "" = ничего не началось → маршрут от главного входа (непустой fromRoom — маркер
+    // «запрос из расписания, с маршрутом»); не сегодня → null (без маршрута).
+    val fromRoom = remember(lessons, nowMinutes, selectedSlot, leftIsToday) {
+        if (selectedSlot == 0 && leftIsToday) {
+            com.politex.ui.util.RouteStartResolver.previousRoomNow(lessons, nowMinutes) ?: ""
+        } else null
     }
 
     Column(

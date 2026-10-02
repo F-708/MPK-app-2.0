@@ -60,7 +60,10 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             } else {
                 views.setViewVisibility(R.id.tv_today_empty, android.view.View.GONE)
                 lessons.take(MAX_ROWS).forEach { lesson ->
-                    views.addView(R.id.today_rows, buildRow(context, lesson, now, style, showRoom))
+                    views.addView(
+                        R.id.today_rows,
+                        buildRow(context, lesson, now, style, showRoom, appWidgetId)
+                    )
                 }
                 // W5: обрезка >12 строк больше не тихая — хвост виден
                 if (lessons.size > MAX_ROWS) {
@@ -91,7 +94,8 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             lesson: LessonEntity,
             now: Int,
             style: WidgetStyle,
-            showRoom: Boolean
+            showRoom: Boolean,
+            appWidgetId: Int
         ): RemoteViews {
             val row = RemoteViews(context.packageName, R.layout.widget_row_list)
 
@@ -122,12 +126,34 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             )
             row.setTextColor(R.id.row_subject, textColor)
 
+            // N8: кабинет — кликабельный чип (как в NowNext): акцентный цвет + рамка-фон,
+            // тап открывает карту с этим кабинетом БЕЗ маршрута (нет EXTRA_SHOW_ROUTE).
             val room = lesson.roomFirst.takeIf { it.isNotBlank() } ?: lesson.roomSecond
-            row.setTextViewText(
-                R.id.row_room,
-                if (showRoom && room.isNotBlank()) "каб. $room" else ""
-            )
-            row.setTextColor(R.id.row_room, style.subColor)
+            if (showRoom && room.isNotBlank()) {
+                row.setTextViewText(R.id.row_room, "каб. $room")
+                row.setTextColor(R.id.row_room, style.mainColor)
+                row.setInt(R.id.row_room, "setBackgroundResource", R.drawable.bg_widget_room_chip)
+                val d = context.resources.displayMetrics.density
+                val ph = (7 * d + 0.5f).toInt()
+                val pv = (2 * d + 0.5f).toInt()
+                row.setViewPadding(R.id.row_room, ph, pv, ph, pv)
+                val intent = Intent(context, com.politex.MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    .putExtra("EXTRA_OPEN_TAB", "MAP")
+                    .putExtra("EXTRA_ROOM", room)
+                row.setOnClickPendingIntent(
+                    R.id.row_room,
+                    PendingIntent.getActivity(
+                        context,
+                        appWidgetId * 100 + lesson.lessonNumber,
+                        intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                )
+            } else {
+                row.setTextViewText(R.id.row_room, "")
+                row.setTextColor(R.id.row_room, style.subColor)
+            }
 
             return row
         }

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -60,7 +61,10 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -87,13 +91,16 @@ import androidx.compose.ui.unit.sp
 import com.politex.data.model.CollegeMap
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.model.CollegeMapData
+import com.politex.data.model.CollegeRouteFinder
 import com.politex.data.model.FloorMap
+import com.politex.data.model.MapPoint
 import com.politex.data.model.MapRoom
 import com.politex.data.repository.ScheduleRepository
 import com.politex.data.local.entity.LessonEntity
 import com.politex.ui.components.RoomScheduleDialog
 import com.politex.ui.components.currentRoomLessonNumber
 import com.politex.ui.components.filterRoomLessonsForDate
+import com.politex.ui.viewmodel.AppViewModel
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -106,6 +113,11 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.util.bouncyClickable
 import java.util.Calendar
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -123,8 +135,14 @@ fun CollegeMapScreen(
     // Т6: переход к карточке преподавателя из расписания кабинета
     onOpenTeacher: (String) -> Unit = { },
 
-    // Точка входа из расписания (кабинет-«откуда»); маршруты удалены, параметр оставлен для совместимости вызовов
+    // R1: точка входа маршрута из расписания/виджета. НЕ null (включая "") = запрос
+    // пришёл «показать маршрут»: "" — старт от главного входа, "214" — старт от кабинета.
+    // Обычный вход с карты/меню — null, маршрута нет.
     fromRoom: String? = null,
+
+    // R1: явный запрос маршрута (виджет NowNext); дублируется одноразовым флагом
+    // AppUiState.showRouteOnMap, который экран снимает сам (см. LaunchedEffect ниже).
+    showRoute: Boolean = false,
 
     // Выбранный кабинет поднимаем наверх (CollegeScreen.mapRoom): переход в карточку
     // преподавателя уничтожает этот экран вместе с его remember-состоянием, и без
@@ -295,6 +313,68 @@ fun CollegeMapScreen(
         CollegeMap.floorForRoom(target)?.let { floorId = it.id }
     }
 
+    // R3: «тёплый» повторный вход по интенту (тап по виджету при уже открытой карте) —
+    // target следует за initialRoom. Эхо onRoomChanged безопасно: при r == target присваивания нет.
+    LaunchedEffect(initialRoom) {
+        val r = initialRoom?.trim().orEmpty()
+        if (r.isNotEmpty() && r != target) target = r
+    }
+
+    // R1: режим маршрута. Запрос «показать маршрут» приходит одним из трёх путей:
+    //  - параметр showRoute (прямой вызов/тесты);
+    //  - непустой fromRoom (тап по кабинету в расписании: "" = от главного входа);
+    //  - одноразовый флаг AppUiState.showRouteOnMap (виджет NowNext → MainActivity →
+    //    openMap(showRoute=true)); CollegeScreen прокидывает только room/fromRoom, поэтому
+    //    флаг снимаем с VM (activity-scoped, тот же экземпляр) прямо здесь.
+    val appViewModel: AppViewModel = viewModel()
+    var routeFromIntent by remember { mutableStateOf(showRoute) }
+    LaunchedEffect(appViewModel) {
+        appViewModel.uiState.collect { state ->
+            if (state.showRouteOnMap) {
+                routeFromIntent = true
+                appViewModel.consumeShowRouteOnMap()
+            }
+        }
+    }
+    val routeActive = routeFromIntent || fromRoom != null
+
+    // R1: мультиэтажный маршрут (CollegeRouteFinder на реальных данных). Ключи — только
+    // входы маршрута: пан/зум пересчёта не вызывают.
+    val floors = remember(mapData) { CollegeMap.Floor.entries.associate { it.id to mapData.floor(it.id) } }
+    val route = remember(routeActive, target, fromRoom, mapData, floors) {
+        if (!routeActive || target.isBlank()) null else run {
+            val to = findRoomEverywhere(mapData, target) ?: return@run null
+            val from = if (!fromRoom.isNullOrBlank()) {
+                findRoomEverywhere(mapData, fromRoom)
+            } else {
+                mainEntranceRoom(mapData)
+            }
+            from?.let { CollegeRouteFinder.findMultiFloorRoute(it, to, floors) }
+        }
+    }
+    val routePoints = remember(route, floorId) {
+        route?.floorPaths?.firstOrNull { it.floorId == floorId }?.points
+    }
+    val routeFinishHere = remember(route, floorId) {
+        route?.floorPaths?.lastOrNull()?.floorId == floorId
+    }
+    // Плашка «Этаж N: подъем по лестнице у каб. X» — про подъём с ТЕКУЩЕГО этажа
+    val routeBanner = remember(route, floorId, mapData) {
+        val fps = route?.takeIf { it.crossesFloors }?.floorPaths ?: return@remember null
+        val i = fps.indexOfFirst { it.floorId == floorId }
+        if (i < 0 || i >= fps.size - 1) return@remember null
+        val stair = fps[i].points.lastOrNull() ?: return@remember null
+        val near = mapData.floor(fps[i].floorId).rooms
+            .filter { it.number.isNotBlank() && it.status != "nonexistent" }
+            .minByOrNull { (it.x - stair.x) * (it.x - stair.x) + (it.y - stair.y) * (it.y - stair.y) }
+        val where = near?.number?.let { " у каб. $it" } ?: ""
+        "${CollegeMap.Floor.from(fps[i].floorId).title}: подъем по лестнице$where"
+    }
+    // Сегменты маршрута по этажам (точки-кнопки переключения)
+    val routeSegments = remember(route) {
+        route?.takeIf { it.crossesFloors }?.floorPaths?.map { it.floorId } ?: emptyList()
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -406,6 +486,11 @@ fun CollegeMapScreen(
                 searchFailed = false
                 target = room.number
             },
+            routePoints = routePoints,
+            routeFinishHere = routeFinishHere,
+            routeBanner = routeBanner,
+            routeSegments = routeSegments,
+            onSelectRouteSegment = { floorId = it },
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
@@ -1018,6 +1103,13 @@ private fun MapCanvas(
     targetRoom: MapRoom?,
     // O3-d: тап по кабинету = тот же выбор, что ввод в поиск
     onRoomTap: (MapRoom) -> Unit = {},
+    // R1: путь маршрута на ТЕКУЩЕМ этаже (null — этаж без пути), пульс точки финиша,
+    // плашка подъёма по лестнице и сегменты-этажи (точки-кнопки переключения)
+    routePoints: List<MapPoint>? = null,
+    routeFinishHere: Boolean = false,
+    routeBanner: String? = null,
+    routeSegments: List<String> = emptyList(),
+    onSelectRouteSegment: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -1183,6 +1275,19 @@ private fun MapCanvas(
                         minScreenPxPerDp = with(density) { 1.dp.toPx() },
                         baseFontPx = baseFontPx
                     )
+                    // R1: маршрут поверх плана; толщины/размеры компенсируют зум (экранные)
+                    val pts = routePoints
+                    if (pts != null && pts.size >= 2) {
+                        drawRoutePath(
+                            points = pts,
+                            imgW = imgW,
+                            imgH = imgH,
+                            zoom = k,
+                            pxPerDp = with(density) { 1.dp.toPx() },
+                            pulse = pulse,
+                            drawFinish = routeFinishHere
+                        )
+                    }
                 }
             }
         }
@@ -1219,6 +1324,65 @@ private fun MapCanvas(
                     scale.animateTo(z, tween(250))
                     offsetX.animateTo(clampX((viewW - imgW * z) / 2f, z), tween(250))
                     offsetY.animateTo(clampY((viewH - imgH * z) / 2f, z), tween(250))
+                }
+            }
+        }
+
+        // R1: межэтажный маршрут — плашка «Этаж N: подъем по лестнице у каб. X»
+        // и точки-кнопки сегментов (переключение этажа по сегментам пути)
+        if (routeBanner != null || routeSegments.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                routeBanner?.let { text ->
+                    Surface(
+                        shape = RoundedCornerShape(3.dp),
+                        color = ColorBrandFill,
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    ) {
+                        Text(
+                            text = text,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+                if (routeSegments.size > 1) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        routeSegments.forEach { fid ->
+                            val selected = fid == floorId
+                            Surface(
+                                shape = CircleShape,
+                                color = if (selected) ColorBrandFill else ColorBgMain,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (selected) ColorBrandFill else ColorBorderLight
+                                ),
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .bouncyClickable { onSelectRouteSegment(fid) }
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = fid,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        style = TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = if (selected) Color.White else ColorTextBody
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1378,6 +1542,117 @@ internal fun roomNumberFit(raw: Float, median: Float, minReadable: Float): Float
     val base = minOf(median * 1.15f, raw)
     // Минимум читаемости поднимает мелкую цифру, но строго в пределах влезающего размера
     return minOf(maxOf(base, minReadable), raw)
+}
+
+/**
+ * R1: старт маршрута без fromRoom — главный вход 1 этажа (entrance kind="main",
+ * координаты 0.481/0.203). Псевдо-кабинет "100": CollegeMap.floorForRoom("100")
+ * даёт этаж 1, как требует findMultiFloorRoute.
+ */
+private fun mainEntranceRoom(mapData: CollegeMapData): MapRoom? =
+    mapData.floor(CollegeMap.Floor.FIRST.id).entrances
+        .firstOrNull { it.kind == "main" }
+        ?.let {
+            MapRoom(
+                id = "route_start_main_entrance",
+                number = "100",
+                title = "Главный вход",
+                note = "",
+                status = "normal",
+                x = it.x,
+                y = it.y,
+                w = 0.02f,
+                h = 0.02f
+            )
+        }
+
+/** Шаг стрелок направления вдоль пути, в нормализованных единицах плана. */
+private const val ROUTE_ARROW_STEP_NORM = 0.06f
+
+/**
+ * R1: линия маршрута поверх плана. Всё рисуется внутри graphicsLayer (план масштабирован),
+ * поэтому толщины/радиусы умножаются на 1/zoom — на экране они постоянны (~4dp линия).
+ * Стрелки-треугольники направления — каждые [ROUTE_ARROW_STEP_NORM] нормализованных единиц;
+ * пульсирующая точка — на финише (когда текущий этаж несёт конец маршрута).
+ */
+private fun DrawScope.drawRoutePath(
+    points: List<MapPoint>,
+    imgW: Float,
+    imgH: Float,
+    zoom: Float,
+    pxPerDp: Float,
+    pulse: Float,
+    drawFinish: Boolean
+) {
+    if (points.size < 2 || imgW <= 0f || imgH <= 0f) return
+    val unit = 1f / zoom
+    val color = ColorBrandBlue
+    val screen = ArrayList<Offset>(points.size)
+    points.forEach { screen += Offset(it.x * imgW, it.y * imgH) }
+
+    val line = Path().apply {
+        moveTo(screen[0].x, screen[0].y)
+        for (i in 1 until screen.size) lineTo(screen[i].x, screen[i].y)
+    }
+    drawPath(
+        path = line,
+        color = color,
+        style = Stroke(width = 4f * pxPerDp * unit, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    )
+
+    // Стрелки направления: равномерный шаг в нормализованных единицах, «перенос» остатка
+    // между сегментами, угол — по экранным осям (план анизотропен: imgW != imgH).
+    val s = 4.5f * pxPerDp * unit
+    var carry = 0f
+    for (i in 1 until points.size) {
+        val a = points[i - 1]
+        val b = points[i]
+        val dx = b.x - a.x
+        val dy = b.y - a.y
+        val nLen = hypot(dx, dy)
+        if (nLen < 1e-5f) continue
+        val angle = atan2(dy * imgH, dx * imgW)
+        var d = ROUTE_ARROW_STEP_NORM - carry
+        while (d <= nLen) {
+            val t = d / nLen
+            drawArrowHead(
+                center = Offset((a.x + dx * t) * imgW, (a.y + dy * t) * imgH),
+                angle = angle,
+                size = s,
+                color = color
+            )
+            d += ROUTE_ARROW_STEP_NORM
+        }
+        carry = (carry + nLen) % ROUTE_ARROW_STEP_NORM
+    }
+
+    if (drawFinish) {
+        val f = screen.last()
+        drawCircle(
+            color = color.copy(alpha = 0.18f + 0.22f * pulse),
+            radius = (11f + 7f * pulse) * pxPerDp * unit,
+            center = f
+        )
+        drawCircle(color = color, radius = 5f * pxPerDp * unit, center = f)
+        drawCircle(color = Color.White, radius = 2f * pxPerDp * unit, center = f)
+    }
+}
+
+/** Треугольник-стрелка: вершина в направлении [angle] (рад), размер — экранный (уже с unit). */
+private fun DrawScope.drawArrowHead(center: Offset, angle: Float, size: Float, color: Color) {
+    val back = angle + PI.toFloat()
+    val tip = Offset(center.x + cos(angle) * size, center.y + sin(angle) * size)
+    val left = Offset(center.x + cos(back + 0.5f) * size, center.y + sin(back + 0.5f) * size)
+    val right = Offset(center.x + cos(back - 0.5f) * size, center.y + sin(back - 0.5f) * size)
+    drawPath(
+        path = Path().apply {
+            moveTo(tip.x, tip.y)
+            lineTo(left.x, left.y)
+            lineTo(right.x, right.y)
+            close()
+        },
+        color = color
+    )
 }
 
 private fun mapRes(floorId: String): Int = when (floorId) {

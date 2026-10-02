@@ -50,6 +50,13 @@ data class AppUiState(
 
     val pendingFromRoom: String? = null,
 
+    /**
+     * R1/N8: одноразовый флаг «показать маршрут» (виджет NowNext / явный запрос).
+     * Живёт отдельно от pendingRoom: CollegeScreen съедает pendingRoom ДО композиции
+     * карты, поэтому флаг потребляет сам CollegeMapScreen (consumeShowRouteOnMap).
+     */
+    val showRouteOnMap: Boolean = false,
+
     val returnTab: AppTab? = null,
 
     /** Одноразовый запрос автопрокрутки из виджета (см. requestScrollTarget). */
@@ -159,12 +166,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(pendingTeacherName = null) }
     }
 
-    fun openMap(room: String, fromRoom: String? = null) {
+    /**
+     * @param showRoute N8/R1: показать маршрут на карте (виджет NowNext). Одноразовый флаг —
+     * потребляет CollegeMapScreen (consumeShowRouteOnMap), т.к. CollegeScreen съедает
+     * pendingRoom до композиции карты.
+     */
+    fun openMap(room: String, fromRoom: String? = null, showRoute: Boolean = false) {
         _uiState.update {
             it.copy(
                 currentTab = AppTab.COLLEGE,
                 pendingRoom = room,
                 pendingFromRoom = fromRoom,
+                showRouteOnMap = showRoute,
                 returnTab = enterCollegeFrom(it.currentTab) ?: it.returnTab
             )
         }
@@ -172,6 +185,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun consumePendingRoom() {
         _uiState.update { it.copy(pendingRoom = null, pendingFromRoom = null) }
+    }
+
+    /** Одноразовое чтение флага маршрута: true — и сразу сброс (как consumePendingRoom). */
+    fun consumeShowRouteOnMap(): Boolean {
+        val was = _uiState.value.showRouteOnMap
+        if (was) _uiState.update { it.copy(showRouteOnMap = false) }
+        return was
     }
 
     fun restoreReturnTab() {

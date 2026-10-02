@@ -152,6 +152,8 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .putExtra("EXTRA_OPEN_TAB", "SCHEDULE")
                 .putExtra("EXTRA_ROOM", room)
+                // N8: тап по кабинету в NowNext — карта С маршрутом от главного входа
+                .putExtra("EXTRA_SHOW_ROUTE", true)
             views.setOnClickPendingIntent(
                 viewId,
                 PendingIntent.getActivity(
