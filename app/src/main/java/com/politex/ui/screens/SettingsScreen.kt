@@ -422,6 +422,56 @@ fun SettingsScreen(
             }
 
             item { SectionHeader("ОБРАТНАЯ СВЯЗЬ") }
+
+            // W36: тогл «Маршруты по карте» — выкл = кнопки кабинетов открывают
+            // карту без построения пути
+            item {
+                var routesEnabled by remember {
+                    mutableStateOf(
+                        com.politex.widget.WidgetUpdateHelper.getPrefs(context)
+                            .getBoolean("map_routes_enabled", true),
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .testTag("map_routes_toggle"),
+                ) {
+                    Row(
+                        modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Маршруты по карте",
+                            style =
+                            androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = ColorTextTitle,
+                            ),
+                        )
+                        Switch(
+                            checked = routesEnabled,
+                            onCheckedChange = { on ->
+                                routesEnabled = on
+                                com.politex.widget.WidgetUpdateHelper.getPrefs(context)
+                                    .edit()
+                                    .putBoolean("map_routes_enabled", on)
+                                    .apply()
+                            },
+                        )
+                    }
+                }
+            }
+
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),

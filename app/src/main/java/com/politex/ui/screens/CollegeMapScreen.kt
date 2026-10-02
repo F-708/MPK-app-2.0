@@ -270,7 +270,14 @@ fun CollegeMapScreen(
     //  - route=true (виджет NowNext → MainActivity → buildMapRoute(showRoute=true));
     //  - непустой/пустой from (!= null): тап по кабинету в расписании, "" = от главного входа.
     // showRoute читается прямо из аргумента записи backstack'а (одноразовый VM-флаг удалён).
-    val routeActive = showRoute || fromRoom != null
+    // W36: глобальный тогл «Маршруты по карте» (настройки): выкл = кнопки кабинетов
+    // открывают карту без построения пути (сам кабинет выбирается как раньше)
+    val routesEnabled =
+        remember {
+            com.politex.widget.WidgetUpdateHelper.getPrefs(context)
+                .getBoolean("map_routes_enabled", true)
+        }
+    val routeActive = routesEnabled && (showRoute || fromRoom != null)
 
     // R1: мультиэтажный маршрут (CollegeRouteFinder на реальных данных). Ключи — только
     // входы маршрута: пан/зум пересчёта не вызывают.

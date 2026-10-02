@@ -55,22 +55,24 @@ const TEST = `
     tool = 'select';
 
     // (г) прямоугольник-коридор drag'ом -> экспорт
+    // (встроенная карта уже содержит rectCorridors — проверяем ДЕЛЬТУ относительно «до»)
     tool = 'corridor'; corridorMode = 'rect';
     const corrBefore = fd1.corridors.length;
+    const rectBefore = fd1.rectCorridors.length;
     fire('mousedown', sx(0.10), sy(0.60));
     fire('mousemove', sx(0.45), sy(0.64));
     fireWin('mouseup');
-    check('rect-corridor-created', (fd1.rectCorridors||[]).length === 1 && fd1.corridors.length === corrBefore,
-      'rectCorridors=' + (fd1.rectCorridors||[]).length + ' corridors(mem)=' + fd1.corridors.length);
-    const rc = fd1.rectCorridors[0];
+    check('rect-corridor-created', (fd1.rectCorridors||[]).length === rectBefore + 1 && fd1.corridors.length === corrBefore,
+      'rectCorridors=' + (fd1.rectCorridors||[]).length + ' (было ' + rectBefore + ') corridors(mem)=' + fd1.corridors.length);
+    const rc = fd1.rectCorridors[fd1.rectCorridors.length - 1];
     check('rect-corridor-normalized', Math.abs(rc.x-0.275)<0.002 && Math.abs(rc.y-0.62)<0.002 && Math.abs(rc.w-0.35)<0.002,
       'x='+rc.x+' y='+rc.y+' w='+rc.w+' h='+rc.h); // 0.002 = погрешность пиксельного roundtrip экран↔мир
     const out = JSON.parse(serialize());
     const f1out = out.floors['1'];
-    const conv = f1out.corridors.find(c => String(c.id).indexOf('rcc_')===0);
-    check('export-rect-kept-in-json', (f1out.rectCorridors||[]).length === 1);
-    check('export-corridor-added', f1out.corridors.length === corrBefore + 1, 'corridors=' + f1out.corridors.length + ' (before ' + corrBefore + ')');
-    check('export-conv-2points', !!conv && conv.points.length === 2, conv ? JSON.stringify(conv) : 'no rcc_*');
+    const conv = f1out.corridors.find(c => c.id === rc.id);
+    check('export-rect-kept-in-json', (f1out.rectCorridors||[]).length === rectBefore + 1);
+    check('export-corridor-added', f1out.corridors.length === corrBefore + rectBefore + 1, 'corridors=' + f1out.corridors.length + ' (реальных ' + corrBefore + ' + прямоуг. ' + (rectBefore+1) + ')');
+    check('export-conv-2points', !!conv && conv.points.length === 2, conv ? JSON.stringify(conv) : 'нет конверсии');
     // горизонтальный прямоугольник: осевая по центру вдоль длинной стороны, width = короткая
     const okAxis = conv && Math.abs(conv.points[0][1]-rc.y)<2e-4 && Math.abs(conv.points[1][1]-rc.y)<2e-4
       && Math.abs(conv.points[0][0]-(rc.x-rc.w/2))<2e-4 && Math.abs(conv.points[1][0]-(rc.x+rc.w/2))<2e-4;
@@ -84,12 +86,12 @@ const TEST = `
     // (е) снап точки коридора: тащим точку к узлу -> прилипает точно
     curFloor = '2'; draw();
     const f2 = map.floors['2'];
-    // точка без маркеров рядом: cor_v14b754[1] = (0.29,0.27), тащим её к узлу n_st238 (0.29,0.311)
-    const cSnap = f2.corridors.find(c => c.id === 'cor_v14b754');
+    // точка без маркеров рядом: cor_v210322[2] = (0.196,0.267), тащим её к узлу n_st238 (0.29,0.311)
+    const cSnap = f2.corridors.find(c => c.id === 'cor_v210322');
     const nT = f2.nodes.find(n => n.id === 'n_st238');
-    const pStart = cSnap.points[1];
+    const pStart = cSnap.points[2];
     const h0 = hitTest({x:pStart[0], y:pStart[1]});
-    check('snap-hit-corridor-point', !!(h0 && h0.kind==='corridor' && h0.obj===cSnap && h0.pi===1),
+    check('snap-hit-corridor-point', !!(h0 && h0.kind==='corridor' && h0.obj===cSnap && h0.pi===2),
       h0 ? h0.kind+':'+(h0.pi!=null?h0.pi:'') : 'null');
     fire('mousedown', sx(pStart[0]), sy(pStart[1]));
     fire('mousemove', sx(nT.x+0.002), sy(nT.y));
@@ -123,13 +125,14 @@ const TEST = `
     // (ж) реимпорт экспорта: производные corridors сняты, rect — источник истины;
     // после переноса прямоугольника повторный экспорт даёт НОВУЮ осевую
     loadMapText(JSON.stringify(out), 'export-test');
-    check('reimport-strips-derived', map.floors['1'].corridors.length === 0 && map.floors['1'].rectCorridors.length === 1,
-      'corridors=' + map.floors['1'].corridors.length + ' rectCorridors=' + map.floors['1'].rectCorridors.length);
-    map.floors['1'].rectCorridors[0].x = 0.4; // двинули прямоугольник
+    check('reimport-strips-derived', map.floors['1'].corridors.length === corrBefore && map.floors['1'].rectCorridors.length === rectBefore + 1,
+      'corridors=' + map.floors['1'].corridors.length + ' (реальных ' + corrBefore + ') rectCorridors=' + map.floors['1'].rectCorridors.length);
+    const rcM = map.floors['1'].rectCorridors[map.floors['1'].rectCorridors.length - 1];
+    rcM.x = 0.4; // двинули прямоугольник
     const out3 = JSON.parse(serialize());
-    const conv3 = out3.floors['1'].corridors.find(c => String(c.id).indexOf('rcc_')===0);
-    const rc3 = out3.floors['1'].rectCorridors[0];
-    check('reexport-after-move-updated', !!conv3 && out3.floors['1'].corridors.length===1 &&
+    const conv3 = out3.floors['1'].corridors.find(c => c.id === rcM.id);
+    const rc3 = out3.floors['1'].rectCorridors.find(r => r.id === rcM.id);
+    check('reexport-after-move-updated', !!conv3 && out3.floors['1'].corridors.length === corrBefore + rectBefore + 1 &&
       Math.abs(conv3.points[0][0]-(rc3.x-rc3.w/2))<2e-4 && Math.abs(conv3.points[1][0]-(rc3.x+rc3.w/2))<2e-4,
       conv3 ? 'ось=' + JSON.stringify(conv3.points) : 'нет');
 
@@ -146,6 +149,78 @@ const TEST = `
     check('rect-draw-no-fat-stroke', __lwSets.length > 0 && maxLw <= 3/cam.s,
       'max lineWidth=' + maxLw + ' (порог 3/cam.s=' + (3/cam.s).toFixed(3) + ', записей ' + __lwSets.length + ')');
     delete map.floors['9'];
+
+    // (и) W6: связи лестниц между этажами — UI-функции, сериализация, импорт, снятие
+    curFloor = '1'; tool = 'select';
+    const stA = {id:'e_tA', x:0.40, y:0.40, kind:'stairs', dir:90, title:'', usable:true, links:[]};
+    const stB = {id:'e_tB', x:0.42, y:0.42, kind:'stairs', dir:90, title:'', usable:true, nearRoom:'238', links:[]};
+    map.floors['1'].entrances.push(stA);
+    map.floors['2'].entrances.push(stB);
+    sel = {kind:'entrance', obj:stA};
+    renderPanel();                       // панель лестницы со списком связей не падает
+    openLinkDialog(stA); closeLinkDialog(); // мини-диалог выбора этажа не падает
+    startStairPick(stA, '2');            // = нажатие кнопки этажа в диалоге
+    check('stairs-pick-floor', curFloor==='2' && !!stairLinkPick && stairLinkPick.en===stA,
+      'curFloor='+curFloor+' pick='+(stairLinkPick?stairLinkPick.en.id:'null'));
+    fire('mousedown', sx(stB.x), sy(stB.y)); // клик по лестнице B на этаже 2
+    check('stairs-link-created', stA.links.length===1 && stA.links[0]==='e_tB' && stB.links.length===1 && stB.links[0]==='e_tA',
+      'A→'+JSON.stringify(stA.links)+' B→'+JSON.stringify(stB.links));
+    check('stairs-link-return', curFloor==='1' && !!sel && sel.obj===stA, 'curFloor='+curFloor);
+    renderPanel(); draw();               // панель со списком связей + отрисовка подковы/бейджа
+    const fB = findEntranceById('e_tB');
+    check('stairs-find-entrance', !!fB && fB.floor==='2' && fB.en===stB);
+    // сериализация сохраняет links у обеих
+    const outS = JSON.parse(serialize());
+    const aS = outS.floors['1'].entrances.find(e=>e.id==='e_tA');
+    const bS = outS.floors['2'].entrances.find(e=>e.id==='e_tB');
+    check('stairs-links-serialized', !!aS && !!bS && JSON.stringify(aS.links)===JSON.stringify(['e_tB']) && JSON.stringify(bS.links)===JSON.stringify(['e_tA']),
+      'A='+JSON.stringify(aS&&aS.links)+' B='+JSON.stringify(bS&&bS.links));
+    // links не появляется у комнат/коридоров — приложение их полей не ждёт
+    check('stairs-links-only-entrances', !outS.floors['1'].rooms.some(r=>r.links!=null) && !outS.floors['1'].corridors.some(c=>c.links!=null));
+    // импорт читает
+    loadMapText(JSON.stringify(outS), 'stairs-links-test');
+    const aI = map.floors['1'].entrances.find(e=>e.id==='e_tA');
+    const bI = map.floors['2'].entrances.find(e=>e.id==='e_tB');
+    check('stairs-links-imported', !!aI && !!bI && aI.links.length===1 && aI.links[0]==='e_tB' && bI.links[0]==='e_tA');
+    // снятие связи = обработчик ✕ в панели
+    removeStairLink(aI, 'e_tB');
+    check('stairs-link-removed', aI.links.length===0 && bI.links.length===0,
+      'A='+JSON.stringify(aI.links)+' B='+JSON.stringify(bI.links));
+
+    // (к) W6: подписи-инструкции — HINTS/TOOLTIPS на месте, панель/статус-бар не падают
+    check('hints-tools-complete', ['select','room','corridor','node','marker','door','route'].every(t=>typeof HINTS[t]==='string' && HINTS[t].length>20));
+    check('tooltips-tools-complete', ['select','room','corridor','node','marker','door','route'].every(t=>Array.isArray(TOOLTIPS[t]) && TOOLTIPS[t].length>=2));
+    setHint(); renderPanel(); draw();
+
+    // (л) W6: узлы — панель со списком связей, снятие связи ✕, подсветка не падает
+    const f2n = map.floors['2'];
+    const nL = f2n.nodes.find(n=>(n.links||[]).length>0);
+    if(nL){
+      curFloor = '2';
+      sel = {kind:'node', obj:nL};
+      renderPanel(); draw();             // панель со списком связей узла + подсветка
+      const otherId = nL.links[0];
+      const other = f2n.nodes.find(n=>n.id===otherId);
+      removeNodeLink(nL, otherId);       // = ✕ в панели
+      check('node-link-removed', (nL.links||[]).indexOf(otherId)<0 && (other.links||[]).indexOf(nL.id)<0,
+        'A='+JSON.stringify(nL.links)+' B='+JSON.stringify(other.links));
+    } else check('node-link-removed', false, 'нет узлов со связями');
+
+    // (м) W6: снап узла при перетаскивании — тащим узел к двери кабинета, прилипает точно
+    const f2q = map.floors['2'];
+    const roomD = f2q.rooms.find(r=>r.door && f2q.nodes.every(n=>Math.hypot((r.door[0]-n.x)*W,(r.door[1]-n.y)*H) > 20));
+    const nDrag = f2q.nodes.find(n=> roomD && Math.hypot((n.x-roomD.door[0])*W,(n.y-roomD.door[1])*H) > 60
+      && f2q.entrances.every(e=>Math.hypot((n.x-e.x)*W,(n.y-e.y)*H) > 15)
+      && f2q.nodes.every(m=>m===n || Math.hypot((m.x-n.x)*W,(m.y-n.y)*H) > 15));
+    if(roomD && nDrag){
+      curFloor = '2'; sel = {kind:'node', obj:nDrag};
+      fire('mousedown', sx(nDrag.x), sy(nDrag.y));
+      fire('mousemove', sx(roomD.door[0]), sy(roomD.door[1]));
+      const snappedN = [nDrag.x, nDrag.y];
+      check('node-snap-to-door', Math.abs(snappedN[0]-roomD.door[0])<1e-9 && Math.abs(snappedN[1]-roomD.door[1])<1e-9,
+        'node=('+snappedN[0]+','+snappedN[1]+') door='+JSON.stringify(roomD.door)+' magnet='+!!snapMark);
+      fireWin('mouseup');
+    } else check('node-snap-to-door', false, 'нет подходящей пары узел↔дверь');
 
     console.log('INTERACTION OK');
   } catch (e) {
