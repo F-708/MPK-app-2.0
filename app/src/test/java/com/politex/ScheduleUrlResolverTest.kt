@@ -96,4 +96,34 @@ class ScheduleUrlResolverTest {
         assertTrue(pages.any { it.contains("01-10-2026-raspisanie-prepodavatelej-2") })
         assertTrue("чужая дата не должна попасть", pages.none { it.contains("02-10-2026") })
     }
+
+    @Test
+    fun `W1a резолвер пробует URL от probe ПЕРВЫМ, без перебора кандидатов`() {
+        // probe уже нашёл точный адрес документа понедельника (живой, проверен curl 2026-10-02).
+        // visit возвращает true на первом URL — резолвер обязан остановиться, не сходив в сеть.
+        val probeUrl = "https://guo-mpk.by/wp-content/uploads/2026/10/05.10.2026-raspisanie-uchashhihsya.doc"
+        val visited = mutableListOf<String>()
+        kotlinx.coroutines.runBlocking {
+            client.forEachDocumentUrl(cal(2026, 10, 5), preferredUrl = probeUrl) { url ->
+                visited.add(url)
+                true // «документ принят»
+            }
+        }
+        assertEquals(listOf(probeUrl), visited)
+    }
+
+    @Test
+    fun `W1a URL от probe отвергнут - резолвер идёт по обычным кандидатам`() {
+        // preferredUrl не принялся (не скачался/не разобрался) — дальше обычный порядок,
+        // начиная с быстрого пути generateCandidateDirectUrls
+        val probeUrl = "https://guo-mpk.by/wp-content/uploads/2026/10/05.10.2026-raspisanie-uchashhihsya.doc"
+        val visited = mutableListOf<String>()
+        kotlinx.coroutines.runBlocking {
+            client.forEachDocumentUrl(cal(2026, 10, 5), preferredUrl = probeUrl) { url ->
+                visited.add(url)
+                visited.size == 2 // первый (URL от probe) отвергаем, на втором останавливаемся
+            }
+        }
+        assertEquals(listOf(probeUrl, "https://guo-mpk.by/wp-content/uploads/2026/10/05.10.2026-raspisanie-uchashhihsya.docx"), visited)
+    }
 }

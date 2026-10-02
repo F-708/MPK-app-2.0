@@ -164,6 +164,9 @@ class MpkNetworkClient {
 
     /**
      * SCH-01, общий резолвер документов расписания. Порядок:
+     * (0) W1a: [preferredUrl] — URL, который уже валидировал probeDocument, пробуем
+     *     ПЕРВЫМ, без перебора кандидатов (это и убирает «очень долго»: раньше синк
+     *     заново гонял весь водопад, хотя probe уже знал точный адрес);
      * (а) прямые имена (месяц даты и предыдущий, суффиксы коллизий);
      * (б) event-страницы даты — документ внутри в iframe officeapps;
      * (в) портал — event-страницы нужной даты из него, затем прямые .doc-ссылки портала.
@@ -174,6 +177,7 @@ class MpkNetworkClient {
     suspend fun forEachDocumentUrl(
         calendar: Calendar,
         nameBase: String = "raspisanie-uchashhihsya",
+        preferredUrl: String? = null,
         visit: suspend (String) -> Boolean,
     ) = withContext(Dispatchers.IO) {
         val tried = LinkedHashSet<String>()
@@ -185,6 +189,9 @@ class MpkNetworkClient {
             }
             return false
         }
+
+        // W1a: URL от probe — первым; не подошёл (не скачался/не разобрался) — обычный порядок
+        if (preferredUrl != null && phaseUrls(listOf(preferredUrl))) return@withContext
 
         suspend fun phaseEventPages(pages: List<String>): Boolean {
             for (page in pages) {
@@ -226,6 +233,7 @@ class MpkNetworkClient {
         targetGroup: String,
         targetCalendar: Calendar = calculateTargetCalendar(),
         maxRetries: Int = 2,
+        preferredUrl: String? = null,
     ): Result<List<LessonEntity>> = withContext(Dispatchers.IO) {
         val timeFormat = SimpleDateFormat("HH:mm:ss (dd.MM.yyyy)", Locale.ROOT)
         val nowStr = timeFormat.format(Date())
@@ -270,8 +278,8 @@ class MpkNetworkClient {
                 // SCH-01: единый резолвер — прямые имена (текущий+предыдущий месяц,
                 // суффиксы коллизий), затем event-страницы даты (документ в iframe
                 // officeapps), затем прямые ссылки портала. Остановка — на первом
-                // документе, где группа нашлась.
-                forEachDocumentUrl(targetCalendar) { url ->
+                // документе, где группа нашлась. W1a: preferredUrl (от probe) — первым.
+                forEachDocumentUrl(targetCalendar, preferredUrl = preferredUrl) { url ->
                     lastCheckedUrl = url
                     val docBytes = downloadFileBytes(url)
                     if (docBytes == null || docBytes.isEmpty()) {

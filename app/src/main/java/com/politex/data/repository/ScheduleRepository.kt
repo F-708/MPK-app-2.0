@@ -7,8 +7,10 @@ import com.politex.data.local.entity.TeacherLessonEntity
 import com.politex.data.network.MpkNetworkClient
 import com.politex.data.network.MpkScheduleParser
 import com.politex.data.network.ProbeResult
+import com.politex.util.GroupParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -67,6 +69,38 @@ internal fun isStaleDate(
     )
     return cal.timeInMillis < cutoffMs
 }
+
+/**
+ * W1: следующий учебный день после base. Суббота — учебный день только для 1 курса
+ * (GroupInfo.hasSaturdayClasses, как в UI/воркере), воскресенье — не учебный никогда.
+ *
+ * Раньше синк считал «завтра» просто «+1 день минус воскресенье»: в пятницу для групп
+ * 2–4 курсов он качал СУББОТУ, а UI показывал вкладку ПОНЕДЕЛЬНИКА — документ
+ * понедельника (уже опубликованный на сайте и проверенный curl'ом 2026-10-02,
+ * /2026/10/05.10.2026-raspisanie-uchashhihsya.doc, 200 OK) вообще не запрашивался.
+ * Это и был root cause «расписание есть на сайте, а приложение говорит
+ * „ещё не опубликовано“».
+ */
+internal fun nextSchoolDay(
+    base: Calendar,
+    saturdayIsSchoolDay: Boolean,
+): Calendar {
+    val cal = (base.clone() as Calendar)
+    do {
+        cal.add(Calendar.DAY_OF_YEAR, 1)
+    } while (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY ||
+        (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY && !saturdayIsSchoolDay))
+    return cal
+}
+
+/**
+ * W1: суббота учебная для группы? Как в UI (GroupScheduleScreen): 1 курс ИЛИ у группы
+ * уже есть субботние уроки в БД (правило курса — эвристика, фактические данные точнее).
+ */
+internal fun saturdayIsSchoolDayFor(
+    groupName: String,
+    existingSaturdayLessons: Boolean,
+): Boolean = GroupParser.parse(groupName)?.hasSaturdayClasses == true || existingSaturdayLessons
 
 class ScheduleRepository(
     private val lessonDao: LessonDao,
@@ -163,7 +197,14 @@ class ScheduleRepository(
         force: Boolean = false,
     ): Result<Int> = withContext(Dispatchers.IO) {
         val today = Calendar.getInstance()
-        val tomorrow = nextSchoolDay(today)
+        // W1: «завтра» = следующий УЧЕБНЫЙ день группы (суббота только для 1 курса),
+        // ровно как считает UI. Иначе в пятницу для 41О синк качал субботу 03.10,
+        // а вкладка «Завтра» показывала пустой понедельник 05.10.
+        val saturdaySchool = saturdayIsSchoolDayFor(
+            groupName,
+            lessonDao.getAllLessonsForGroup(groupName).first().any { it.dayOfWeek == 6 },
+        )
+        val tomorrow = nextSchoolDay(today, saturdaySchool)
         val todayStr = formatDate(today)
         val tomorrowStr = formatDate(tomorrow)
 
@@ -197,10 +238,13 @@ class ScheduleRepository(
         networkClient.publishStatus(statusMessage = "Проверяю сайт…", isSyncing = true)
         var probeFound = false
         var probeNetworkError = false
+        // W1a: URL, который probe уже нашёл, — синк скачает его ПЕРВЫМ, без водопада
+        val probeFoundUrl = mutableMapOf<String, String>()
         for ((calendar, _) in days) {
-            when (networkClient.probeDocument(calendar)) {
+            when (val probe = networkClient.probeDocument(calendar)) {
                 is ProbeResult.Found -> {
                     probeFound = true
+                    probeFoundUrl[formatDate(calendar)] = probe.url
                     break
                 }
                 ProbeResult.NetworkError -> probeNetworkError = true
@@ -219,7 +263,8 @@ class ScheduleRepository(
         if (useCatalog) {
             for ((calendar, _) in days) {
                 val date = formatDate(calendar)
-                runCatching { fetchAllGroupsForDate(calendar, date, allGroups) { documentFound = documentFound || it } }
+                // W1a: probe уже знает URL этого дня — качаем его первым
+                runCatching { fetchAllGroupsForDate(calendar, date, allGroups, probeFoundUrl[date]) { documentFound = documentFound || it } }
                     .onSuccess { dayLessons ->
                         // F1: частичный/чужой документ под тем же именем не принимаем —
                         // replaceForDate затрёт полные данные других групп
@@ -230,13 +275,16 @@ class ScheduleRepository(
         } else {
             if (needTomorrow) {
                 networkClient
-                    .fetchScheduleForGroup(groupName, tomorrow)
+                    // W1a: явная дата + URL от probe первым
+                    .fetchScheduleForGroup(groupName, tomorrow, preferredUrl = probeFoundUrl[tomorrowStr])
                     .onSuccess { fetched += it }
                     .onFailure { fetchFailed = true }
             }
             if (needToday) {
                 networkClient
-                    .fetchScheduleForGroup(groupName)
+                    // W1: явный today — прежде календарь по умолчанию (calculateTargetCalendar)
+                    // в пятницу вечером уходил на понедельник, а не на запрошенный день
+                    .fetchScheduleForGroup(groupName, today, preferredUrl = probeFoundUrl[todayStr])
                     .onSuccess { fetched += it }
                     .onFailure { fetchFailed = true }
             }
@@ -252,13 +300,13 @@ class ScheduleRepository(
         if (distinct.none { it.groupName == groupName } && documentFound) {
             if (needTomorrow) {
                 networkClient
-                    .fetchScheduleForGroup(groupName, tomorrow)
+                    .fetchScheduleForGroup(groupName, tomorrow, preferredUrl = probeFoundUrl[tomorrowStr])
                     .onSuccess { fetched += it }
                     .onFailure { fetchFailed = true }
             }
             if (needToday) {
                 networkClient
-                    .fetchScheduleForGroup(groupName)
+                    .fetchScheduleForGroup(groupName, today, preferredUrl = probeFoundUrl[todayStr])
                     .onSuccess { fetched += it }
                     .onFailure { fetchFailed = true }
             }
@@ -348,19 +396,23 @@ class ScheduleRepository(
      * такие есть в фикстурах проекта), а предсказуемые URL в этом случае дают 404.
      * Без фолбэка синк молча решил бы, что расписание не опубликовано.
      *
+     * W1a: [preferredUrl] — URL, который уже нашёл probe; резолвер пробует его первым,
+     * остальные кандидаты не перебираются, пока он не отвергнут.
+     *
      * @param documentFound отличает «документа нет на сайте» от «документ есть, но не разобрался»
      */
     private suspend fun fetchAllGroupsForDate(
         calendar: Calendar,
         date: String,
         candidateGroups: List<String>,
+        preferredUrl: String? = null,
         documentFound: (Boolean) -> Unit = {},
     ): List<LessonEntity> {
         // SCH-01: единый резолвер — прямые имена (месяц даты и предыдущий, суффиксы
         // коллизий «-1»/«-2»), event-страницы даты (документ в iframe officeapps),
         // затем ссылки портала. Остановка на первом документе, который разобрался.
         var found: List<LessonEntity> = emptyList()
-        networkClient.forEachDocumentUrl(calendar) { url ->
+        networkClient.forEachDocumentUrl(calendar, preferredUrl = preferredUrl) { url ->
             val bytes = networkClient.downloadFileBytes(url)
             if (bytes == null || bytes.isEmpty()) return@forEachDocumentUrl false
             documentFound(true)
@@ -530,13 +582,7 @@ class ScheduleRepository(
         }
     }
 
-    private fun nextSchoolDay(base: Calendar = Calendar.getInstance()): Calendar {
-        val cal = (base.clone() as Calendar)
-        do {
-            cal.add(Calendar.DAY_OF_YEAR, 1)
-        } while (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
-        return cal
-    }
+    // W1: nextSchoolDay теперь единая internal-функция файла — с субботой по курсу (см. выше)
 
     private fun formatDate(calendar: Calendar): String = "%02d.%02d.%04d".format(
         calendar.get(Calendar.DAY_OF_MONTH),
