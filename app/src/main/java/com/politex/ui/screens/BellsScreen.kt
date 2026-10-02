@@ -95,7 +95,8 @@ fun BellsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val now = remember { Calendar.getInstance() }
+    // SUI-01-паттерн и здесь: remember{Calendar.getInstance()} застревал на дне открытия
+    val now = com.politex.ui.util.rememberToday()
     val todayDow = remember {
         when (now.get(Calendar.DAY_OF_WEEK)) {
             Calendar.MONDAY -> 1
@@ -167,6 +168,13 @@ fun BellsScreen(
     // (или к последнему, если уроки уже закончились). Одноразово.
     val density = androidx.compose.ui.platform.LocalDensity.current
     var viewportPx by remember { mutableStateOf(0) }
+    // N17: кратковременная подсветка текущего звонка после входа из виджета — фидбэк глазу
+    var flashCurrent by remember { mutableStateOf(false) }
+    LaunchedEffect(flashCurrent) {
+        if (!flashCurrent) return@LaunchedEffect
+        delay(1600)
+        flashCurrent = false
+    }
     LaunchedEffect(scrollToCurrentRequested, activeSlot, rows) {
         if (!scrollToCurrentRequested) return@LaunchedEffect
         // Ждём первого лэйаута, иначе вьюпорт/maxValue ещё 0 и прокрутка невозможна
@@ -186,6 +194,7 @@ fun BellsScreen(
                 val scrollTo = (posPx + cardH / 2 - viewportPx / 2).toInt()
                 scrollState.animateScrollTo(scrollTo.coerceIn(0, scrollState.maxValue))
             }
+            flashCurrent = true
         }
         onScrollToCurrentConsumed()
     }
@@ -321,6 +330,7 @@ fun BellsScreen(
                         LessonBellCard(
                             item = row.item,
                             isActive = activeSlot == row.item,
+                            highlight = flashCurrent && activeSlot == row.item,
                             railTopColor = railColor(row.item.startMinutes, blueEndMinutes, isTodaySelected),
                             railBottomColor = railColor(row.item.endMinutes, blueEndMinutes, isTodaySelected),
                             inBlue = row.item.startMinutes < (blueEndMinutes ?: -1),
@@ -462,9 +472,16 @@ private fun LessonBellCard(
     railTopColor: Color,
     railBottomColor: Color,
     inBlue: Boolean,
-    dotProgress: Float?
+    dotProgress: Float?,
+    highlight: Boolean = false
 ) {
     val tickColor = if (inBlue) RAIL_BLUE else RAIL_GRAY_SOFT
+    // N17: вспышка-подсветка текущей строки при входе из виджета (~1.6s, гаснет)
+    val flashAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (highlight) 0.16f else 0f,
+        animationSpec = tween(durationMillis = if (highlight) 150 else 900),
+        label = "BellFlash"
+    )
     val pulseRadius by if (dotProgress != null) {
         rememberInfiniteTransition(label = "DotPulse").animateFloat(
             initialValue = 4.5f,
@@ -491,6 +508,13 @@ private fun LessonBellCard(
         modifier = Modifier
             .fillMaxWidth()
             .drawBehind {
+                // N17: фоновая вспышка подсветки (flashAlpha гаснет до 0)
+                if (flashAlpha > 0.005f) {
+                    drawRect(
+                        color = ColorActiveBlue.copy(alpha = flashAlpha),
+                        size = size
+                    )
+                }
                 val cx = size.width + 10.dp.toPx()
                 val tickLen = 5.dp.toPx()
                 // N12: рельс продлён на зазор между строками — полоса времени сплошная,

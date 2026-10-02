@@ -98,6 +98,18 @@ class RealMapMultiFloorRouteTest {
     }
 
     @Test
+    fun `одноэтажные маршруты между крыльями строятся через перемычки коридоров`() {
+        // 1 этаж: левое крыло (136/147) и центр (131/115) соединены коридором cor_v1hall
+        val r1 = CollegeRouteFinder.findMultiFloorRoute(room("136"), room("115"), floorsMap())
+        assertNotNull("136→115 (разные крылья 1 эт) должен строиться", r1)
+        assertEquals(1, r1!!.floorPaths.size)
+        // 3-4: левое крыло (335) и крыло 4 этажа (401) соединены cor_v34bridge+cor_v4wing
+        val r2 = CollegeRouteFinder.findMultiFloorRoute(room("335"), room("401"), floorsMap())
+        assertNotNull("335→401 должен строиться", r2)
+        assertEquals(1, r2!!.floorPaths.size)
+    }
+
+    @Test
     fun `главный вход достижим как точка маршрута`() {
         val f1 = mapData.floor("1")
         val main = f1.entrances.firstOrNull { it.kind == "main" }
