@@ -13,10 +13,10 @@ class TeacherInsights(
     private val bySurname: Map<String, List<Teacher>> =
         teachers.groupBy { surnameOf(it.name) }.filterKeys { it.isNotBlank() }
 
-    private val matched: Map<String, TeacherFacts> = buildFacts(lessons)
-
-    /** Погашение шильдика «Ведёт у вас» — столько дней без датированных уроков (W28). */
+    /** Порог погашения W28 — ВЫШЕ matched: buildFacts читает его при инициализации. */
     private val staleMillis = STALE_DAYS * 24L * 60L * 60L * 1000L
+
+    private val matched: Map<String, TeacherFacts> = buildFacts(lessons)
 
     val activeNames: Set<String> =
         matched.filterValues { it.activeNow }.keys
@@ -103,13 +103,18 @@ class TeacherInsights(
         }
     }
 
-    /** dd.MM.yyyy → epoch millis; null при кривом формате (lenient=false). */
-    private fun parseDotDateMillis(date: String): Long? =
-        runCatching {
-            java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT).apply {
+    /** Дата урока → epoch millis; оба встречающихся формата: dd.MM.yyyy и yyyy-MM-dd (→ yyyy.MM.dd). null при кривом. */
+    private fun parseDotDateMillis(date: String): Long? {
+        val parts = date.split(".")
+        if (parts.size != 3) return null
+        val pattern =
+            if (parts[0].length == 4) "yyyy.MM.dd" else "dd.MM.yyyy"
+        return runCatching {
+            java.text.SimpleDateFormat(pattern, java.util.Locale.ROOT).apply {
                 isLenient = false
             }.parse(date)?.time
         }.getOrNull()
+    }
 
     fun matchTeacher(rawName: String): Teacher? {
         val clean = rawName.trim().trim(',', '/', '-', ' ')
