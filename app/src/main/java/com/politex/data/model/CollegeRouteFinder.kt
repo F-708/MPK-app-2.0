@@ -23,8 +23,18 @@ object CollegeRouteFinder {
     private const val STAIR_PAIR_RADIUS = 0.06f
 
     /**
-     * Граф этажа: вершины = узлы(nodes) + точки коридоров; рёбра = links узлов, соседние точки
-     * коридоров, и концы коридоров, примыкающие к узлам в радиусе JOIN_RADIUS.
+     * Радиус «проекции на коридор»: вершина (узел, конец коридора, лестница, комната) соединяется
+     * с ближайшей точкой ЛЮБОГО сегмента ЛЮБОГО коридора, если перпендикуляр короче этого радиуса.
+     * Коридоры на плане пересекаются крест-накрест без общих точек (разметка рисовалась вручную),
+     * без проекции граф распадался на 2-5 компонент на этаж. Замер по реальным данным: 0.05
+     * связывает 2 этаж полностью, 1 и 3-4 — до 2 компонент.
+     */
+    private const val PROJECTION_RADIUS = 0.05f
+
+    /**
+     * Граф этажа: вершины = узлы(nodes) + точки коридоров + проекции; рёбра = links узлов,
+     * соседние точки коридоров, концы коридоров к узлам в радиусе JOIN_RADIUS, и ПРОЕКЦИИ
+     * вершин на сегменты коридоров в радиусе PROJECTION_RADIUS (склейка пересечений).
      */
     private fun buildGraph(floor: FloorMap): Pair<List<Vertex>, List<List<Pair<Int, Float>>>> {
         val vertices = mutableListOf<Vertex>()
@@ -53,10 +63,14 @@ object CollegeRouteFinder {
             n.links.forEach { other -> nodeIndex[other]?.let { link(a, it) } }
         }
 
+        val segments = mutableListOf<Pair<Vertex, Vertex>>()
         floor.corridors.forEach { c ->
             if (c.points.size < 2) return@forEach
             val idx = c.points.map { p -> addVertex(p.x, p.y) }
-            for (i in 1 until idx.size) link(idx[i - 1], idx[i])
+            for (i in 1 until idx.size) {
+                link(idx[i - 1], idx[i])
+                segments.add(vertices[idx[i - 1]] to vertices[idx[i]])
+            }
             listOf(idx.first(), idx.last()).forEach { end ->
                 var best = -1
                 var bestD = JOIN_RADIUS
@@ -67,7 +81,36 @@ object CollegeRouteFinder {
                 if (best >= 0) link(end, best)
             }
         }
+
+        // Проекционная склейка: каждая существующая вершина соединяется с ближайшей точкой
+        // каждого сегмента, если перпендикуляр ≤ PROJECTION_RADIUS. Снимок списка вершин
+        // фиксируется до цикла — добавленные проекции сами не проецируются (иначе O(n^3)).
+        val snapshot = vertices.toList()
+        for (v in snapshot) {
+            for ((a, b) in segments) {
+                val q = projectOnSegment(v, a, b) ?: continue
+                if (dist(v, q) < 1e-4f) continue // уже на сегменте
+                val qv = addVertex(q.x, q.y)
+                link(vertices.indexOfFirst { it === v }, qv)
+                // проекция обязана лежать НА сегменте: addVertex её задедупит с точкой
+                // коридора только при точном совпадении; иначе соединим с концами сегмента
+                val ai = vertices.indexOf(a); val bi = vertices.indexOf(b)
+                if (ai >= 0 && vertices[ai] !== q) link(qv, ai)
+                if (bi >= 0 && vertices[bi] !== q) link(qv, bi)
+            }
+        }
         return vertices to adjacency
+    }
+
+    /** Проекция точки p на отрезок ab; null если перпендикуляр длиннее PROJECTION_RADIUS. */
+    private fun projectOnSegment(p: Vertex, a: Vertex, b: Vertex): Vertex? {
+        val dx = b.x - a.x; val dy = b.y - a.y
+        val len2 = dx * dx + dy * dy
+        if (len2 == 0f) return null
+        val t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2
+        val tc = if (t < 0f) 0f else if (t > 1f) 1f else t
+        val q = Vertex(a.x + tc * dx, a.y + tc * dy)
+        return if (dist(p, q) <= PROJECTION_RADIUS) q else null
     }
 
     /** Путь по графу одного этажа от точки (ax,ay) до (bx,by): последовательность точек графа (без концов). */
@@ -99,18 +142,28 @@ object CollegeRouteFinder {
     }
 
     /**
-     * Мультиэтажный маршрут. Если кабинеты на одном этаже — обычный [findRoute]. Иначе идёт по
-     * цепочке этажей (порядок из [CollegeMap.Floor]) и на каждой границе выбирает ОБЩУЮ лестницу
-     * (пригодную по [isUsableStair]) на обоих этажах, стоящую рядом (STAIR_PAIR_RADIUS), ближайшую
-     * к текущей позиции — greedy, глобально-оптимальный перебор лестниц не нужен на реальном плане.
+     * Подъём лестницы — фиксированная «стоимость» межэтажного перехода. Реальные координаты
+     * сопряжённых лестниц почти совпадают (0.007–0.041), поэтому без стоимости алгоритм мог бы
+     * «дёргаться» между этажами; штраф делает переход осмысленным, но не запрещает его.
+     */
+    private const val STAIR_COST = 0.25f
+
+    /**
+     * Мультиэтажный маршрут: ЕДИНЫЙ граф по всем этажам цепочки + межэтажные рёбра лестниц,
+     * один Дейкстра. Greedy-выбор лестницы на каждом этаже (первая версия) ломался на
+     * фрагментированном графе: комната могла быть связна с другой лестницей, не выбранной.
+     * Глобальный поиск выбирает лестницы автоматически по кратчайшей стоимости.
      *
-     * @param isUsableStair фильтр пригодных лестниц (заказчик: аварийными не пользуемся). По умолчанию все.
+     * Лестницы: только [isUsableStair] (по умолчанию поле usable — список заказчика);
+     * сопряжение между соседними этажами — по близости координат (≤ STAIR_PAIR_RADIUS).
+     *
+     * @param isUsableStair фильтр пригодных лестниц (заказчик: аварийными не пользуемся).
      */
     fun findMultiFloorRoute(
         from: MapRoom,
         to: MapRoom,
         floors: Map<String, FloorMap>,
-        isUsableStair: (MapEntrance) -> Boolean = { true }
+        isUsableStair: (MapEntrance) -> Boolean = { it.usable }
     ): MultiFloorRoute? {
         val fromId = CollegeMap.floorForRoom(from.number)?.id ?: return null
         val toId = CollegeMap.floorForRoom(to.number)?.id ?: return null
@@ -126,46 +179,121 @@ object CollegeRouteFinder {
         if (fi < 0 || ti < 0) return null
         val chain = if (fi < ti) order.subList(fi, ti + 1) else order.subList(ti, fi + 1).reversed()
 
-        fun stairs(fid: String) = floors[fid]?.entrances
-            ?.filter { it.kind == "stairs" && isUsableStair(it) } ?: emptyList()
-
-        val result = mutableListOf<FloorPath>()
-        var total = 0f
-        // Текущая точка на текущем этаже: старт — центр кабинета from
-        var cx = from.x; var cy = from.y
-        for (i in 0 until chain.size) {
-            val fid = chain[i]
-            val floor = floors[fid] ?: return null
-            if (i == chain.size - 1) {
-                // Последний этаж: путь от текущей точки до кабинета to
-                val seg = floorPath(floor, cx, cy, to.x, to.y) ?: return null
-                val pts = mutableListOf(MapPoint(cx, cy)) + seg + MapPoint(to.x, to.y)
-                result.add(FloorPath(fid, pts))
-                for (k in 1 until seg.size) total += distP(seg[k - 1], seg[k])
-                break
+        // --- Единый граф: вершины помечены этажом ---
+        val gVerts = mutableListOf<Triple<String, Float, Float>>() // (floorId, x, y)
+        val gAdj = mutableListOf<MutableList<Pair<Int, Float>>>()
+        fun addV(fid: String, x: Float, y: Float): Int {
+            gVerts.forEachIndexed { i, v ->
+                if (v.first == fid && Math.abs(v.second - x) < 1e-4f && Math.abs(v.third - y) < 1e-4f) return i
             }
-            // Ищем общую лестницу: на этом этаже и на следующем, стоящую рядом
-            val nextId = chain[i + 1]
-            val here = stairs(fid)
-            val there = stairs(nextId)
-            var bestHere: MapEntrance? = null
-            var bestThere: MapEntrance? = null
-            var bestCost = Float.MAX_VALUE
-            for (a in here) for (b in there) {
-                if (distE(a, b) > STAIR_PAIR_RADIUS) continue
-                val cost = hypot(cx - a.x, cy - a.y)
-                if (cost < bestCost) { bestCost = cost; bestHere = a; bestThere = b }
-            }
-            val stairA = bestHere ?: return null
-            val stairB = bestThere ?: return null
-            val seg = floorPath(floor, cx, cy, stairA.x, stairA.y) ?: return null
-            val pts = mutableListOf(MapPoint(cx, cy)) + seg + MapPoint(stairA.x, stairA.y)
-            result.add(FloorPath(fid, pts))
-            for (k in 1 until seg.size) total += distP(seg[k - 1], seg[k])
-            // Переход на следующий этаж: продолжаем от сопряжённой лестницы
-            cx = stairB.x; cy = stairB.y
+            gVerts.add(Triple(fid, x, y)); gAdj.add(mutableListOf())
+            return gVerts.size - 1
         }
+        fun linkV(a: Int, b: Int, w: Float? = null) {
+            if (a == b) return
+            val d = w ?: hypot(gVerts[a].second - gVerts[b].second, gVerts[a].third - gVerts[b].third)
+            gAdj[a].add(b to d); gAdj[b].add(a to d)
+        }
+
+        // Этажные подграфы (nodes + corridors, как в buildGraph) и индексы лестниц
+        val stairByFloor = mutableMapOf<Int, MutableList<Int>>()
+        var startV = -1
+        var finishV = -1
+        chain.forEachIndexed { pos, fid ->
+            val floor = floors[fid] ?: return null
+            val (verts, adj) = buildGraph(floor)
+            val base = gVerts.size
+            verts.forEach { (x, y) -> addV(fid, x, y) }
+            adj.forEachIndexed { i, edges -> edges.forEach { (j, d) -> if (j > i) linkV(base + i, base + j, d) } }
+
+            fun snap(x: Float, y: Float): Int {
+                // Ближайшая вершина этажного графа к точке (лестница/комната)
+                var best = -1; var bd = Float.MAX_VALUE
+                verts.forEachIndexed { i, v ->
+                    val d = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y)
+                    if (d < bd) { bd = d; best = i }
+                }
+                return if (best < 0) -1 else base + best
+            }
+
+            // Лестницы этажа → вершины графа (ребро до ближайшей вершины коридора/узла)
+            floor.entrances.filter { it.kind == "stairs" && isUsableStair(it) }.forEach { e ->
+                val sv = addV(fid, e.x, e.y)
+                val near = snap(e.x, e.y)
+                if (near >= 0) linkV(sv, near)
+                stairByFloor.getOrPut(pos) { mutableListOf() }.add(sv)
+            }
+            // Комнаты старта/финиша на своих этажах — тоже вершины, связанные с графом этажа.
+            // ponytail: привязка к БЛИЖАЙШЕЙ вершине без ограничения радиуса — для дальних комнат
+            // (~0.3 от коридора, wing'ы без vision-доразметки) линия подхода будет диагональной;
+            // когда vision-разметка f1/f3-4 добавит коридоры, диагонали исчезнут сами.
+            if (fid == fromId) { val v = addV(fid, from.x, from.y); val n = snap(from.x, from.y); if (n >= 0) linkV(v, n); startV = v }
+            if (fid == toId) { val v = addV(fid, to.x, to.y); val n = snap(to.x, to.y); if (n >= 0) linkV(v, n); finishV = v }
+        }
+
+        // Межэтажные рёбра: сопряжённые лестницы соседних этажей (≤ STAIR_PAIR_RADIUS)
+        for (pos in 0 until chain.size - 1) {
+            val here = stairByFloor[pos] ?: continue
+            val there = stairByFloor[pos + 1] ?: continue
+            for (a in here) for (b in there) {
+                val va = gVerts[a]; val vb = gVerts[b]
+                if (hypot(va.second - vb.second, va.third - vb.third) <= STAIR_PAIR_RADIUS) {
+                    linkV(a, b, STAIR_COST)
+                }
+            }
+        }
+        if (gVerts.isEmpty()) return null
+
+        val path = shortestPathGlobal(gAdj, gVerts.size, startV, finishV) ?: return null
+
+        // Разбиение пути на сегменты по этажам (для послойной отрисовки)
+        val result = mutableListOf<FloorPath>()
+        var curFloor = gVerts[path.first()].first
+        var cur = mutableListOf<MapPoint>()
+        fun flush() { if (cur.size >= 1) result.add(FloorPath(curFloor, cur.toList())); cur = mutableListOf() }
+        for (vi in path) {
+            val v = gVerts[vi]
+            if (v.first != curFloor) { flush(); curFloor = v.first }
+            cur.add(MapPoint(v.second, v.third))
+        }
+        flush()
+        // Начало/конец — центры кабинетов (могут отличаться от snapped-вершин)
+        if (result.isNotEmpty()) {
+            val first = result[0]
+            if (first.points.isEmpty() || distP(first.points.first(), MapPoint(from.x, from.y)) > 1e-4f)
+                result[0] = first.copy(points = listOf(MapPoint(from.x, from.y)) + first.points)
+            val last = result[result.size - 1]
+            if (last.points.isEmpty() || distP(last.points.last(), MapPoint(to.x, to.y)) > 1e-4f)
+                result[result.size - 1] = last.copy(points = last.points + MapPoint(to.x, to.y))
+        }
+        var total = 0f
+        result.forEach { fp -> for (i in 1 until fp.points.size) total += distP(fp.points[i - 1], fp.points[i]) }
+        total += STAIR_COST * (result.size - 1) // межэтажные переходы учтены в стоимости, не в геометрии
         return MultiFloorRoute(result, total)
+    }
+
+    private fun shortestPathGlobal(
+        adjacency: List<List<Pair<Int, Float>>>, n: Int, start: Int, finish: Int
+    ): List<Int>? {
+        if (start < 0 || finish < 0 || start >= n || finish >= n) return null
+        val best = FloatArray(n) { Float.MAX_VALUE }
+        val prev = IntArray(n) { -1 }
+        val used = BooleanArray(n)
+        best[start] = 0f
+        repeat(n) {
+            var v = -1; var bestD = Float.MAX_VALUE
+            for (i in 0 until n) if (!used[i] && best[i] < bestD) { bestD = best[i]; v = i }
+            if (v < 0) return@repeat
+            used[v] = true
+            adjacency[v].forEach { (to, w) ->
+                if (best[v] + w < best[to]) { best[to] = best[v] + w; prev[to] = v }
+            }
+        }
+        if (best[finish] == Float.MAX_VALUE) return null
+        val path = ArrayDeque<Int>()
+        var cur = finish
+        while (cur >= 0) { path.addFirst(cur); if (cur == start) break; cur = prev[cur] }
+        return if (path.first() == start) path.toList() else null
     }
 
     private fun hypot(dx: Float, dy: Float) = Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()

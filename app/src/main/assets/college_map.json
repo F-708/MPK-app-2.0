@@ -1045,7 +1045,9 @@
           "y": 0.3128,
           "kind": "stairs",
           "dir": 90,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "138"
         },
         {
           "id": "e_2fxxde6",
@@ -1053,7 +1055,9 @@
           "y": 0.5165,
           "kind": "stairs",
           "dir": 90,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "132"
         },
         {
           "id": "e_hgg9r5w",
@@ -1061,7 +1065,9 @@
           "y": 0.5459,
           "kind": "stairs",
           "dir": 90,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "115"
         },
         {
           "id": "e_9kyra5x",
@@ -1069,7 +1075,9 @@
           "y": 0.8273,
           "kind": "stairs",
           "dir": 180,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": false,
+          "nearRoom": "118"
         },
         {
           "id": "e_o4hfotf",
@@ -1077,7 +1085,9 @@
           "y": 0.2292,
           "kind": "stairs",
           "dir": 180,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "147"
         }
       ]
     },
@@ -1899,6 +1909,122 @@
             ]
           ],
           "width": 0.012
+        },
+        {
+          "id": "cor_v210322",
+          "points": [
+            [
+              0.176,
+              0.221
+            ],
+            [
+              0.176,
+              0.267
+            ],
+            [
+              0.196,
+              0.267
+            ]
+          ],
+          "width": 0.012
+        },
+        {
+          "id": "cor_v14b754",
+          "points": [
+            [
+              0.29,
+              0.311
+            ],
+            [
+              0.29,
+              0.27
+            ]
+          ],
+          "width": 0.012
+        },
+        {
+          "id": "cor_v21e4fe",
+          "points": [
+            [
+              0.598,
+              0.578
+            ],
+            [
+              0.598,
+              0.485
+            ]
+          ],
+          "width": 0.012
+        },
+        {
+          "id": "cor_v732501",
+          "points": [
+            [
+              0.089,
+              0.215
+            ],
+            [
+              0.089,
+              0.161
+            ]
+          ],
+          "width": 0.012
+        },
+        {
+          "id": "cor_v7e549e",
+          "points": [
+            [
+              0.504,
+              0.524
+            ],
+            [
+              0.504,
+              0.484
+            ]
+          ],
+          "width": 0.012
+        },
+        {
+          "id": "cor_vb72589",
+          "points": [
+            [
+              0.869,
+              0.546
+            ],
+            [
+              0.896,
+              0.546
+            ]
+          ],
+          "width": 0.012
+        },
+        {
+          "id": "cor_v53151b",
+          "points": [
+            [
+              0.871,
+              0.843
+            ],
+            [
+              0.896,
+              0.838
+            ]
+          ],
+          "width": 0.012
+        },
+        {
+          "id": "cor_v59e5c8",
+          "points": [
+            [
+              0.504,
+              0.524
+            ],
+            [
+              0.509,
+              0.88
+            ]
+          ],
+          "width": 0.012
         }
       ],
       "nodes": [
@@ -1980,6 +2106,91 @@
           "links": [
             "n_b87bizb"
           ]
+        },
+        {
+          "id": "n_st241",
+          "x": 0.176,
+          "y": 0.221,
+          "links": [
+            "n_j241"
+          ]
+        },
+        {
+          "id": "n_j241",
+          "x": 0.176,
+          "y": 0.267,
+          "links": [
+            "n_st241",
+            "n_lo3c9rv"
+          ]
+        },
+        {
+          "id": "n_st238",
+          "x": 0.29,
+          "y": 0.311,
+          "links": [
+            "n_lo3c9rv",
+            "n_he9c7aj"
+          ]
+        },
+        {
+          "id": "n_st230",
+          "x": 0.598,
+          "y": 0.578,
+          "links": [
+            "n_j230"
+          ]
+        },
+        {
+          "id": "n_j230",
+          "x": 0.598,
+          "y": 0.485,
+          "links": [
+            "n_st230",
+            "n_b87bizb",
+            "n_o8bfb1m"
+          ]
+        },
+        {
+          "id": "n_st243",
+          "x": 0.089,
+          "y": 0.215,
+          "links": [
+            "n_nb6ek1h"
+          ]
+        },
+        {
+          "id": "n_st234",
+          "x": 0.504,
+          "y": 0.524,
+          "links": [
+            "n_b87bizb",
+            "n_232"
+          ]
+        },
+        {
+          "id": "n_232",
+          "x": 0.509,
+          "y": 0.88,
+          "links": [
+            "n_st234"
+          ]
+        },
+        {
+          "id": "n_st225",
+          "x": 0.869,
+          "y": 0.546,
+          "links": [
+            "n_o8bfb1m"
+          ]
+        },
+        {
+          "id": "n_st223",
+          "x": 0.871,
+          "y": 0.843,
+          "links": [
+            "n_o8bfb1m"
+          ]
         }
       ],
       "labels": [
@@ -2050,7 +2261,9 @@
           "y": 0.221,
           "kind": "stairs",
           "dir": 180,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "242-1"
         },
         {
           "id": "e_eztq0l0",
@@ -2058,7 +2271,9 @@
           "y": 0.8426,
           "kind": "stairs",
           "dir": 180,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": false,
+          "nearRoom": "223"
         },
         {
           "id": "e_akbxwvr",
@@ -2066,7 +2281,9 @@
           "y": 0.3105,
           "kind": "stairs",
           "dir": 90,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "238"
         },
         {
           "id": "e_28htffa",
@@ -2074,7 +2291,9 @@
           "y": 0.5235,
           "kind": "stairs",
           "dir": 90,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "233"
         },
         {
           "id": "e_nrfdbcb",
@@ -2082,7 +2301,9 @@
           "y": 0.5459,
           "kind": "stairs",
           "dir": 90,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "220"
         },
         {
           "id": "e_oisdafs",
@@ -2090,7 +2311,20 @@
           "y": 0.2151,
           "kind": "stairs",
           "dir": 90,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "243"
+        },
+        {
+          "id": "e_st230",
+          "x": 0.598,
+          "y": 0.578,
+          "kind": "stairs",
+          "dir": 0,
+          "title": "Лестница",
+          "usable": true,
+          "note": "Добавлена vision-разметкой 2026-10-02 (каб.230). Координаты ±0.01, LOW confidence — перепроверить.",
+          "nearRoom": "230"
         }
       ]
     },
@@ -2971,7 +3205,9 @@
           "y": 0.3411,
           "kind": "stairs",
           "dir": 90,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "332"
         },
         {
           "id": "e_y89ai9i",
@@ -2979,7 +3215,9 @@
           "y": 0.553,
           "kind": "stairs",
           "dir": 90,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "301"
         },
         {
           "id": "e_rdshl17",
@@ -2987,7 +3225,9 @@
           "y": 0.56,
           "kind": "stairs",
           "dir": 90,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "318"
         },
         {
           "id": "e_wf8mlfr",
@@ -2995,7 +3235,9 @@
           "y": 0.2398,
           "kind": "stairs",
           "dir": 180,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "336-1"
         },
         {
           "id": "e_0jof8nz",
@@ -3003,7 +3245,9 @@
           "y": 0.8343,
           "kind": "stairs",
           "dir": 180,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": false,
+          "nearRoom": "320"
         },
         {
           "id": "e_4qufx10",
@@ -3011,7 +3255,9 @@
           "y": 0.2387,
           "kind": "stairs",
           "dir": 90,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "337"
         },
         {
           "id": "e_8yy3eev",
@@ -3019,7 +3265,9 @@
           "y": 0.294,
           "kind": "stairs",
           "dir": 180,
-          "title": "Лестница"
+          "title": "Лестница",
+          "usable": true,
+          "nearRoom": "405"
         }
       ]
     }

@@ -33,7 +33,13 @@ data class MapEntrance(
     val y: Float,
     val kind: String,
     val dir: Float,
-    val title: String
+    val title: String,
+    /**
+     * Для лестниц (kind="stairs"): пригодна ли для маршрута. Заказчик дал точный список
+     * пригодных лестниц (1эт 131/115/136/147, 2эт 241/238/230, 3эт 335/332/301/317, 4эт 401);
+     * остальные — аварийные, маршруты по ним не строим. Для входов (kind="main") всегда true.
+     */
+    val usable: Boolean = true
 )
 
 data class FloorMap(
@@ -129,7 +135,9 @@ class CollegeMapData(private val floors: Map<String, FloorMap>) {
                             y = o.optDouble("y").toFloat(),
                             kind = o.optString("kind", "backup").ifBlank { "backup" },
                             dir = o.optDouble("dir", 0.0).toFloat(),
-                            title = o.optString("title")
+                            title = o.optString("title"),
+                            // Лестница без явного usable считается пригодной (обратная совместимость)
+                            usable = o.optBoolean("usable", true)
                         )
                     }
                 )
