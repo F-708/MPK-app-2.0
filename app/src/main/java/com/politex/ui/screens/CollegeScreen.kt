@@ -162,7 +162,10 @@ fun CollegeScreen(
 
     LaunchedEffect(pendingTeacherName) {
         val name = pendingTeacherName ?: return@LaunchedEffect
-        val all = TeachersRepository(context).loadTeachers()
+        // E2: парсинг teachers.csv — не на main-потоке (LaunchedEffect = Main)
+        val all = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            TeachersRepository(context).loadTeachers()
+        }
         val surname = com.politex.data.repository.TeacherInsights.surnameOf(name)
         val found = all.firstOrNull {
             com.politex.data.repository.TeacherInsights.surnameOf(it.name) == surname
@@ -232,7 +235,10 @@ fun CollegeScreen(
                 onOpenTeacher = { name ->
                     // Т6: преподаватель из расписания кабинета — тот же механизм, что из вкладки «Расписание»
                     scope.launch {
-                        val all = TeachersRepository(context).loadTeachers()
+                        // E2: IO-парсинг, не main
+                        val all = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            TeachersRepository(context).loadTeachers()
+                        }
                         val surname = com.politex.data.repository.TeacherInsights.surnameOf(name)
                         val found = all.firstOrNull {
                             com.politex.data.repository.TeacherInsights.surnameOf(it.name) == surname

@@ -30,13 +30,23 @@ data class Student(
  */
 class StudentsRepository(private val context: Context) {
 
-    fun loadStudents(): List<Student> = try {
+    /**
+     * E2/ARC-03: 800 КБ CSV парсились на main-thread внутри remember{} (ANR-риск на
+     * admin-сборке). Кэш один на процесс (приём TeachersRepository Б13), а UI-сайты
+     * читают через produceState+IO.
+     */
+    fun loadStudents(): List<Student> = cached ?: try {
         parse(
             context.assets.open("students.csv").bufferedReader(Charsets.UTF_8).readLines(),
             knownGroups = GroupCatalog.load(context).all().toSet()
-        )
+        ).also { cached = it }
     } catch (_: Exception) {
         emptyList()
+    }
+
+    private companion object {
+        @Volatile
+        private var cached: List<Student>? = null
     }
 
     /** O8: виден тестам — разбор выгрузки без чтения ассета флейвора admin. */

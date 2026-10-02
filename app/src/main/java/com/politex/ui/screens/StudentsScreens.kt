@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -71,8 +72,10 @@ import com.politex.data.repository.TeacherInsights
 import androidx.compose.material3.CircularProgressIndicator
 import com.politex.ui.util.bouncyClickable
 import java.util.Calendar
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
@@ -85,7 +88,11 @@ fun StudentsDatabaseScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val students = remember { StudentsRepository(context).loadStudents() }
+    // E2: 800 КБ CSV не парсятся на main-thread — produceState + IO; кэш репозитория
+    // делает повторные входы мгновенными
+    val students by produceState(initialValue = emptyList<Student>(), key1 = context) {
+        value = withContext(Dispatchers.IO) { StudentsRepository(context).loadStudents() }
+    }
 
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var groupFilter by rememberSaveable { mutableStateOf("") }
@@ -433,7 +440,10 @@ fun StudentCardScreen(
         }
     }
 
-    val teachers = remember { TeachersRepository(context).loadTeachers() }
+    // E2: парсинг teachers.csv — на IO, не в композиции
+    val teachers by produceState(initialValue = emptyList<Teacher>(), key1 = context) {
+        value = withContext(Dispatchers.IO) { TeachersRepository(context).loadTeachers() }
+    }
     val insights = remember(teachers, allGroupLessons) {
         TeacherInsights(teachers, allGroupLessons)
     }
