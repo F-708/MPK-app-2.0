@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.politex.util.Dow
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.repository.ScheduleRepository
@@ -80,15 +81,7 @@ import java.util.Calendar
 // ---------- Чистая логика экрана (юнит-тесты без Compose) ----------
 
 /** Calendar.DAY_OF_WEEK -> 1..7 (пн..вс), как в ScheduleScreen. */
-internal fun groupScheduleDayOfWeek(cal: Calendar): Int = when (cal.get(Calendar.DAY_OF_WEEK)) {
-    Calendar.MONDAY -> 1
-    Calendar.TUESDAY -> 2
-    Calendar.WEDNESDAY -> 3
-    Calendar.THURSDAY -> 4
-    Calendar.FRIDAY -> 5
-    Calendar.SATURDAY -> 6
-    else -> 7
-}
+internal fun groupScheduleDayOfWeek(cal: Calendar): Int = Dow.of(cal)
 
 internal fun groupScheduleIsSchoolDay(dayOfWeek: Int, saturdayIsSchoolDay: Boolean): Boolean =
     dayOfWeek in 1..5 || (dayOfWeek == 6 && saturdayIsSchoolDay)
@@ -187,7 +180,7 @@ fun GroupScheduleScreen(
     }
 
     val isTeacherKnown: (String) -> Boolean = remember(context) {
-        val known = TeachersRepository(context).loadTeachers()
+        val known = com.politex.AppGraph.teachersRepository.loadTeachers()
             .map { TeacherInsights.surnameOf(it.name) }
             .toHashSet()
         val check: (String) -> Boolean = { name ->

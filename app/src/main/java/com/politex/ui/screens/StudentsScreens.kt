@@ -91,7 +91,7 @@ fun StudentsDatabaseScreen(
     // E2: 800 КБ CSV не парсятся на main-thread — produceState + IO; кэш репозитория
     // делает повторные входы мгновенными
     val students by produceState(initialValue = emptyList<Student>(), key1 = context) {
-        value = withContext(Dispatchers.IO) { StudentsRepository(context).loadStudents() }
+        value = withContext(Dispatchers.IO) { com.politex.AppGraph.studentsRepository.loadStudents() }
     }
 
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -442,7 +442,7 @@ fun StudentCardScreen(
 
     // E2: парсинг teachers.csv — на IO, не в композиции
     val teachers by produceState(initialValue = emptyList<Teacher>(), key1 = context) {
-        value = withContext(Dispatchers.IO) { TeachersRepository(context).loadTeachers() }
+        value = withContext(Dispatchers.IO) { com.politex.AppGraph.teachersRepository.loadTeachers() }
     }
     val insights = remember(teachers, allGroupLessons) {
         TeacherInsights(teachers, allGroupLessons)

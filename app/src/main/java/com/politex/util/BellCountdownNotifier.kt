@@ -11,6 +11,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.politex.util.Dow
 import com.politex.MainActivity
 import com.politex.R
 import com.politex.data.model.CollegeBellSchedule
@@ -202,15 +203,7 @@ object BellCountdownNotifier {
     }
 
     /** День недели в формате расписания (1=Пн..6=Сб, 7=Вс). */
-    private fun modeLessonsDay(cal: Calendar): Int = when (cal.get(Calendar.DAY_OF_WEEK)) {
-        Calendar.MONDAY -> 1
-        Calendar.TUESDAY -> 2
-        Calendar.WEDNESDAY -> 3
-        Calendar.THURSDAY -> 4
-        Calendar.FRIDAY -> 5
-        Calendar.SATURDAY -> 6
-        else -> 7
-    }
+    private fun modeLessonsDay(cal: Calendar): Int = Dow.of(cal)
 
     private fun isQuietWindowNow(context: Context): Boolean {
         val cal = Calendar.getInstance()

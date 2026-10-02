@@ -88,6 +88,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.politex.util.Dow
 import com.politex.data.model.CollegeMap
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.model.CollegeMapData
@@ -153,16 +154,9 @@ fun CollegeMapScreen(
     val context = LocalContext.current
     val mapData = remember { CollegeMapData.load(context) }
 
-    // Т5: поиск по группе — репозиторий, как на остальных экранах.
-    // Б3: каталог групп подключён, иначе разбор «кабинет по всем группам» не перебирает группы.
-    val scheduleRepository = remember {
-        ScheduleRepository(
-            lessonDao = com.politex.data.local.MpkDatabase.getInstance(context).lessonDao(),
-            // F6: без каталога разбор по всем группам молча деградирует до одной —
-            // кабинет показывал бы пары одного потока
-            catalogProvider = { com.politex.util.GroupCatalog.load(context).all() }
-        )
-    }
+    // Т5/Б3/E1: репозиторий — единый из AppGraph (каталог + teacherLessonDao + общий кэш),
+    // вместо локального создания без teacherLessonDao (офлайн-преподаватели не работали)
+    val scheduleRepository = remember { com.politex.AppGraph.scheduleRepository }
     // MAP-05: ключ по номеру дня — если экран пережил полночь, следующая recomposition
     // перечитает «сегодня» (раньше remember{Calendar.getInstance()} навсегда застревал на дне
     // открытия экрана). Calendar вместо java.time — minSdk 24 без desugaring.
@@ -177,15 +171,7 @@ fun CollegeMapScreen(
         )
     }
     val todayDow = remember(today) {
-        when (today.get(Calendar.DAY_OF_WEEK)) {
-            Calendar.MONDAY -> 1
-            Calendar.TUESDAY -> 2
-            Calendar.WEDNESDAY -> 3
-            Calendar.THURSDAY -> 4
-            Calendar.FRIDAY -> 5
-            Calendar.SATURDAY -> 6
-            else -> 7
-        }
+        Dow.of(today)
     }
 
     // O3-c: группы для подсказок поиска — полный список кодов из ассета (если он уже есть)
@@ -249,15 +235,7 @@ fun CollegeMapScreen(
         )
     }
     val tomorrowDow = remember(tomorrowCal) {
-        when (tomorrowCal.get(Calendar.DAY_OF_WEEK)) {
-            Calendar.MONDAY -> 1
-            Calendar.TUESDAY -> 2
-            Calendar.WEDNESDAY -> 3
-            Calendar.THURSDAY -> 4
-            Calendar.FRIDAY -> 5
-            Calendar.SATURDAY -> 6
-            else -> 7
-        }
+        Dow.of(tomorrowCal)
     }
 
     // Активная дата диалога: завтра — когда переключатель в положении «Завтра»

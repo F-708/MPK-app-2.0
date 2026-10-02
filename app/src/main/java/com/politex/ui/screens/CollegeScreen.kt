@@ -164,7 +164,7 @@ fun CollegeScreen(
         val name = pendingTeacherName ?: return@LaunchedEffect
         // E2: парсинг teachers.csv — не на main-потоке (LaunchedEffect = Main)
         val all = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            TeachersRepository(context).loadTeachers()
+            com.politex.AppGraph.teachersRepository.loadTeachers()
         }
         val surname = com.politex.data.repository.TeacherInsights.surnameOf(name)
         val found = all.firstOrNull {
@@ -237,7 +237,7 @@ fun CollegeScreen(
                     scope.launch {
                         // E2: IO-парсинг, не main
                         val all = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            TeachersRepository(context).loadTeachers()
+                            com.politex.AppGraph.teachersRepository.loadTeachers()
                         }
                         val surname = com.politex.data.repository.TeacherInsights.surnameOf(name)
                         val found = all.firstOrNull {
@@ -262,7 +262,7 @@ fun CollegeScreen(
                 onTeacherClick = { name ->
                     // как в LaunchedEffect(pendingTeacherName): поиск по фамилии
                     val surname = com.politex.data.repository.TeacherInsights.surnameOf(name)
-                    val found = TeachersRepository(context).loadTeachers().firstOrNull {
+                    val found = com.politex.AppGraph.teachersRepository.loadTeachers().firstOrNull {
                         com.politex.data.repository.TeacherInsights.surnameOf(it.name) == surname
                     }
                     if (found != null) {
@@ -828,7 +828,8 @@ private fun TeachersPage(
     onOpenTeacher: (Teacher) -> Unit
 ) {
     val context = LocalContext.current
-    val repository = remember { TeachersRepository(context) }
+    // E1: единый репозиторий из AppGraph (кэш парсинга на процесс)
+    val repository = com.politex.AppGraph.teachersRepository
     val teachers = remember { repository.loadTeachers() }
 
     val allLessons by scheduleRepository
@@ -1106,7 +1107,8 @@ private fun TeacherCardPageWrapper(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val repository = remember { TeachersRepository(context) }
+    // E1: единый репозиторий из AppGraph (кэш парсинга на процесс)
+    val repository = com.politex.AppGraph.teachersRepository
     val teachers = remember { repository.loadTeachers() }
     val allLessons by scheduleRepository
         .getAllLessonsForGroup(groupInfo.canonicalName)
@@ -1425,14 +1427,9 @@ private fun TeacherScheduleTab(
     val scope = rememberCoroutineScope()
     val client = remember { com.politex.data.network.MpkNetworkClient() }
     // Офлайн-путь: тот же репозиторий, что у приложения, — читает из teacher_lessons
-    val offlineRepository = remember(teacherLessonDao) {
-        teacherLessonDao?.let {
-            com.politex.data.repository.ScheduleRepository(
-                lessonDao = com.politex.data.local.MpkDatabase.getInstance(context).lessonDao(),
-                teacherLessonDao = it
-            )
-        }
-    }
+    // E1: экземпляр AppGraph уже содержит teacherLessonDao; null — только если экран
+    // открыт без офлайн-дао явно (семантика прежнего remember(teacherLessonDao))
+    val offlineRepository = teacherLessonDao?.let { com.politex.AppGraph.scheduleRepository }
 
     var dayOffset by rememberSaveable { mutableIntStateOf(0) }
     var showCalendar by remember { mutableStateOf(false) }
@@ -1536,11 +1533,7 @@ private fun TeacherScheduleTab(
     if (showCalendar) {
         com.politex.ui.components.CalendarArchiveDialog(
             groupName = "",
-            scheduleRepository = com.politex.data.repository.ScheduleRepository(
-                lessonDao = com.politex.data.local.MpkDatabase.getInstance(context).lessonDao(),
-                catalogProvider = { com.politex.util.GroupCatalog.load(context).all() },
-                teacherLessonDao = com.politex.data.local.MpkDatabase.getInstance(context).teacherLessonDao()
-            ),
+            scheduleRepository = com.politex.AppGraph.scheduleRepository,
             onDismiss = { showCalendar = false },
             onDateSelected = { _, dateStr ->
                 // dateStr приходит в dd.MM.yyyy; парсим календарём, не строковой заменой

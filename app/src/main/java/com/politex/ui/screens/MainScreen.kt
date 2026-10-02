@@ -15,10 +15,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -105,7 +107,7 @@ fun MainScreen(
                 ) {
                     val tabs = listOf(
                         Triple(AppTab.SCHEDULE, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
-                        Triple(AppTab.TASKS, Icons.Filled.Checklist, Icons.Outlined.Checklist),
+                        Triple(AppTab.TASKS, Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
                         Triple(AppTab.BELLS, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
                         Triple(AppTab.COLLEGE, Icons.Filled.Apps, Icons.Outlined.Apps)
                     )
@@ -202,9 +204,10 @@ fun MainScreen(
                         onDateChange = { scheduleDate = it }
                     )
                 }
-                AppTab.TASKS -> TasksScreen(
+                AppTab.TASKS -> LessonsHubScreen(
                     groupInfo = currentGroupInfo,
                     taskRepository = viewModel.taskRepository,
+                    modifier = Modifier.fillMaxSize(),
                     // T1: undo-снекбар удаления задания — хост уже висит в Scaffold
                     snackbarHostState = snackbarHostState
                 )

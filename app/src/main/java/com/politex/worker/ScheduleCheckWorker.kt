@@ -84,16 +84,9 @@ class ScheduleCheckWorker(
             return@withContext Result.success()
         }
 
-        val networkClient = MpkNetworkClient()
-        val db = MpkDatabase.getInstance(applicationContext)
-        // Б3: тот же репозиторий, что у приложения — документ разбирается сразу по всем
-        // группам каталога и пишется в Room. Раньше воркер качал день одной группы,
-        // поэтому фоновая догрузка не помогала открыть чужую группу без сети.
-        val repository = ScheduleRepository(
-            lessonDao = db.lessonDao(),
-            networkClient = networkClient,
-            catalogProvider = { GroupCatalog.load(applicationContext).all() }
-        )
+        // E1/Б3: шаренный репозиторий из AppGraph — документ разбирается по всем группам
+        // каталога, кэш и teacherLessonDao те же, что у UI
+        val repository = com.politex.AppGraph.scheduleRepository
         val result = repository.syncScheduleForDate(groupName, targetCalendar)
 
         result.fold(

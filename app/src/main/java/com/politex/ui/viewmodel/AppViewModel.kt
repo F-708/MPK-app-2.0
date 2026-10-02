@@ -30,7 +30,8 @@ import kotlinx.coroutines.launch
 
 enum class AppTab(val title: String) {
     SCHEDULE("Расписание"),
-    TASKS("Задания"),
+    // Ф4: вкладка переименована по заказчику: внутри — Материалы/Задания/Оценки
+    TASKS("Уроки"),
     BELLS("Звонки"),
     COLLEGE("Другое")
 }
@@ -66,13 +67,9 @@ data class AppUiState(
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = MpkDatabase.getInstance(application)
-    val scheduleRepository = ScheduleRepository(
-        lessonDao = database.lessonDao(),
-        // Б3: каталог групп — чтобы один документ разбирался сразу по всем группам
-        catalogProvider = { GroupCatalog.load(application).all() },
-        // Офлайн-расписание преподавателей (своя таблица, см. TeacherLessonEntity)
-        teacherLessonDao = database.teacherLessonDao()
-    )
+    // E1: единый экземпляр из AppGraph (полный набор deps: каталог + teacherLessonDao),
+    // вместо локального создания с риском рассинхрона зависимостей
+    val scheduleRepository = com.politex.AppGraph.scheduleRepository
     val taskRepository = TaskRepository(database.taskDao())
 
     val diagnosticInfo = scheduleRepository.diagnosticInfo

@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.widget.RemoteViews
+import com.politex.util.Dow
 import com.politex.R
 import com.politex.data.model.BellItem
 import com.politex.data.model.CollegeBellSchedule
@@ -248,15 +249,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
 
             val mode = CountdownMode.load(context, appWidgetId)
             val cal = java.util.Calendar.getInstance()
-            val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
-                Calendar.MONDAY -> 1
-                Calendar.TUESDAY -> 2
-                Calendar.WEDNESDAY -> 3
-                Calendar.THURSDAY -> 4
-                Calendar.FRIDAY -> 5
-                Calendar.SATURDAY -> 6
-                else -> 7
-            }
+            val dow = Dow.of(cal)
             val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
             val bells = CollegeBellSchedule.getBellsForDay(dow)
             // Один read БД на обновление (countdownInfo читал бы его второй раз)

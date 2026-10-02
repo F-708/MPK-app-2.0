@@ -343,3 +343,65 @@ _Файлы: MainScreen (AppTab.TASKS → «Уроки»), новый конте
 - N6: виджет времени — закрыто волной C (watchdog+ресивер+период), проверить на устройстве
 - D2 (weekly-шаблоны replace), D3 (exportSchema), E1-E5, F1-F5 — по REVIEW-PLAN
 - Фазы 3-UI (напоминалки-UX готовит агент), 4 (Уроки: мат.база+оценки) — после текущих волн
+
+---
+
+# СПЕЦИФИКАЦИЯ Ф4.2 «Оценки» (для агента G, 2026-10-02)
+
+## Модель данных (БД v6, MIGRATION_5_6 после_materials_агента)
+- `grade_entries(id PK auto, subjectName TEXT, category TEXT, value INTEGER, label TEXT, dateIso TEXT, createdAt LONG)`
+  category ∈ {REGULAR, PRACTICAL, CONTROL, LAB, EXAM}; LAB хранит value 0=незачёт/1=зачёт (UI — тумблер, не баллы);
+  EXAM — не более одной активной записи на предмет (upsert); label — подпись работы («Практ. №3»), dateIso — дата оценки (yyyy-MM-dd).
+- `grade_config(subjectName TEXT PK, priorityJson TEXT)` — порядок категорий для агрегации (JSON-массив category-строк),
+  по умолчанию ["REGULAR","PRACTICAL","CONTROL","EXAM"]. LAB в агрегацию НЕ входит.
+- Средний балл предмета = сворачивание по приоритету: идём снизу списка приоритета вверх? НЕТ —
+  формула заказчика (парное сворачивание в порядке priority):
+  acc = avg(категория priority[0]); далее для каждой следующей категории c (если есть оценки):
+    acc = (acc + avg(c)) / 2. Пустые категории пропускаются БЕЗ сдвига acc.
+  Дефолт priority = [REGULAR, PRACTICAL, CONTROL, EXAM] даёт ровно формулу заказчика:
+  ((обычные+практ)/2 + контр)/2 + экзамен)/2 с пропусками пустых.
+  Округление для показа: 1 знак (Math.round(x*10)/10.0); в списке предметов — там же.
+- Drag-and-drop приоритета: экран «Настройка веса категорий» (по предмету): LazyColumn категорий с
+  handle-иконкой, reorder через swap-кнопки вверх/вниз (v1, ponytail: настоящий drag — позже), сохранение в grade_config.
+
+## UI
+- GradesScreen: LazyColumn предметов (MpkCurriculum.getSubjects(specialtyCode, course)): строка = предмет + справа средний балл (крупно, цвет: ≥7 ColorSuccess-аналог, 4-6 ColorTextTitle, <4 красный).
+- Тап по предмету → экран предмета: по центру ТЕКУЩИЙ средний балл (32sp), ниже категории-секции
+  (список оценок с label+дата), внизу панель ввода:Row категорий-чипов (выбор активной) + Row кнопок 1..10
+  (квадраты 40dp, bouncyClickable; для LAB — два чипа «Зачёт/Незачёт»; для EXAM — одна кнопка-поле с заменой).
+  Кнопка «+ работа с подписью» — диалог label+dateIso (дефолт сегодня).
+- Кнопка-шестерёнка → настройка приоритета категорий.
+- Всё в стиле приложения (Surface 2dp, ColorBorderLight, bouncyClickable).
+
+## Тесты
+- GradeAggregatorTest: формула по умолчанию (кейсы заказчика: без экзамена, с экзаменом, пустая контрольная пропускается, только практ), свой priority, LAB не входит, округление.
+- MigrationV5ToV6Test (по образцу V3ToV4/V4ToV5).
+
+---
+
+# ПЛАН E4+N15: Navigation-Compose (отдельная большая волна, после N1/M/G)
+
+Цель: убрать самодельную when()-навигацию (MainScreen:175) и pending*/returnTab-костыли
+(AppViewModel), устранить класс багов «состояние теряется при смене вкладки» и N15
+(«назад» выбрасывает на уровень глубже).
+
+## Шаги
+1. Подключить androidx.navigation.compose (уже в libs.versions.toml, закомментирован — раскомментировать).
+2. NavHost с route'ами: schedule, tasks(=lessons hub), bells, college, map?room=&from=&route=, teacher?name=, students(admin).
+   Нижняя панель = 4 таба (SCHEDULE/TASKS/BELLS/COLLEGE), каждый со СВОИМ backstack (NavHost +
+   popUpTo(startDest, saveState=true)/restoreState=true — стандартный паттерн bottom-nav).
+3. Аргументы вместо pending*: map(room, fromRoom, showRoute), teacher(name), scrollTarget через
+   SavedStateHandle/currentBackStackEntry (одноразовое чтение = consume).
+4. Удалить из AppUiState: pendingRoom/pendingFromRoom/pendingTeacherName/returnTab/scrollTarget
+   (переезжают в nav-аргументы/SavedState); AppViewModel остаётся для данных (groupLessons и т.д.).
+5. CollegeScreen pageStack/goBack → navigator.popBackStack(); глубокие входы (navigateDeepEntry) →
+   navController.navigate с launchSingleTop.
+6. N15-приёмка (тест/ручная): расписание группы → выбор группы → кабинет → карта → back →
+   расписание ВЫБРАННОЙ группы (не выбор группы); карта → преподаватель → back → карта с тем же кабинетом.
+7. Roborazzi-смоуки всех табов + T8NavigationScrollTest адаптировать под nav-аргументы.
+
+## Риски/правила
+- Волна идёт ОДНОВРЕМЕННО с ничем другим (все файлы UI).
+- Состояние экранов, которое должно переживать таб: поднять в VM (groupLessons уже там) или rememberSaveable.
+- Splash-оверлей остаётся ВНЕ NavHost (MainActivity Box).
+- Приёмка: 284+ тестов зелёные + ручной проход 4 табов × back-сценарии.

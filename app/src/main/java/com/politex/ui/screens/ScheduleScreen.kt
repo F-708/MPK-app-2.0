@@ -107,7 +107,7 @@ private var knownTeacherSurnamesCache: Set<String>? = null
 
 private fun knownTeacherSurnames(context: android.content.Context): Set<String> =
     knownTeacherSurnamesCache ?: java.util.Collections.synchronizedSet(
-        com.politex.data.repository.TeachersRepository(context)
+        com.politex.AppGraph.teachersRepository
             .loadTeachers()
             .map { com.politex.data.repository.TeacherInsights.surnameOf(it.name) }
             .toHashSet()
