@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EventBusy
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -27,7 +26,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -70,13 +68,6 @@ fun filterRoomLessonsForDate(
 }
 
 /**
- * O3-b: пары кабинета, сгруппированные по номеру урока (порядок — по номеру).
- * В одной паре кабинета обычно несколько групп (31-я 1-2 урок, 22-я 3-4 и т.д.) —
- * диалог рисует на каждую пару заголовок и блок карточек.
- */
-fun groupRoomLessonsByNumber(lessons: List<LessonEntity>): List<Pair<Int, List<LessonEntity>>> = lessons.groupBy { it.lessonNumber }.toSortedMap().map { (n, l) -> n to l }
-
-/**
  * Номер текущей (идущей прямо сейчас) пары, null — если сейчас перемена/вне занятий.
  * Тот же расчёт, что во вкладке «Расписание»: звонки дня недели (dayOfWeek 1=Пн..7=Вс)
  * и текущая минута суток. Инфочас четверга (lessonNumber=0) парой не считается.
@@ -95,14 +86,21 @@ fun currentRoomLessonNumber(
 }
 
 /**
- * Диалог «Расписание кабинета на сегодня»: список пар (время, группа, преподаватель, предмет),
- * текущая пара выделена синей рамкой с меткой «СЕЙЧАС» — как во вкладке «Расписание».
+ * Диалог «Расписание кабинета»: список пар (предмет, время, группа, преподаватель),
+ * текущая пара выделена синей рамкой и лёгким фоном — как во вкладке «Расписание».
+ *
+ * W7: шапка — две строки без каши: слева номер кабинета (цифра 20sp bold,
+ * подпись «кабинет» 11sp muted сверху), крестик справа (48dp хитбокс);
+ * ниже — дата одной строкой слева и компактный сегмент «Сегодня|Завтра» справа.
+ * W8: карточки без секционных заголовков и без номера урока внутри —
+ * плоский список, отсортированный по lessonNumber.
  *
  * @param roomNumber номер кабинета (для заголовка)
- * @param dateTitle  подпись с датой («сегодня, 22.09»)
+ * @param dateTitle  подпись с датой («02.10.2026, пятница») — приходит одной строкой,
+ *                   рендерим в одну строку (maxLines=1), перенос не вставляем
  * @param lessons    готовый список пар по кабинету (загружается снаружи через репозиторий)
  * @param currentLessonNumber номер текущей пары или null
- * @param onTeacherClick клик по преподавателю — открытие его карточки (проводит интегратор)
+ * @param onTeacherClick клик по преподавателю — открытие его карточки
  */
 @Composable
 fun RoomScheduleDialog(
@@ -127,55 +125,61 @@ fun RoomScheduleDialog(
         containerColor = ColorBgMain,
         confirmButton = {},
         title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBrandFill,
-                    modifier = Modifier.size(32.dp),
+            // W7: шапка в две строки — цифра крупно слева, крестик справа,
+            // дата + переключатель дня второй строкой
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "кабинет",
+                            style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                            maxLines = 1,
+                        )
                         Text(
                             text = roomNumber,
-                            style =
-                            TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = androidx.compose.ui.graphics.Color.White,
-                            ),
+                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp, color = ColorTextTitle),
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.testTag("room_header_room"),
+                        )
+                    }
+                    IconButton(
+                        onClick = onDismissRequest,
+                        // W7: крупный хитбокс крестика 48dp, выше контента
+                        modifier = Modifier.size(48.dp).testTag("room_close"),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Закрыть",
+                            tint = ColorTextMuted,
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Кабинет $roomNumber",
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = ColorTextTitle),
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     if (dateTitle.isNotBlank()) {
                         Text(
                             text = dateTitle,
-                            style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
+                            // W7: дата строго одной строкой — не переносим посреди числа
+                            style = TextStyle(fontSize = 13.sp, color = ColorTextBody),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            softWrap = false,
+                            modifier =
+                            Modifier
+                                .weight(1f)
+                                .testTag("room_header_date"),
                         )
                     }
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                DayToggle(
-                    tomorrowSelected = tomorrowSelected,
-                    onDayChange = onDayChange,
-                )
-                IconButton(
-                    onClick = onDismissRequest,
-                    // D4: хитбокс крестика 48dp
-                    modifier = Modifier.size(48.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Закрыть",
-                        tint = ColorTextMuted,
+                    DayToggle(
+                        tomorrowSelected = tomorrowSelected,
+                        onDayChange = onDayChange,
                     )
                 }
             }
@@ -184,35 +188,24 @@ fun RoomScheduleDialog(
             if (lessons.isEmpty()) {
                 RoomScheduleEmptyState(tomorrow = tomorrowSelected)
             } else {
-                val groupedLessons = remember(lessons) { groupRoomLessonsByNumber(lessons) }
+                // W8: плоский список карточек — без секционных заголовков «к 1 уроку 1 группа»
                 LazyColumn(
                     modifier =
                     Modifier
                         .fillMaxWidth()
                         .heightIn(max = 420.dp),
                     contentPadding = PaddingValues(bottom = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // O3-b: заголовок на каждую пару — при нескольких группах в кабинете карточки
-                    // разных групп в одной паре разделены явно
-                    groupedLessons.forEach { (lessonNumber, pairLessons) ->
-                        item(key = "header_$lessonNumber") {
-                            RoomLessonHeader(
-                                lessonNumber = lessonNumber,
-                                groupCount = pairLessons.size,
-                                isCurrent = lessonNumber == currentLessonNumber,
-                            )
-                        }
-                        items(
-                            pairLessons,
-                            key = { "${it.groupName}_${it.lessonNumber}_${it.id}" },
-                        ) { lesson ->
-                            RoomLessonCard(
-                                lesson = lesson,
-                                isCurrent = lesson.lessonNumber == currentLessonNumber,
-                                onTeacherClick = onTeacherClick,
-                            )
-                        }
+                    items(
+                        lessons,
+                        key = { "${it.groupName}_${it.lessonNumber}_${it.id}" },
+                    ) { lesson ->
+                        RoomLessonCard(
+                            lesson = lesson,
+                            isCurrent = lesson.lessonNumber == currentLessonNumber,
+                            onTeacherClick = onTeacherClick,
+                        )
                     }
                 }
             }
@@ -234,8 +227,8 @@ private fun RoomScheduleEmptyState(tomorrow: Boolean) {
 }
 
 /**
- * Б8: переключатель «Сегодня/Завтра» в шапке диалога кабинета — тот же визуальный
- * язык, что у ячеек дня в расписании (выбранная ячейка залита акцентом).
+ * Б8/W7: компактный сегмент «Сегодня|Завтра» — Row из двух кнопок высотой 32dp,
+ * активная залита брендовым цветом.
  */
 @Composable
 private fun DayToggle(
@@ -247,7 +240,7 @@ private fun DayToggle(
         modifier = modifier.testTag("room_day_toggle"),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        listOf(false to "СЕГОДНЯ", true to "ЗАВТРА").forEach { (isTomorrow, title) ->
+        listOf(false to "Сегодня", true to "Завтра").forEach { (isTomorrow, title) ->
             val selected = tomorrowSelected == isTomorrow
             Surface(
                 shape = RoundedCornerShape(2.dp),
@@ -255,7 +248,7 @@ private fun DayToggle(
                 border = BorderStroke(1.dp, if (selected) ColorBrandFill else ColorBorderLight),
                 modifier =
                 Modifier
-                    .heightIn(min = 40.dp)
+                    .heightIn(min = 32.dp)
                     .bouncyClickable(scaleDown = 0.97f) { onDayChange(isTomorrow) }
                     .testTag(if (isTomorrow) "room_day_tomorrow" else "room_day_today"),
             ) {
@@ -270,7 +263,7 @@ private fun DayToggle(
                         style =
                         TextStyle(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             color = if (selected) androidx.compose.ui.graphics.Color.White else ColorTextMuted,
                         ),
                     )
@@ -315,49 +308,9 @@ private fun RoomScheduleEmptyContent(tomorrow: Boolean) {
 }
 
 /**
- * O3-b: заголовок пары в диалоге — «1–2 урок» + сколько групп занимает кабинет в этот слот.
- * Текущая пара подписана синим (как метка «СЕЙЧАС» на карточке).
- */
-@Composable
-private fun RoomLessonHeader(
-    lessonNumber: Int,
-    groupCount: Int,
-    isCurrent: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier =
-        modifier
-            .fillMaxWidth()
-            .testTag("room_lesson_header_$lessonNumber"),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "$lessonNumber урок",
-            style =
-            TextStyle(
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
-                color = if (isCurrent) ColorActiveBlue else ColorTextMuted,
-            ),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text =
-            when {
-                groupCount % 10 == 1 && groupCount % 100 != 11 -> "$groupCount группа"
-                groupCount % 10 in 2..4 && groupCount % 100 !in 12..14 -> "$groupCount группы"
-                else -> "$groupCount групп"
-            },
-            style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-        )
-    }
-}
-
-/**
- * Компактная карточка пары для кабинета: номер, время, предмет, группа, преподаватель(и).
- * Стили совпадают с LessonCard из ScheduleScreen (2.dp радиус, палитра, размеры шрифтов),
- * без привязки к экрану расписания.
+ * W8: компактная карточка пары — ТОЛЬКО предмет (14sp semi-bold, максимум 2 строки),
+ * время (12sp muted), группа (12sp) и преподаватель (12sp, кликабельный чип).
+ * Текущая пара: рамка 2dp ColorActiveBlue + лёгкий фон.
  */
 @Composable
 private fun RoomLessonCard(
@@ -368,92 +321,52 @@ private fun RoomLessonCard(
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        color = ColorBgMain,
+        // W8: подсветка текущей пары — рамка 2dp синим + лёгкий синий фон
+        color = if (isCurrent) ColorActiveBlue.copy(alpha = 0.07f) else ColorBgMain,
         border = BorderStroke(if (isCurrent) 2.dp else 1.dp, if (isCurrent) ColorActiveBlue else ColorBorderLight),
         shadowElevation = 0.dp,
         modifier =
         modifier
             .fillMaxWidth()
-            .testTag("room_lesson_card_${lesson.lessonNumber}"),
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBrandFill,
-                        modifier = Modifier.size(24.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "${lesson.lessonNumber}",
-                                style =
-                                TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = androidx.compose.ui.graphics.Color.White,
-                                ),
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = lesson.timeRangeDisplay,
-                        style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ColorTextBody),
-                    )
-                }
-
+            .testTag("room_lesson_card_${lesson.lessonNumber}")
+            .then(
                 if (isCurrent) {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorActiveBlue,
-                        modifier = Modifier.testTag("room_lesson_current_${lesson.lessonNumber}"),
-                    ) {
-                        Text(
-                            text = "СЕЙЧАС",
-                            style =
-                            TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                color = androidx.compose.ui.graphics.Color.White,
-                            ),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
+                    Modifier.testTag("room_lesson_current_${lesson.lessonNumber}")
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
             Text(
                 text = lesson.shortSubjectName,
-                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
+                style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = ColorTextTitle),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
 
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = lesson.timeRangeDisplay,
+                style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
+                maxLines = 1,
+            )
+
             Spacer(modifier = Modifier.height(6.dp))
 
+            // W8: группа и преподаватели в один ряд, компактно
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorSurfaceHighlight,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                Text(
+                    text = lesson.groupName,
+                    style = TextStyle(fontSize = 12.sp, color = ColorTextBody),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.testTag("room_lesson_group_${lesson.lessonNumber}"),
-                ) {
-                    Text(
-                        text = lesson.groupName,
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = ColorTextMuted),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                    )
-                }
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -462,25 +375,6 @@ private fun RoomLessonCard(
                 ) {
                     RoomTeacherChip(name = lesson.teacherFirst, onClick = onTeacherClick)
                     RoomTeacherChip(name = lesson.teacherSecond, onClick = onTeacherClick)
-                }
-            }
-
-            if (lesson.isSplit && lesson.roomFirst.isNotBlank() && lesson.roomSecond.isNotBlank()) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = null,
-                        tint = ColorBrandBlue,
-                        modifier = Modifier.size(12.dp),
-                    )
-                    Spacer(
-                        modifier = Modifier.width(2.dp),
-                    )
-                    Text(
-                        text = "дробная: каб. ${lesson.roomFirst} / каб. ${lesson.roomSecond}",
-                        style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-                    )
                 }
             }
         }

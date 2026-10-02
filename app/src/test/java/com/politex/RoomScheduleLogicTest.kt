@@ -108,6 +108,20 @@ class RoomScheduleLogicTest {
     }
 
     @Test
+    fun `W8 - плоский список без группировки, несколько групп в одном слоте, сортировка по уроку`() {
+        val lessons =
+            listOf(
+                lesson(2, roomFirst = "215", groupName = "22П"),
+                lesson(1, roomFirst = "215", groupName = "31О"),
+                lesson(1, roomFirst = "215", groupName = "41О"),
+            )
+        val result = filterRoomLessonsForDate(lessons, "215", "22.09.2026")
+        // карточки идут одной плоской лентой, порядок — по lessonNumber, внутри — как в исходном списке
+        assertEquals(listOf(1, 1, 2), result.map { it.lessonNumber })
+        assertEquals(listOf("31О", "41О", "22П"), result.map { it.groupName })
+    }
+
+    @Test
     fun `подтверждение источника слота — CollegeBellSchedule getCurrentSlot`() {
         // Заодно проверяем контракт: слот урока 1 в понедельник 08:15–09:00
         val slot = CollegeBellSchedule.getCurrentSlot(8 * 60 + 45, 1)

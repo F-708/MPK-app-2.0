@@ -754,7 +754,7 @@ private fun SearchField(
                         )
                     } else if (notFound) {
                         Text(
-                            text = "$value — такого кабинета нет",
+                            text = "Кабинета $value нет на плане",
                             style = TextStyle(fontSize = 14.sp, color = DEAD_COLOR),
                             maxLines = 1,
                         )
