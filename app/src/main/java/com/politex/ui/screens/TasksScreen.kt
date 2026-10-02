@@ -90,7 +90,6 @@ import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
-import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.MpkCurriculum
 import kotlinx.coroutines.launch
@@ -165,37 +164,16 @@ fun TasksScreen(
             .background(ColorBgMain),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
+            // W23: заголовок «Учебное задание», группа и «активных N» убраны по замечанию
+            // заказчика — остаются только кнопка «Добавить» и фильтр категорий под ней.
             Row(
                 modifier =
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    // T3: maxLines=2 + Ellipsis — заголовок главного экрана
-                    // не режется по букве («Учебные зада»)
-                    Text(
-                        text = "Учебные задания",
-                        style = TextStylePageTitle,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    // T5: считаем по filteredTasks — цифра не противоречит списку под ней
-                    Text(
-                        text = "Группа ${groupInfo.canonicalName} • ${filteredTasks.count { !it.isCompleted }} активных",
-                        style =
-                        androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp,
-                            color = ColorBrandBlue,
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     border = BorderStroke(1.dp, ColorBrandBlue),
@@ -233,71 +211,28 @@ fun TasksScreen(
                 }
             }
 
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth(),
+            // W23: фильтр категорий — фиксированный Row сегментов (Все + доступные типы),
+            // каждый weight(1f): НЕ скроллится и не требует листания (LazyRow убран).
+            Row(
+                modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                item {
-                    val isSelected = selectedFilter == null
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
-                        color = if (isSelected) ColorTopBar else ColorBgMain,
-                        modifier =
-                        Modifier
-                            // T7: хитбокс чипа 44dp (текст 11sp прежний)
-                            .heightIn(min = 44.dp)
-                            .bouncyClickable { selectedFilter = null },
-                    ) {
-                        // C2: Box(contentAlignment=Center) здесь и так центрирует:
-                        // Surface пропускает min-высоту внутрь, Box берёт её как свою
-                        // и центрирует Text внутри (проверено по исходникам Box.kt).
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.padding(horizontal = 12.dp),
-                        ) {
-                            Text(
-                                text = "ВСЕ (${allTasks.size})",
-                                style =
-                                androidx.compose.ui.text.TextStyle(
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = 11.sp,
-                                    color = if (isSelected) Color.White else ColorTextBody,
-                                ),
-                            )
-                        }
-                    }
-                }
-
-                items(availableTypes) { type ->
-                    val isSelected = selectedFilter == type
-                    val count = allTasks.count { it.taskTypeEnum == type }
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
-                        color = if (isSelected) ColorTopBar else ColorBgMain,
-                        modifier =
-                        Modifier
-                            // T7: хитбокс чипа 44dp
-                            .heightIn(min = 44.dp)
-                            .bouncyClickable { selectedFilter = type },
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.padding(horizontal = 10.dp),
-                        ) {
-                            Text(
-                                text = "${type.displayName.uppercase()} ($count)",
-                                style =
-                                androidx.compose.ui.text.TextStyle(
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = 11.sp,
-                                    color = if (isSelected) Color.White else ColorTextBody,
-                                ),
-                            )
-                        }
-                    }
+                TaskFilterSegment(
+                    label = "Все",
+                    isSelected = selectedFilter == null,
+                    modifier = Modifier.weight(1f),
+                    onClick = { selectedFilter = null },
+                )
+                availableTypes.forEach { type ->
+                    TaskFilterSegment(
+                        label = type.shortFilterLabel(),
+                        isSelected = selectedFilter == type,
+                        modifier = Modifier.weight(1f),
+                        onClick = { selectedFilter = type },
+                    )
                 }
             }
 
@@ -528,27 +463,20 @@ fun TaskItemCard(
             Spacer(modifier = Modifier.width(6.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                // W24: бейдж ДЗ/курсовая вытеснял название предмета — заменён на цветную
+                // точку 8dp слева + тонкую подполосу цвета категории. Полный тип задания
+                // виден при тапе на карточку (диалог редактирования, блок «Категория»).
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.5f)),
-                        color = badgeColor.copy(alpha = 0.12f),
-                        contentColor = badgeColor,
-                    ) {
-                        Text(
-                            text = task.taskTypeEnum.badge,
-                            style =
-                            androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp,
-                            ),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
-                    }
-
+                    Box(
+                        modifier =
+                        Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(badgeColor),
+                    )
                     if (task.subjectName.isNotBlank()) {
                         Text(
                             text = task.shortSubjectName,
@@ -558,11 +486,24 @@ fun TaskItemCard(
                                 fontSize = 12.sp,
                                 color = ColorBrandBlue,
                             ),
-                            maxLines = 1,
+                            // W24: предмету отдан весь остаток строки, 2 строки
+                            modifier = Modifier.weight(1f),
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
                     }
                 }
+                // W24: подполоса — компактный цветовой маркер категории под предметом
+                Box(
+                    modifier =
+                    Modifier
+                        .padding(top = 2.dp)
+                        .width(32.dp)
+                        .height(2.dp)
+                        .background(badgeColor.copy(alpha = 0.6f)),
+                )
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -634,6 +575,55 @@ fun TaskItemCard(
     }
 }
 
+// W23: короткие подписи сегментов фильтра — 7 штук помещаются в ряд без прокрутки
+private fun TaskType.shortFilterLabel(): String =
+    when (this) {
+        TaskType.HOMEWORK -> "ДЗ"
+        TaskType.LAB_WORK -> "Лаб"
+        TaskType.PRACTICAL_WORK -> "Практ"
+        TaskType.CONTROL_WORK -> "КР"
+        TaskType.COURSE_WORK -> "Курс"
+        TaskType.DIPLOMA -> "Дипл"
+    }
+
+/** W23: сегмент фильтра категорий — фиксированной ширины (weight(1f) снаружи), без скролла. */
+@Composable
+private fun TaskFilterSegment(
+    label: String,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
+        color = if (isSelected) ColorTopBar else ColorBgMain,
+        modifier =
+        modifier
+            // T7: хитбокс чипа 44dp
+            .heightIn(min = 44.dp)
+            .bouncyClickable(onClick = onClick),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = label,
+                softWrap = false,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style =
+                androidx.compose.ui.text.TextStyle(
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 10.sp,
+                    color = if (isSelected) Color.White else ColorTextBody,
+                ),
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskEditDialog(
@@ -648,8 +638,8 @@ fun TaskEditDialog(
     val isEdit = task != null
     var title by remember { mutableStateOf(task?.title ?: "") }
     var description by remember { mutableStateOf(task?.description ?: "") }
-    var dueDateMillis by remember { mutableStateOf(task?.deadlineDate?.let { millisFromIso(it) }) }
-    var showDatePicker by remember { mutableStateOf(false) }
+    // W32: «Срок сдачи» (выбор даты) удалён из диалога; deadlineDate в БД остаётся —
+    // новое задание пишется с пустым сроком, при правке прежний срок не затирается.
     val currentYear =
         remember {
             java.util.Calendar
@@ -719,7 +709,8 @@ fun TaskEditDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    text = "Категория:",
+                    // W24: полный тип задания — здесь (в карточке осталась только цветная точка)
+                    text = "Категория: ${selectedType.displayName}",
                     style =
                     androidx.compose.ui.text
                         .TextStyle(fontSize = 12.sp, color = ColorTextMuted),
@@ -757,6 +748,66 @@ fun TaskEditDialog(
                     }
                 }
 
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Что нужно сделать", fontSize = 12.sp) },
+                    placeholder = { Text("Например: Упр. 4, Отчет по лабе №2", fontSize = 12.sp) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(2.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                // H1: блок «Напоминания». W33: перенесён ВЫШЕ блока предмета —
+                // порядок полей: Категория → Что нужно сделать → Напоминания → Предмет.
+                Text(
+                    text = "Напоминания:",
+                    style =
+                    androidx.compose.ui.text
+                        .TextStyle(fontSize = 12.sp, color = ColorTextMuted),
+                )
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    // быстрые чипы: W32 — больше не привязаны к «Сроку сдачи», считаем от сегодня
+                    item {
+                        ReminderQuickChip(text = "+1 день") {
+                            reminderMillisFrom(todayIso(), 18, 0, 1)?.let { m -> reminders = reminders + m }
+                        }
+                    }
+                    item {
+                        ReminderQuickChip(text = "+2 дня") {
+                            reminderMillisFrom(todayIso(), 18, 0, 2)?.let { m -> reminders = reminders + m }
+                        }
+                    }
+                    item {
+                        ReminderQuickChip(text = "+ напоминание", tag = "add_reminder_chip") { showReminderComposer = !showReminderComposer }
+                    }
+                }
+
+                // добавленные напоминания чипами «12.10 18:00 ×» (удаление по крестику)
+                reminders.forEachIndexed { index, millis ->
+                    ReminderChip(
+                        label = formatReminderChip(millis),
+                        onRemove = { reminders = reminders.filterIndexed { i, _ -> i != index } },
+                    )
+                }
+
+                if (showReminderComposer) {
+                    ReminderComposer(
+                        initialDateIso = todayIso(),
+                        currentYear = currentYear,
+                        onDismiss = { showReminderComposer = false },
+                        onAdd = { millis ->
+                            reminders = reminders + millis
+                            showReminderComposer = false
+                        },
+                    )
+                }
+
+                // W33: предмет — НИЖЕ блока напоминаний (по замечанию заказчика)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -851,113 +902,6 @@ fun TaskEditDialog(
                         }
                     }
                 }
-
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Что нужно сделать", fontSize = 12.sp) },
-                    placeholder = { Text("Например: Упр. 4, Отчет по лабе №2", fontSize = 12.sp) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(2.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .bouncyClickable { showDatePicker = true },
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = null,
-                            tint = ColorBrandBlue,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text =
-                            dueDateMillis?.let { "Срок сдачи: ${formatDateForShow(isoDate(it))}" }
-                                ?: "Срок сдачи — выбрать дату",
-                            style =
-                            androidx.compose.ui.text.TextStyle(
-                                fontSize = 13.sp,
-                                color = if (dueDateMillis == null) ColorTextMuted else ColorTextTitle,
-                            ),
-                        )
-                    }
-                }
-
-                if (showDatePicker) {
-                    com.politex.ui.components.SimpleDatePickerDialog(
-                        initialDateIso = dueDateMillis?.let { isoDate(it) },
-                        minYear = currentYear,
-                        maxYear = currentYear + 4,
-                        onDismiss = { showDatePicker = false },
-                        onConfirm = { iso ->
-                            dueDateMillis = millisFromIso(iso)
-                            showDatePicker = false
-                        },
-                    )
-                }
-
-                // H1: блок «Напоминания» — рядом со «Сроком сдачи»
-                Text(
-                    text = "Напоминания:",
-                    style =
-                    androidx.compose.ui.text
-                        .TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-                )
-
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    // быстрые чипы от срока сдачи: «+1 день», «+2 дня» (время по умолчанию 18:00)
-                    dueDateMillis?.let { due ->
-                        val dueIso = isoDate(due)
-                        item {
-                            ReminderQuickChip(text = "+1 день") {
-                                reminderMillisFrom(dueIso, 18, 0, 1)?.let { m -> reminders = reminders + m }
-                            }
-                        }
-                        item {
-                            ReminderQuickChip(text = "+2 дня") {
-                                reminderMillisFrom(dueIso, 18, 0, 2)?.let { m -> reminders = reminders + m }
-                            }
-                        }
-                    }
-                    item {
-                        ReminderQuickChip(text = "+ напоминание") { showReminderComposer = !showReminderComposer }
-                    }
-                }
-
-                // добавленные напоминания чипами «12.10 18:00 ×» (удаление по крестику)
-                reminders.forEachIndexed { index, millis ->
-                    ReminderChip(
-                        label = formatReminderChip(millis),
-                        onRemove = { reminders = reminders.filterIndexed { i, _ -> i != index } },
-                    )
-                }
-
-                if (showReminderComposer) {
-                    ReminderComposer(
-                        initialDateIso = dueDateMillis?.let { isoDate(it) } ?: todayIso(),
-                        currentYear = currentYear,
-                        onDismiss = { showReminderComposer = false },
-                        onAdd = { millis ->
-                            reminders = reminders + millis
-                            showReminderComposer = false
-                        },
-                    )
-                }
             }
         },
         confirmButton = {
@@ -965,9 +909,13 @@ fun TaskEditDialog(
                 shape = RoundedCornerShape(2.dp),
                 color = ColorBrandFill,
                 modifier =
-                Modifier.bouncyClickable {
+                Modifier
+                    .testTag("task_edit_confirm")
+                    .bouncyClickable {
                     if (title.isNotBlank() && effectiveSubject.isNotBlank()) {
-                        val dueIso = dueDateMillis?.let { isoDate(it) } ?: ""
+                        // W32: срок сдачи в диалоге больше не выбирается — новое задание
+                        // пишется с пустым deadlineDate, правка не затирает прежний срок.
+                        val dueIso = task?.deadlineDate ?: ""
                         // H1: новое → собираем сущность; правка → copy (id/group/completed/createdAt сохраняются)
                         val entity =
                             if (task == null) {
@@ -1115,6 +1063,7 @@ internal fun todayIso(): String {
 @Composable
 private fun ReminderQuickChip(
     text: String,
+    tag: String? = null,
     onClick: () -> Unit,
 ) {
     Surface(
@@ -1125,7 +1074,8 @@ private fun ReminderQuickChip(
         modifier =
         Modifier
             .height(30.dp)
-            .bouncyClickable(onClick = onClick),
+            .bouncyClickable(onClick = onClick)
+            .let { if (tag != null) it.testTag(tag) else it },
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
             Text(
@@ -1362,13 +1312,15 @@ private fun ReminderComposer(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBrandFill,
                     modifier =
-                    Modifier.bouncyClickable {
-                        val h = if (customTime) hourInput.toIntOrNull() ?: -1 else presetHour
-                        val m = if (customTime) minuteInput.toIntOrNull() ?: -1 else presetMinute
-                        if (h in 0..23 && m in 0..59) {
-                            reminderMillisFrom(dateIso, h, m, 0)?.let(onAdd)
-                        }
-                    },
+                    Modifier
+                        .testTag("reminder_composer_confirm")
+                        .bouncyClickable {
+                            val h = if (customTime) hourInput.toIntOrNull() ?: -1 else presetHour
+                            val m = if (customTime) minuteInput.toIntOrNull() ?: -1 else presetMinute
+                            if (h in 0..23 && m in 0..59) {
+                                reminderMillisFrom(dateIso, h, m, 0)?.let(onAdd)
+                            }
+                        },
                 ) {
                     Text(
                         text = "ДОБАВИТЬ",
