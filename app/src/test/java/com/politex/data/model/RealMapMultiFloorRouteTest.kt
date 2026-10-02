@@ -126,4 +126,41 @@ class RealMapMultiFloorRouteTest {
         val r = CollegeRouteFinder.findMultiFloorRoute(startRoom, room("301"), floorsMap())
         assertNotNull("маршрут от главного входа до 301 должен строиться", r)
     }
+
+    // W40c: площадка 4-го этажа (каб. 401-405) связана links e_8yy3eev ↔ e_wf8mlfr
+    // (лестница у 335, тот же план «3-4»). Жалоба заказчика: 309 → 405 не находился.
+    @Test
+    fun `W40c - маршрут 309 на 405 строится через лестницу у 335`() {
+        val r = CollegeRouteFinder.findMultiFloorRoute(room("309"), room("405"), floorsMap())
+        assertNotNull("309→405 должен строиться (links e_8yy3eev↔e_wf8mlfr)", r)
+        assertTrue(r!!.crossesFloors)
+        // вниз на 2 этаж → вверх у 335 (e_wf8mlfr) → площадка 4-го этажа (e_8yy3eev)
+        assertEquals(listOf("3-4", "2", "3-4", "3-4"), r.floorPaths.map { it.floorId })
+    }
+
+    // W40a: подключение комнат ПРОЕКЦИЕЙ двери на коридор. Жалоба заказчика: «из 107 в 123
+    // маршрут идёт почти до 115 и обратно» — крюк к дальнему узлу. После W40a путь вдоль
+    // коридора: длина ~0.13 (было ~0.39), точки идут монотонно по коридору y≈0.49.
+    @Test
+    fun `W40a - маршрут 107 на 123 идёт вдоль коридора без крюка`() {
+        val r = CollegeRouteFinder.findMultiFloorRoute(room("107"), room("123"), floorsMap())
+        assertNotNull("107→123 должен строиться", r)
+        assertFalse(r!!.crossesFloors)
+        assertTrue("длина должна быть ~0.21 без крюка (было ~0.39), получилось ${r.distance}", r.distance < 0.25f)
+        // маршрут держится полосы коридора (y 0.48-0.53), не убегая к дальним узлам
+        val pts = r.floorPaths[0].points
+        assertTrue(pts.size >= 3)
+        assertTrue(
+            "путь должен идти вдоль коридора y≈0.49, точки ${pts.take(3)}",
+            pts.drop(1).dropLast(1).all { it.y in 0.44f..0.56f },
+        )
+    }
+
+    // W40a: дверь читается из ассета и используется как точка старта маршрута
+    @Test
+    fun `W40a - дверь комнаты читается из ассета`() {
+        val r107 = mapData.floor("1").room("107")
+        assertNotNull(r107)
+        assertNotNull("у 107 должна быть дверь в разметке", r107!!.door)
+    }
 }

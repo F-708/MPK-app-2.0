@@ -35,8 +35,19 @@ object CollegeRouteFinder {
      * Граф этажа: вершины = узлы(nodes) + точки коридоров + проекции; рёбра = links узлов,
      * соседние точки коридоров, концы коридоров к узлам в радиусе JOIN_RADIUS, и ПРОЕКЦИИ
      * вершин на сегменты коридоров в радиусе PROJECTION_RADIUS (склейка пересечений).
+     *
+     * W40a: [attach] — точки старта/финиша (дверь комнаты ?: центр). Каждая ПРОЕЦИРУЕТСЯ
+     * на ближайший сегмент коридора этажа (перпендикуляр без ограничения радиуса) и
+     * подключается к проекционной точке, связанной с концами сегмента — маршрут выходит
+     * из двери ПРЯМО в коридор, без крюка к дальнему перекрёстку (ближайшая ВЕРШИНА может
+     * быть дальним узлом, хотя коридор проходит мимо двери). Фолбэк: если проекция ДАЛЬШЕ
+     * ближайшей вершины (комната в крыле без разметки рядом) — подключение к вершине,
+     * как раньше. Возврат: (вершины, рёбра, индексы attach-вершин).
      */
-    private fun buildGraph(floor: FloorMap): Pair<List<Vertex>, List<List<Pair<Int, Float>>>> {
+    private fun buildGraph(
+        floor: FloorMap,
+        attach: List<Pair<Float, Float>> = emptyList(),
+    ): Triple<List<Vertex>, List<List<Pair<Int, Float>>>, List<Int>> {
         val vertices = mutableListOf<Vertex>()
         val adjacency = mutableListOf<MutableList<Pair<Int, Float>>>()
 
@@ -88,9 +99,12 @@ object CollegeRouteFinder {
         // Проекционная склейка: каждая существующая вершина соединяется с ближайшей точкой
         // каждого сегмента, если перпендикуляр ≤ PROJECTION_RADIUS. Снимок списка вершин
         // фиксируется до цикла — добавленные проекции сами не проецируются (иначе O(n^3)).
+        // W40b: проекции, лежащие на ОДНОМ сегменте, дополнительно записываются для цепочки.
+        val onSegment = HashMap<Int, MutableList<Pair<Float, Int>>>() // сегмент → (t, вершина)
         val snapshot = vertices.toList()
         for (v in snapshot) {
-            for ((a, b) in segments) {
+            for ((si, ab) in segments.withIndex()) {
+                val (a, b) = ab
                 val q = projectOnSegment(v, a, b) ?: continue
                 if (dist(v, q) < 1e-4f) continue // уже на сегменте
                 val qv = addVertex(q.x, q.y)
@@ -101,13 +115,77 @@ object CollegeRouteFinder {
                 val bi = vertices.indexOf(b)
                 if (ai >= 0 && vertices[ai] !== q) link(qv, ai)
                 if (bi >= 0 && vertices[bi] !== q) link(qv, bi)
+                onSegment.getOrPut(si) { mutableListOf() }.add(tOnSegment(q, a, b) to qv)
             }
         }
-        return vertices to adjacency
+
+        // W40a: подключение attach-точек (старт/финиш) ПРОЕКЦИЕЙ на ближайший сегмент
+        // коридора этажа. Перебираются все сегменты, выбирается минимальный перпендикуляр;
+        // проекция связывается с концами сегмента (механизм как в склейке выше). Если
+        // проекция ДАЛЬШЕ ближайшей вершины графа (комната в крыле без коридора рядом) —
+        // фолбэк на ближайшую вершину, как до W40a. Фолбэк ищется только среди «настоящих»
+        // вершин (до attach): иначе на пустом этаже две комнаты связались бы напрямую.
+        val n0 = vertices.size
+        val attachIdx = attach.map { (ax, ay) ->
+            val rv = addVertex(ax, ay)
+            val p = Vertex(ax, ay)
+            var bestQ: Vertex? = null
+            var bestD = Float.MAX_VALUE
+            var bestSi = -1
+            for ((si, ab) in segments.withIndex()) {
+                val (a, b) = ab
+                val q = projectPointOnSegment(p, a, b) ?: continue
+                val d = dist(p, q)
+                if (d < bestD) {
+                    bestD = d
+                    bestQ = q
+                    bestSi = si
+                }
+            }
+            val nv = nearestVertex(vertices.subList(0, n0), ax, ay)
+            val nvD = if (nv >= 0) dist(p, vertices[nv]) else Float.MAX_VALUE
+            if (bestQ != null && bestD <= nvD) {
+                val qi = addVertex(bestQ.x, bestQ.y)
+                link(rv, qi)
+                val (a, b) = segments[bestSi]
+                val ai = vertices.indexOf(a)
+                val bi = vertices.indexOf(b)
+                if (ai >= 0) link(qi, ai)
+                if (bi >= 0) link(qi, bi)
+                onSegment.getOrPut(bestSi) { mutableListOf() }.add(tOnSegment(bestQ, a, b) to qi)
+            } else if (nv >= 0) {
+                link(rv, nv)
+            }
+            rv
+        }
+
+        // W40b: проекции одного сегмента — ЦЕПОЧКОЙ по t (a—q1—q2—…—b). Коридоры заказчика
+        // размечены «на глаз» длинными сегментами: без цепочки две двери на одном сегменте
+        // связаны только через его дальние концы — маршрут делает крюк к перекрёстку
+        // (жалоба «из 107 в 123 идёт почти до 115 и обратно»). Цепочка даёт рёбра вдоль
+        // коридора между соседними проекциями.
+        onSegment.forEach { (si, list) ->
+            val (a, b) = segments[si]
+            val chain = mutableListOf(vertices.indexOf(a))
+            list.sortedBy { it.first }.forEach { e -> if (e.second != chain.last()) chain.add(e.second) }
+            val bi = vertices.indexOf(b)
+            if (bi != chain.last()) chain.add(bi)
+            for (i in 1 until chain.size) link(chain[i - 1], chain[i])
+        }
+        return Triple(vertices, adjacency, attachIdx)
     }
 
-    /** Проекция точки p на отрезок ab; null если перпендикуляр длиннее PROJECTION_RADIUS. */
-    private fun projectOnSegment(p: Vertex, a: Vertex, b: Vertex): Vertex? {
+    /** Параметр t точки q, лежащей на отрезке ab (0 = a, 1 = b). */
+    private fun tOnSegment(q: Vertex, a: Vertex, b: Vertex): Float {
+        val dx = b.x - a.x
+        val dy = b.y - a.y
+        val len2 = dx * dx + dy * dy
+        if (len2 == 0f) return 0f
+        return ((q.x - a.x) * dx + (q.y - a.y) * dy) / len2
+    }
+
+    /** Проекция точки p на отрезок ab (t зажат в [0,1]); без ограничения радиуса. */
+    private fun projectPointOnSegment(p: Vertex, a: Vertex, b: Vertex): Vertex? {
         val dx = b.x - a.x
         val dy = b.y - a.y
         val len2 = dx * dx + dy * dy
@@ -120,9 +198,12 @@ object CollegeRouteFinder {
         } else {
             t
         }
-        val q = Vertex(a.x + tc * dx, a.y + tc * dy)
-        return if (dist(p, q) <= PROJECTION_RADIUS) q else null
+        return Vertex(a.x + tc * dx, a.y + tc * dy)
     }
+
+    /** Проекция точки p на отрезок ab; null если перпендикуляр длиннее PROJECTION_RADIUS. */
+    private fun projectOnSegment(p: Vertex, a: Vertex, b: Vertex): Vertex? =
+        projectPointOnSegment(p, a, b)?.takeIf { dist(p, it) <= PROJECTION_RADIUS }
 
     /** Путь по графу одного этажа от точки (ax,ay) до (bx,by): последовательность точек графа (без концов). */
     private fun floorPath(
@@ -132,13 +213,15 @@ object CollegeRouteFinder {
         bx: Float,
         by: Float,
     ): List<MapPoint>? {
-        val (vertices, adjacency) = buildGraph(floor)
-        if (vertices.isEmpty()) return null
-        val start = nearestVertex(vertices, ax, ay)
-        val finish = nearestVertex(vertices, bx, by)
-        if (start < 0 || finish < 0) return null
-        val path = shortestPath(vertices, adjacency, start, finish) ?: return null
-        return path.map { MapPoint(vertices[it].x, vertices[it].y) }
+        val (vertices, adjacency, attachIdx) = buildGraph(floor, listOf(ax to ay, bx to by))
+        if (attachIdx.size < 2) return null
+        val path = shortestPath(vertices, adjacency, attachIdx[0], attachIdx[1]) ?: return null
+        val out = mutableListOf<MapPoint>()
+        path.forEach {
+            val p = MapPoint(vertices[it].x, vertices[it].y)
+            if (out.isEmpty() || distP(out.last(), p) > 1e-4f) out.add(p) // без дублей точек
+        }
+        return out
     }
 
     fun findRoute(
@@ -147,13 +230,22 @@ object CollegeRouteFinder {
         floor: FloorMap,
     ): Route? {
         if (from.id == to.id) return null
-        val graph = floorPath(floor, from.x, from.y, to.x, to.y) ?: return null
-        val points = mutableListOf(MapPoint(from.x, from.y))
-        points += graph
-        points.add(MapPoint(to.x, to.y))
+        // W40a: старт/финиш — от двери (если размечена), центр — для отрисовки
+        val fromP = from.door ?: MapPoint(from.x, from.y)
+        val toP = to.door ?: MapPoint(to.x, to.y)
+        val graph = floorPath(floor, fromP.x, fromP.y, toP.x, toP.y) ?: return null
+        val raw = mutableListOf(MapPoint(from.x, from.y)) + graph + MapPoint(to.x, to.y)
+        val points = mutableListOf<MapPoint>()
+        raw.forEach { if (points.isEmpty() || distP(points.last(), it) > 1e-4f) points.add(it) }
         var total = 0f
-        for (i in 1 until graph.size) total += distP(graph[i - 1], graph[i])
+        for (i in 1 until points.size) total += distP(points[i - 1], points[i])
         return Route(points, total)
+    }
+
+    /** W40a: точка подключения комнаты к графу — дверь (приоритет разметки) или центр. */
+    private fun attachPoint(r: MapRoom): Pair<Float, Float> {
+        val p = r.door ?: MapPoint(r.x, r.y)
+        return p.x to p.y
     }
 
     /**
@@ -221,14 +313,19 @@ object CollegeRouteFinder {
             linkV(a, b, STAIR_COST)
         }
 
-        // Этажные подграфы (nodes + corridors, как в buildGraph) и индексы лестниц
+        // Этажные подграфы (nodes + corridors, как в buildGraph) и индексы лестниц.
+        // Комнаты старта/финиша подключаются как attach-точки buildGraph (W40a: дверь?:
+        // центр → ПРОЕКЦИЯ на ближайший сегмент коридора, фолбэк — ближайшая вершина).
         val stairVById = HashMap<String, Int>()
         val stairs = mutableListOf<Triple<String, MapEntrance, Int>>() // (floorId, entrance, vertex)
         var startV = -1
         var finishV = -1
         order.forEach { fid ->
             val floor = floors.getValue(fid)
-            val (verts, adj) = buildGraph(floor)
+            val attach = ArrayList<Pair<Float, Float>>()
+            if (fid == fromId) attach.add(attachPoint(from))
+            if (fid == toId) attach.add(attachPoint(to))
+            val (verts, adj, attachIdx) = buildGraph(floor, attach)
             val base = gVerts.size
             verts.forEach { (x, y) -> addV(fid, x, y) }
             adj.forEachIndexed { i, edges -> edges.forEach { (j, d) -> if (j > i) linkV(base + i, base + j, d) } }
@@ -255,21 +352,10 @@ object CollegeRouteFinder {
                 stairVById[e.id] = sv
                 stairs.add(Triple(fid, e, sv))
             }
-            // Комнаты старта/финиша на своих этажах — тоже вершины, связанные с графом этажа.
-            // ponytail: привязка к БЛИЖАЙШЕЙ вершине без ограничения радиуса — для дальних комнат
-            // (~0.3 от коридора, wing'ы без vision-доразметки) линия подхода будет диагональной;
-            // когда vision-разметка f1/f3-4 добавит коридоры, диагонали исчезнут сами.
-            if (fid == fromId) {
-                val v = addV(fid, from.x, from.y)
-                val n = snap(from.x, from.y)
-                if (n >= 0) linkV(v, n)
-                startV = v
-            }
-            if (fid == toId) {
-                val v = addV(fid, to.x, to.y)
-                val n = snap(to.x, to.y)
-                if (n >= 0) linkV(v, n)
-                finishV = v
+            // Комнаты старта/финиша уже в графе этажа как attach-вершины (индексы совпадают
+            // после слияния: локальный i → глобальный base + i)
+            attachIdx.forEachIndexed { k, idx ->
+                if (fid == fromId && (fid != toId || k == 0)) startV = base + idx else finishV = base + idx
             }
         }
 
@@ -312,7 +398,8 @@ object CollegeRouteFinder {
             cur.add(MapPoint(v.second, v.third))
         }
         flush()
-        // Начало/конец — центры кабинетов (могут отличаться от snapped-вершин)
+        // Начало/конец — центры кабинетов (путь стартует от двери — W40a — центр только
+        // для отрисовки; без двери attach-точка и есть центр)
         if (result.isNotEmpty()) {
             val first = result[0]
             if (first.points.isEmpty() || distP(first.points.first(), MapPoint(from.x, from.y)) > 1e-4f) {

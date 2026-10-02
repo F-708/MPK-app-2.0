@@ -25,6 +25,7 @@ for (const fid of FLOOR_ORDER) {
     rooms: (f.rooms || []).map(r => ({
       number: r.number || '', status: r.status || 'normal',
       x: +r.x, y: +r.y, w: +r.w, h: +r.h,
+      door: Array.isArray(r.door) && r.door.length >= 2 ? [+r.door[0], +r.door[1]] : null,
     })),
     corridors: (f.corridors || []).filter(c => Array.isArray(c.points) && c.points.length >= 2),
     nodes: (f.nodes || []).map(n => ({ id: n.id, x: +n.x, y: +n.y, links: n.links || [] })),
@@ -45,7 +46,10 @@ function floorForRoom(number) {
 }
 
 // ---- порт buildGraph (CollegeRouteFinder.buildGraph) ----
-function buildGraphFloor(fd) {
+// attach (W40a): точки старта/финиша — ПРОЕКЦИЯ на ближайший сегмент коридора
+// (перпендикуляр без радиуса; если проекция дальше ближайшей вершины — фолбэк на неё)
+function buildGraphFloor(fd, attach) {
+  attach = attach || [];
   const vertices = [], adjacency = [], segments = [];
   function addVertex(x, y) {
     for (let i = 0; i < vertices.length; i++)
@@ -80,21 +84,83 @@ function buildGraphFloor(fd) {
       if (best >= 0) link(end, best);
     });
   });
-  // Проекционная склейка (снимок вершин до цикла, как в приложении)
+  // Проекционная склейка (снимок вершин до цикла, как в приложении).
+  // W40b: проекции одного сегмента записываются для цепочки по t.
+  const onSegment = {}; // si -> [{t, v}]
   const snapshot = vertices.slice();
   for (const v of snapshot) {
-    for (const seg of segments) {
+    segments.forEach((seg, si) => {
       const q = projectOnSegment(v, seg[0], seg[1]);
-      if (!q) continue;
-      if (Math.hypot(v.x - q.x, v.y - q.y) < VDUP) continue;
+      if (!q) return;
+      if (Math.hypot(v.x - q.x, v.y - q.y) < VDUP) return;
       const qv = addVertex(q.x, q.y);
       link(vertices.indexOf(v), qv);
       const ai = vertices.indexOf(seg[0]), bi = vertices.indexOf(seg[1]);
       if (ai >= 0 && vertices[ai] !== q) link(qv, ai);
       if (bi >= 0 && vertices[bi] !== q) link(qv, bi);
-    }
+      (onSegment[si] ||= []).push({ t: tOnSegment(q, seg[0], seg[1]), v: qv });
+    });
   }
-  return { vertices, adjacency };
+  // W40a: подключение attach-точек проекцией на ближайший сегмент коридора.
+  // Фолбэк — ближайшая «настоящая» вершина ДО attach (иначе на пустом этаже
+  // две комнаты связались бы напрямую).
+  const n0 = vertices.length;
+  const attachIdx = attach.map(pt => {
+    const rv = addVertex(pt[0], pt[1]);
+    let bestQ = null, bestD = Infinity, bestSi = -1;
+    for (let si = 0; si < segments.length; si++) {
+      const seg = segments[si];
+      const q = projectPointOnSegment(pt, seg[0], seg[1]);
+      if (!q) continue;
+      const d = Math.hypot(pt[0] - q.x, pt[1] - q.y);
+      if (d < bestD) { bestD = d; bestQ = q; bestSi = si; }
+    }
+    const nv = nearestVertex(vertices.slice(0, n0), pt[0], pt[1]);
+    const nvD = nv >= 0 ? Math.hypot(vertices[nv].x - pt[0], vertices[nv].y - pt[1]) : Infinity;
+    if (bestQ && bestD <= nvD) {
+      const qi = addVertex(bestQ.x, bestQ.y);
+      link(rv, qi);
+      const seg = segments[bestSi];
+      const ai = vertices.indexOf(seg[0]), bi = vertices.indexOf(seg[1]);
+      if (ai >= 0) link(qi, ai);
+      if (bi >= 0) link(qi, bi);
+      (onSegment[bestSi] ||= []).push({ t: tOnSegment(bestQ, seg[0], seg[1]), v: qi });
+    } else if (nv >= 0) {
+      link(rv, nv);
+    }
+    return rv;
+  });
+  // W40b: проекции одного сегмента — ЦЕПОЧКОЙ по t (a—q1—q2—…—b): без этого две двери на
+  // одном длинном «на глаз»-сегменте связаны только через дальние концы (крюк к перекрёстку)
+  Object.keys(onSegment).forEach(si => {
+    const seg = segments[si];
+    const chain = [vertices.indexOf(seg[0])];
+    onSegment[si].sort((p, q) => p.t - q.t).forEach(e => { if (e.v !== chain[chain.length - 1]) chain.push(e.v); });
+    const bi = vertices.indexOf(seg[1]);
+    if (bi !== chain[chain.length - 1]) chain.push(bi);
+    for (let i = 1; i < chain.length; i++) link(chain[i - 1], chain[i]);
+  });
+  return { vertices, adjacency, attach: attachIdx };
+}
+function tOnSegment(q, a, b) { // параметр t точки q на отрезке ab (0 = a, 1 = b)
+  const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
+  if (len2 === 0) return 0;
+  return ((q.x - a.x) * dx + (q.y - a.y) * dy) / len2;
+}
+function projectPointOnSegment(p, a, b) { // t зажат в [0,1], без ограничения радиуса
+  const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
+  if (len2 === 0) return null;
+  let t = ((p[0] - a.x) * dx + (p[1] - a.y) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return { x: a.x + t * dx, y: a.y + t * dy };
+}
+function nearestVertex(vertices, x, y) {
+  let best = -1, bd = Infinity;
+  for (let i = 0; i < vertices.length; i++) {
+    const d = (vertices[i].x - x) * (vertices[i].x - x) + (vertices[i].y - y) * (vertices[i].y - y);
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
 }
 function projectOnSegment(p, a, b) {
   const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
@@ -127,7 +193,10 @@ const roomV = {};         // 'номер' -> вершина (только usable
 FLOOR_ORDER.forEach(fid => {
   const fd = floors[fid];
   if (!fd) return;
-  const g = buildGraphFloor(fd);
+  // W40a: комнаты — attach-точки (дверь ?: центр) → проекция на ближайший сегмент
+  const rooms = fd.rooms.filter(r => r.number && r.status !== 'nonexistent' && floorForRoom(r.number));
+  const attach = rooms.map(r => (r.door ? [r.door[0], r.door[1]] : [r.x, r.y]));
+  const g = buildGraphFloor(fd, attach);
   const base = gVerts.length;
   g.vertices.forEach(v => addV(fid, v.x, v.y));
   g.adjacency.forEach((edges, i) => edges.forEach(ed => { if (ed[0] > i) linkV(base + i, base + ed[0], ed[1]); }));
@@ -148,12 +217,7 @@ FLOOR_ORDER.forEach(fid => {
     stairVById[e.id] = sv;
     stairs.push({ fid, en: e, v: sv });
   });
-  fd.rooms.filter(r => r.number && r.status !== 'nonexistent' && floorForRoom(r.number)).forEach(r => {
-    const v = addV(fid, r.x, r.y);
-    const n = snap(r.x, r.y);
-    if (n >= 0) linkV(v, n);
-    roomV[r.number.toLowerCase()] = v;
-  });
+  rooms.forEach((r, k) => { roomV[r.number.toLowerCase()] = base + g.attach[k]; });
 });
 
 // 1) ЯВНЫЕ links: пары по id (любые этажи, включая совпадение floorId — 3-4 план
@@ -201,6 +265,12 @@ function dijkstra(start, finish) {
 }
 
 // ---- findMultiFloorRoute (порт: сегменты по floorId + рёбрам лестниц) ----
+function routeLength(segments) { // как в приложении: геометрия + STAIR_COST на переход
+  let len = 0;
+  for (const sg of segments) for (let i = 1; i < sg.points.length; i++)
+    len += Math.hypot(sg.points[i][0] - sg.points[i - 1][0], sg.points[i][1] - sg.points[i - 1][1]);
+  return len + STAIR_COST * (segments.length - 1);
+}
 function findMultiFloorRoute(fromNumber, toNumber) {
   const fromId = floorForRoom(fromNumber), toId = floorForRoom(toNumber);
   if (!fromId || !toId) return null;
@@ -327,6 +397,19 @@ for (const [a, b] of demos) {
   const r = findMultiFloorRoute(a, b);
   say('  ' + a + ' → ' + b + ': ' +
     (r ? r.map(sg => 'эт ' + sg.floorId + ' (' + sg.points.length + ' т.)').join(' → ') : 'НЕТ МАРШРУТА'));
+}
+
+// W40: маршруты заказчика (жалобы на крюки и 309→405) — длина и точки
+say('');
+say('Маршруты заказчика (W40):');
+const w40 = [['107', '123'], ['116', '123'], ['331', '301'], ['309', '405']];
+for (const [a, b] of w40) {
+  const r = findMultiFloorRoute(a, b);
+  const pts = r ? r.reduce((n, sg) => n + sg.points.length, 0) : 0;
+  say('  ' + a + ' → ' + b + ': ' + (r
+    ? 'длина ' + routeLength(r).toFixed(3) + ', точек ' + pts + ' [' +
+      r.map(sg => 'эт ' + sg.floorId + ':' + sg.points.length).join(' → ') + ']'
+    : 'НЕТ МАРШРУТА'));
 }
 
 fs.writeFileSync(REPORT, lines.join('\n') + '\n', 'utf8');

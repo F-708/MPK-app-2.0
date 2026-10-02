@@ -261,6 +261,13 @@ const TEST = `
     check('route-corpus-via-floor2', !!(routePreview && routePreview.segments &&
       routePreview.segments.map(s=>s.floorId).join(',') === '3-4,2,3-4'),
       routePreview ? 'сегменты: ' + routePreview.segments.map(s=>s.floorId).join(',') + ' точек ' + routePreview.points.length : 'нет маршрута');
+    // W40a: старт цепляется ПРОЕКЦИЕЙ на коридор (перпендикуляр (0.10,0.30)→(0.10,0.50)),
+    // а не к дальнему узлу/концу коридора — нет крюка
+    const p0 = routePreview && routePreview.points[0], p1 = routePreview && routePreview.points[1];
+    check('route-w40a-projection-attach', !!(p0 && p1 &&
+      Math.abs(p0[0]-0.10)<1e-6 && Math.abs(p0[1]-0.30)<1e-6 &&
+      Math.abs(p1[0]-0.10)<1e-6 && Math.abs(p1[1]-0.50)<1e-6),
+      p1 ? 'первые точки: ('+p0[0]+','+p0[1]+') → ('+p1[0]+','+p1[1]+')' : 'нет маршрута');
     fireWin('keydown', { key:'Escape' });
 
     // «4 этаж» отрезан от 3-го на том же плане: единственный вход — лестница, связанная

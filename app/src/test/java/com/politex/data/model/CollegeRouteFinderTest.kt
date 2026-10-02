@@ -100,6 +100,57 @@ class CollegeRouteFinderTest {
         )
     }
 
+    // W40a: комната цепляется ПРОЕКЦИЕЙ двери на ближайший сегмент коридора (без радиуса),
+    // а не к дальнему узлу — маршрут из двери выходит в коридор сразу, без крюка.
+    @Test
+    fun `W40a - комната цепляется проекцией двери на коридор без крюка к узлу`() {
+        val f = floorWithCorridor() // коридор (0.1,0.5)-(0.9,0.5): вершины-концы в 0.4 от дверей
+        val a = room("101", 0.5f, 0.3f).let { it.copy(door = MapPoint(0.5f, 0.46f)) }
+        val b = room("105", 0.5f, 0.7f).let { it.copy(door = MapPoint(0.5f, 0.54f)) }
+
+        val route = CollegeRouteFinder.findRoute(a, b, f)
+
+        assertNotNull("маршрут должен найтись", route)
+        // путь проходит через точку проекции (0.5,0.5) — перпендикуляр из обеих дверей
+        assertTrue(
+            "в пути должна быть точка проекции (0.5,0.5), путь ${route!!.points}",
+            route.points.any { Math.abs(it.x - 0.5f) < 1e-3f && Math.abs(it.y - 0.5f) < 1e-3f },
+        )
+        // и НЕ ходит к концам коридора (крюк к дальнему узлу)
+        assertTrue(
+            "путь не должен идти к концам коридора (крюк), путь ${route.points}",
+            route.points.none {
+                (Math.abs(it.x - 0.1f) < 1e-3f && Math.abs(it.y - 0.5f) < 1e-3f) ||
+                    (Math.abs(it.x - 0.9f) < 1e-3f && Math.abs(it.y - 0.5f) < 1e-3f)
+            },
+        )
+        // длина по прямой через коридор, а не 2×0.4+0.8 крюком через конец
+        assertTrue("длина должна быть короткой, получилось ${route.distance}", route.distance < 0.5f)
+    }
+
+    // W40b: две двери на ОДНОМ длинном сегменте «на глаз»-коридора связаны цепочкой
+    // проекций по t — маршрут идёт вдоль коридора, не кидаясь к дальним концам сегмента.
+    @Test
+    fun `W40b - две двери на одном сегменте идут вдоль коридора`() {
+        val f = floorWithCorridor() // один длинный сегмент (0.1,0.5)-(0.9,0.5)
+        val a = room("101", 0.3f, 0.3f).let { it.copy(door = MapPoint(0.3f, 0.46f)) }
+        val b = room("105", 0.7f, 0.3f).let { it.copy(door = MapPoint(0.7f, 0.46f)) }
+
+        val route = CollegeRouteFinder.findRoute(a, b, f)
+
+        assertNotNull(route)
+        // центры добавляют по 0.16 подхода к двери: длина ≈ 0.16+0.04+0.4+0.04+0.16 = 0.8
+        assertTrue("длина вдоль коридора ~0.8, получилось ${route!!.distance}", route.distance in 0.7f..0.9f)
+        // концы сегмента не посещаются — нет крюка к дальним узлам
+        assertTrue(
+            "путь не должен касаться концов сегмента, путь ${route.points}",
+            route.points.none {
+                (Math.abs(it.x - 0.1f) < 1e-3f && Math.abs(it.y - 0.5f) < 1e-3f) ||
+                    (Math.abs(it.x - 0.9f) < 1e-3f && Math.abs(it.y - 0.5f) < 1e-3f)
+            },
+        )
+    }
+
     // ---- W39c: ортогонализация маршрута для отрисовки ----
 
     @Test

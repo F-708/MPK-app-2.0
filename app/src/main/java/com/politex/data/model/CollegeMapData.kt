@@ -19,6 +19,11 @@ data class MapRoom(
     val y: Float,
     val w: Float,
     val h: Float,
+    /**
+     * W40a: точка двери комнаты [x, y] из разметки заказчика (null — дверь не размечена).
+     * Маршрут стартует/финишрует от двери (центр — только для отрисовки начала линии).
+     */
+    val door: MapPoint? = null,
 )
 
 data class MapCorridor(
@@ -126,6 +131,8 @@ class CollegeMapData(
                                 y = o.optDouble("y").toFloat(),
                                 w = o.optDouble("w").toFloat(),
                                 h = o.optDouble("h").toFloat(),
+                                door = o.optJSONArray("door")?.takeIf { it.length() >= 2 }
+                                    ?.let { MapPoint(it.optDouble(0).toFloat(), it.optDouble(1).toFloat()) },
                             )
                         },
                         corridors =
