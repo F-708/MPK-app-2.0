@@ -41,7 +41,9 @@ import kotlinx.coroutines.delay
 @Composable
 fun IntroSplash(
     onFinished: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // N16: вход из виджета/уведомления — без анимации, сразу к месту тапа
+    skip: Boolean = false
 ) {
     val context = LocalContext.current
     val reducedMotion = remember {
@@ -60,31 +62,37 @@ fun IntroSplash(
     var progressPlaying by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
+        // N16: skip (виджет/уведомление) или reducedMotion — минимум задержки;
+        // обычный холодный старт — ~750ms вместо прежних 1350 («меньше секунды»)
+        if (skip) {
+            onFinished()
+            return@LaunchedEffect
+        }
         if (reducedMotion) {
             delay(400)
             onFinished()
             return@LaunchedEffect
         }
         appearing = true
-        delay(350)
+        delay(250)
         progressPlaying = true
-        delay(1000)
+        delay(500)
         onFinished()
     }
 
     val emblemScale by animateFloatAsState(
         targetValue = if (appearing) 1f else 0.6f,
-        animationSpec = tween(durationMillis = 350),
+        animationSpec = tween(durationMillis = 250),
         label = "IntroScale"
     )
     val emblemAlpha by animateFloatAsState(
         targetValue = if (appearing) 1f else 0f,
-        animationSpec = tween(durationMillis = 350),
+        animationSpec = tween(durationMillis = 250),
         label = "IntroAlpha"
     )
     val barProgress by animateFloatAsState(
         targetValue = if (progressPlaying) 1f else 0.05f,
-        animationSpec = tween(durationMillis = 950, easing = LinearEasing),
+        animationSpec = tween(durationMillis = 480, easing = LinearEasing),
         label = "IntroBar"
     )
 
@@ -146,8 +154,9 @@ fun IntroSplash(
 }
 
 @Composable
-fun IntroSplashOverlay(modifier: Modifier = Modifier) {
-    var visible by remember { mutableStateOf(true) }
+fun IntroSplashOverlay(modifier: Modifier = Modifier, skip: Boolean = false) {
+    // N16: при skip не компонуем оверлей вовсе — ни одного кадра белого сплэша
+    var visible by remember { mutableStateOf(!skip) }
     if (visible) {
         androidx.compose.animation.AnimatedVisibility(
             visible = visible,
@@ -155,7 +164,7 @@ fun IntroSplashOverlay(modifier: Modifier = Modifier) {
             exit = fadeOut(),
             modifier = modifier
         ) {
-            IntroSplash(onFinished = { visible = false })
+            IntroSplash(onFinished = { visible = false }, skip = skip)
         }
     }
 }

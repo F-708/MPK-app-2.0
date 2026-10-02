@@ -40,6 +40,13 @@ class MainActivity : ComponentActivity() {
         // H1: доставка напоминаний о заданиях (периодический воркер, 15 мин)
         MpkWorkManagerHelper.setupPeriodicReminderCheck(this)
 
+        // N16: холодный старт из виджета/уведомления — без splash, сразу к месту тапа
+        val deepLink = shouldSkipSplash(
+            intent?.hasExtra("EXTRA_OPEN_TAB") == true,
+            intent?.hasExtra("EXTRA_ROOM") == true,
+            intent?.hasExtra("EXTRA_SCROLL_TARGET") == true
+        )
+
         setContent {
             val appViewModel: AppViewModel = viewModel()
             mainViewModel = appViewModel
@@ -49,11 +56,15 @@ class MainActivity : ComponentActivity() {
                 handleIntent(intent, appViewModel)
             }
 
-            MyApplicationTheme {
-                MainScreen(
-                    viewModel = appViewModel,
-                    modifier = Modifier.fillMaxSize()
-                )
+            androidx.compose.foundation.layout.Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
+                MyApplicationTheme {
+                    MainScreen(
+                        viewModel = appViewModel,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                // N16: splash поверх контента (~750ms), при deep-link — skip
+                com.politex.ui.components.IntroSplashOverlay(skip = deepLink)
             }
         }
     }
@@ -97,3 +108,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+/**
+ * N16: splash НЕ проигрывается, если приложение открыто из виджета/уведомления —
+ * любой из extras означает «пользователь тапнул туда-то, заставка только мешает».
+ * Чистая функция (без Android-зависимостей) — удобно покрыть юнит-тестом.
+ */
+fun shouldSkipSplash(hasOpenTab: Boolean, hasRoom: Boolean, hasScrollTarget: Boolean): Boolean =
+    hasOpenTab || hasRoom || hasScrollTarget

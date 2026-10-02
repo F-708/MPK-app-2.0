@@ -42,7 +42,12 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.tv_next_subject, style.mainColor)
             views.setTextColor(R.id.tv_now_details, style.subColor)
             views.setTextColor(R.id.tv_next_details, style.subColor)
-            // Б7: кабинет — отдельная кнопка, красится в акцент темы виджета
+            // N7: чип кабинета — фон highlightColor, текст mainColor. Пара даёт
+            // контраст во всех 4 стилях: LIGHT (тёмный текст по светло-голубому),
+            // DARK/BLUE/SKY (белый текст по тёмно-синему). Было: текст mainColor по
+            // почти-белой плашке bg_widget_room_chip — белый по белому в DARK/BLUE/SKY.
+            views.setInt(R.id.tv_now_room, "setBackgroundColor", style.highlightColor)
+            views.setInt(R.id.tv_next_room, "setBackgroundColor", style.highlightColor)
             views.setTextColor(R.id.tv_now_room, style.mainColor)
             views.setTextColor(R.id.tv_next_room, style.mainColor)
 
