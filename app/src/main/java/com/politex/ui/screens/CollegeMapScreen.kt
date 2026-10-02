@@ -54,6 +54,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,7 +65,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -101,7 +101,6 @@ import com.politex.data.local.entity.LessonEntity
 import com.politex.ui.components.RoomScheduleDialog
 import com.politex.ui.components.currentRoomLessonNumber
 import com.politex.ui.components.filterRoomLessonsForDate
-import com.politex.ui.viewmodel.AppViewModel
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -141,14 +140,13 @@ fun CollegeMapScreen(
     // Обычный вход с карты/меню — null, маршрута нет.
     fromRoom: String? = null,
 
-    // R1: явный запрос маршрута (виджет NowNext); дублируется одноразовым флагом
-    // AppUiState.showRouteOnMap, который экран снимает сам (см. LaunchedEffect ниже).
+    // R1: явный запрос маршрута (виджет NowNext). E4: приходит nav-аргументом route=
+    // (buildMapRoute) вместо одноразового флага AppUiState.showRouteOnMap.
     showRoute: Boolean = false,
 
-    // Выбранный кабинет поднимаем наверх (CollegeScreen.mapRoom): переход в карточку
-    // преподавателя уничтожает этот экран вместе с его remember-состоянием, и без
-    // синхронизации возврат «назад» открывал карту со СТАРЫМ кабинетом.
-    onRoomChanged: (String) -> Unit = {},
+    // E4: экран — запись backstack'а Navigation-Compose. Выбранный кабинет живёт в
+    // rememberSaveable записи: переход в карточку преподавателя и «назад» восстанавливают
+    // его же (Б8/N15 без подъёма onRoomChanged в родителя — аргумент room стабилен в записи).
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -193,22 +191,19 @@ fun CollegeMapScreen(
         value = (catalogCodes + fromDb).distinct().sorted()
     }
 
-    var query by remember { mutableStateOf(initialRoom?.trim().orEmpty()) }
-    var groupQuery by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf(initialRoom?.trim().orEmpty()) }
+    var groupQuery by rememberSaveable { mutableStateOf("") }
     // Сообщение от поиска по группе («Сейчас уроков нет — …» / ошибка)
     var groupMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    var searchFailed by remember { mutableStateOf(false) }
-    // MAP-01: target — ЕДИНСТВЕННЫЙ источник истины на экране. Раньше remember(initialTarget)
-    // пересоздавал state на каждое эхо родителя (onRoomChanged → mapRoom → initialRoom), и тап
-    // мог перезаписаться старым значением («третий клик не нажимается»). initialRoom читаем
-    // только в инициализаторе: возврат с карточки преподавателя ПЕРЕСОЗДАЁТ экран (when() в
-    // CollegeScreen), и remember{} стартует с mapRoom — сценарий «преподаватель → назад → тот
-    // же кабинет» сохраняется, а локальные тапы эхом больше не сбрасываются.
-    var target by remember { mutableStateOf(initialRoom?.trim().orEmpty()) }
-    LaunchedEffect(target) { onRoomChanged(target) }
-    var floorId by remember {
+    var searchFailed by rememberSaveable { mutableStateOf(false) }
+    // MAP-01: target — ЕДИНСТВЕННЫЙ источник истины на экране. initialRoom читаем только
+    // в инициализаторе. E4: rememberSaveable — состояние выбранного кабинета/этажа живёт
+    // в saved-state записи backstack'а: map → teacher → back восстанавливает тот же кабинет
+    // (приёмка N15) без эха onRoomChanged родителю.
+    var target by rememberSaveable { mutableStateOf(initialRoom?.trim().orEmpty()) }
+    var floorId by rememberSaveable {
         mutableStateOf(CollegeMap.floorForRoom(initialRoom.orEmpty())?.id ?: "1")
     }
 
@@ -291,30 +286,11 @@ fun CollegeMapScreen(
         CollegeMap.floorForRoom(target)?.let { floorId = it.id }
     }
 
-    // R3: «тёплый» повторный вход по интенту (тап по виджету при уже открытой карте) —
-    // target следует за initialRoom. Эхо onRoomChanged безопасно: при r == target присваивания нет.
-    LaunchedEffect(initialRoom) {
-        val r = initialRoom?.trim().orEmpty()
-        if (r.isNotEmpty() && r != target) target = r
-    }
-
-    // R1: режим маршрута. Запрос «показать маршрут» приходит одним из трёх путей:
-    //  - параметр showRoute (прямой вызов/тесты);
-    //  - непустой fromRoom (тап по кабинету в расписании: "" = от главного входа);
-    //  - одноразовый флаг AppUiState.showRouteOnMap (виджет NowNext → MainActivity →
-    //    openMap(showRoute=true)); CollegeScreen прокидывает только room/fromRoom, поэтому
-    //    флаг снимаем с VM (activity-scoped, тот же экземпляр) прямо здесь.
-    val appViewModel: AppViewModel = viewModel()
-    var routeFromIntent by remember { mutableStateOf(showRoute) }
-    LaunchedEffect(appViewModel) {
-        appViewModel.uiState.collect { state ->
-            if (state.showRouteOnMap) {
-                routeFromIntent = true
-                appViewModel.consumeShowRouteOnMap()
-            }
-        }
-    }
-    val routeActive = routeFromIntent || fromRoom != null
+    // R1: режим маршрута. Запрос «показать маршрут» приходит nav-аргументами (E4):
+    //  - route=true (виджет NowNext → MainActivity → buildMapRoute(showRoute=true));
+    //  - непустой/пустой from (!= null): тап по кабинету в расписании, "" = от главного входа.
+    // showRoute читается прямо из аргумента записи backstack'а (одноразовый VM-флаг удалён).
+    val routeActive = showRoute || fromRoom != null
 
     // R1: мультиэтажный маршрут (CollegeRouteFinder на реальных данных). Ключи — только
     // входы маршрута: пан/зум пересчёта не вызывают.

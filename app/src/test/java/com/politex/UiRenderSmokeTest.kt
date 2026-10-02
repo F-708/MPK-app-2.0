@@ -64,15 +64,10 @@ class UiRenderSmokeTest {
 
     @Test
     fun `экран другого рендерится`() {
-        val repo = ScheduleRepository(MpkDatabase.getInstance(context).lessonDao())
+        // E4: CollegeScreen теперь только меню — подразделы стали route'ами NavController
         composeRule.setContent {
             MyApplicationTheme {
-                CollegeScreen(
-                    groupInfo = group,
-                    scheduleRepository = repo,
-                    onGroupChanged = {},
-                    onRunConnectionTest = {},
-                )
+                CollegeScreen(groupInfo = group)
             }
         }
         composeRule.waitForIdle()

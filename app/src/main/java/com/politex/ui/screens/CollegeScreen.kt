@@ -87,220 +87,151 @@ private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
 private val ADMIN_GOLD = Color(0xFFE8C55A)
 
-private enum class OtherPage { MENU, SPECIALTY, TEACHERS, TEACHER_CARD, SETTINGS, STUDENTS, STUDENT_CARD, MAP, GROUP_SCHEDULE }
-
+/**
+ * E4/N15: вкладка «Другое» — только МЕНЮ. Внутренний стек OtherPage/pageStack/goBack/
+ * navigateDeepEntry и BackHandler УДАЛЕНЫ: подразделы стали route'ами общего NavController
+ * (college/specialty, college/teachers, college/settings, college/students, teacher?name=,
+ * map?…, group_schedule?group= — см. MainScreen), «назад» обрабатывает системный backstack.
+ * Корень N15 устранён: back с карты возвращается на ПРЕДЫДУЩИЙ route (расписание выбранной
+ * группы), а не «на уровень глубже» к выбору группы.
+ */
 @Composable
 fun CollegeScreen(
     groupInfo: GroupInfo,
-    scheduleRepository: ScheduleRepository,
-    onGroupChanged: (String) -> Unit,
-    onRunConnectionTest: () -> Unit,
-
-    pendingTeacherName: String? = null,
-    onPendingTeacherConsumed: () -> Unit = {},
-
-    pendingRoomName: String? = null,
-
-    pendingFromRoomName: String? = null,
-    onPendingRoomConsumed: () -> Unit = {},
-
-    onReturnToOrigin: () -> Unit = {},
+    onOpenSpecialty: () -> Unit = {},
+    onOpenTeachers: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onOpenStudents: () -> Unit = {},
+    onOpenGroupSchedule: () -> Unit = {},
+    onOpenMap: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var page by rememberSaveable { mutableStateOf(OtherPage.MENU) }
-    var pageStack by rememberSaveable { mutableStateOf(listOf<OtherPage>()) }
-    var selectedStudent by remember { mutableStateOf<Student?>(null) }
-    var selectedTeacher by remember { mutableStateOf<Teacher?>(null) }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    fun navigateTo(target: OtherPage) {
-        pageStack = pageStack + page
-        page = target
-    }
-
-    fun popPage(): Boolean {
-        val stack = pageStack
-        if (stack.isEmpty()) return false
-        page = stack.last()
-        pageStack = stack.dropLast(1)
-        return true
-    }
-
-    fun goBack() {
-        if (!popPage()) {
-            page = OtherPage.MENU
-            onReturnToOrigin()
-        }
-    }
-
-    var mapRoom by remember { mutableStateOf(pendingRoomName) }
-    var mapFromRoom by remember { mutableStateOf(pendingFromRoomName) }
-
-    // 8.6: глубокий вход из глубины раздела (карточка урока → аудитория,
-    // экран группы → преподаватель) пушит ТЕКУЩУЮ страницу — «назад» вернёт
-    // пользователя туда, откуда он пришёл, а не в меню. Свежий вход снаружи
-    // (из вкладки «Расписание») стек не пушит: «назад» срабатывает через
-    // пустой стек → goBack → onReturnToOrigin → исходная вкладка.
-    // Дубликат целевой страницы из стека убираем, чтобы не ходить по кругу.
-    fun navigateDeepEntry(target: OtherPage) {
-        if (page == OtherPage.MENU && pageStack.isEmpty()) {
-            page = target
-        } else {
-            pageStack = pageStack - target
-            navigateTo(target)
-        }
-    }
-
-    LaunchedEffect(pendingRoomName) {
-        val room = pendingRoomName ?: return@LaunchedEffect
-        mapRoom = room
-        mapFromRoom = pendingFromRoomName
-        navigateDeepEntry(OtherPage.MAP)
-        onPendingRoomConsumed()
-    }
-
-    LaunchedEffect(pendingTeacherName) {
-        val name = pendingTeacherName ?: return@LaunchedEffect
-        // E2: парсинг teachers.csv — не на main-потоке (LaunchedEffect = Main)
-        val all = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            com.politex.AppGraph.teachersRepository.loadTeachers()
-        }
-        val surname = com.politex.data.repository.TeacherInsights.surnameOf(name)
-        val found = all.firstOrNull {
-            com.politex.data.repository.TeacherInsights.surnameOf(it.name) == surname
-        }
-        if (found != null) {
-            selectedTeacher = found
-            navigateDeepEntry(OtherPage.TEACHER_CARD)
-        }
-        onPendingTeacherConsumed()
-    }
-    BackHandler(enabled = page != OtherPage.MENU) { goBack() }
-
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(ColorBgMain)
     ) {
-        when (page) {
-            OtherPage.MENU -> OtherMenu(
-                groupInfo = groupInfo,
-                onOpenSpecialty = { navigateTo(OtherPage.SPECIALTY) },
-                onOpenTeachers = { navigateTo(OtherPage.TEACHERS) },
-                onOpenSettings = { navigateTo(OtherPage.SETTINGS) },
-                onOpenStudents = { navigateTo(OtherPage.STUDENTS) },
-                onOpenGroupSchedule = { navigateTo(OtherPage.GROUP_SCHEDULE) },
+        OtherMenu(
+            groupInfo = groupInfo,
+            onOpenSpecialty = onOpenSpecialty,
+            onOpenTeachers = onOpenTeachers,
+            onOpenSettings = onOpenSettings,
+            onOpenStudents = onOpenStudents,
+            onOpenGroupSchedule = onOpenGroupSchedule,
+            onOpenMap = onOpenMap
+        )
+    }
+}
 
-                onOpenMap = { mapRoom = null; mapFromRoom = null; navigateTo(OtherPage.MAP) }
-            )
-            OtherPage.SPECIALTY -> MySpecialtyPage(groupInfo) { goBack() }
-            OtherPage.TEACHERS -> TeachersPage(
+// ---------- Обёртки route'ов подразделов (контент — прежние приватные страницы) ----------
+
+@Composable
+internal fun SpecialtyRoute(groupInfo: GroupInfo, onBack: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
+        MySpecialtyPage(groupInfo, onBack)
+    }
+}
+
+@Composable
+internal fun TeachersRoute(
+    groupInfo: GroupInfo,
+    scheduleRepository: ScheduleRepository,
+    onOpenTeacher: (Teacher) -> Unit,
+    onBack: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
+        TeachersPage(
+            groupInfo = groupInfo,
+            scheduleRepository = scheduleRepository,
+            onBack = onBack,
+            onOpenTeacher = onOpenTeacher
+        )
+    }
+}
+
+/**
+ * E4: карточка преподавателя — route teacher?name=. ФИО разрешается в Teacher ОДИН раз
+ * при входе в composable (IO, кэш AppGraph на процесс); прежние три дубля поиска по фамилии
+ * (pendingTeacherName / карта / расписание группы) схлопнулись в этот route: callers просто
+ * navigate(buildTeacherRoute(name)). Не найден → возврат (onNotFound), как в старом коде.
+ */
+@Composable
+internal fun TeacherCardRoute(
+    teacherName: String,
+    groupInfo: GroupInfo,
+    scheduleRepository: ScheduleRepository,
+    onOpenRoom: (String) -> Unit,
+    onNotFound: () -> Unit,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    var teacher by remember(teacherName) { mutableStateOf<Teacher?>(null) }
+    LaunchedEffect(teacherName) {
+        // E2: парсинг teachers.csv — не на main-потоке
+        teacher = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.politex.AppGraph.teachersRepository.loadTeachers()
+        }.firstOrNull {
+            TeacherInsights.surnameOf(it.name) == TeacherInsights.surnameOf(teacherName)
+        }
+        if (teacher == null) onNotFound()
+    }
+    Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
+        teacher?.let { found ->
+            TeacherCardPageWrapper(
+                teacher = found,
                 groupInfo = groupInfo,
                 scheduleRepository = scheduleRepository,
-                onBack = { goBack() },
-                onOpenTeacher = { teacher ->
-                    selectedTeacher = teacher
-                    navigateTo(OtherPage.TEACHER_CARD)
-                }
+                teacherLessonDao = com.politex.data.local.MpkDatabase
+                    .getInstance(context).teacherLessonDao(),
+                // Б3: кабинет в расписании преподавателя ведёт на ту же карту,
+                // что и кабинет из своего расписания (раньше надпись была мёртвой)
+                onOpenRoom = onOpenRoom,
+                onBack = onBack
             )
-            OtherPage.TEACHER_CARD -> {
-                val teacher = selectedTeacher
-                if (teacher != null) {
-                    TeacherCardPageWrapper(
-                        teacher = teacher,
-                        groupInfo = groupInfo,
-                        scheduleRepository = scheduleRepository,
-                        teacherLessonDao = com.politex.data.local.MpkDatabase
-                            .getInstance(context).teacherLessonDao(),
-                        // Б3: кабинет в расписании преподавателя ведёт на ту же карту,
-                        // что и кабинет из своего расписания (раньше надпись была мёртвой)
-                        onOpenRoom = { room ->
-                            mapRoom = room
-                            mapFromRoom = null
-                            navigateTo(OtherPage.MAP)
-                        },
-                        onBack = { goBack() }
-                    )
-                } else {
-                    popPage()
-                }
-            }
-            OtherPage.MAP -> CollegeMapScreen(
-                initialRoom = mapRoom,
-                fromRoom = mapFromRoom,
-                // Б8: запоминаем выбранный кабинет на уровне CollegeScreen — иначе переход
-                // в карточку преподавателя и назад открывал карту со старым кабинетом
-                onRoomChanged = { mapRoom = it },
-                onOpenTeacher = { name ->
-                    // Т6: преподаватель из расписания кабинета — тот же механизм, что из вкладки «Расписание»
-                    scope.launch {
-                        // E2: IO-парсинг, не main
-                        val all = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            com.politex.AppGraph.teachersRepository.loadTeachers()
-                        }
-                        val surname = com.politex.data.repository.TeacherInsights.surnameOf(name)
-                        val found = all.firstOrNull {
-                            com.politex.data.repository.TeacherInsights.surnameOf(it.name) == surname
-                        }
-                        if (found != null) {
-                            selectedTeacher = found
-                            navigateTo(OtherPage.TEACHER_CARD)
-                        }
-                    }
-                },
-                onBack = {
-                    mapRoom = null
-                    mapFromRoom = null
-                    goBack()
-                }
+        }
+    }
+}
+
+@Composable
+internal fun SettingsRoute(
+    groupInfo: GroupInfo,
+    onGroupChanged: (String) -> Unit,
+    onRunConnectionTest: () -> Unit,
+    onBack: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
+        SettingsPage(
+            groupInfo = groupInfo,
+            onGroupChanged = onGroupChanged,
+            onRunConnectionTest = onRunConnectionTest,
+            onBack = onBack
+        )
+    }
+}
+
+/**
+ * База учащихся (admin). ponytail: список→карточка — локальное состояние route'а, а не
+ * отдельный route: Student не сериализуется в nav-аргумент, а перезагрузка 800 КБ CSV
+ * по имени — лишний IO. Внутренний BackHandler возвращает из карточки в список;
+ * глубже двух уровней здесь не было и нет.
+ */
+@Composable
+internal fun StudentsRoute(scheduleRepository: ScheduleRepository, onBack: () -> Unit) {
+    var selectedStudent by remember { mutableStateOf<Student?>(null) }
+    BackHandler(enabled = selectedStudent != null) { selectedStudent = null }
+    Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
+        val student = selectedStudent
+        if (student == null) {
+            StudentsDatabaseScreen(
+                onBack = onBack,
+                onOpenStudent = { selectedStudent = it }
             )
-            OtherPage.GROUP_SCHEDULE -> GroupScheduleScreen(
+        } else {
+            StudentCardScreen(
+                student = student,
                 scheduleRepository = scheduleRepository,
-                onBack = { goBack() },
-                ownGroupName = groupInfo.canonicalName,
-                onTeacherClick = { name ->
-                    // как в LaunchedEffect(pendingTeacherName): поиск по фамилии
-                    val surname = com.politex.data.repository.TeacherInsights.surnameOf(name)
-                    val found = com.politex.AppGraph.teachersRepository.loadTeachers().firstOrNull {
-                        com.politex.data.repository.TeacherInsights.surnameOf(it.name) == surname
-                    }
-                    if (found != null) {
-                        selectedTeacher = found
-                        navigateTo(OtherPage.TEACHER_CARD)
-                    }
-                },
-                onRoomClick = { room, fromRoom ->
-                    mapRoom = room
-                    mapFromRoom = fromRoom
-                    navigateTo(OtherPage.MAP)
-                }
+                onBack = { selectedStudent = null }
             )
-            OtherPage.SETTINGS -> SettingsPage(
-                groupInfo = groupInfo,
-                onGroupChanged = onGroupChanged,
-                onRunConnectionTest = onRunConnectionTest,
-                onBack = { goBack() }
-            )
-            OtherPage.STUDENTS -> StudentsDatabaseScreen(
-                onBack = { goBack() },
-                onOpenStudent = { student ->
-                    selectedStudent = student
-                    navigateTo(OtherPage.STUDENT_CARD)
-                }
-            )
-            OtherPage.STUDENT_CARD -> {
-                val student = selectedStudent
-                if (student != null) {
-                    StudentCardScreen(
-                        student = student,
-                        scheduleRepository = scheduleRepository,
-                        onBack = { goBack() }
-                    )
-                } else {
-                    popPage()
-                }
-            }
         }
     }
 }

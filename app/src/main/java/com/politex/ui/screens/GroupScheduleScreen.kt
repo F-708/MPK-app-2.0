@@ -112,14 +112,49 @@ internal fun pickForeignGroupLessons(rows: List<LessonEntity>, dateString: Strin
 // ---------- Экран «Расписание группы» ----------
 
 /**
+ * E4: обёртка route'а group_schedule?group=. Группа — АРГУМЕНТ записи backstack'а, а не
+ * remember-состояние: выбор группы пушит новую запись (group=X), поэтому возврат с карты
+ * (N15: group_schedule → map → back) попадает В РАСПИСАНИЕ ВЫБРАННОЙ ГРУППЫ, а не к выбору;
+ * «СМЕНИТЬ»/«назад» — popBackStack на запись выбора группы (group="), курс в ней сохранён.
+ */
+@Composable
+fun GroupScheduleRoute(
+    group: String,
+    groupInfo: com.politex.data.model.GroupInfo,
+    scheduleRepository: ScheduleRepository,
+    onGroupPicked: (String) -> Unit,
+    onChangeGroup: () -> Unit,
+    onTeacherClick: (String) -> Unit,
+    onRoomClick: (room: String, fromRoom: String?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    GroupScheduleScreen(
+        scheduleRepository = scheduleRepository,
+        onBack = onChangeGroup,
+        selectedGroupName = group,
+        onGroupSelected = onGroupPicked,
+        onChangeGroup = onChangeGroup,
+        ownGroupName = groupInfo.canonicalName,
+        onTeacherClick = onTeacherClick,
+        onRoomClick = onRoomClick,
+        modifier = modifier
+    )
+}
+
+/**
  * Просмотр расписания ЛЮБОЙ группы колледжа (курс -> группа из учебного плана,
  * не из базы учащихся). Синхронизация пишет строки в общую БД с ключом groupName
  * и НЕ меняет собственную группу пользователя (selected_group не трогается).
+ *
+ * E4: selectedGroupName — nav-аргумент (см. GroupScheduleRoute), а не внутреннее состояние.
  */
 @Composable
 fun GroupScheduleScreen(
     scheduleRepository: ScheduleRepository,
     onBack: () -> Unit,
+    selectedGroupName: String = "",
+    onGroupSelected: (String) -> Unit = {},
+    onChangeGroup: () -> Unit = {},
     ownGroupName: String = "",
     onTeacherClick: (String) -> Unit = {},
     onRoomClick: (room: String, fromRoom: String?) -> Unit = { _, _ -> },
@@ -131,7 +166,6 @@ fun GroupScheduleScreen(
     // N1: живой статус синхронизации из общей диагностики («Проверяю сайт…» → «Файл найден…»)
     val diagnosticInfo by scheduleRepository.diagnosticInfo.collectAsState()
 
-    var selectedGroupName by rememberSaveable { mutableStateOf("") }
     var selectedCourse by rememberSaveable {
         mutableIntStateOf(GroupParser.parse(ownGroupName)?.course ?: 1)
     }
@@ -346,7 +380,7 @@ fun GroupScheduleScreen(
                 selectedCourse = selectedCourse,
                 onCourseSelected = { selectedCourse = it },
                 ownGroupName = ownGroupName,
-                onGroupSelected = { selectedGroupName = it }
+                onGroupSelected = { onGroupSelected(it) }
             )
         } else {
             // Отличительная плашка «чужой» группы — тёмный тон из палитры (ColorTopBar)
@@ -404,7 +438,7 @@ fun GroupScheduleScreen(
                         color = Color.White.copy(alpha = 0.14f),
                         modifier = Modifier
                             .heightIn(min = 48.dp)
-                            .bouncyClickable { selectedGroupName = "" }
+                            .bouncyClickable { onChangeGroup() }
                             .testTag("group_schedule_change_button")
                     ) {
                         Box(

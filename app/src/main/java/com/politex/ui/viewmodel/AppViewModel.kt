@@ -28,40 +28,46 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class AppTab(val title: String) {
-    SCHEDULE("Расписание"),
+/**
+ * E4/N15: карта route'ов NavHost (ARC-01). Базовые имена — navigate() ходит по ним;
+ * паттерны с опциональными query-аргументами строятся в MainScreen (scrollRoutePattern,
+ * buildMapRoute и т.д.). Константы живут здесь, чтобы AppTab.route и MainScreen/MainActivity
+ * ссылались на один источник.
+ */
+const val ROUTE_SCHEDULE = "schedule"
+const val ROUTE_LESSONS = "lessons"
+const val ROUTE_BELLS = "bells"
+const val ROUTE_COLLEGE = "college"
+const val ROUTE_SPECIALTY = "college/specialty"
+const val ROUTE_TEACHERS = "college/teachers"
+const val ROUTE_SETTINGS = "college/settings"
+const val ROUTE_STUDENTS = "college/students"
+const val ROUTE_TEACHER = "teacher?name={name}"
+const val ROUTE_MAP = "map?room={room}&from={from}&route={route}"
+const val ROUTE_GROUP_SCHEDULE = "group_schedule?group={group}"
+
+/** Ключ одноразового запроса автопрокрутки в SavedStateHandle записи навигации. */
+const val ARG_SCROLL = "scroll"
+
+enum class AppTab(val title: String, val route: String) {
+    SCHEDULE("Расписание", ROUTE_SCHEDULE),
     // Ф4: вкладка переименована по заказчику: внутри — Материалы/Задания/Оценки
-    TASKS("Уроки"),
-    BELLS("Звонки"),
-    COLLEGE("Другое")
+    TASKS("Уроки", ROUTE_LESSONS),
+    BELLS("Звонки", ROUTE_BELLS),
+    COLLEGE("Другое", ROUTE_COLLEGE)
 }
 
+/**
+ * E4: из состояния УБРАНЫ currentTab/returnTab/pendingRoom/pendingFromRoom/
+ * pendingTeacherName/showRouteOnMap/scrollTarget — их заменили backstack и
+ * аргументы Navigation-Compose (ARC-01/ARC-06). VM осталась только про данные.
+ */
 data class AppUiState(
     val currentGroupName: String,
     val groupInfo: GroupInfo?,
-    val currentTab: AppTab = AppTab.SCHEDULE,
     val isSyncing: Boolean = false,
     val hasSyncError: Boolean = false,
-
-    val showGroupSelection: Boolean = false,
-
-    val pendingTeacherName: String? = null,
-
-    val pendingRoom: String? = null,
-
-    val pendingFromRoom: String? = null,
-
-    /**
-     * R1/N8: одноразовый флаг «показать маршрут» (виджет NowNext / явный запрос).
-     * Живёт отдельно от pendingRoom: CollegeScreen съедает pendingRoom ДО композиции
-     * карты, поэтому флаг потребляет сам CollegeMapScreen (consumeShowRouteOnMap).
-     */
-    val showRouteOnMap: Boolean = false,
-
-    val returnTab: AppTab? = null,
-
-    /** Одноразовый запрос автопрокрутки из виджета (см. requestScrollTarget). */
-    val scrollTarget: String? = null
+    val showGroupSelection: Boolean = false
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -120,13 +126,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun selectTab(tab: AppTab) {
-        _uiState.update { it.copy(currentTab = tab, returnTab = null) }
-    }
-
-    private fun enterCollegeFrom(returnTab: AppTab): AppTab? =
-        if (returnTab == AppTab.COLLEGE) null else returnTab
-
     fun setGroup(newGroupName: String) {
         val parsed = GroupParser.parse(newGroupName) ?: return
         WidgetUpdateHelper.setSelectedGroup(getApplication(), parsed.canonicalName)
@@ -146,70 +145,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (!scheduleRepository.hasSchedule(parsed.canonicalName)) {
                 syncSchedule(isAutoSync = false)
             }
-        }
-    }
-
-    fun openTeacher(teacherName: String) {
-        _uiState.update {
-            it.copy(
-                currentTab = AppTab.COLLEGE,
-                pendingTeacherName = teacherName,
-                returnTab = enterCollegeFrom(it.currentTab) ?: it.returnTab
-            )
-        }
-    }
-
-    fun consumePendingTeacher() {
-        _uiState.update { it.copy(pendingTeacherName = null) }
-    }
-
-    /**
-     * @param showRoute N8/R1: показать маршрут на карте (виджет NowNext). Одноразовый флаг —
-     * потребляет CollegeMapScreen (consumeShowRouteOnMap), т.к. CollegeScreen съедает
-     * pendingRoom до композиции карты.
-     */
-    fun openMap(room: String, fromRoom: String? = null, showRoute: Boolean = false) {
-        _uiState.update {
-            it.copy(
-                currentTab = AppTab.COLLEGE,
-                pendingRoom = room,
-                pendingFromRoom = fromRoom,
-                showRouteOnMap = showRoute,
-                returnTab = enterCollegeFrom(it.currentTab) ?: it.returnTab
-            )
-        }
-    }
-
-    fun consumePendingRoom() {
-        _uiState.update { it.copy(pendingRoom = null, pendingFromRoom = null) }
-    }
-
-    /** Одноразовое чтение флага маршрута: true — и сразу сброс (как consumePendingRoom). */
-    fun consumeShowRouteOnMap(): Boolean {
-        val was = _uiState.value.showRouteOnMap
-        if (was) _uiState.update { it.copy(showRouteOnMap = false) }
-        return was
-    }
-
-    fun restoreReturnTab() {
-        _uiState.update {
-            val target = it.returnTab
-            if (target != null) it.copy(currentTab = target, returnTab = null) else it
-        }
-    }
-
-    /**
-     * Цель автопрокрутки из виджета («CURRENT_LESSON»/«CURRENT_BELL»).
-     * Одноразовый запрос: экран потребляет его и сбрасывает, повторный вход
-     * на вкладку из меню уже не скроллит.
-     */
-    fun requestScrollTarget(target: String) {
-        _uiState.update { it.copy(scrollTarget = target) }
-    }
-
-    fun consumeScrollTarget() {
-        if (_uiState.value.scrollTarget != null) {
-            _uiState.update { it.copy(scrollTarget = null) }
         }
     }
 
