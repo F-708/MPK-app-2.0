@@ -7,10 +7,14 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.politex.data.local.dao.LessonDao
+import com.politex.data.local.dao.MaterialDao
 import com.politex.data.local.dao.TaskDao
 import com.politex.data.local.dao.TaskReminderDao
 import com.politex.data.local.dao.TeacherLessonDao
 import com.politex.data.local.entity.LessonEntity
+import com.politex.data.local.entity.MaterialBookmarkEntity
+import com.politex.data.local.entity.MaterialFolderEntity
+import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.data.local.entity.StudentTaskEntity
 import com.politex.data.local.entity.TaskReminderEntity
 import com.politex.data.local.entity.TeacherLessonEntity
@@ -20,9 +24,12 @@ import com.politex.data.local.entity.TeacherLessonEntity
         LessonEntity::class,
         StudentTaskEntity::class,
         TeacherLessonEntity::class,
-        TaskReminderEntity::class
+        TaskReminderEntity::class,
+        MaterialFolderEntity::class,
+        MaterialItemEntity::class,
+        MaterialBookmarkEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class MpkDatabase : RoomDatabase() {
@@ -31,6 +38,7 @@ abstract class MpkDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
     abstract fun teacherLessonDao(): TeacherLessonDao
     abstract fun taskReminderDao(): TaskReminderDao
+    abstract fun materialDao(): MaterialDao
 
     companion object {
         // internal, а не private: тест миграции создаёт базу v1 «на диске» под тем же именем
@@ -110,6 +118,73 @@ abstract class MpkDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * M1: v4 → v5 — «Материальная база». Три НОВЫХ таблицы (`material_folders`,
+         * `material_items`, `material_bookmarks`) + индексы folderId/itemId. Существующие
+         * `lessons`/`student_tasks`/`teacher_lessons`/`task_reminders` не трогаются: ДЗ и
+         * напоминания студента переживают миграцию.
+         *
+         * Имена таблиц/колонок/индексов Room-генерируемые (index_<table>_<col>) и должны
+         * совпасть побайтово с ожидаемой схемой v5, иначе Room упадёт на валидации при
+         * открытии у всех обновившихся (см. MigrationV4ToV5Test).
+         *
+         * Значения по умолчанию (`isArchive`, `textContent`, …) заданы в Kotlin-конструкторах
+         * сущностей, а НЕ через @ColumnInfo(defaultValue=...) — поэтому здесь нет DEFAULT-выражений.
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `material_folders` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `subjectName` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `isArchive` INTEGER NOT NULL,
+                        `sortOrder` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `material_items` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `folderId` INTEGER NOT NULL,
+                        `kind` TEXT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `fileName` TEXT NOT NULL,
+                        `ext` TEXT NOT NULL,
+                        `uriPath` TEXT NOT NULL,
+                        `pageCount` INTEGER NOT NULL,
+                        `lastPage` INTEGER NOT NULL,
+                        `rotationDeg` INTEGER NOT NULL,
+                        `sortOrder` INTEGER NOT NULL,
+                        `textContent` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_material_items_folderId` " +
+                        "ON `material_items` (`folderId`)"
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `material_bookmarks` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `itemId` INTEGER NOT NULL,
+                        `page` INTEGER NOT NULL,
+                        `label` TEXT NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_material_bookmarks_itemId` " +
+                        "ON `material_bookmarks` (`itemId`)"
+                )
+            }
+        }
+
         @Volatile
         private var INSTANCE: MpkDatabase? = null
 
@@ -120,7 +195,7 @@ abstract class MpkDatabase : RoomDatabase() {
                     MpkDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     // ponytail: оставлено как страховка от будущих незапланированных схем —
                     // для объявленных версий выше путь всегда идёт через MIGRATION_1_2
                     .fallbackToDestructiveMigration()

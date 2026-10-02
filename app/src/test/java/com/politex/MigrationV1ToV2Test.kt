@@ -81,6 +81,12 @@ class MigrationV1ToV2Test {
         val context = ApplicationProvider.getApplicationContext<Context>()
         createV1Database(context)
 
+        // INSTANCE — статический singleton: другой миграционный тест в той же JVM мог
+        // закэшировать инстанс на своей базе, и тогда getInstance вернул бы ЕГО, а не нашу
+        // свежую v1-базу (миграция не проверялась бы вовсе). Сбрасываем рефлекшеном —
+        // приём тот же, что в MigrationV2ToV3Test/MigrationV3ToV4Test.
+        resetSingleton()
+
         // Единственная точка, где объявлена миграция, — companion MpkDatabase
         val db = com.politex.data.local.MpkDatabase.getInstance(context)
 
@@ -94,5 +100,20 @@ class MigrationV1ToV2Test {
             db.teacherLessonDao().getForSurnameOnDate("ламкина", "16.09.2026")
         }
         assertTrue("новая таблица должна существовать и быть пустой", teacherRows.isEmpty())
+
+        db.close()
+        resetSingleton()
+    }
+
+    /** Сброс статического INSTANCE, чтобы getInstance открыл именно нашу свежую v1-базу. */
+    private fun resetSingleton() {
+        try {
+            val cls = Class.forName("com.politex.data.local.MpkDatabase")
+            val field = cls.getDeclaredField("INSTANCE")
+            field.isAccessible = true
+            field.set(null, null)
+        } catch (_: Exception) {
+            // если поля нет/недоступно — тест упадёт ниже с ясной причиной
+        }
     }
 }
