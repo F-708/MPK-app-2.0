@@ -299,9 +299,15 @@ fun CollegeMapScreen(
                 }
             }
         }
+    // W39c: полилинии маршрута на ТЕКУЩЕМ этаже, ортогонализованные (диагонали → L-уголки
+    // мимо комнат). Полилиний может быть несколько: сегмент «3-4» рвётся на переходе
+    // по лестнице (подход у 335 / площадка 4-го этажа).
     val routePoints =
         remember(route, floorId) {
-            route?.floorPaths?.firstOrNull { it.floorId == floorId }?.points
+            route?.floorPaths
+                ?.filter { it.floorId == floorId }
+                ?.map { CollegeRouteFinder.orthogonalize(it.points, floor.rooms) }
+                ?.takeIf { it.isNotEmpty() }
         }
     val routeFinishHere =
         remember(route, floorId) {
@@ -872,8 +878,9 @@ private fun MapCanvas(
     // O3-d: тап по кабинету = тот же выбор, что ввод в поиск
     onRoomTap: (MapRoom) -> Unit = {},
     // R1: путь маршрута на ТЕКУЩЕМ этаже (null — этаж без пути), пульс точки финиша,
-    // плашка подъёма по лестнице и сегменты-этажи (точки-кнопки переключения)
-    routePoints: List<MapPoint>? = null,
+    // плашка подъёма по лестнице и сегменты-этажи (точки-кнопки переключения).
+    // W39c: полилинии текущего этажа (сегмент «3-4» рвётся на переходе по лестнице)
+    routePoints: List<List<MapPoint>>? = null,
     routeFinishHere: Boolean = false,
     routeBanner: String? = null,
     routeSegments: List<String> = emptyList(),
@@ -1056,11 +1063,12 @@ private fun MapCanvas(
                         minScreenPxPerDp = with(density) { 1.dp.toPx() },
                         baseFontPx = baseFontPx,
                     )
-                    // R1: маршрут поверх плана; толщины/размеры компенсируют зум (экранные)
-                    val pts = routePoints
-                    if (pts != null && pts.size >= 2) {
+                    // R1: маршрут поверх плана; толщины/размеры компенсируют зум (экранные).
+                    // W39c: полилиний может быть несколько (разрыв на лестнице внутри этажа 3-4)
+                    val polylines = routePoints
+                    if (!polylines.isNullOrEmpty()) {
                         drawRoutePath(
-                            points = pts,
+                            polylines = polylines,
                             imgW = imgW,
                             imgH = imgH,
                             zoom = k,
@@ -1372,11 +1380,14 @@ private const val ROUTE_ARROW_STEP_NORM = 0.06f
 /**
  * R1: линия маршрута поверх плана. Всё рисуется внутри graphicsLayer (план масштабирован),
  * поэтому толщины/радиусы умножаются на 1/zoom — на экране они постоянны (~4dp линия).
- * Стрелки-треугольники направления — каждые [ROUTE_ARROW_STEP_NORM] нормализованных единиц;
- * пульсирующая точка — на финише (когда текущий этаж несёт конец маршрута).
+ * W39c: [polylines] — уже ортогонализованные линии CollegeRouteFinder.orthogonalize
+ * (диагонали заменены L-уголками мимо комнат); полилиний несколько, когда сегмент этажа
+ * разорван переходом по лестнице. Стрелки-треугольники направления — каждые
+ * [ROUTE_ARROW_STEP_NORM] нормализованных единиц; пульсирующая точка — на финише
+ * (когда текущий этаж несёт конец маршрута).
  */
 private fun DrawScope.drawRoutePath(
-    points: List<MapPoint>,
+    polylines: List<List<MapPoint>>,
     imgW: Float,
     imgH: Float,
     zoom: Float,
@@ -1384,58 +1395,63 @@ private fun DrawScope.drawRoutePath(
     pulse: Float,
     drawFinish: Boolean,
 ) {
-    if (points.size < 2 || imgW <= 0f || imgH <= 0f) return
+    if (imgW <= 0f || imgH <= 0f) return
     val unit = 1f / zoom
     val color = ColorBrandBlue
-    val screen = ArrayList<Offset>(points.size)
-    points.forEach { screen += Offset(it.x * imgW, it.y * imgH) }
 
-    val line =
-        Path().apply {
-            moveTo(screen[0].x, screen[0].y)
-            for (i in 1 until screen.size) lineTo(screen[i].x, screen[i].y)
-        }
-    drawPath(
-        path = line,
-        color = color,
-        style = Stroke(width = 4f * pxPerDp * unit, cap = StrokeCap.Round, join = StrokeJoin.Round),
-    )
+    for (points in polylines) {
+        if (points.size < 2) continue
+        val screen = ArrayList<Offset>(points.size)
+        points.forEach { screen += Offset(it.x * imgW, it.y * imgH) }
 
-    // Стрелки направления: равномерный шаг в нормализованных единицах, «перенос» остатка
-    // между сегментами, угол — по экранным осям (план анизотропен: imgW != imgH).
-    val s = 4.5f * pxPerDp * unit
-    var carry = 0f
-    for (i in 1 until points.size) {
-        val a = points[i - 1]
-        val b = points[i]
-        val dx = b.x - a.x
-        val dy = b.y - a.y
-        val nLen = hypot(dx, dy)
-        if (nLen < 1e-5f) continue
-        val angle = atan2(dy * imgH, dx * imgW)
-        var d = ROUTE_ARROW_STEP_NORM - carry
-        while (d <= nLen) {
-            val t = d / nLen
-            drawArrowHead(
-                center = Offset((a.x + dx * t) * imgW, (a.y + dy * t) * imgH),
-                angle = angle,
-                size = s,
-                color = color,
-            )
-            d += ROUTE_ARROW_STEP_NORM
+        val line =
+            Path().apply {
+                moveTo(screen[0].x, screen[0].y)
+                for (i in 1 until screen.size) lineTo(screen[i].x, screen[i].y)
+            }
+        drawPath(
+            path = line,
+            color = color,
+            style = Stroke(width = 4f * pxPerDp * unit, cap = StrokeCap.Round, join = StrokeJoin.Round),
+        )
+
+        // Стрелки направления: равномерный шаг в нормализованных единицах, «перенос» остатка
+        // между сегментами, угол — по экранным осям (план анизотропен: imgW != imgH).
+        val s = 4.5f * pxPerDp * unit
+        var carry = 0f
+        for (i in 1 until points.size) {
+            val a = points[i - 1]
+            val b = points[i]
+            val dx = b.x - a.x
+            val dy = b.y - a.y
+            val nLen = hypot(dx, dy)
+            if (nLen < 1e-5f) continue
+            val angle = atan2(dy * imgH, dx * imgW)
+            var d = ROUTE_ARROW_STEP_NORM - carry
+            while (d <= nLen) {
+                val t = d / nLen
+                drawArrowHead(
+                    center = Offset((a.x + dx * t) * imgW, (a.y + dy * t) * imgH),
+                    angle = angle,
+                    size = s,
+                    color = color,
+                )
+                d += ROUTE_ARROW_STEP_NORM
+            }
+            carry = (carry + nLen) % ROUTE_ARROW_STEP_NORM
         }
-        carry = (carry + nLen) % ROUTE_ARROW_STEP_NORM
     }
 
     if (drawFinish) {
-        val f = screen.last()
+        val f = polylines.lastOrNull { it.isNotEmpty() }?.last() ?: return
+        val c = Offset(f.x * imgW, f.y * imgH)
         drawCircle(
             color = color.copy(alpha = 0.18f + 0.22f * pulse),
             radius = (11f + 7f * pulse) * pxPerDp * unit,
-            center = f,
+            center = c,
         )
-        drawCircle(color = color, radius = 5f * pxPerDp * unit, center = f)
-        drawCircle(color = Color.White, radius = 2f * pxPerDp * unit, center = f)
+        drawCircle(color = color, radius = 5f * pxPerDp * unit, center = c)
+        drawCircle(color = Color.White, radius = 2f * pxPerDp * unit, center = c)
     }
 }
 

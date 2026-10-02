@@ -1,5 +1,6 @@
 package com.politex.data.model
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -97,5 +98,71 @@ class CollegeRouteFinderTest {
             "длина около 0.8, получилось ${route!!.distance}",
             route.distance > 0.7f && route.distance < 0.9f,
         )
+    }
+
+    // ---- W39c: ортогонализация маршрута для отрисовки ----
+
+    @Test
+    fun `ортогонализация - диагональ заменяется L-уголком`() {
+        val out = CollegeRouteFinder.orthogonalize(listOf(MapPoint(0.1f, 0.1f), MapPoint(0.5f, 0.4f)), emptyList())
+        assertEquals("диагональ → 3 точки (уголок)", 3, out.size)
+        assertEquals(MapPoint(0.1f, 0.1f), out[0])
+        assertEquals(MapPoint(0.5f, 0.4f), out[2])
+        assertEquals("уголок c1: сначала вертикаль", MapPoint(0.1f, 0.4f), out[1])
+    }
+
+    @Test
+    fun `ортогонализация - уголок выбирается мимо комнаты`() {
+        // комната (x 0.05-0.15, y 0.2-0.3) перекрывает вертикальную ногу уголка c1=(0.1,0.4)
+        val blocker =
+            MapRoom(
+                id = "r", number = "105", title = "", note = "", status = "normal",
+                x = 0.1f, y = 0.25f, w = 0.1f, h = 0.1f,
+            )
+        val out = CollegeRouteFinder.orthogonalize(
+            listOf(MapPoint(0.1f, 0.1f), MapPoint(0.5f, 0.4f)),
+            listOf(blocker),
+        )
+        assertEquals(3, out.size)
+        assertEquals("выбран уголок c2 мимо комнаты", MapPoint(0.5f, 0.1f), out[1])
+        assertEquals(MapPoint(0.5f, 0.4f), out[2])
+    }
+
+    @Test
+    fun `ортогонализация - комнаты концов сегмента не блокируют`() {
+        // старт — центр комнаты: первая нога неизбежно проходит сквозь её прямоугольник,
+        // но это СВОЯ комната — уголок допустим
+        val startRoom =
+            MapRoom(
+                id = "a", number = "101", title = "", note = "", status = "normal",
+                x = 0.1f, y = 0.1f, w = 0.06f, h = 0.06f,
+            )
+        val out = CollegeRouteFinder.orthogonalize(
+            listOf(MapPoint(0.1f, 0.1f), MapPoint(0.5f, 0.4f)),
+            listOf(startRoom),
+        )
+        assertEquals(3, out.size)
+        assertEquals(MapPoint(0.1f, 0.4f), out[1])
+    }
+
+    @Test
+    fun `ортогонализация - оба уголка через комнаты, остаётся диагональ`() {
+        // две комнаты блокируют обе пары ног
+        val blockers =
+            listOf(
+                MapRoom(id = "r1", number = "301", title = "", note = "", status = "normal", x = 0.1f, y = 0.25f, w = 0.1f, h = 0.1f), // нога c1
+                MapRoom(id = "r2", number = "302", title = "", note = "", status = "normal", x = 0.5f, y = 0.25f, w = 0.1f, h = 0.1f), // нога c2 (x 0.45-0.55)
+            )
+        val out = CollegeRouteFinder.orthogonalize(
+            listOf(MapPoint(0.1f, 0.1f), MapPoint(0.5f, 0.4f)),
+            blockers,
+        )
+        assertEquals("оба зла — диагональ остаётся", 2, out.size)
+    }
+
+    @Test
+    fun `ортогонализация - уже ортогональные сегменты не трогаются`() {
+        val pts = listOf(MapPoint(0.1f, 0.1f), MapPoint(0.5f, 0.1f), MapPoint(0.5f, 0.4f))
+        assertEquals(pts, CollegeRouteFinder.orthogonalize(pts, emptyList()))
     }
 }

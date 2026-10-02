@@ -63,6 +63,13 @@ data class MapEntrance(
      * остальные — аварийные, маршруты по ним не строим. Для входов (kind="main") всегда true.
      */
     val usable: Boolean = true,
+    /**
+     * W39a: ручные связи лестницы с лестницами на ДРУГИХ этажах (id entrances, разметка
+     * заказчика). Сопряжение стволов по links — основной механизм; близость координат —
+     * фолбэк для старых карт без links. План «3-4» несёт 3-й и 4-й этажи, поэтому links
+     * могут указывать и на лестницу того же floorId (площадка 4-го этажа у 335).
+     */
+    val links: List<String> = emptyList(),
 )
 
 data class FloorMap(
@@ -169,6 +176,8 @@ class CollegeMapData(
                                 title = o.optString("title"),
                                 // Лестница без явного usable считается пригодной (обратная совместимость)
                                 usable = o.optBoolean("usable", true),
+                                // W39a: ручные связи лестниц между этажами (id entrances)
+                                links = o.optJSONArray("links").mapStrings(),
                             )
                         },
                     )

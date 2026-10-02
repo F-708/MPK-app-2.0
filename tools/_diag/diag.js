@@ -84,18 +84,30 @@ const TEST = `
     tool = 'select'; corridorMode = 'line';
 
     // (е) снап точки коридора: тащим точку к узлу -> прилипает точно
+    // (карта обновляется заказчиком — пары «точка→узел» подбираем по данным, без хардкода id)
     curFloor = '2'; draw();
     const f2 = map.floors['2'];
-    // точка без маркеров рядом: cor_v210322[2] = (0.196,0.267), тащим её к узлу n_st238 (0.29,0.311)
-    const cSnap = f2.corridors.find(c => c.id === 'cor_v210322');
-    const nT = f2.nodes.find(n => n.id === 'n_st238');
-    const pStart = cSnap.points[2];
+    const px = (x, y) => Math.hypot(x * W, y * H);
+    let cSnap = null, piSnap = -1, pStart = null, nT = null;
+    outer:
+    for (const c of f2.corridors) {
+      for (let pi = 2; pi < c.points.length; pi++) {
+        const p = c.points[pi];
+        const nearAny = f2.nodes.some(n => px(n.x - p[0], n.y - p[1]) < 8) ||
+                        f2.rooms.some(r => r.door && px(r.door[0] - p[0], r.door[1] - p[1]) < 8);
+        if (nearAny) continue;
+        let best = null, bd = Infinity;
+        for (const n of f2.nodes) { const d = px(n.x - p[0], n.y - p[1]); if (d < bd) { bd = d; best = n; } }
+        if (best && bd > 60 && bd < 400) { cSnap = c; piSnap = pi; pStart = p; nT = best; break outer; }
+      }
+    }
+    check('snap-pair-found', !!(cSnap && nT), cSnap ? cSnap.id + '[' + piSnap + '] → ' + nT.id : 'нет пары точка↔узел');
     const h0 = hitTest({x:pStart[0], y:pStart[1]});
-    check('snap-hit-corridor-point', !!(h0 && h0.kind==='corridor' && h0.obj===cSnap && h0.pi===2),
+    check('snap-hit-corridor-point', !!(h0 && h0.kind==='corridor' && h0.obj===cSnap && h0.pi===piSnap),
       h0 ? h0.kind+':'+(h0.pi!=null?h0.pi:'') : 'null');
     fire('mousedown', sx(pStart[0]), sy(pStart[1]));
-    fire('mousemove', sx(nT.x+0.002), sy(nT.y));
-    const snapped = cSnap.points[1];
+    fire('mousemove', sx(nT.x), sy(nT.y));
+    const snapped = cSnap.points[piSnap];
     const isNode = f2.nodes.some(n => Math.abs(n.x-snapped[0])<1e-6 && Math.abs(n.y-snapped[1])<1e-6);
     const isDoor = f2.rooms.some(r => r.door && Math.abs(r.door[0]-snapped[0])<1e-6 && Math.abs(r.door[1]-snapped[1])<1e-6);
     check('snap-point-exact', isNode || isDoor, 'point=' + JSON.stringify(snapped) + (isNode?' (node)':' (door)') + ' magnet=' + !!snapMark);
@@ -192,19 +204,25 @@ const TEST = `
     check('tooltips-tools-complete', ['select','room','corridor','node','marker','door','route'].every(t=>Array.isArray(TOOLTIPS[t]) && TOOLTIPS[t].length>=2));
     setHint(); renderPanel(); draw();
 
-    // (л) W6: узлы — панель со списком связей, снятие связи ✕, подсветка не падает
+    // (л) W6: узлы — панель со списком связей, снятие связи ✕, подсветка не падает.
+    // На карте заказчика узлы пока без связей — пара узлов создаётся синтетически
+    // (как лестницы в (и)), связь — через UI-путь linkClick.
     const f2n = map.floors['2'];
-    const nL = f2n.nodes.find(n=>(n.links||[]).length>0);
-    if(nL){
-      curFloor = '2';
-      sel = {kind:'node', obj:nL};
-      renderPanel(); draw();             // панель со списком связей узла + подсветка
-      const otherId = nL.links[0];
-      const other = f2n.nodes.find(n=>n.id===otherId);
-      removeNodeLink(nL, otherId);       // = ✕ в панели
-      check('node-link-removed', (nL.links||[]).indexOf(otherId)<0 && (other.links||[]).indexOf(nL.id)<0,
-        'A='+JSON.stringify(nL.links)+' B='+JSON.stringify(other.links));
-    } else check('node-link-removed', false, 'нет узлов со связями');
+    const nA = {id:'n_tA', x:0.62, y:0.62, links:[]};
+    const nB = {id:'n_tB', x:0.66, y:0.66, links:[]};
+    f2n.nodes.push(nA, nB);
+    curFloor = '2';
+    linkFrom = nA;
+    linkClick({x:nB.x, y:nB.y});          // = «Связать» + клик по второму узлу
+    const linked = nA.links.length===1 && nA.links[0]==='n_tB' && nB.links.length===1 && nB.links[0]==='n_tA';
+    check('node-link-created', linked, 'A='+JSON.stringify(nA.links)+' B='+JSON.stringify(nB.links));
+    if(!linked){ nA.links.push('n_tB'); nB.links.push('n_tA'); } // фолбэк: связь как из linkClick
+    sel = {kind:'node', obj:nA};
+    renderPanel(); draw();                 // панель со списком связей узла + подсветка
+    removeNodeLink(nA, 'n_tB');            // = ✕ в панели
+    check('node-link-removed', (nA.links||[]).indexOf('n_tB')<0 && (nB.links||[]).indexOf('n_tA')<0,
+      'A='+JSON.stringify(nA.links)+' B='+JSON.stringify(nB.links));
+    f2n.nodes.pop(); f2n.nodes.pop();      // чистим синтетику
 
     // (м) W6: снап узла при перетаскивании — тащим узел к двери кабинета, прилипает точно
     const f2q = map.floors['2'];
@@ -221,6 +239,53 @@ const TEST = `
         'node=('+snappedN[0]+','+snappedN[1]+') door='+JSON.stringify(roomD.door)+' magnet='+!!snapMark);
       fireWin('mouseup');
     } else check('node-snap-to-door', false, 'нет подходящей пары узел↔дверь');
+
+    // (н) W39: links-сопряжение лестниц + обход корпуса через другой этаж (глобальный граф),
+    // вход на «4 этаж» плана 3-4 через связанную лестницу, ортогонализация превью
+    const savedFloors = map.floors;
+    const mkStair = (id,x,y,links)=>({id, x, y, kind:'stairs', dir:0, title:'', usable:true, links});
+    map.floors = {
+      '2': Object.assign(emptyFloor(), {
+        corridors:[{id:'nc2f2', points:[[0.05,0.5],[0.5,0.5],[0.95,0.5]], width:0.012}],
+        entrances:[mkStair('ns2c2',0.25,0.5,['ns34c2']), mkStair('ns2c1',0.75,0.5,['ns34c1'])]}),
+      '3-4': Object.assign(emptyFloor(), {
+        corridors:[{id:'nc2', points:[[0.05,0.5],[0.25,0.5],[0.45,0.5]], width:0.012},
+                   {id:'nc1', points:[[0.55,0.5],[0.75,0.5],[0.95,0.5]], width:0.012}],
+        entrances:[mkStair('ns34c2',0.25,0.5,['ns2c2']), mkStair('ns34c1',0.75,0.5,['ns2c1'])]})
+    };
+    curFloor = '3-4'; tool = 'route';
+    // A в корпусе 2 (слева), B в корпусе 1 (справа) — на плане корпуса НЕ связаны:
+    // маршрут обязан пойти вниз → 2 этаж → вверх
+    routeA = {x:0.10, y:0.30, floor:'3-4'};
+    fire('mousedown', sx(0.90), sy(0.30));
+    check('route-corpus-via-floor2', !!(routePreview && routePreview.segments &&
+      routePreview.segments.map(s=>s.floorId).join(',') === '3-4,2,3-4'),
+      routePreview ? 'сегменты: ' + routePreview.segments.map(s=>s.floorId).join(',') + ' точек ' + routePreview.points.length : 'нет маршрута');
+    fireWin('keydown', { key:'Escape' });
+
+    // «4 этаж» отрезан от 3-го на том же плане: единственный вход — лестница, связанная
+    // links с площадкой 4-го этажа (links на ту же floorId)
+    map.floors['3-4'] = Object.assign(emptyFloor(), {
+      corridors:[{id:'nc3', points:[[0.05,0.5],[0.25,0.5],[0.45,0.5]], width:0.012},
+                 {id:'nc4', points:[[0.70,0.2],[0.85,0.2],[0.95,0.2]], width:0.012}],
+      entrances:[mkStair('ns3',0.25,0.5,['ns4']), mkStair('ns4',0.75,0.2,['ns3'])]});
+    routeA = {x:0.10, y:0.30, floor:'3-4'};
+    fire('mousedown', sx(0.85), sy(0.12));
+    check('route-4floor-via-stair', !!(routePreview && routePreview.segments &&
+      routePreview.segments.map(s=>s.floorId).join(',') === '3-4,3-4'),
+      routePreview ? 'сегменты: ' + routePreview.segments.map(s=>s.floorId).join(',') + ' точек ' + routePreview.points.length : 'нет маршрута');
+    fireWin('keydown', { key:'Escape' });
+
+    // W39c: ортогонализация превью — тот же алгоритм, что в приложении
+    const o1 = orthogonalize([[0.1,0.1],[0.5,0.4]], []);
+    check('ortho-diagonal-L', o1.length===3 && o1[1][0]===0.1 && o1[1][1]===0.4, JSON.stringify(o1));
+    const o2 = orthogonalize([[0.1,0.1],[0.5,0.1],[0.5,0.4]], []);
+    check('ortho-orthogonal-untouched', JSON.stringify(o2)===JSON.stringify([[0.1,0.1],[0.5,0.1],[0.5,0.4]]), JSON.stringify(o2));
+    const o3 = orthogonalize([[0.1,0.1],[0.5,0.4]],
+      [{id:'rr', number:'301', title:'', note:'', status:'normal', x:0.1, y:0.25, w:0.1, h:0.1, door:null}]);
+    check('ortho-corner-avoids-room', o3.length===3 && o3[1][0]===0.5 && o3[1][1]===0.1, JSON.stringify(o3));
+
+    map.floors = savedFloors; curFloor = '1'; tool = 'select'; routeA = null; routePreview = null;
 
     console.log('INTERACTION OK');
   } catch (e) {

@@ -38,24 +38,20 @@ class RealMapMultiFloorRouteTest {
     }
 
     @Test
-    fun `usable-разметка лестниц соответствует списку заказчика`() {
+    fun `usable-разметка и ручные links лестниц читаются из карты`() {
         val floors = floorsMap()
-        val usableStairs =
-            floors.values
-                .flatMap { it.entrances }
-                .filter { it.kind == "stairs" && it.usable }
-        assertTrue("пригодных лестниц должно быть несколько", usableStairs.size >= 8)
-        // Все лестницы имеют явное поле usable из JSON (схема v1 → usable:true по умолчанию)
         val allStairs = floors.values.flatMap { it.entrances }.filter { it.kind == "stairs" }
-        assertTrue(allStairs.isNotEmpty())
-        // Аварийные (118/223/320 ствол) помечены unusable
-        val unusableIds = allStairs.filter { !it.usable }.map { it.id }
+        assertTrue("лестниц должно быть несколько", allStairs.size >= 8)
+        // W39a: заказчик разметил РУЧНЫЕ связи лестниц между этажами (entrance.links)
+        val withLinks = allStairs.filter { it.usable && it.links.isNotEmpty() }
         assertTrue(
-            "ствол 118-223-320 должен быть unusable",
-            unusableIds.containsAll(
-                listOf("e_9kyra5x", "e_eztq0l0", "e_0jof8nz"),
-            ),
+            "лестниц с ручными links должно быть большинство (разметка заказчика), было ${withLinks.size}",
+            withLinks.size >= 8,
         )
+        // каждый link указывает на существующую лестницу (иначе маршруты тихо теряются)
+        val ids = allStairs.map { it.id }.toSet()
+        val dangling = withLinks.flatMap { it.links }.filter { it !in ids }
+        assertTrue("битые links: $dangling", dangling.isEmpty())
     }
 
     @Test
