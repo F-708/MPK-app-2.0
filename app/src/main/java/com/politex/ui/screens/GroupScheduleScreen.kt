@@ -135,6 +135,9 @@ fun GroupScheduleScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    // N1: живой статус синхронизации из общей диагностики («Проверяю сайт…» → «Файл найден…»)
+    val diagnosticInfo by scheduleRepository.diagnosticInfo.collectAsState()
+
     var selectedGroupName by rememberSaveable { mutableStateOf("") }
     var selectedCourse by rememberSaveable {
         mutableIntStateOf(GroupParser.parse(ownGroupName)?.course ?: 1)
@@ -162,7 +165,15 @@ fun GroupScheduleScreen(
             result.fold(
                 onSuccess = { count ->
                     if (count == 0) {
-                        syncEmptyNotice = "Группы $group нет в опубликованном расписании на ближайшие даты"
+                        // N1: различаем «сайт ещё не опубликовал файл» (probe NOT_FOUND) и
+                        // «файл есть, но этой группы в нём нет» — по живому статусу синка.
+                        val notPublished = scheduleRepository.diagnosticInfo.value.statusMessage
+                            .contains("не опубликовано", ignoreCase = true)
+                        syncEmptyNotice = if (notPublished) {
+                            "Расписание ещё не опубликовано на ближайшие даты"
+                        } else {
+                            "Группы $group нет в опубликованном расписании на ближайшие даты"
+                        }
                     }
                 },
                 onFailure = { syncError = "Не удалось загрузить расписание: проверьте интернет" }
@@ -188,10 +199,19 @@ fun GroupScheduleScreen(
     // SUI-01: «сегодня» с ключом дня и пересчётом на ON_RESUME (прежний remember{} залипал)
     val realNow = rememberToday()
     val realDayOfWeek = groupScheduleDayOfWeek(realNow)
-    val saturdayLessons by scheduleRepository
-        .getLessonsForDay(selectedGroupName, 6)
-        .collectAsState(initial = emptyList<LessonEntity>())
-    val saturdayIsSchoolDay = foreignInfo?.hasSaturdayClasses == true || saturdayLessons.isNotEmpty()
+
+    // N4: ОДИН Flow по всей группе (ключ — только selectedGroupName). Раньше здесь и ниже
+    // были Flow, ключом которых была дата (getLessonsForDateOrDay / getLessonsForDay), и каждый
+    // Flow пересоздавался на каждой рекомпозиции → collectAsState перезапускался → на тап
+    // «Сегодня/Завтра» (activeDateString меняется) подписка рвалась, initial=null → спиннер →
+    // круг в Room. Теперь день фильтруется в памяти (lessonsForDay), подписка одна и живёт
+    // до смены группы. Суббота тоже берётся из этого списка (без отдельного Flow).
+    val foreignLessonsFlow = remember(selectedGroupName) {
+        scheduleRepository.getAllLessonsForGroup(selectedGroupName)
+    }
+    val allForeignLessons: List<LessonEntity>? by foreignLessonsFlow.collectAsState(initial = null)
+    val saturdayIsSchoolDay = foreignInfo?.hasSaturdayClasses == true ||
+        allForeignLessons?.any { it.dayOfWeek == 6 } == true
 
     val daySlots = remember(selectedGroupName, saturdayIsSchoolDay, realNow) {
         val left = (realNow.clone() as Calendar).apply {
@@ -228,13 +248,11 @@ fun GroupScheduleScreen(
         } else null
     }
 
-    // Запрос по реальной дате + фолбэк на день недели
-    val lessonsState: List<LessonEntity>? by scheduleRepository
-        .getLessonsForDateOrDay(selectedGroupName, activeDateString, activeDayOfWeek)
-        .collectAsState(initial = null)
-    val isInitialLoad = lessonsState == null
-    val lessons = remember(lessonsState, activeDateString) {
-        pickForeignGroupLessons(lessonsState ?: emptyList(), activeDateString)
+    // N4: запрос по реальной дате + фолбэк на день недели — теперь ЧИСТО в памяти из
+    // единственного Flow группы (lessonsForDay: точная дата приоритетнее шаблона дня недели).
+    val isInitialLoad = allForeignLessons == null
+    val lessons = remember(allForeignLessons, activeDateString, activeDayOfWeek) {
+        lessonsForDay(allForeignLessons ?: emptyList(), activeDateString, activeDayOfWeek)
     }
 
     // R2: старт маршрута — кабинет текущей/предыдущей пары (см. RouteStartResolver).
@@ -513,7 +531,8 @@ fun GroupScheduleScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = when {
-                                isSyncing -> "Загружаем расписание…"
+                                // N1: во время синка — живой статус «рукопожатия» с сайтом
+                                isSyncing -> diagnosticInfo.statusMessage.ifBlank { "Загружаем расписание…" }
                                 syncError != null -> syncError ?: ""
                                 syncEmptyNotice != null -> syncEmptyNotice ?: ""
                                 else -> "Нет данных — расписание ещё не синхронизировано"

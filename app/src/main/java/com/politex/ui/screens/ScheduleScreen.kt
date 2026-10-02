@@ -41,7 +41,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.EventNote
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.AssignmentLate
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
@@ -71,9 +71,16 @@ import androidx.compose.ui.unit.sp
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.model.GroupInfo
+import com.politex.data.model.TaskType
 import com.politex.data.repository.ScheduleRepository
 import com.politex.ui.components.CalendarArchiveDialog
 import com.politex.ui.theme.ColorActiveBlue
+import com.politex.ui.theme.ColorBadgeCourse
+import com.politex.ui.theme.ColorBadgeDiploma
+import com.politex.ui.theme.ColorBadgeExam
+import com.politex.ui.theme.ColorBadgeHW
+import com.politex.ui.theme.ColorBadgeLab
+import com.politex.ui.theme.ColorBadgePract
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -117,6 +124,9 @@ fun ScheduleScreen(
     // сетевую ошибку за «расписание ещё не опубликовано»
     hasSyncError: Boolean = false,
 
+    // N18: тап по значку домашки ведёт на вкладку заданий (плумбится из MainScreen)
+    onOpenTasks: () -> Unit = {},
+
     onTeacherClick: (String) -> Unit = {},
 
     onRoomClick: (room: String, fromRoom: String?) -> Unit = { _, _ -> },
@@ -141,6 +151,10 @@ fun ScheduleScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+
+    // N1: живой статус синхронизации («Проверяю сайт…» → «Файл найден, загружаю…») —
+    // показываем в пустом состоянии, чтобы заказчик видел «рукопожатие» с сайтом.
+    val diagnosticInfo by scheduleRepository.diagnosticInfo.collectAsState()
 
     val isTeacherKnown: (String) -> Boolean = remember(context) {
         val known = knownTeacherSurnames(context)
@@ -299,14 +313,16 @@ fun ScheduleScreen(
                 .mapValues { (_, list) -> com.politex.util.HomeworkMarkers.dedupeByLatestDate(list) }
         }
 
-    val homeworkMarkerNumbers: Set<Int> = remember(lessons, pendingTasks, activeDayOfWeek, selectedSlot, selectedDateString) {
+    // N18: урок → типы заданий на день (для цветных бейджей); ключи = уроки с домашкой.
+    // Одна и та же разметка, что и раньше (markerLessonNumbers), но с типами заданий.
+    val homeworkByLesson: Map<Int, List<TaskType>> = remember(lessons, pendingTasks, activeDayOfWeek, selectedSlot, selectedDateString) {
         val now = System.currentTimeMillis()
         val dayIso = com.politex.util.HomeworkMarkers.dayIsoOf(activeCal)
         val isToday = com.politex.util.HomeworkMarkers.dayIsoOf(realNow) == dayIso
         val isPast = com.politex.util.HomeworkMarkers.dayIsoOf(
             (realNow.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) }
         ) > dayIso
-        com.politex.util.HomeworkMarkers.markerLessonNumbers(
+        com.politex.util.HomeworkMarkers.markerLessonTypes(
             dayLessons = lessons,
             day = com.politex.util.HomeworkMarkers.DayContext(dayIso, isToday, isPast),
             nowMillis = now,
@@ -314,6 +330,7 @@ fun ScheduleScreen(
             pendingTasks = pendingTasks
         )
     }
+    val homeworkMarkerNumbers: Set<Int> = homeworkByLesson.keys
 
     // --- Автопрокрутка списка к текущему уроку ---
 
@@ -601,21 +618,34 @@ fun ScheduleScreen(
                                 .background(ColorSurfaceHighlight),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.EventBusy,
-                                contentDescription = null,
-                                tint = ColorBrandBlue,
-                                modifier = Modifier.size(28.dp)
-                            )
+                            // N1: во время синка — спиннер, иначе «нет занятий»
+                            if (isSyncing) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    color = ColorBrandBlue,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.EventBusy,
+                                    contentDescription = null,
+                                    tint = ColorBrandBlue,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // SUI-02: при сетевом сбое честный текст — раньше он маскировался
-                        // под «не опубликовано» и уводил диагностику не туда
+                        // под «не опубликовано» и уводил диагностику не туда.
+                        // N1: во время синка показываем ЖИВОЙ статус «рукопожатия» с сайтом.
                         Text(
-                            text = if (hasSyncError) "Не удалось обновить расписание"
-                            else "Расписание ещё не опубликовано",
+                            text = when {
+                                isSyncing -> diagnosticInfo.statusMessage.ifBlank { "Проверяю сайт…" }
+                                hasSyncError -> "Не удалось обновить расписание"
+                                else -> "Расписание ещё не опубликовано"
+                            },
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp,
@@ -628,6 +658,7 @@ fun ScheduleScreen(
 
                         Text(
                             text = when {
+                                isSyncing -> "Обновляем расписание с сайта guo-mpk.by…"
                                 hasSyncError -> "Проверьте подключение к интернету и попробуйте ещё раз."
                                 selectedDateString.isNotBlank() ->
                                     "Нет данных за $selectedDateString. Расписание за прошедшие дни хранится в архиве только после синхронизации."
@@ -721,6 +752,9 @@ fun ScheduleScreen(
                                 lesson = lesson,
                                 isCurrent = lesson.lessonNumber == currentLessonNumber,
                                 hasHomework = lesson.lessonNumber in homeworkMarkerNumbers,
+                                // N18: типы заданий урока → цветные бейджи; тап → вкладка заданий
+                                homeworkTypes = homeworkByLesson[lesson.lessonNumber] ?: emptyList(),
+                                onHomeworkClick = onOpenTasks,
                                 onTeacherClick = onTeacherClick,
                                 isTeacherKnown = isTeacherKnown,
                                 onRoomClick = { room -> onRoomClick(room, fromRoom) },
@@ -790,6 +824,10 @@ fun LessonCard(
     lesson: LessonEntity,
     isCurrent: Boolean = false,
     hasHomework: Boolean = false,
+    // N18: типы заданий урока — для цветных точек-бейджей (пусто → доминирующий цвет дня)
+    homeworkTypes: List<TaskType> = emptyList(),
+    // N18: тап по значку домашки → вкладка заданий
+    onHomeworkClick: () -> Unit = {},
     onTeacherClick: (String) -> Unit = {},
 
     isTeacherKnown: (String) -> Boolean = { true },
@@ -850,22 +888,13 @@ fun LessonCard(
                 }
 
                 if (hasHomework) {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBrandFill,
-                        modifier = Modifier
-                            .size(24.dp)
-                            .testTag("homework_badge_${lesson.lessonNumber}")
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Есть домашнее задание",
-                                tint = Color.White,
-                                modifier = Modifier.size(15.dp)
-                            )
-                        }
-                    }
+                    // N18: выразительный кликабельный бейдж задания (тап → вкладка заданий),
+                    // мультицвет по типам заданий вместо одного серого «редактировать»
+                    HomeworkBadge(
+                        lessonNumber = lesson.lessonNumber,
+                        types = homeworkTypes,
+                        onClick = onHomeworkClick
+                    )
                 }
             }
 
@@ -1210,4 +1239,79 @@ fun lessonsForDay(
     val exact = allGroupLessons.filter { it.dateString == activeDateString }
     return if (exact.isNotEmpty()) exact
     else allGroupLessons.filter { it.dateString.isBlank() && it.dayOfWeek == activeDayOfWeek }
+}
+
+/**
+ * N18: TaskType → цвет бейджа (та же палитра, что в TasksScreen). Чистая функция ради
+ * юнит-теста маппинга типов→цвета. ponytail: дубль одной `when`-ветки из TasksScreen —
+ * выносить в общий маппер ради 6 строк не стоит, но если палитра бейджей разъедется,
+ * заменить на единый `TaskType.badgeColor` в ui.theme.
+ */
+fun taskTypeBadgeColor(type: TaskType): Color = when (type) {
+    TaskType.HOMEWORK -> ColorBadgeHW
+    TaskType.LAB_WORK -> ColorBadgeLab
+    TaskType.PRACTICAL_WORK -> ColorBadgePract
+    TaskType.CONTROL_WORK -> ColorBadgeExam
+    TaskType.COURSE_WORK -> ColorBadgeCourse
+    TaskType.DIPLOMA -> ColorBadgeDiploma
+}
+
+/**
+ * N18: значок задания на уроке — выразительный (AssignmentLate, не «редактировать»),
+ * кликабельный (тап → вкладка заданий, хитбокс ≥44dp как T2 в TasksScreen) и мультицветный:
+ * до 3 цветных точек по типам заданий дня. Доминирующий цвет — первый тип; если типов нет
+ * (источник не дал тип на урок) — одна точка цвета домашки.
+ */
+@Composable
+private fun HomeworkBadge(
+    lessonNumber: Int,
+    types: List<TaskType>,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // До 3 разных типов; доминирующий — первый (для основного значка)
+    val distinctTypes = remember(types) { types.distinct().take(3) }
+    val dominant = if (distinctTypes.isNotEmpty()) taskTypeBadgeColor(distinctTypes.first()) else ColorBadgeHW
+    // Хитбокс 44dp (паттерн S2/T2): зона нажатия больше видимого значка
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .bouncyClickable(onClick = onClick)
+            .testTag("homework_badge_$lessonNumber"),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = dominant,
+                modifier = Modifier.size(24.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.AssignmentLate,
+                        contentDescription = "Открыть задания",
+                        tint = Color.White,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+            }
+            // Мультицвет: маленькие точки по типам заданий (читаемый «что задано»)
+            if (distinctTypes.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(3.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    distinctTypes.forEach { type ->
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(taskTypeBadgeColor(type))
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

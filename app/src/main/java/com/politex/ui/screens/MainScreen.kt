@@ -189,6 +189,8 @@ fun MainScreen(
                         isSyncing = uiState.isSyncing,
                         // SUI-02: сетевой сбой не должен маскироваться под «не опубликовано»
                         hasSyncError = uiState.hasSyncError,
+                        // N18: тап по значку домашки открывает вкладку заданий
+                        onOpenTasks = { viewModel.selectTab(AppTab.TASKS) },
                         onTeacherClick = { name -> viewModel.openTeacher(name) },
                         onRoomClick = { room, fromRoom -> viewModel.openMap(room, fromRoom) },
                         listState = scheduleListState,

@@ -6,6 +6,7 @@ import com.politex.data.local.entity.LessonEntity
 import com.politex.data.local.entity.TeacherLessonEntity
 import com.politex.data.network.MpkNetworkClient
 import com.politex.data.network.MpkScheduleParser
+import com.politex.data.network.ProbeResult
 import java.io.IOException
 import java.util.Calendar
 import kotlinx.coroutines.Dispatchers
@@ -179,6 +180,30 @@ class ScheduleRepository(
         val allGroups = (catalog() + groupName).distinct()
         val useCatalog = catalog().isNotEmpty()
         val days = listOf(tomorrow to needTomorrow, today to needToday).filter { it.second }
+
+        // N1: «рукопожатие» ДО полной загрузки — дешёвый HEAD/Range-проход, «есть ли
+        // вообще файл?». Даёт честный фидбэк на экране («Проверяю сайт…» → «Файл найден,
+        // загружаю…») и разделяет «не опубликовано» (успех, 0 — НЕ ошибка сети) и сетевой
+        // сбой. NOT_FOUND по всем нужным дням → даже не пробуем качать.
+        networkClient.publishStatus(statusMessage = "Проверяю сайт…", isSyncing = true)
+        var probeFound = false
+        var probeNetworkError = false
+        for ((calendar, _) in days) {
+            when (networkClient.probeDocument(calendar)) {
+                is ProbeResult.Found -> { probeFound = true; break }
+                ProbeResult.NetworkError -> probeNetworkError = true
+                is ProbeResult.NotFound -> Unit
+            }
+        }
+        if (!probeFound && !probeNetworkError) {
+            // Сайт жив, но файла на ближайшие даты нет — «не опубликовано», без скачиваний.
+            networkClient.publishStatus(statusMessage = "Расписание ещё не опубликовано", isSyncing = false)
+            return@withContext Result.success(0)
+        }
+        if (probeFound) {
+            networkClient.publishStatus(statusMessage = "Файл найден, загружаю расписание…")
+        }
+
         if (useCatalog) {
             for ((calendar, _) in days) {
                 val date = formatDate(calendar)
@@ -236,13 +261,23 @@ class ScheduleRepository(
                 }
                 pruneOldLessons()
                 // N2: возвращаем число уроков СВОЕЙ группы, а не всех разобранных из документа
-                Result.success(syncedCountForGroup(finalLessons, groupName))
+                val synced = syncedCountForGroup(finalLessons, groupName)
+                // N1: финальный статус на экран (catalog-путь сам diagnosticInfo не трогает)
+                networkClient.publishStatus(statusMessage = "Расписание загружено ($synced уроков)", isSyncing = false)
+                Result.success(synced)
             }
             // Сеть отвалилась — честная ошибка (тост «проверьте интернет»).
             // Пустая успешная загрузка («расписание ещё не опубликовано») ошибкой не
             // считается: success(0) → тост «новых данных пока нет», как и раньше.
-            fetchFailed -> Result.failure(IOException("Не удалось получить расписание"))
-            else -> Result.success(0)
+            fetchFailed -> {
+                networkClient.publishStatus(statusMessage = "Не удалось получить расписание", isSyncing = false)
+                Result.failure(IOException("Не удалось получить расписание"))
+            }
+            else -> {
+                // N1: файл был (probe FOUND), но по группе ничего не разобралось
+                networkClient.publishStatus(statusMessage = "Расписание ещё не опубликовано", isSyncing = false)
+                Result.success(0)
+            }
         }
     }
 

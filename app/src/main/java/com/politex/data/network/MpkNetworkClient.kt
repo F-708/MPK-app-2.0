@@ -16,6 +16,41 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
+
+/**
+ * N1: результат «рукопожатия» с сайтом — быстрый ответ на вопрос «есть ли вообще
+ * файл расписания?», ДО полной загрузки. [Found] — документ доступен (можно качать),
+ * [NotFound] — сайт отвечает, но файла нет («расписание ещё не опубликовано», НЕ ошибка
+ * сети), [NetworkError] — сайт недоступен (полный путь синка даст честную сетевую ошибку).
+ */
+sealed class ProbeResult {
+    data class Found(val url: String, val httpCode: Int) : ProbeResult()
+    data class NotFound(val lastHttpCode: Int) : ProbeResult()
+    object NetworkError : ProbeResult()
+}
+
+/** N1: служебный код «запрос упал с IOException» (отличаем от HTTP-кодов). */
+internal const val PROBE_NET_FAIL = -1
+
+/** N1: чистая часть probe — исход по одному URL из кодов HEAD и (фолбэк) GET-Range. */
+internal data class UrlProbe(val found: Boolean, val code: Int, val networkError: Boolean = false)
+
+/**
+ * N1: решение по одному URL. headCode/rangeGetCode — HTTP-коды; [PROBE_NET_FAIL] (-1) —
+ * запрос упал с IOException; 0 — запрос не выполнялся.
+ *
+ * Логика: HEAD 2xx → файл есть. HEAD не 2xx (сайт часто отвечает 405/404 на HEAD при
+ * живом GET) → доверяем GET-Range: 2xx → файл есть. IOException на любом шаге → сеть
+ * недоступна. Иначе → файла нет (запоминаем последний код для диагностики).
+ */
+internal fun probeUrlOutcome(headCode: Int, rangeGetCode: Int): UrlProbe = when {
+    headCode == PROBE_NET_FAIL -> UrlProbe(found = false, code = PROBE_NET_FAIL, networkError = true)
+    headCode in 200..299 -> UrlProbe(found = true, code = headCode)
+    rangeGetCode == PROBE_NET_FAIL -> UrlProbe(found = false, code = PROBE_NET_FAIL, networkError = true)
+    rangeGetCode in 200..299 -> UrlProbe(found = true, code = rangeGetCode)
+    else -> UrlProbe(found = false, code = if (rangeGetCode > 0) rangeGetCode else headCode)
+}
 
 class MpkNetworkClient {
 
@@ -386,5 +421,80 @@ class MpkNetworkClient {
             .header("Accept", BROWSER_ACCEPT)
             .build()
         return client.newCall(request).execute()
+    }
+
+    /** N1: HEAD-запрос (дёшево, без тела). Некоторые серверы не любят HEAD — см. probeDocument. */
+    private fun executeHead(url: String): Response =
+        client.newCall(
+            Request.Builder().url(url).head()
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", BROWSER_ACCEPT)
+                .build()
+        ).execute()
+
+    /** N1: GET первого байта (Range) — фолбэк, когда HEAD не дал внятного ответа. */
+    private fun executeRangeGet(url: String): Response =
+        client.newCall(
+            Request.Builder().url(url).get()
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", BROWSER_ACCEPT)
+                .header("Range", "bytes=0-0")
+                .build()
+        ).execute()
+
+    /** N1: HTTP-код запроса; [PROBE_NET_FAIL] при IOException (сайт недоступен). */
+    private fun safeCode(block: () -> Response): Int =
+        try {
+            block().use { it.code }
+        } catch (_: IOException) {
+            PROBE_NET_FAIL
+        }
+
+    /**
+     * N1: «рукопожатие» — есть ли вообще файл расписания, БЕЗ полной загрузки.
+     * Быстрый HEAD-проход по БЫСТРОМУ пути резолвера: предсказуемые прямые URL
+     * (generateCandidateDirectUrls — покрывают и документ внутри iframe event-страницы,
+     * т.к. его src тоже прямой) плюс сами event-страницы даты (generateCandidateEventUrls).
+     * Для каждого URL — HEAD; если сайт не отвечает на HEAD внятно (не 2xx), фолбэк —
+     * GET Range первого байта. Первый 2xx → [ProbeResult.Found]; IOException → ранний
+     * [ProbeResult.NetworkError] (сайт недоступен); все 404/405 → [ProbeResult.NotFound].
+     *
+     * ponytail: probe НЕ ходит на портал (тяжело и это уже полный резолвер). Документ,
+     * доступный ЛИШЬ по нестандартной прямой ссылке с портала, даст NotFound → по ТЗ это
+     * «не опубликовано» и полный резолвер не запускается. Если такой кейс станет частым —
+     * добавить сюда URL портала; сейчас быстрый путь покрывает доказанные сценарии (SCH-01).
+     */
+    suspend fun probeDocument(
+        calendar: Calendar,
+        nameBase: String = "raspisanie-uchashhihsya"
+    ): ProbeResult = withContext(Dispatchers.IO) {
+        val candidates = generateCandidateDirectUrls(calendar, nameBase).map { it.first } +
+            generateCandidateEventUrls(calendar, nameBase).map { it.first }
+        var lastCode = 0
+        for (url in candidates) {
+            val head = safeCode { executeHead(url) }
+            // HEAD 2xx — файл/страница есть; HEAD упал (-1) — сеть; иначе — дешёвый GET Range
+            val range = if (head == PROBE_NET_FAIL || head in 200..299) 0 else safeCode { executeRangeGet(url) }
+            val outcome = probeUrlOutcome(head, range)
+            when {
+                outcome.networkError -> return@withContext ProbeResult.NetworkError
+                outcome.found -> return@withContext ProbeResult.Found(url, outcome.code)
+                else -> lastCode = outcome.code
+            }
+        }
+        ProbeResult.NotFound(lastCode)
+    }
+
+    /**
+     * N1: дать репозиторию управлять статусом синхронизации. [ScheduleRepository] ведёт
+     * сценарий «Проверяю сайт… → Файл найден, загружаю…», но _diagnosticInfo приватен
+     * для клиента — поэтому статус пишется через этот метод (null-поле не меняем).
+     */
+    fun publishStatus(statusMessage: String? = null, isSyncing: Boolean? = null) {
+        val current = _diagnosticInfo.value
+        _diagnosticInfo.value = current.copy(
+            statusMessage = statusMessage ?: current.statusMessage,
+            isSyncing = isSyncing ?: current.isSyncing
+        )
     }
 }

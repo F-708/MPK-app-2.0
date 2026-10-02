@@ -2,6 +2,7 @@
 
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.local.entity.StudentTaskEntity
+import com.politex.data.model.TaskType
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -61,6 +62,42 @@ object HomeworkMarkers {
             }
         }
         return result
+    }
+
+    /**
+     * N18: для каждого урока (по номеру) с домашкой — СПИСОК типов заданий на этот день.
+     * Тот же матчинг, что в [markerLessonNumbers], но собирает [TaskType] для цветных
+     * бейджей (домашка/лаба/курсовая…). Типы внутри урока дедуплицируются.
+     */
+    fun markerLessonTypes(
+        dayLessons: List<LessonEntity>,
+        day: DayContext,
+        nowMillis: Long,
+        weeklyLessonsByDow: Map<Int, List<LessonEntity>>,
+        pendingTasks: List<StudentTaskEntity>
+    ): Map<Int, List<TaskType>> {
+        if (day.isPast || dayLessons.isEmpty() || pendingTasks.isEmpty()) return emptyMap()
+
+        val result = LinkedHashMap<Int, MutableList<TaskType>>()
+        for (lesson in dayLessons) {
+            if (lessonPassed(lesson, day, nowMillis)) continue
+            val subject = lesson.officialSubjectName
+            for (task in pendingTasks) {
+                val deadline = task.deadlineDate.trim()
+                val matches = if (!subjectsMatch(subject, task.subjectName)) {
+                    false
+                } else if (deadline.isNotBlank()) {
+                    sameIsoDay(deadline, day.dayIso)
+                } else {
+                    val targetIso = resolveNextOccurrenceIso(task.createdAt, subject, weeklyLessonsByDow)
+                    targetIso != null && sameIsoDay(targetIso, day.dayIso)
+                }
+                if (matches) {
+                    result.getOrPut(lesson.lessonNumber) { mutableListOf() }.add(task.taskTypeEnum)
+                }
+            }
+        }
+        return result.mapValues { (_, types) -> types.distinct() }
     }
 
     fun subjectsMatch(lessonSubject: String, taskSubject: String): Boolean {
