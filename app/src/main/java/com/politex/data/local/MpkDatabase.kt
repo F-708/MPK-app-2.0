@@ -19,7 +19,7 @@ import com.politex.data.local.entity.TeacherLessonEntity
         StudentTaskEntity::class,
         TeacherLessonEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class MpkDatabase : RoomDatabase() {
@@ -64,6 +64,23 @@ abstract class MpkDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v2 → v3 (D1/DAT-01): индексы на `lessons` под реальные запросы. Таблица держит
+         * кэш ВСЕХ групп (тысячи строк), виджет читает её каждую минуту — без индексов каждый
+         * запрос был full scan. Имена Room-генерируемые (index_<table>_<cols>) — должны
+         * совпадать побайтово с ожидаемой схемой, иначе Room упадёт на валидации при открытии
+         * (см. MigrationV2ToV3Test).
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lessons_groupName_dayOfWeek` ON `lessons` (`groupName`, `dayOfWeek`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lessons_groupName_dateString` ON `lessons` (`groupName`, `dateString`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lessons_dateString` ON `lessons` (`dateString`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lessons_roomFirst` ON `lessons` (`roomFirst`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_lessons_roomSecond` ON `lessons` (`roomSecond`)")
+            }
+        }
+
         @Volatile
         private var INSTANCE: MpkDatabase? = null
 
@@ -74,7 +91,7 @@ abstract class MpkDatabase : RoomDatabase() {
                     MpkDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     // ponytail: оставлено как страховка от будущих незапланированных схем —
                     // для объявленных версий выше путь всегда идёт через MIGRATION_1_2
                     .fallbackToDestructiveMigration()
