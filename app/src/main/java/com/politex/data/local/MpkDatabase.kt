@@ -23,7 +23,7 @@ import com.politex.data.local.entity.TeacherLessonEntity
         TaskReminderEntity::class
     ],
     version = 4,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class MpkDatabase : RoomDatabase() {
 

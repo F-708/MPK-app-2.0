@@ -107,6 +107,12 @@ secrets {
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
 }
 
+// DAT-03: экспорт схемы Room в app/schemas — миграции валидируются автоматически
+// (MigrationTestHelper и ручная сверка), схемы версионируются в git
+ksp {
+  arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {
