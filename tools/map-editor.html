@@ -310,17 +310,20 @@ function draw(){
   }
 
   // W5: коридоры-прямоугольники (при экспорте становятся обычными коридорами по осевой)
+  // рисуются как комнаты: заливка + тонкая рамка, прямые углы (НИКАКИХ толстых
+  // round-cap осевых — они и давали «жирный овал» размером с прямоугольник)
+  ctx.lineJoin = 'miter'; ctx.lineCap = 'butt';
   for(const rc of (fd.rectCorridors||[])){
     const x = wx(rc.x-rc.w/2), y = wy(rc.y-rc.h/2), w = rc.w*W, h = rc.h*H;
-    ctx.fillStyle = 'rgba(56,189,248,0.13)';
+    ctx.fillStyle = 'rgba(56,189,248,0.18)';
     ctx.fillRect(x,y,w,h);
-    ctx.strokeStyle = 'rgba(56,189,248,0.55)'; ctx.lineWidth = 1.2/cam.s;
-    ctx.setLineDash([6/cam.s,4/cam.s]); ctx.strokeRect(x,y,w,h); ctx.setLineDash([]);
-    // пунктирная осевая — именно она уйдёт в экспорт как обычный corridor
+    ctx.strokeStyle = 'rgba(56,189,248,0.85)'; ctx.lineWidth = 1.5/cam.s;
+    ctx.strokeRect(x,y,w,h);
+    // пунктирная осевая ТОНКОЙ линией — именно она уйдёт в экспорт как обычный corridor
     const conv = rectCorridorToCorridor(rc);
-    ctx.strokeStyle = 'rgba(34,211,238,0.85)';
-    ctx.lineWidth = Math.max(conv.width*W, 2/cam.s);
-    ctx.setLineDash([10/cam.s,7/cam.s]);
+    ctx.strokeStyle = 'rgba(34,211,238,0.7)';
+    ctx.lineWidth = 1/cam.s;
+    ctx.setLineDash([6/cam.s, 4/cam.s]);
     ctx.beginPath();
     ctx.moveTo(wx(conv.points[0][0]), wy(conv.points[0][1]));
     ctx.lineTo(wx(conv.points[1][0]), wy(conv.points[1][1]));
@@ -335,6 +338,7 @@ function draw(){
       });
     }
   }
+  ctx.lineJoin = ctx.lineCap = 'round'; // вернуть для остальных полилиний
 
   // связи узлов
   if(showLinks){
@@ -457,12 +461,18 @@ function draw(){
     }
   }
 
-  // превью новой комнаты
-  if(mode && mode.t==='drawRoom'){
+  // превью новой комнаты / прямоугольника-коридора (как и сохранённый: заливка + рамка)
+  if(mode && (mode.t==='drawRoom' || mode.t==='drawRectCorridor')){
     const l=Math.min(mode.x0,mode.x1), t2=Math.min(mode.y0,mode.y1);
     const w=Math.abs(mode.x1-mode.x0), h=Math.abs(mode.y1-mode.y0);
+    if(mode.t==='drawRectCorridor'){
+      ctx.lineJoin = 'miter';
+      ctx.fillStyle='rgba(56,189,248,0.18)';
+      ctx.fillRect(wx(l), wy(t2), w*W, h*H);
+    }
     ctx.strokeStyle='#22d3ee'; ctx.lineWidth=2/cam.s; ctx.setLineDash([6/cam.s,4/cam.s]);
     ctx.strokeRect(wx(l), wy(t2), w*W, h*H); ctx.setLineDash([]);
+    if(mode.t==='drawRectCorridor') ctx.lineJoin = 'round';
   }
 
   // точки выбранного коридора

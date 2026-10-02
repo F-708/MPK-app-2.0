@@ -132,6 +132,21 @@ const TEST = `
     check('reexport-after-move-updated', !!conv3 && out3.floors['1'].corridors.length===1 &&
       Math.abs(conv3.points[0][0]-(rc3.x-rc3.w/2))<2e-4 && Math.abs(conv3.points[1][0]-(rc3.x+rc3.w/2))<2e-4,
       conv3 ? 'ось=' + JSON.stringify(conv3.points) : 'нет');
+
+    // (з) W5-фикс: отрисовка rect-коридора — заливка+рамка, НИКАКИХ lineWidth ~ width*W.
+    // Пустой этаж с одним выбранным rect-коридором: все lineWidth <= 3/cam.s.
+    map.floors['9'] = emptyFloor();
+    map.floors['9'].rectCorridors.push({id:'rcc_test', x:0.5, y:0.5, w:0.2, h:0.08});
+    sel = {kind:'rectCorridor', obj: map.floors['9'].rectCorridors[0]};
+    curFloor = '9';
+    __lwSets.length = 0;
+    draw();
+    sel = null; curFloor = '1';
+    const maxLw = __lwSets.length ? Math.max.apply(null, __lwSets) : 0;
+    check('rect-draw-no-fat-stroke', __lwSets.length > 0 && maxLw <= 3/cam.s,
+      'max lineWidth=' + maxLw + ' (порог 3/cam.s=' + (3/cam.s).toFixed(3) + ', записей ' + __lwSets.length + ')');
+    delete map.floors['9'];
+
     console.log('INTERACTION OK');
   } catch (e) {
     console.error('INTERACT ERROR:', e && e.stack || e);
@@ -157,6 +172,7 @@ function makeEl() {
   };
   return el;
 }
+const __lwSets = global.__lwSets = [];
 const ctxStub = new Proxy({}, {
   get(_, k) {
     if (k === 'canvas') return {};
@@ -166,7 +182,7 @@ const ctxStub = new Proxy({}, {
       return undefined;
     };
   },
-  set() { return true; },
+  set(_, k, v) { if (k === 'lineWidth') __lwSets.push(v); return true; },
 });
 const elements = {};
 global.document = {
