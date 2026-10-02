@@ -1,37 +1,38 @@
 package com.politex.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragIndicator
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,28 +44,37 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.politex.data.local.MpkDatabase
 import com.politex.data.local.dao.GradeDao
 import com.politex.data.local.entity.GradeConfigEntity
 import com.politex.data.local.entity.GradeEntryEntity
 import com.politex.data.model.GroupInfo
-import com.politex.ui.components.SimpleDatePickerDialog
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorError
 import com.politex.ui.theme.ColorSuccess
+import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
+import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberToday
 import com.politex.util.GradeAggregator
@@ -74,20 +84,23 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
- * Ф4.2 «Оценки» (агент G, MASTER-PLAN фаза 4.2).
+ * Ф4.2 «Оценки» (агент G, MASTER-PLAN фаза 4.2) + волна W17–W22.
  *
- * G1: три «страницы» в одном файле без nav-графа — список предметов → предмет → вес категорий.
- * Внутренняя навигация двумя rememberSaveable-строками: hub-экран вызывает нас как лист,
- * свой back-стек тут дешевле, чем тянуть Navigation в запрещённую зону LessonsHubScreen.
+ * W17: название предмета — maxLines=2 + Ellipsis (список, шапка, экран веса).
+ * W18: пустые состояния — три точки по центру, а не текст («—»/«Пока нет оценок»).
+ * W19: «+ работу» убран полностью — быстрый ввод без подписи и даты (дата = сегодня).
+ *      Строка оценки = значение-бейдж + ✕ удаления (44dp).
+ * W20: нампад 2×5 (1–5 / 6–9 и 10), кнопки weight(1f) ~56dp — без скролла.
+ * W21: категории — фиксированный Row из 5 сегментов, выбранная залита ColorTopBar.
+ * W22: «Вес категорий» = ДЕРЕВО агрегации: мини-дерево на экране предмета,
+ *      полное дерево с drag&drop листьев (меняется порядок в плоском priorityJson,
+ *      схема БД не меняется, формула GradeAggregator не меняется).
+ *
+ * G1: три «страницы» без nav-графа (rememberSaveable-строки).
  * Данные — напрямую из GradeDao (паттерн MaterialBaseScreen), без ViewModel.
- *
- * G2: агрегация — чистый GradeAggregator (util), здесь только подготовка Map<category, values>.
- * G3: цветовая семантика среднего балла: ≥7 зелёный, <4 красный, иначе нейтральный.
- * G4: панель ввода под большой палец — чипы категорий + квадраты 1..10 (40dp), LAB — тумблер
- *     «Зачёт/Незачёт», EXAM — одна запись с заменой (upsertExam) и стиранием (✕ в строке).
- * G5: reorder приоритета категорий кнопками вверх/вниз (v1, ponytail: настоящий drag — позже).
  */
 @Composable
 fun GradesScreen(
@@ -150,9 +163,7 @@ private fun GradeSubjectList(
         Modifier
             .fillMaxSize()
             .testTag("grades_root_list"),
-        contentPadding =
-        androidx.compose.foundation.layout
-            .PaddingValues(12.dp),
+        contentPadding = PaddingValues(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(subjects) { subject ->
@@ -183,20 +194,27 @@ private fun GradeSubjectList(
                 ) {
                     Text(
                         text = subject,
+                        maxLines = 2, // W17: длинные названия («физическая культура и…»)
+                        overflow = TextOverflow.Ellipsis,
                         style = TextStyle(fontSize = 14.sp, color = ColorTextTitle),
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = GradeAggregator.format(avg),
-                        style =
-                        TextStyle(
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = gradeColor(avg),
-                        ),
-                        modifier = Modifier.testTag("grades_avg_$subject"),
-                    )
+                    if (avg == null) {
+                        // W18: нет оценок — три точки, а не «—»
+                        EmptyDots(modifier = Modifier.testTag("grades_avg_$subject"))
+                    } else {
+                        Text(
+                            text = GradeAggregator.format(avg),
+                            style =
+                            TextStyle(
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = gradeColor(avg),
+                            ),
+                            modifier = Modifier.testTag("grades_avg_$subject"),
+                        )
+                    }
                 }
             }
         }
@@ -218,28 +236,23 @@ private fun GradeSubjectScreen(
     val configs by dao.allConfigs().collectAsState(initial = emptyList())
 
     val byCategory = remember(entries) { entries.groupBy({ it.category }) { it.value } }
-    val avg =
-        remember(byCategory, configs, subject) {
-            GradeAggregator.average(byCategory, priorityFor(configs, subject))
-        }
+    val priority = remember(configs, subject) { priorityFor(configs, subject) }
+    val avg = remember(byCategory, priority) { GradeAggregator.average(byCategory, priority) }
 
     var activeCategory by rememberSaveable(subject) { mutableStateOf(GradeCategory.REGULAR.name) }
-    // G4: «+ работа» взводит подпись и дату — следующий тап по оценке пишет их
-    var pendingWork by remember { mutableStateOf<Pair<String, String>?>(null) }
-    var showWorkDialog by remember { mutableStateOf(false) }
 
+    // W19: быстрый ввод — без «+ работу»: label пустой, дата = сегодня автоматически
     fun submit(value: Int) {
         val entry =
             GradeEntryEntity(
                 subjectName = subject,
                 category = activeCategory,
                 value = value,
-                label = pendingWork?.first ?: "",
-                dateIso = pendingWork?.second ?: isoOf(today),
+                label = "",
+                dateIso = isoOf(today),
             )
         scope.launch {
             if (activeCategory == GradeCategory.EXAM.name) dao.upsertExam(entry) else dao.insert(entry)
-            pendingWork = null
         }
     }
 
@@ -249,7 +262,7 @@ private fun GradeSubjectScreen(
             .fillMaxSize()
             .testTag("grades_subject_screen"),
     ) {
-        // Шапка: назад, предмет, шестерёнка приоритета
+        // Шапка: назад + предмет (W17: две строки с многоточием)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -259,45 +272,89 @@ private fun GradeSubjectScreen(
             }
             Text(
                 text = subject,
-                maxLines = 1,
+                maxLines = 2, // W17
+                overflow = TextOverflow.Ellipsis,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
-                modifier = Modifier.weight(1f),
+                modifier =
+                Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp),
             )
-            IconButton(
-                onClick = onOpenPriority,
-                modifier = Modifier.size(48.dp).testTag("grades_priority_btn"),
-            ) {
-                Icon(Icons.Default.Settings, contentDescription = "Вес категорий", tint = ColorTextMuted)
-            }
         }
 
-        // G3: ТЕКУЩИЙ средний балл по центру, 32sp
+        // G3/W18: текущий средний балл; нет оценок — три точки, а не «—»
         Box(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = GradeAggregator.format(avg),
-                style =
-                TextStyle(
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = gradeColor(avg),
-                ),
-                modifier = Modifier.testTag("grades_current_avg"),
+            if (avg == null) {
+                EmptyDots(modifier = Modifier.testTag("grades_current_avg"))
+            } else {
+                Text(
+                    text = GradeAggregator.format(avg),
+                    style =
+                    TextStyle(
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = gradeColor(avg),
+                    ),
+                    modifier = Modifier.testTag("grades_current_avg"),
+                )
+            }
+        }
+
+        // W22: мини-дерево формулы — листья-категории снизу, итог сверху,
+        // линии = сложение пар (аккумулятор + категория) ÷ 2 по priority
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            AggregationTree(
+                priority = priority,
+                byCategory = byCategory,
+                spec = MiniTreeSpec,
+                compact = true,
+                skipEmpty = true,
+                draggable = false,
             )
         }
 
-        // Секции категорий: список оценок (value, label, дата) — видно, какие работы сданы
+        // W22: вход в полное дерево с drag&drop
+        Surface(
+            shape = RoundedCornerShape(2.dp),
+            color = ColorTopBar,
+            border = BorderStroke(1.dp, ColorTopBar),
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .height(40.dp)
+                .testTag("grades_priority_btn")
+                .bouncyClickable(onClick = onOpenPriority),
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Settings, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "НАСТРОИТЬ ВЕС",
+                        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                    )
+                }
+            }
+        }
+
+        // Секции категорий: строки оценок = значение-бейдж + ✕ (W19)
         LazyColumn(
             modifier =
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .testTag("grades_entries_list"),
-            contentPadding =
-            androidx.compose.foundation.layout
-                .PaddingValues(horizontal = 12.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             GradeCategory.values().forEach { category ->
@@ -316,11 +373,16 @@ private fun GradeSubjectScreen(
                 }
                 if (categoryEntries.isEmpty()) {
                     item(key = "empty_${category.name}") {
-                        Text(
-                            text = "Пока нет оценок",
-                            style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-                            modifier = Modifier.padding(start = 4.dp),
-                        )
+                        // W18: три точки по центру вместо «Пока нет оценок»
+                        Box(
+                            modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            EmptyDots()
+                        }
                     }
                 } else {
                     items(categoryEntries, key = { it.id }) { entry ->
@@ -333,7 +395,7 @@ private fun GradeSubjectScreen(
             }
         }
 
-        // ── Панель ввода (G4) ──
+        // ── Панель ввода (G4, W20/W21) ──
         Surface(
             shape = RoundedCornerShape(2.dp),
             color = ColorBgMain,
@@ -344,39 +406,22 @@ private fun GradeSubjectScreen(
                 .testTag("grades_input_panel"),
         ) {
             Column(modifier = Modifier.padding(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // «+ работа с подписью»: диалог label + дата (дефолт сегодня)
-                    Chip(
-                        text = "+ работа",
-                        selected = pendingWork != null,
-                        tag = "grades_add_work",
-                        onClick = { showWorkDialog = true },
-                    ) { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                    if (pendingWork != null) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Chip(
-                            text = "${pendingWork!!.first} · ${displayDate(pendingWork!!.second)}",
-                            selected = true,
-                            tag = "grades_pending_work",
-                            onClick = { pendingWork = null },
-                        ) { Icon(Icons.Default.Close, contentDescription = "Сбросить подпись", modifier = Modifier.size(14.dp)) }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(GradeCategory.values().toList()) { category ->
-                        Chip(
-                            text = category.title,
+                // W21: фиксированный Row из 5 сегментов — влезает без скролла,
+                // компактные подписи, выбранная залита ColorTopBar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    GradeCategory.values().forEach { category ->
+                        CategorySegment(
+                            category = category,
                             selected = activeCategory == category.name,
-                            tag = "grades_chip_${category.name}",
                             onClick = { activeCategory = category.name },
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 when (activeCategory) {
                     GradeCategory.LAB.name ->
@@ -389,34 +434,48 @@ private fun GradeSubjectScreen(
                             LabButton(text = "Незачёт", value = 0, tag = "grades_lab_fail", onSubmit = ::submit)
                         }
                     else ->
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            items((1..10).toList()) { value ->
-                                NumberKey(value = value, onSubmit = ::submit)
+                        // W20: нампад 2×5 (1–5 / 6–9 и 10), кнопки ~56dp с weight(1f) —
+                        // цифры 1..10 влезают на любом экране без скролла
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                (1..5).forEach { NumberKey(value = it, onSubmit = ::submit) }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                (6..9).forEach { NumberKey(value = it, onSubmit = ::submit) }
+                                NumberKey(value = 10, onSubmit = ::submit)
                             }
                         }
                 }
             }
         }
     }
-
-    if (showWorkDialog) {
-        AddWorkDialog(
-            today = today,
-            onDismiss = { showWorkDialog = false },
-            onConfirm = { label, dateIso ->
-                pendingWork = label to dateIso
-                showWorkDialog = false
-            },
-        )
-    }
 }
 
-/** Строка оценки: value-бейдж, подпись, дата, ✕ (44dp хитбокс). LAB — «Зачёт/Незачёт». */
+/** W19: строка оценки — только значение-бейдж + ✕ удаления (44dp). LAB — «Зач/Нез». */
 @Composable
 private fun GradeEntryRow(
     entry: GradeEntryEntity,
     onDelete: () -> Unit,
 ) {
+    val isLab = entry.category == GradeCategory.LAB.name
+    val valueText =
+        if (isLab) {
+            if (entry.value == 1) "Зач" else "Нез"
+        } else {
+            entry.value.toString()
+        }
+    val valueColor =
+        if (isLab) {
+            if (entry.value == 1) ColorSuccess else ColorError
+        } else {
+            gradeColor(entry.value.toDouble())
+        }
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
@@ -430,38 +489,20 @@ private fun GradeEntryRow(
             modifier = Modifier.padding(start = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val valueText =
-                if (entry.category == GradeCategory.LAB.name) {
-                    if (entry.value == 1) "Зач" else "Нез"
-                } else {
-                    entry.value.toString()
-                }
-            Text(
-                text = valueText,
-                style =
-                TextStyle(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color =
-                    if (entry.category == GradeCategory.LAB.name) {
-                        ColorTextTitle
-                    } else {
-                        gradeColor(entry.value.toDouble())
-                    },
-                ),
-                modifier = Modifier.width(34.dp),
-            )
-            Column(modifier = Modifier.weight(1f)) {
+            // W19: бейдж значения — без бейджа категории и даты
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBgMain,
+                border = BorderStroke(1.dp, ColorBorderLight),
+            ) {
                 Text(
-                    text = entry.label.ifEmpty { GradeCategory.values().first { it.name == entry.category }.title },
+                    text = valueText,
                     maxLines = 1,
-                    style = TextStyle(fontSize = 13.sp, color = ColorTextTitle),
-                )
-                Text(
-                    text = displayDate(entry.dateIso),
-                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = valueColor),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
+            Spacer(modifier = Modifier.weight(1f))
             Box(
                 modifier =
                 Modifier
@@ -481,9 +522,9 @@ private fun GradeEntryRow(
     }
 }
 
-/** Квадрат 40dp с цифрой — под большой палец одной руки (G4). */
+/** W20: прямоугольник ~56dp с weight(1f) — нампад 2×5 под большой палец. */
 @Composable
-private fun NumberKey(
+private fun RowScope.NumberKey(
     value: Int,
     onSubmit: (Int) -> Unit,
 ) {
@@ -493,21 +534,22 @@ private fun NumberKey(
         border = BorderStroke(1.dp, ColorBorderLight),
         modifier =
         Modifier
-            .size(40.dp)
+            .weight(1f)
+            .height(56.dp)
             .testTag("grades_num_$value")
             .bouncyClickable { onSubmit(value) },
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
                 text = value.toString(),
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
+                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
             )
         }
     }
 }
 
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.LabButton(
+private fun RowScope.LabButton(
     text: String,
     value: Int,
     tag: String,
@@ -538,38 +580,31 @@ private fun androidx.compose.foundation.layout.RowScope.LabButton(
     }
 }
 
+/** W21: сегмент категории — компактная подпись, weight(1f), выбранная залита ColorTopBar. */
 @Composable
-private fun Chip(
-    text: String,
+private fun RowScope.CategorySegment(
+    category: GradeCategory,
     selected: Boolean,
-    tag: String,
     onClick: () -> Unit,
-    icon: (@Composable () -> Unit)? = null,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        color = if (selected) ColorBrandBlue else ColorBgMain,
-        border = BorderStroke(1.dp, if (selected) ColorBrandBlue else ColorBorderLight),
+        color = if (selected) ColorTopBar else ColorBgMain,
+        border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
         modifier =
         Modifier
-            .height(30.dp)
-            .testTag(tag)
+            .weight(1f)
+            .height(32.dp)
+            .testTag("grades_chip_${category.name}")
             .bouncyClickable(onClick = onClick),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (icon != null) {
-                icon()
-                Spacer(modifier = Modifier.width(4.dp))
-            }
+        Box(contentAlignment = Alignment.Center) {
             Text(
-                text = text,
+                text = CATEGORY_SHORT[category.name] ?: category.title,
                 maxLines = 1,
                 style =
                 TextStyle(
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (selected) Color.White else ColorTextBody,
                 ),
@@ -578,85 +613,302 @@ private fun Chip(
     }
 }
 
-/** Диалог «+ работа»: подпись («Практ. №3») + дата, дефолт сегодня (G4). */
-@Composable
-private fun AddWorkDialog(
-    today: Calendar,
-    onDismiss: () -> Unit,
-    onConfirm: (label: String, dateIso: String) -> Unit,
-) {
-    var label by remember { mutableStateOf("") }
-    var dateIso by remember { mutableStateOf(isoOf(today)) }
-    var showDatePicker by remember { mutableStateOf(false) }
-    val year = today.get(Calendar.YEAR)
+// ── Дерево агрегации (W22) ───────────────────────────────────────────────────
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(2.dp),
-        containerColor = ColorBgMain,
-        title = {
-            Text(
-                text = "Работа с подписью",
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = label,
-                    onValueChange = { label = it },
-                    singleLine = true,
-                    label = { Text("Например: Практ. №3") },
-                    modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .testTag("grades_work_label"),
-                )
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier =
-                    Modifier
-                        .testTag("grades_work_date")
-                        .bouncyClickable { showDatePicker = true },
-                ) {
-                    Text(
-                        text = "Дата: ${displayDate(dateIso)}",
-                        style = TextStyle(fontSize = 13.sp, color = ColorTextTitle),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+/** W22: параметры раскладки дерева (мини на экране предмета / полное с drag). */
+private data class TreeSpec(
+    val cardW: Dp,
+    val cardH: Dp,
+    val gap: Dp,
+    val vGap: Dp,
+)
+
+private val MiniTreeSpec = TreeSpec(cardW = 64.dp, cardH = 34.dp, gap = 8.dp, vGap = 14.dp)
+private val FullTreeSpec = TreeSpec(cardW = 96.dp, cardH = 46.dp, gap = 12.dp, vGap = 32.dp)
+
+/** Раскладка уровней дерева в координаты (dp): уровень 0 — листья снизу. */
+private data class TreeLayout(
+    val levels: List<List<String>>,
+    val centers: List<List<Float>>, // центры узлов по уровням, dp
+    val widthDp: Float,
+    val heightDp: Float,
+)
+
+private fun treeLayout(
+    levels: List<List<String>>,
+    spec: TreeSpec,
+): TreeLayout {
+    val step = spec.cardW.value + spec.gap.value
+    val centers = ArrayList<List<Float>>(levels.size)
+    // листья: узел i стоит на слоте i
+    var prev: List<Float> = List(levels[0].size) { it * step + spec.cardW.value / 2f }
+    centers += prev
+    for (k in 1 until levels.size) {
+        val cur = ArrayList<Float>(levels[k].size)
+        cur += (prev[0] + prev[1]) / 2f // родитель = середина пары детей
+        for (j in 1 until levels[k].size) cur += prev[j + 1] // остальные узлы проходят насквозь
+        centers += cur
+        prev = cur
+    }
+    val width = levels[0].size * step - spec.gap.value
+    val height = levels.size * spec.cardH.value + (levels.size - 1) * spec.vGap.value
+    return TreeLayout(levels, centers, width, height)
+}
+
+/**
+ * W22: дерево агрегации — лестница пар снизу вверх (листья → итог), линии = «(левый + правый) ÷ 2».
+ * [draggable] = экран веса: долгий тап по листу + перетаскивание меняет порядок в
+ * плоском priority-списке ( [onReorder] ); схема БД и формула GradeAggregator не меняются.
+ * [skipEmpty] = мини-дерево рисует только непустые категории (честная текущая формула),
+ * полное дерево показывает все — пустые перетаскиваются «на будущее».
+ */
+@Composable
+private fun AggregationTree(
+    priority: List<String>,
+    byCategory: Map<String, List<Int>>,
+    spec: TreeSpec,
+    compact: Boolean,
+    skipEmpty: Boolean,
+    draggable: Boolean,
+    onReorder: (List<String>) -> Unit = {},
+) {
+    val levels =
+        remember(priority, byCategory, skipEmpty) {
+            if (skipEmpty) {
+                GradeAggregator.buildTreeLevels(priority, byCategory.filterValues { it.isNotEmpty() }.keys)
+            } else {
+                GradeAggregator.buildTreeLevels(priority)
+            }
+        }
+    if (levels.isEmpty()) return
+    val layout = remember(levels, spec) { treeLayout(levels, spec) }
+    val density = LocalDensity.current
+    val stepPx = with(density) { (spec.cardW + spec.gap).toPx() }
+    val leaves = levels[0]
+
+    var dragging by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var targetSlot by remember { mutableStateOf(-1) }
+
+    Box(modifier = Modifier.size(layout.widthDp.dp, layout.heightDp.dp)) {
+        // W22: линии сложения — узел 0 уровня k сходится с узлами 0/1 уровня k-1
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val cardHpx = spec.cardH.toPx()
+            val vGapPx = spec.vGap.toPx()
+            val stroke = 1.5.dp.toPx()
+            for (k in 1 until levels.size) {
+                val parentBottom = size.height - k * (cardHpx + vGapPx)
+                val childTop = size.height - cardHpx - (k - 1) * (cardHpx + vGapPx)
+                val px = layout.centers[k][0].dp.toPx()
+                for (c in 0..1) {
+                    drawLine(
+                        color = ColorBorderLight,
+                        start = Offset(px, parentBottom),
+                        end = Offset(layout.centers[k - 1][c].dp.toPx(), childTop),
+                        strokeWidth = stroke,
                     )
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(label.trim().ifEmpty { "Работа" }, dateIso) },
-                modifier = Modifier.testTag("grades_work_confirm"),
-            ) { Text("ГОТОВО", style = TextStyle(fontWeight = FontWeight.Bold, color = ColorBrandBlue)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("ОТМЕНА", style = TextStyle(fontWeight = FontWeight.Bold, color = ColorTextMuted))
-            }
-        },
-    )
+        }
 
-    if (showDatePicker) {
-        SimpleDatePickerDialog(
-            initialDateIso = dateIso,
-            minYear = year - 1,
-            maxYear = year + 1,
-            onDismiss = { showDatePicker = false },
-            onConfirm = {
-                dateIso = it
-                showDatePicker = false
-            },
-        )
+        levels.forEachIndexed { k, rowNodes ->
+            rowNodes.forEachIndexed { j, node ->
+                val x = (layout.centers[k][j] - spec.cardW.value / 2f).dp
+                val y = (layout.heightDp - spec.cardH.value - k * (spec.cardH.value + spec.vGap.value)).dp
+                val isDragged = draggable && node == dragging
+                val highlighted =
+                    draggable && k == 0 && targetSlot >= 0 && j == targetSlot && node != dragging
+                val dragModifier =
+                    if (draggable && k == 0) {
+                        // W22: честный drag&drop — долгий тап, карточка следует за пальцем,
+                        // дроп в слот другого листа = перемещение в priority-списке
+                        Modifier.pointerInput(node, priority) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = {
+                                    dragging = node
+                                    dragOffset = Offset.Zero
+                                    targetSlot = j
+                                },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    dragOffset += amount
+                                    targetSlot =
+                                        (j + (dragOffset.x / stepPx)).roundToInt()
+                                            .coerceIn(0, leaves.lastIndex)
+                                },
+                                onDragEnd = {
+                                    if (targetSlot != j) {
+                                        onReorder(moveCategory(priority, node, targetSlot, leaves))
+                                    }
+                                    dragging = null
+                                    dragOffset = Offset.Zero
+                                    targetSlot = -1
+                                },
+                                onDragCancel = {
+                                    dragging = null
+                                    dragOffset = Offset.Zero
+                                    targetSlot = -1
+                                },
+                            )
+                        }
+                    } else {
+                        Modifier
+                    }
+                Box(
+                    modifier =
+                    Modifier
+                        .offset { IntOffset(x.roundToPx(), y.roundToPx()) }
+                        .size(spec.cardW, spec.cardH)
+                        .zIndex(if (isDragged) 10f else 0f)
+                        .graphicsLayer {
+                            if (isDragged) {
+                                translationX = dragOffset.x
+                                translationY = dragOffset.y
+                            }
+                        }
+                        .then(dragModifier)
+                        .let {
+                            if (draggable && k == 0) {
+                                it.testTag("grades_priority_row_$node")
+                            } else {
+                                it
+                            }
+                        },
+                ) {
+                    TreeCard(
+                        node = node,
+                        isTop = k == levels.lastIndex,
+                        byCategory = byCategory,
+                        compact = compact,
+                        highlighted = highlighted,
+                        showHandle = draggable && k == 0,
+                    )
+                }
+            }
+        }
     }
 }
 
-// ── Экран «Вес категорий» (G5) ───────────────────────────────────────────────
+/** W22: узел дерева: лист (имя + средний), внутренний (значение + ÷2), итог (заливка ColorTopBar). */
+@Composable
+private fun TreeCard(
+    node: String,
+    isTop: Boolean,
+    byCategory: Map<String, List<Int>>,
+    compact: Boolean,
+    highlighted: Boolean,
+    showHandle: Boolean,
+) {
+    val leaves = node.split("+")
+    val isLeaf = leaves.size == 1
+    val value = remember(node, byCategory) { GradeAggregator.average(byCategory, leaves) }
+    val leafAvg = if (isLeaf) byCategory[leaves[0]]?.average() else null
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color =
+        when {
+            highlighted -> ColorSurfaceHighlight
+            isTop -> ColorTopBar
+            else -> ColorBgMain
+        },
+        border =
+        BorderStroke(
+            if (highlighted) 2.dp else 1.dp,
+            when {
+                highlighted -> ColorBrandFill
+                isTop -> ColorTopBar
+                else -> ColorBorderLight
+            },
+        ),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (showHandle) {
+                // W22: хэндл перетаскивания — теперь он работает (drag по всей карточке)
+                Icon(
+                    imageVector = Icons.Default.DragIndicator,
+                    contentDescription = "Перетащить",
+                    tint = ColorTextMuted,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                when {
+                    isTop -> {
+                        Text(
+                            text = "ИТОГ",
+                            style = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                        )
+                        if (value == null) {
+                            EmptyDots()
+                        } else {
+                            Text(
+                                text = GradeAggregator.format(value),
+                                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                            )
+                        }
+                    }
+                    isLeaf -> {
+                        Text(
+                            text = treeTitle(leaves[0], compact),
+                            maxLines = 1,
+                            style = TextStyle(fontSize = 10.sp, color = ColorTextMuted),
+                        )
+                        if (leafAvg == null) {
+                            EmptyDots()
+                        } else {
+                            Text(
+                                text = GradeAggregator.format(leafAvg),
+                                maxLines = 1,
+                                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = gradeColor(leafAvg)),
+                            )
+                        }
+                    }
+                    else -> {
+                        if (value == null) {
+                            EmptyDots()
+                        } else {
+                            Text(
+                                text = GradeAggregator.format(value),
+                                maxLines = 1,
+                                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = gradeColor(value)),
+                            )
+                        }
+                        Text("÷2", style = TextStyle(fontSize = 9.sp, color = ColorTextMuted))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** W18: три наглядные точки — пустое состояние (нет оценок / нет среднего). */
+@Composable
+private fun EmptyDots(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        repeat(3) {
+            Box(
+                modifier =
+                Modifier
+                    .size(4.dp)
+                    .background(ColorTextMuted, CircleShape),
+            )
+        }
+    }
+}
+
+// ── Экран «Как считается балл» (W22, бывший «Вес категорий») ─────────────────
 
 @Composable
 private fun GradePriorityScreen(
@@ -665,6 +917,8 @@ private fun GradePriorityScreen(
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val entries by dao.entriesForSubject(subject).collectAsState(initial = emptyList())
+    val byCategory = remember(entries) { entries.groupBy({ it.category }) { it.value } }
     var order by remember { mutableStateOf<List<String>?>(null) } // null = загрузка
 
     LaunchedEffect(subject) {
@@ -686,70 +940,52 @@ private fun GradePriorityScreen(
                 Icon(Icons.Default.ChevronLeft, contentDescription = "Назад", tint = ColorTextTitle)
             }
             Text(
-                text = "Вес категорий",
+                text = "Как считается балл",
                 maxLines = 1,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
-                modifier = Modifier.weight(1f),
+                modifier =
+                Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp),
             )
         }
         Text(
             text = subject,
+            maxLines = 2, // W17
+            overflow = TextOverflow.Ellipsis,
             style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
             modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Text(
+            text = "Каждая линия: (левый + правый) ÷ 2. Держите категорию и перетащите — порядок сложения изменится.",
+            style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
         )
 
         val list = order
         if (list != null) {
-            Column(
+            // W22: полное дерево, горизонтальный скролл если не влезает, drag листьев
+            Box(
                 modifier =
                 Modifier
                     .weight(1f)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center,
             ) {
-                list.forEachIndexed { index, categoryName ->
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBgMain,
-                        border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .testTag("grades_priority_row_$categoryName"),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(start = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.DragIndicator,
-                                contentDescription = null,
-                                tint = ColorTextMuted,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Text(
-                                text = "${index + 1}. ${titleOf(categoryName)}",
-                                style = TextStyle(fontSize = 14.sp, color = ColorTextTitle),
-                                modifier = Modifier.weight(1f),
-                            )
-                            ReorderArrow(
-                                tag = "grades_priority_up_$categoryName",
-                                up = true,
-                                enabled = index > 0,
-                                onClick = { order = list.swap(index, index - 1) },
-                            )
-                            ReorderArrow(
-                                tag = "grades_priority_down_$categoryName",
-                                up = false,
-                                enabled = index < list.lastIndex,
-                                onClick = { order = list.swap(index, index + 1) },
-                            )
-                        }
-                    }
+                Box(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    AggregationTree(
+                        priority = list,
+                        byCategory = byCategory,
+                        spec = FullTreeSpec,
+                        compact = false,
+                        skipEmpty = false,
+                        draggable = true,
+                        onReorder = { order = it },
+                    )
                 }
             }
 
-            // Сохранение в grade_config (одна строка JSON-массива)
+            // Сохранение в grade_config (плоский priority-список, схема БД не меняется)
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 color = ColorBrandFill,
@@ -783,30 +1019,6 @@ private fun GradePriorityScreen(
     }
 }
 
-@Composable
-private fun ReorderArrow(
-    tag: String,
-    up: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier =
-        Modifier
-            .size(44.dp) // D4: хитбокс 44dp
-            .testTag(tag)
-            .bouncyClickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = if (up) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-            contentDescription = if (up) "Выше" else "Ниже",
-            tint = if (enabled) ColorBrandBlue else ColorTextMuted,
-            modifier = Modifier.size(20.dp),
-        )
-    }
-}
-
 // ── Мелочи ───────────────────────────────────────────────────────────────────
 
 /** G3: ≥7 зелёный, <4 красный, 4–6.9 нейтральный, нет оценок — приглушённый. */
@@ -836,11 +1048,44 @@ private fun parsePriority(json: String): List<String> = try {
 
 private fun titleOf(categoryName: String): String = GradeCategory.values().firstOrNull { it.name == categoryName }?.title ?: categoryName
 
-private fun <T> List<T>.swap(
-    i: Int,
-    j: Int,
-): List<T> = toMutableList().also {
-    it[i] = it[j].also { tmp -> it[j] = it[i] }
+/** W21: компактные подписи для сегментов ввода и мини-дерева. */
+private val CATEGORY_SHORT =
+    mapOf(
+        GradeCategory.REGULAR.name to "Обычн",
+        GradeCategory.PRACTICAL.name to "Практ",
+        GradeCategory.CONTROL.name to "Контр",
+        GradeCategory.LAB.name to "Лаб",
+        GradeCategory.EXAM.name to "Экз",
+    )
+
+private fun treeTitle(
+    categoryName: String,
+    compact: Boolean,
+): String = if (compact) CATEGORY_SHORT[categoryName] ?: categoryName else titleOf(categoryName)
+
+/**
+ * W22: перемещение категории в priority-списке по слоту среди листьев дерева.
+ * Дроп правее своего места = вставка ПОСЛЕ якоря, левее = ДО якоря
+ * (стандартная семантика reorder); пустые категории остаются на своих местах.
+ */
+private fun moveCategory(
+    list: List<String>,
+    name: String,
+    targetSlot: Int,
+    leaves: List<String>,
+): List<String> {
+    val from = leaves.indexOf(name)
+    if (targetSlot == from) return list
+    val rest = list.toMutableList()
+    rest.remove(name)
+    val anchor = leaves.getOrNull(targetSlot)
+    val anchorIdx = if (anchor == null) -1 else rest.indexOf(anchor)
+    when {
+        anchorIdx < 0 -> rest.add(name)
+        targetSlot > from -> rest.add(anchorIdx + 1, name)
+        else -> rest.add(anchorIdx, name)
+    }
+    return rest
 }
 
 private fun isoOf(cal: Calendar): String = String.format(
@@ -850,9 +1095,3 @@ private fun isoOf(cal: Calendar): String = String.format(
     cal.get(Calendar.MONTH) + 1,
     cal.get(Calendar.DAY_OF_MONTH),
 )
-
-/** yyyy-MM-dd → dd.MM.yyyy (конвенция показа дат проекта). */
-private fun displayDate(iso: String): String {
-    val p = iso.split("-")
-    return if (p.size == 3) "${p[2]}.${p[1]}.${p[0]}" else iso
-}

@@ -58,6 +58,33 @@ object GradeAggregator {
         return acc
     }
 
+    /**
+     * W22: дерево агрегации для отрисовки формулы (уровни СНИЗУ ВВЕРХ).
+     * Уровень 0 — листья (категории priority в порядке сложения; пустые и LAB
+     * выпадают — ровно как в [average]); каждый следующий уровень склеивает
+     * первые два узла предыдущего в "A+B"; верхний уровень — единственный итог.
+     * Разделитель узла "+" чистый: имена категорий его не содержат.
+     * Схема БД не меняется: дерево РИСУЕТСЯ по плоскому priority-списку.
+     *
+     * @param priority порядок сворачивания (имена категорий)
+     * @param nonEmpty категории, у которых есть оценки (дефолт — все из priority)
+     */
+    fun buildTreeLevels(
+        priority: List<String>,
+        nonEmpty: Set<String> = priority.toSet(),
+    ): List<List<String>> {
+        val leaves = priority.filter { it != GradeCategory.LAB.name && it in nonEmpty }
+        if (leaves.isEmpty()) return emptyList()
+        val levels = ArrayList<List<String>>(leaves.size)
+        var current: List<String> = leaves
+        levels += current
+        while (current.size > 1) {
+            current = listOf(current[0] + "+" + current[1]) + current.drop(2)
+            levels += current
+        }
+        return levels
+    }
+
     /** Округление для показа: 1 знак (спека Ф4.2). */
     fun round1(x: Double): Double = Math.round(x * 10) / 10.0
 

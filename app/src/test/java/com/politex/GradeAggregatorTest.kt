@@ -126,4 +126,60 @@ class GradeAggregatorTest {
             GradeAggregator.DEFAULT_PRIORITY,
         )
     }
+
+    // ── W22: buildTreeLevels — дерево формулы для отрисовки ──────────────────
+
+    @Test
+    fun `buildTreeLevels — лестница склеивает первые два узла каждого уровня`() {
+        assertEquals(
+            listOf(
+                listOf("REGULAR", "PRACTICAL", "CONTROL", "EXAM"),
+                listOf("REGULAR+PRACTICAL", "CONTROL", "EXAM"),
+                listOf("REGULAR+PRACTICAL+CONTROL", "EXAM"),
+                listOf("REGULAR+PRACTICAL+CONTROL+EXAM"),
+            ),
+            GradeAggregator.buildTreeLevels(GradeAggregator.DEFAULT_PRIORITY),
+        )
+    }
+
+    @Test
+    fun `buildTreeLevels — пустые категории и LAB выпадают из дерева`() {
+        assertEquals(
+            listOf(listOf("REGULAR", "EXAM"), listOf("REGULAR+EXAM")),
+            GradeAggregator.buildTreeLevels(
+                listOf("REGULAR", "LAB", "CONTROL", "EXAM"),
+                setOf("REGULAR", "EXAM", "LAB"),
+            ),
+        )
+    }
+
+    @Test
+    fun `buildTreeLevels — один лист и совсем пусто`() {
+        assertEquals(listOf(listOf("PRACTICAL")), GradeAggregator.buildTreeLevels(listOf("PRACTICAL")))
+        assertEquals(emptyList<String>(), GradeAggregator.buildTreeLevels(listOf("REGULAR"), emptySet()))
+        assertEquals(emptyList<String>(), GradeAggregator.buildTreeLevels(emptyList()))
+    }
+
+    @Test
+    fun `buildTreeLevels — порядок узлов зеркалит порядок сворачивания average`() {
+        // дерево по приоритету [EXAM, CONTROL, REGULAR] — пары те же, что в average
+        val priority = listOf("EXAM", "CONTROL", "REGULAR")
+        assertEquals(
+            listOf(
+                listOf("EXAM", "CONTROL", "REGULAR"),
+                listOf("EXAM+CONTROL", "REGULAR"),
+                listOf("EXAM+CONTROL+REGULAR"),
+            ),
+            GradeAggregator.buildTreeLevels(priority),
+        )
+        // верхний узел = те же листья, что сворачивает average
+        assertEquals(
+            GradeAggregator.average(mapOf("EXAM" to listOf(10), "CONTROL" to listOf(8), "REGULAR" to listOf(6)), priority)!!,
+            GradeAggregator.average(
+                mapOf("EXAM" to listOf(10), "CONTROL" to listOf(8), "REGULAR" to listOf(6)),
+                GradeAggregator.buildTreeLevels(priority).last().single().split("+"),
+            )!!,
+            delta,
+        )
+    }
 }
