@@ -85,6 +85,8 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
+import com.politex.ui.util.rememberNowMinutes
+import com.politex.ui.util.rememberToday
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
 import java.util.Locale
@@ -110,6 +112,10 @@ fun ScheduleScreen(
     scheduleRepository: ScheduleRepository,
     onSyncRequest: () -> Unit,
     isSyncing: Boolean = false,
+
+    // SUI-02: сбой синхронизации из uiState — пустое состояние не должно выдавать
+    // сетевую ошибку за «расписание ещё не опубликовано»
+    hasSyncError: Boolean = false,
 
     onTeacherClick: (String) -> Unit = {},
 
@@ -144,18 +150,10 @@ fun ScheduleScreen(
         check
     }
 
-    val realNow = remember { Calendar.getInstance() }
-    val realDayOfWeek = remember {
-        when (realNow.get(Calendar.DAY_OF_WEEK)) {
-            Calendar.MONDAY -> 1
-            Calendar.TUESDAY -> 2
-            Calendar.WEDNESDAY -> 3
-            Calendar.THURSDAY -> 4
-            Calendar.FRIDAY -> 5
-            Calendar.SATURDAY -> 6
-            else -> 7
-        }
-    }
+    // SUI-01: «сегодня» с ключом дня + пересчёт на ON_RESUME. Прежний remember{} залипал
+    // на вчерашней дате, если композиция переживала полночь в фоне.
+    val realNow = rememberToday()
+    val realDayOfWeek = groupScheduleDayOfWeek(realNow)
 
     // O1/A+F: единственный Flow по группе — источник и для списка дня, и для weekly-разметки,
     // и для субботы. Раньше их было 7 (день+5 дней+суббота), каждая инвалидация гнала 7 перезапросов.
@@ -172,20 +170,14 @@ fun ScheduleScreen(
         remember(allGroupLessons) { allGroupLessons.filter { it.dayOfWeek == 6 } }
     val saturdayIsSchoolDay = groupInfo.course == 1 || saturdayLessons.isNotEmpty()
 
-    fun calendarDayOfWeek(cal: Calendar): Int = when (cal.get(Calendar.DAY_OF_WEEK)) {
-        Calendar.MONDAY -> 1
-        Calendar.TUESDAY -> 2
-        Calendar.WEDNESDAY -> 3
-        Calendar.THURSDAY -> 4
-        Calendar.FRIDAY -> 5
-        Calendar.SATURDAY -> 6
-        else -> 7
-    }
+    // SUI-05: calendarDayOfWeek был локальным близнецом groupScheduleDayOfWeek — используем общий
+    fun calendarDayOfWeek(cal: Calendar): Int = groupScheduleDayOfWeek(cal)
 
     fun isSchoolDay(dow: Int): Boolean = dow in 1..5 || (dow == 6 && saturdayIsSchoolDay)
 
-    val daySlots = remember(groupInfo.canonicalName, saturdayIsSchoolDay, realDayOfWeek) {
-        val left = Calendar.getInstance().apply {
+    // SUI-01: ключ realNow — слоты пересчитываются после полуночи/возврата из фона
+    val daySlots = remember(groupInfo.canonicalName, saturdayIsSchoolDay, realNow) {
+        val left = (realNow.clone() as Calendar).apply {
             when (realDayOfWeek) {
                 6 -> if (!saturdayIsSchoolDay) add(Calendar.DAY_OF_YEAR, 2)
                 7 -> add(Calendar.DAY_OF_YEAR, 1)
@@ -201,7 +193,8 @@ fun ScheduleScreen(
     val leftCal = daySlots.first
     val rightCal = daySlots.second
 
-    val tomorrow = remember { (Calendar.getInstance() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) } }
+    // SUI-01: «завтра» — от того же наблюдаемого «сегодня»
+    val tomorrow = remember(realNow) { (realNow.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) } }
     fun sameDay(a: Calendar, b: Calendar): Boolean =
         a.get(Calendar.YEAR) == b.get(Calendar.YEAR) &&
             a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
@@ -257,12 +250,14 @@ fun ScheduleScreen(
         String.format(java.util.Locale.ROOT, "%s, %02d.%02d", prefix, d, m)
     }
 
-    val currentLessonNumber = remember(activeDayOfWeek, selectedSlot, activeDateString) {
+    // SUI-03: тикающая минута в ключе — иначе «текущая пара» залипала на уже закончившемся
+    // уроке, пока композиция жива (время читалось внутри remember, но в ключ не входило).
+    val nowMinutes = rememberNowMinutes()
+
+    val currentLessonNumber = remember(nowMinutes, activeDayOfWeek, selectedSlot, activeDateString, leftIsToday) {
         if (selectedSlot == 0 && leftIsToday) {
-            val cal = java.util.Calendar.getInstance()
-            val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
             val bells = CollegeBellSchedule.getBellsForDay(activeDayOfWeek)
-            bells.firstOrNull { minutes in it.startMinutes..it.endMinutes }?.lessonNumber
+            bells.firstOrNull { nowMinutes in it.startMinutes..it.endMinutes }?.lessonNumber
                 ?.takeIf { it > 0 }
         } else null
     }
@@ -357,11 +352,10 @@ fun ScheduleScreen(
 
     // Уроки просматриваемого дня уже закончились (сейчас позже конца последнего урока).
     // Считаем по звонкам: конец последнего урока, который есть у группы в этот день.
-    val schoolDayEnded: Boolean = remember(activeDayOfWeek, selectedSlot, activeDateString, lessons) {
+    // SUI-03: тот же тикающий ключ — иначе после конца занятий экран не переключался на «завтра»
+    val schoolDayEnded: Boolean = remember(nowMinutes, activeDayOfWeek, selectedSlot, activeDateString, lessons, leftIsToday) {
         if (selectedSlot != 0 || !leftIsToday) false
         else {
-            val cal = Calendar.getInstance()
-            val nowMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
             val bells = CollegeBellSchedule.getBellsForDay(activeDayOfWeek)
             val lastEnd = lessons
                 .mapNotNull { l -> bells.firstOrNull { it.lessonNumber == l.lessonNumber }?.endMinutes }
@@ -406,8 +400,10 @@ fun ScheduleScreen(
         if (idx != null && idx > 0) {
             listState.animateScrollToItem(idx, -listState.layoutInfo.viewportEndOffset / 3)
         }
-        // Урок уже виден (idx == 0 либо скроллить некуда) — подсветка всё равно нужна
+        // N17: урок уже виден (idx == 0 либо скроллить некуда) — подсветка всё равно нужна.
+        // На перемене/до уроков currentLessonNumber == null — подсвечиваем ближайший урок.
         highlightLesson = currentLessonNumber
+            ?: (idx ?: 0).let { lessonNumbers.getOrNull(it) }
         onScrollToCurrentConsumed()
     }
 
@@ -615,8 +611,11 @@ fun ScheduleScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        // SUI-02: при сетевом сбое честный текст — раньше он маскировался
+                        // под «не опубликовано» и уводил диагностику не туда
                         Text(
-                            text = "Расписание ещё не опубликовано",
+                            text = if (hasSyncError) "Не удалось обновить расписание"
+                            else "Расписание ещё не опубликовано",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp,
@@ -628,10 +627,11 @@ fun ScheduleScreen(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = if (selectedDateString.isNotBlank()) {
-                                "Нет данных за $selectedDateString. Расписание за прошедшие дни хранится в архиве только после синхронизации."
-                            } else {
-                                "Для группы ${groupInfo.canonicalName} на этот день пар пока нет в базе колледжа."
+                            text = when {
+                                hasSyncError -> "Проверьте подключение к интернету и попробуйте ещё раз."
+                                selectedDateString.isNotBlank() ->
+                                    "Нет данных за $selectedDateString. Расписание за прошедшие дни хранится в архиве только после синхронизации."
+                                else -> "Для группы ${groupInfo.canonicalName} на этот день пар пока нет в базе колледжа."
                             },
                             style = androidx.compose.ui.text.TextStyle(
                                 fontSize = 13.sp,
@@ -672,7 +672,8 @@ fun ScheduleScreen(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "СИНХРОНИЗИРОВАТЬ С САЙТОМ",
+                                        // SUI-02: при сбое — «ПОВТОРИТЬ», иначе прежний текст
+                                        text = if (hasSyncError) "ПОВТОРИТЬ" else "СИНХРОНИЗИРОВАТЬ С САЙТОМ",
                                         style = androidx.compose.ui.text.TextStyle(
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.sp,

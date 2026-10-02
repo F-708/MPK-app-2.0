@@ -187,6 +187,8 @@ fun MainScreen(
                         scheduleRepository = viewModel.scheduleRepository,
                         onSyncRequest = { viewModel.syncSchedule() },
                         isSyncing = uiState.isSyncing,
+                        // SUI-02: сетевой сбой не должен маскироваться под «не опубликовано»
+                        hasSyncError = uiState.hasSyncError,
                         onTeacherClick = { name -> viewModel.openTeacher(name) },
                         onRoomClick = { room, fromRoom -> viewModel.openMap(room, fromRoom) },
                         listState = scheduleListState,

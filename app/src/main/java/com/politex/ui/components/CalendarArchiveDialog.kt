@@ -94,7 +94,8 @@ fun CalendarArchiveDialog(
     onDateSelected: ((dayOfWeek: Int, dateString: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val calendar = remember { Calendar.getInstance() }
+    // SUI-01: «сегодня» с ключом дня — иначе открытый ночью диалог подсвечивал вчерашнюю дату
+    val calendar = com.politex.ui.util.rememberToday()
     var displayedYear by remember { mutableIntStateOf(calendar.get(Calendar.YEAR)) }
     var displayedMonth by remember { mutableIntStateOf(calendar.get(Calendar.MONTH)) }
 

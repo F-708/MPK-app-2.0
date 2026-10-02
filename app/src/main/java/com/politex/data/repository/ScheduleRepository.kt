@@ -37,6 +37,14 @@ internal fun shouldFetchDay(alreadyParsedGroups: Int, catalogSize: Int, force: B
 internal fun isFullDayDocument(groupCount: Int, catalogSize: Int): Boolean =
     catalogSize > 0 && groupCount >= (catalogSize + 1) / 2
 
+/**
+ * N2: сколько уроков ЗАПРОШЕННОЙ группы вернул синк за сегодня+завтра. Документ разбирается
+ * по всему каталогу, поэтому в `finalLessons` лежат строки всех групп; тост «обновлено (N уроков)»
+ * должен показывать N по своей группе, а не общее число по колледжу.
+ */
+internal fun syncedCountForGroup(finalLessons: List<LessonEntity>, groupName: String): Int =
+    finalLessons.count { it.groupName == groupName }
+
 internal fun isStaleDate(date: String, cutoffMs: Long): Boolean {
     if (!DATE_DD_MM_YYYY.matches(date)) return false
     val cal = Calendar.getInstance()
@@ -227,7 +235,8 @@ class ScheduleRepository(
                     runCatching { syncTeacherScheduleForDate(calendar) }
                 }
                 pruneOldLessons()
-                Result.success(finalLessons.size)
+                // N2: возвращаем число уроков СВОЕЙ группы, а не всех разобранных из документа
+                Result.success(syncedCountForGroup(finalLessons, groupName))
             }
             // Сеть отвалилась — честная ошибка (тост «проверьте интернет»).
             // Пустая успешная загрузка («расписание ещё не опубликовано») ошибкой не

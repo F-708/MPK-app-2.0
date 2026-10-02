@@ -53,13 +53,14 @@ fun SimpleDatePickerDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
-    val today = remember { Calendar.getInstance() }
+    // SUI-01: «сегодня» с ключом дня и пересчётом на ON_RESUME (прежний remember{} залипал за полночь)
+    val today = com.politex.ui.util.rememberToday()
 
-    val startYear = remember(initialDateIso) {
+    val startYear = remember(initialDateIso, today) {
         initialDateIso?.split("-")?.getOrNull(0)?.toIntOrNull()
             ?: today.get(Calendar.YEAR)
     }
-    val startMonth = remember(initialDateIso) {
+    val startMonth = remember(initialDateIso, today) {
         (initialDateIso?.split("-")?.getOrNull(1)?.toIntOrNull()?.minus(1))
             ?: today.get(Calendar.MONTH)
     }

@@ -70,6 +70,8 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
+import com.politex.ui.util.rememberNowMinutes
+import com.politex.ui.util.rememberToday
 import com.politex.util.GroupParser
 import com.politex.util.MpkCurriculum
 import kotlinx.coroutines.launch
@@ -139,24 +141,31 @@ fun GroupScheduleScreen(
     }
     var selectedSlot by rememberSaveable(selectedGroupName) { mutableIntStateOf(0) }
     var isSyncing by remember { mutableStateOf(false) }
-    var syncNotice by remember(selectedGroupName) { mutableStateOf<String?>(null) }
+    // N3: две разные причины держим отдельно. syncError (сеть) уместен и рядом с кэшем;
+    // syncEmptyNotice («нет в опубликованном расписании») — только когда видимый список пуст,
+    // иначе плашка противоречит урокам на экране (данные легли weekly-шаблоном с пустой dateString).
+    var syncError by remember(selectedGroupName) { mutableStateOf<String?>(null) }
+    var syncEmptyNotice by remember(selectedGroupName) { mutableStateOf<String?>(null) }
 
     val foreignInfo = remember(selectedGroupName) { GroupParser.parse(selectedGroupName) }
 
     // Синхронизация чужой группы: те же строки БД (ключ groupName), своя группа не меняется
     fun syncForeignSchedule(force: Boolean) {
         if (selectedGroupName.isBlank() || isSyncing) return
+        val group = selectedGroupName
         isSyncing = true
-        syncNotice = null
+        syncError = null
+        syncEmptyNotice = null
         scope.launch {
-            val result = scheduleRepository.syncScheduleFromWeb(selectedGroupName, force = force)
+            val result = scheduleRepository.syncScheduleFromWeb(group, force = force)
             isSyncing = false
-            syncNotice = result.fold(
+            result.fold(
                 onSuccess = { count ->
-                    if (count == 0) "Группы $selectedGroupName нет в опубликованном расписании на ближайшие даты"
-                    else null
+                    if (count == 0) {
+                        syncEmptyNotice = "Группы $group нет в опубликованном расписании на ближайшие даты"
+                    }
                 },
-                onFailure = { "Не удалось загрузить расписание: проверьте интернет" }
+                onFailure = { syncError = "Не удалось загрузить расписание: проверьте интернет" }
             )
         }
     }
@@ -176,15 +185,16 @@ fun GroupScheduleScreen(
         check
     }
 
-    val realNow = remember { Calendar.getInstance() }
-    val realDayOfWeek = remember { groupScheduleDayOfWeek(realNow) }
+    // SUI-01: «сегодня» с ключом дня и пересчётом на ON_RESUME (прежний remember{} залипал)
+    val realNow = rememberToday()
+    val realDayOfWeek = groupScheduleDayOfWeek(realNow)
     val saturdayLessons by scheduleRepository
         .getLessonsForDay(selectedGroupName, 6)
         .collectAsState(initial = emptyList<LessonEntity>())
     val saturdayIsSchoolDay = foreignInfo?.hasSaturdayClasses == true || saturdayLessons.isNotEmpty()
 
-    val daySlots = remember(selectedGroupName, saturdayIsSchoolDay, realDayOfWeek) {
-        val left = Calendar.getInstance().apply {
+    val daySlots = remember(selectedGroupName, saturdayIsSchoolDay, realNow) {
+        val left = (realNow.clone() as Calendar).apply {
             when (realDayOfWeek) {
                 6 -> if (!saturdayIsSchoolDay) add(Calendar.DAY_OF_YEAR, 2)
                 7 -> add(Calendar.DAY_OF_YEAR, 1)
@@ -195,7 +205,8 @@ fun GroupScheduleScreen(
     val leftCal = daySlots.first
     val rightCal = daySlots.second
 
-    val tomorrow = remember { (Calendar.getInstance() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) } }
+    // SUI-01: «завтра» — от наблюдаемого «сегодня»
+    val tomorrow = remember(realNow) { (realNow.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) } }
     fun sameDay(a: Calendar, b: Calendar): Boolean =
         a.get(Calendar.YEAR) == b.get(Calendar.YEAR) &&
             a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
@@ -207,12 +218,12 @@ fun GroupScheduleScreen(
     val activeDayOfWeek = groupScheduleDayOfWeek(activeCal)
     val activeDateString = groupScheduleDbDate(activeCal)
 
-    val currentLessonNumber = remember(activeDayOfWeek, selectedSlot, leftIsToday) {
+    // SUI-03: тикающая минута в ключе — «текущая пара» переезжает на границе урока
+    val nowMinutes = rememberNowMinutes()
+    val currentLessonNumber = remember(nowMinutes, activeDayOfWeek, selectedSlot, leftIsToday) {
         if (selectedSlot == 0 && leftIsToday) {
-            val cal = Calendar.getInstance()
-            val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
             CollegeBellSchedule.getBellsForDay(activeDayOfWeek)
-                .firstOrNull { minutes in it.startMinutes..it.endMinutes }?.lessonNumber
+                .firstOrNull { nowMinutes in it.startMinutes..it.endMinutes }?.lessonNumber
                 ?.takeIf { it > 0 }
         } else null
     }
@@ -437,7 +448,9 @@ fun GroupScheduleScreen(
                     .background(ColorDividerLight)
             )
 
-            if (syncNotice != null && lessons.isNotEmpty()) {
+            // N3: рядом с непустым списком уместно только предупреждение о сбое сети —
+            // «нет в опубликованном расписании» противоречило бы урокам на экране.
+            if (syncError != null && lessons.isNotEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorSurfaceVariantLight,
@@ -447,7 +460,7 @@ fun GroupScheduleScreen(
                         .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = syncNotice ?: "",
+                        text = syncError ?: "",
                         style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                     )
@@ -499,7 +512,8 @@ fun GroupScheduleScreen(
                         Text(
                             text = when {
                                 isSyncing -> "Загружаем расписание…"
-                                syncNotice != null -> syncNotice ?: ""
+                                syncError != null -> syncError ?: ""
+                                syncEmptyNotice != null -> syncEmptyNotice ?: ""
                                 else -> "Нет данных — расписание ещё не синхронизировано"
                             },
                             style = androidx.compose.ui.text.TextStyle(
