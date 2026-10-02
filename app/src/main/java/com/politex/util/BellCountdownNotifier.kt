@@ -236,10 +236,41 @@ object BellCountdownNotifier {
             // O6: 06:00–07:00 — виджетный гейт 07:00 (не наш файл) ещё молчит, но заказчику
             // строку надо вернуть уже в 06:00. Даём её здесь, если по режиму есть уроки сегодня.
             morningInfo(context)?.let { return buildVisibleNotification(context, it) }
+            // N5: строка должна быть «живой» как в Яндекс.Картах — всегда показывать актуальное.
+            // Вечер после уроков и ночь до уроков берём те же подписи, что и виджет
+            // («до 1 урока завтра: 14 ч» / «до 1 урока: N мин»), вместо пустой заглушки.
+            eveningOrNightInfo(context, mode)?.let { return buildVisibleNotification(context, it) }
             return buildHiddenNotification(context)
         }
 
         return buildVisibleNotification(context, info)
+    }
+
+    /**
+     * N5: вечернее/ночное окно — та же логика, что у виджета (W3/O6), чтобы строка
+     * уведомления никогда не была бессмысленной. null → заглушка (выходной/нет уроков).
+     */
+    private fun eveningOrNightInfo(
+        context: Context,
+        mode: com.politex.widget.CountdownMode
+    ): Triple<Long, String, Int>? {
+        val cal = Calendar.getInstance()
+        val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.MONDAY -> 1
+            Calendar.TUESDAY -> 2
+            Calendar.WEDNESDAY -> 3
+            Calendar.THURSDAY -> 4
+            Calendar.FRIDAY -> 5
+            Calendar.SATURDAY -> 6
+            else -> return null
+        }
+        val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+        val bells = CollegeBellSchedule.getBellsForDay(dow)
+        val lastGroupLesson = if (mode == com.politex.widget.CountdownMode.GROUP_LESSONS) {
+            BellCountdownWidgetProvider.lastGroupLessonForToday(context, cal)
+        } else null
+        return BellCountdownWidgetProvider.tomorrowFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
+            ?: BellCountdownWidgetProvider.nightFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
     }
 
     /** O6: сборка обычной строки отсчёта — общая для основного пути и утреннего окна 06:00. */
@@ -269,6 +300,9 @@ object BellCountdownNotifier {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setShowWhen(false)
+            // N5: кастомный вид — крупные цифры отсчёта (как в Яндекс.Погоде), а не просто
+            // заголовок+подпись. Decorated сохраняет системную шапку (иконка, время, приложение).
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
 
         if (theme.accent != 0) {
             builder.color = theme.accent
@@ -277,25 +311,39 @@ object BellCountdownNotifier {
             }
         }
 
-        when (style) {
-            Style.COMPACT -> {
-                builder.setContentTitle(title)
-            }
-            Style.WITH_APP_NAME -> {
-                builder.setContentTitle("Мой Политех")
-                builder.setContentText(title)
-            }
-            Style.WITH_LESSON -> {
-                builder.setContentTitle(title)
-                builder.setSubText(currentLessonLabel(info))
-            }
-            Style.WITH_PROGRESS -> {
-                builder.setContentTitle(title)
-                if (hasProgress) {
-                    builder.setProgress(100, progressPercent, false)
-                }
-            }
+        // Fallback для старых версий/свёрнутого вида — обычный текст
+        builder.setContentTitle(title)
+        builder.setContentText(info.second)
+
+        // Кастомный RemoteViews: крупное значение + единица + подпись
+        val views = android.widget.RemoteViews(context.packageName, R.layout.notification_bell_countdown)
+        val valueText = BellCountdownWidgetProvider.formatMinutes(info.first)
+        // «25 мин» → value=«25», unit=«мин»; «1 ч 5 мин» → value=«1 ч 5», unit=«мин» —
+        // просто режем по последнему пробелу, цифры крупно, единица мелко
+        val cut = valueText.lastIndexOf(' ')
+        if (cut > 0) {
+            views.setTextViewText(R.id.nbell_value, valueText.substring(0, cut))
+            views.setTextViewText(R.id.nbell_unit, valueText.substring(cut + 1))
+        } else {
+            views.setTextViewText(R.id.nbell_value, valueText)
+            views.setTextViewText(R.id.nbell_unit, "")
         }
+        views.setTextViewText(R.id.nbell_label, info.second)
+        views.setViewVisibility(
+            R.id.nbell_app,
+            if (style == Style.WITH_APP_NAME) android.view.View.VISIBLE else android.view.View.GONE
+        )
+        views.setViewVisibility(
+            R.id.nbell_progress,
+            if (style == Style.WITH_PROGRESS && hasProgress) android.view.View.VISIBLE else android.view.View.GONE
+        )
+        if (style == Style.WITH_PROGRESS && hasProgress) {
+            views.setProgressBar(R.id.nbell_progress, 100, progressPercent, false)
+        }
+        if (style == Style.WITH_LESSON) {
+            views.setTextViewText(R.id.nbell_label, "${info.second} • ${currentLessonLabel(info)}")
+        }
+        builder.setCustomContentView(views)
 
         return builder.build()
     }
