@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -325,7 +326,10 @@ fun BellsScreen(
                             inBlue = row.item.startMinutes < (blueEndMinutes ?: -1),
                             dotProgress = dotProgressIn(row.item, currentTimeMinutes, isTodaySelected)
                         )
-                    is BellRow.Break -> BreakRow(row)
+                    is BellRow.Break -> BreakRow(
+                        row = row,
+                        dotProgress = dotProgressInBreak(row, currentTimeMinutes, isTodaySelected)
+                    )
                 }
             }
         }
@@ -417,6 +421,40 @@ private fun dotProgressIn(bell: BellItem, nowMinutes: Int, isActive: Boolean): F
     return null
 }
 
+/** N12: точка бежит и по строке перемены — «точка не видна во время перемен» (заказчик). */
+private fun dotProgressInBreak(row: BellRow.Break, nowMinutes: Int, isActive: Boolean): Float? {
+    if (!isActive) return null
+    if (nowMinutes in row.startMinutes..row.endMinutes) {
+        return (nowMinutes - row.startMinutes).toFloat() /
+            (row.endMinutes - row.startMinutes).coerceAtLeast(1)
+    }
+    return null
+}
+
+/**
+ * N12: бегущая точка на рельсе — общая для уроков и перемен. DrawScope сам реализует
+ * Density, поэтому dp.toPx() доступен напрямую. fraction — доля высоты строки (0..1).
+ */
+private fun DrawScope.drawRailDot(cx: Float, fraction: Float, pulseRadiusDp: Float, insetDp: Float) {
+    val inset = insetDp.dp.toPx()
+    val travel = (size.height - inset * 2).coerceAtLeast(1f)
+    val y = inset + travel * fraction
+    drawCircle(
+        color = RAIL_BLUE_SOFT,
+        radius = pulseRadiusDp.dp.toPx() + 4.dp.toPx(),
+        center = Offset(cx, y)
+    )
+    drawCircle(
+        color = RAIL_BLUE,
+        radius = 4.5.dp.toPx(),
+        center = Offset(cx, y)
+    )
+}
+
+/** N12: зазор между строками списка (Arrangement.spacedBy) — рельс продлевается на него,
+ *  чтобы полоса времени была СПЛОШНОЙ, а не разбитой на куски по карточкам. */
+private const val RAIL_GAP_DP = 6
+
 @Composable
 private fun LessonBellCard(
     item: BellItem,
@@ -455,10 +493,13 @@ private fun LessonBellCard(
             .drawBehind {
                 val cx = size.width + 10.dp.toPx()
                 val tickLen = 5.dp.toPx()
+                // N12: рельс продлён на зазор между строками — полоса времени сплошная,
+                // чёрточки-границы уроков остаются метками НА линии, не разрывами.
+                val gap = RAIL_GAP_DP.dp.toPx()
 
                 drawLine(
                     color = railTopColor,
-                    start = Offset(cx, 0f),
+                    start = Offset(cx, -gap),
                     end = Offset(cx, size.height / 2f),
                     strokeWidth = 2.dp.toPx(),
                     cap = StrokeCap.Round
@@ -466,7 +507,7 @@ private fun LessonBellCard(
                 drawLine(
                     color = railBottomColor,
                     start = Offset(cx, size.height / 2f),
-                    end = Offset(cx, size.height),
+                    end = Offset(cx, size.height + gap),
                     strokeWidth = 2.dp.toPx(),
                     cap = StrokeCap.Round
                 )
@@ -485,20 +526,7 @@ private fun LessonBellCard(
                 )
 
                 if (dotProgress != null) {
-
-                    val inset = 16.dp.toPx()
-                    val travel = (size.height - inset * 2).coerceAtLeast(1f)
-                    val y = inset + travel * dotProgress
-                    drawCircle(
-                        color = RAIL_BLUE_SOFT,
-                        radius = pulseRadius.dp.toPx() + 4.dp.toPx(),
-                        center = Offset(cx, y)
-                    )
-                    drawCircle(
-                        color = RAIL_BLUE,
-                        radius = 4.5.dp.toPx(),
-                        center = Offset(cx, y)
-                    )
+                    drawRailDot(cx, dotProgress, pulseRadius, 16f)
                 }
             }
     ) {
@@ -568,20 +596,35 @@ private fun LessonBellCard(
 }
 
 @Composable
-private fun BreakRow(row: BellRow.Break) {
+private fun BreakRow(row: BellRow.Break, dotProgress: Float? = null) {
     val range = "${minutesToTime(row.startMinutes)} – ${minutesToTime(row.endMinutes)}"
+    // N12: точка видна и во время перемены — тот же пульс, что у урока
+    val pulseRadius by if (dotProgress != null) {
+        rememberInfiniteTransition(label = "BreakDotPulse").animateFloat(
+            initialValue = 4.5f,
+            targetValue = 7f,
+            animationSpec = infiniteRepeatable(tween(durationMillis = 900), RepeatMode.Reverse),
+            label = "BreakDotPulseRadius"
+        )
+    } else {
+        remember { mutableStateOf(0f) }
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .drawBehind {
                 val cx = size.width + 10.dp.toPx()
+                val gap = RAIL_GAP_DP.dp.toPx()
                 drawLine(
                     color = RAIL_GRAY_SOFT,
-                    start = Offset(cx, 0f),
-                    end = Offset(cx, size.height),
+                    start = Offset(cx, -gap),
+                    end = Offset(cx, size.height + gap),
                     strokeWidth = 2.dp.toPx(),
                     cap = StrokeCap.Round
                 )
+                if (dotProgress != null) {
+                    drawRailDot(cx, dotProgress, pulseRadius, 3f)
+                }
             }
             .padding(start = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
