@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
    Правила резервного копирования (API 30 и ниже). F2: принцип минимальности —
-   в облако уходят только пользовательские данные: настройки (prefs), тема и
-   база с ДЗ/расписанием. Кэш и служебное не резервируется.
+   с include-правилами резервируются ТОЛЬКО перечисленные данные: настройки
+   (prefs) и база с ДЗ/расписанием; всё прочее (кэш, служебные prefs) не входит.
 -->
 <full-backup-content>
     <include domain="sharedpref" path="mpk_widget_prefs.xml" />
     <include domain="database" path="mpk_schedule.db" />
-    <exclude domain="sharedpref" path="." />
 </full-backup-content>
