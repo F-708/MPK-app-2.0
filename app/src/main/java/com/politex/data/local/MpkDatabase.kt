@@ -6,11 +6,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.politex.data.local.dao.GradeDao
 import com.politex.data.local.dao.LessonDao
 import com.politex.data.local.dao.MaterialDao
 import com.politex.data.local.dao.TaskDao
 import com.politex.data.local.dao.TaskReminderDao
 import com.politex.data.local.dao.TeacherLessonDao
+import com.politex.data.local.entity.GradeConfigEntity
+import com.politex.data.local.entity.GradeEntryEntity
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.local.entity.MaterialBookmarkEntity
 import com.politex.data.local.entity.MaterialFolderEntity
@@ -27,9 +30,11 @@ import com.politex.data.local.entity.TeacherLessonEntity
         TaskReminderEntity::class,
         MaterialFolderEntity::class,
         MaterialItemEntity::class,
-        MaterialBookmarkEntity::class
+        MaterialBookmarkEntity::class,
+        GradeEntryEntity::class,
+        GradeConfigEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class MpkDatabase : RoomDatabase() {
@@ -39,6 +44,7 @@ abstract class MpkDatabase : RoomDatabase() {
     abstract fun teacherLessonDao(): TeacherLessonDao
     abstract fun taskReminderDao(): TaskReminderDao
     abstract fun materialDao(): MaterialDao
+    abstract fun gradeDao(): GradeDao
 
     companion object {
         // internal, а не private: тест миграции создаёт базу v1 «на диске» под тем же именем
@@ -185,6 +191,40 @@ abstract class MpkDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * G1: v5 → v6 — «Оценки». Две НОВЫХ таблицы (`grade_entries`, `grade_config`),
+         * существующие не трогаются: ДЗ, материалы и напоминания переживают миграцию.
+         * Индексов нет (см. KDoc GradeEntryEntity), DEFAULT-выражений тоже — значения по
+         * умолчанию заданы в Kotlin-конструкторах. Имена таблиц/колонок Room-генерируемые и
+         * должны совпасть побайтово со схемой v6 (см. MigrationV5ToV6Test).
+         */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `grade_entries` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `subjectName` TEXT NOT NULL,
+                        `category` TEXT NOT NULL,
+                        `value` INTEGER NOT NULL,
+                        `label` TEXT NOT NULL,
+                        `dateIso` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `grade_config` (
+                        `subjectName` TEXT NOT NULL,
+                        `priorityJson` TEXT NOT NULL,
+                        PRIMARY KEY(`subjectName`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         @Volatile
         private var INSTANCE: MpkDatabase? = null
 
@@ -195,7 +235,7 @@ abstract class MpkDatabase : RoomDatabase() {
                     MpkDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     // ponytail: оставлено как страховка от будущих незапланированных схем —
                     // для объявленных версий выше путь всегда идёт через MIGRATION_1_2
                     .fallbackToDestructiveMigration()
