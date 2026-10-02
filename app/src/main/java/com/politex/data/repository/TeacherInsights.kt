@@ -5,13 +5,21 @@ import com.politex.data.local.entity.LessonEntity
 class TeacherInsights(
     private val teachers: List<Teacher>,
     lessons: List<LessonEntity>,
+    // W28: «срез» актуальности для шильдика «Ведёт у вас». Замены/ушедшие преподаватели
+    // fade-out: погашаем, если нет ни недельного шаблона, ни урока с датой за последние
+    // [STALE_DAYS] дней. Дефолт — текущее время (вызывающие не меняются).
+    private val nowMillis: Long = System.currentTimeMillis(),
 ) {
     private val bySurname: Map<String, List<Teacher>> =
         teachers.groupBy { surnameOf(it.name) }.filterKeys { it.isNotBlank() }
 
     private val matched: Map<String, TeacherFacts> = buildFacts(lessons)
 
-    val activeNames: Set<String> = matched.keys
+    /** Погашение шильдика «Ведёт у вас» — столько дней без датированных уроков (W28). */
+    private val staleMillis = STALE_DAYS * 24L * 60L * 60L * 1000L
+
+    val activeNames: Set<String> =
+        matched.filterValues { it.activeNow }.keys
 
     fun isActive(name: String): Boolean = activeNames.contains(name)
 
@@ -28,6 +36,9 @@ class TeacherInsights(
         val subjects: List<String>,
         val count: Int,
         val lastDate: String,
+        // W28: недельный шаблон (регулярное расписание) ИЛИ последняя датированная
+        // пара свежее порога → преподаватель «ведёт сейчас»
+        val activeNow: Boolean = false,
     )
 
     private fun buildFacts(lessons: List<LessonEntity>): Map<String, TeacherFacts> {
@@ -35,6 +46,8 @@ class TeacherInsights(
         val subjects = mutableMapOf<String, MutableList<String>>()
         val counts = mutableMapOf<String, Int>()
         val dates = mutableMapOf<String, String>()
+        val weekly = mutableMapOf<String, Boolean>()
+        val dateMillis = mutableMapOf<String, Long>()
 
         lessons.forEach { lesson ->
             val names = splitTeacherNames(lesson.teacherFirst) + splitTeacherNames(lesson.teacherSecond)
@@ -56,6 +69,16 @@ class TeacherInsights(
                 if (dateKey.isNotBlank()) {
                     val prev = dates[full]
                     if (prev == null || dateKey > prev) dates[full] = dateKey
+                    // W28: максимальная дата в epoch (сравнение дат — только через epoch,
+                    // лексикографика dd.MM.yyyy запрещена конвенцией)
+                    parseDotDateMillis(dateKey)?.let { ms ->
+                        val prevMs = dateMillis[full]
+                        if (prevMs == null || ms > prevMs) dateMillis[full] = ms
+                    }
+                } else {
+                    // Пустая dateString = недельный шаблон — преподаватель в актуальном
+                    // расписании группы, свежесть не проверяем
+                    weekly[full] = true
                 }
             }
         }
@@ -73,9 +96,20 @@ class TeacherInsights(
                 subjects = subjects[full].orEmpty().distinct().take(6),
                 count = counts[full] ?: 0,
                 lastDate = dates[full].orEmpty(),
+                activeNow =
+                weekly[full] == true ||
+                    (dateMillis[full] != null && dateMillis[full]!! >= nowMillis - staleMillis),
             )
         }
     }
+
+    /** dd.MM.yyyy → epoch millis; null при кривом формате (lenient=false). */
+    private fun parseDotDateMillis(date: String): Long? =
+        runCatching {
+            java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT).apply {
+                isLenient = false
+            }.parse(date)?.time
+        }.getOrNull()
 
     fun matchTeacher(rawName: String): Teacher? {
         val clean = rawName.trim().trim(',', '/', '-', ' ')
@@ -111,6 +145,9 @@ class TeacherInsights(
     }
 
     companion object {
+        /** W28: дней свежести датированных уроков для шильдика «Ведёт у вас». */
+        const val STALE_DAYS = 30L
+
         fun splitTeacherNames(raw: String): List<String> = raw
             .split('/')
             .map { it.trim() }

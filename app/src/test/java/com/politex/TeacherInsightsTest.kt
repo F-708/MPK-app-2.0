@@ -6,6 +6,7 @@ import com.politex.data.repository.TeacherInsights
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -173,5 +174,42 @@ class TeacherInsightsTest {
 
         assertNotNull(ti.rooms("Зыбин Олег Львович"))
         assertNotNull(ti.rooms("Купрейчик Наталья Андреевна"))
+    }
+
+    // ===== W28: свежесть шильдика «Ведёт у вас» =====
+
+    @Test
+    fun `W28 недельный шаблон держит шильдик без дат`() {
+        val ti = TeacherInsights(base, listOf(lesson(teacherFirst = "Зыбин О.Л.", date = "")), nowMillis = 1_800_000_000_000L)
+        assertTrue(ti.isActive("Зыбин Олег Львович"))
+    }
+
+    @Test
+    fun `W28 датированный урок в пределах порога держит шильдик`() {
+        val now = 1_800_000_000_000L // ~2027-01-15
+        val ti = TeacherInsights(base, listOf(lesson(teacherFirst = "Зыбин О.Л.", date = "10.01.2027")), nowMillis = now)
+        assertTrue("дата 5 дней назад — активен", ti.isActive("Зыбин Олег Львович"))
+    }
+
+    @Test
+    fun `W28 старый датированный урок гасит шильдик`() {
+        val now = 1_800_000_000_000L
+        val ti = TeacherInsights(base, listOf(lesson(teacherFirst = "Зыбин О.Л.", date = "01.09.2026")), nowMillis = now)
+        assertFalse("дата старше 30 дней без шаблона — погашен", ti.isActive("Зыбин Олег Львович"))
+    }
+
+    @Test
+    fun `W28 смешанный случай дат побеждает свежая`() {
+        val now = 1_800_000_000_000L
+        val ti =
+            TeacherInsights(
+                base,
+                listOf(
+                    lesson(teacherFirst = "Зыбин О.Л.", date = "01.09.2026"),
+                    lesson(teacherFirst = "Зыбин О.Л.", date = "12.01.2027"),
+                ),
+                nowMillis = now,
+            )
+        assertTrue("есть свежая дата — активен", ti.isActive("Зыбин Олег Львович"))
     }
 }
