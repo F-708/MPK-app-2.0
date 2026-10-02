@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-   Правила резервного копирования для API 31+.
-   Резервируются настройки группы, уведомлений и учебные задания.
-   См. https://developer.android.com/about/versions/12/backup-restore#xml-changes
+   Правила резервного копирования для API 31+. F2: принцип минимальности —
+   резервируются только пользовательские данные: настройки виджетов/темы и база
+   с ДЗ и кэшем расписания. Служебные prefs (диагностика, notified_/checked_ ключи
+   воркера) в облако не уходят.
 -->
 <data-extraction-rules>
-    <cloud-backup />
-    <device-transfer />
+    <cloud-backup>
+        <include domain="sharedpref" path="mpk_widget_prefs.xml" />
+        <include domain="database" path="mpk_schedule.db" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="mpk_widget_prefs.xml" />
+        <include domain="database" path="mpk_schedule.db" />
+    </device-transfer>
 </data-extraction-rules>
