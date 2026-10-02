@@ -68,6 +68,7 @@ class WidgetConfigActivity : ComponentActivity() {
                     var style by remember { mutableStateOf(WidgetStyle.LIGHT) }
                     var countdownMode by remember { mutableStateOf(CountdownMode.GROUP_LESSONS) }
                     var showRoom by remember { mutableStateOf(true) }
+                    var showSeconds by remember { mutableStateOf(false) }
 
                     Column(
                         modifier =
@@ -131,30 +132,56 @@ class WidgetConfigActivity : ComponentActivity() {
                             }
                         }
 
-                        if (kind.showRoomOption) {
+                        if (kind.showRoomOption || kind == WidgetKind.COUNTDOWN) {
                             Spacer(modifier = Modifier.height(18.dp))
                             SectionTitle("Дополнительно")
-                            Row(
-                                modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Показывать кабинет",
-                                        fontSize = 14.sp,
-                                        color = ColorTextBody,
-                                    )
-                                    Text(
-                                        text = "Если не нужен — строки станут короче",
-                                        fontSize = 12.sp,
-                                        color = ColorTextMuted,
-                                    )
+                            if (kind.showRoomOption) {
+                                Row(
+                                    modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Показывать кабинет",
+                                            fontSize = 14.sp,
+                                            color = ColorTextBody,
+                                        )
+                                        Text(
+                                            text = "Если не нужен — строки станут короче",
+                                            fontSize = 12.sp,
+                                            color = ColorTextMuted,
+                                        )
+                                    }
+                                    Switch(checked = showRoom, onCheckedChange = { showRoom = it })
                                 }
-                                Switch(checked = showRoom, onCheckedChange = { showRoom = it })
+                            }
+                            if (kind == WidgetKind.COUNTDOWN) {
+                                Row(
+                                    modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Показывать секунды",
+                                            fontSize = 14.sp,
+                                            color = ColorTextBody,
+                                        )
+                                        Text(
+                                            text = "Отсчёт вида «4:32» — обновление каждую секунду",
+                                            fontSize = 12.sp,
+                                            color = ColorTextMuted,
+                                        )
+                                    }
+                                    Switch(checked = showSeconds, onCheckedChange = { showSeconds = it })
+                                }
                             }
                         }
 
@@ -171,6 +198,7 @@ class WidgetConfigActivity : ComponentActivity() {
                                     WidgetOptions.setShowRoom(this@WidgetConfigActivity, appWidgetId, showRoom)
                                     if (kind == WidgetKind.COUNTDOWN) {
                                         CountdownMode.save(this@WidgetConfigActivity, appWidgetId, countdownMode)
+                                        WidgetOptions.setSeconds(this@WidgetConfigActivity, appWidgetId, showSeconds)
                                     }
                                     WidgetUpdateHelper.updateOne(this@WidgetConfigActivity, appWidgetId)
                                     WidgetAlarm.scheduleNext(this@WidgetConfigActivity)
@@ -250,6 +278,7 @@ enum class WidgetKind(
 
 object WidgetOptions {
     private const val PREF_SHOW_ROOM = "widget_show_room_"
+    private const val PREF_SECONDS = "widget_seconds_"
 
     fun showRoom(
         context: android.content.Context,
@@ -266,6 +295,33 @@ object WidgetOptions {
             .edit()
             .putBoolean(PREF_SHOW_ROOM + appWidgetId, value)
             .apply()
+    }
+
+    /** Секунды в countdown-виджете: mm:ss вместо «N мин». Default false. */
+    fun seconds(
+        context: android.content.Context,
+        appWidgetId: Int,
+    ): Boolean = WidgetUpdateHelper.getPrefs(context).getBoolean(PREF_SECONDS + appWidgetId, false)
+
+    fun setSeconds(
+        context: android.content.Context,
+        appWidgetId: Int,
+        value: Boolean,
+    ) {
+        WidgetUpdateHelper
+            .getPrefs(context)
+            .edit()
+            .putBoolean(PREF_SECONDS + appWidgetId, value)
+            .apply()
+        // настройка изменилась — сервис должен увидеть это сразу, не через 60 с кэша
+        WidgetUpdateHelper.invalidateSecondsCache()
+    }
+
+    fun removeSeconds(
+        context: android.content.Context,
+        appWidgetId: Int,
+    ) {
+        WidgetUpdateHelper.getPrefs(context).edit().remove(PREF_SECONDS + appWidgetId).apply()
     }
 }
 

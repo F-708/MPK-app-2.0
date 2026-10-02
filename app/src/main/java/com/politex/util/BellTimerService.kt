@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import com.politex.widget.BellCountdownWidgetProvider
+import com.politex.widget.WidgetUpdateHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -43,26 +44,53 @@ class BellTimerService : Service() {
         tickJob =
             scope.launch {
                 while (true) {
+                    // Посекундный режим: секунды включены в одном из countdown-виджетов
+                    // (кэш 60 с) ИЛИ стиль уведомления «с секундами». Иначе — минутный тик,
+                    // поведение не меняется вообще.
+                    // ponytail: посекундно тикает ТОЛЬКО foreground BellTimerService; WidgetAlarm
+                    // остаётся минутной страховкой. Сервис убит OEM / не включён — секунды
+                    // пропадают, виджет честно деградирует до минутного (посекундный будильник
+                    // не заводим: будить процесс 60 раз в минуту ради смены цифры — слишком).
+                    val style = BellCountdownNotifier.getStyle(this@BellTimerService)
+                    val secondMode =
+                        WidgetUpdateHelper.needSecondTick(
+                            WidgetUpdateHelper.hasSecondsWidgets(this@BellTimerService),
+                            style,
+                        )
                     val nowMs = System.currentTimeMillis()
-                    val msToNextMinute = 60_000L - (nowMs % 60_000L)
-                    delay(msToNextMinute)
+                    // тик к границе секунды (секунды) или минуты (как раньше)
+                    delay(if (secondMode) 1000L - nowMs % 1000L else 60_000L - nowMs % 60_000L)
+
+                    // Минутная граница: в секундном режиме просыпаемся каждый тик на :00
+                    // секунды — тогда делаем и обычную минутную работу (updateAll).
+                    val minuteBoundary = !secondMode || System.currentTimeMillis() % 60_000L < 1_000L
 
                     // Т10: показ ИЛИ демоут в заглушку — foreground-уведомление сервиса
                     // всегда обновляется через startForeground (в скрытом состоянии это
                     // заменяет строку тихой заглушкой; сервис живёт и в 07:00 вернёт отсчёт).
-                    try {
-                        startForeground(
-                            BellCountdownNotifier.NOTIFICATION_ID,
-                            BellCountdownNotifier.buildNotification(this@BellTimerService),
-                        )
-                    } catch (_: Exception) {
-                        BellCountdownNotifier.show(this@BellTimerService)
+                    // Секунды в уведомлении = стиль WITH_SECONDS → пересборка каждый тик.
+                    if (minuteBoundary || style == BellCountdownNotifier.Style.WITH_SECONDS) {
+                        try {
+                            startForeground(
+                                BellCountdownNotifier.NOTIFICATION_ID,
+                                BellCountdownNotifier.buildNotification(this@BellTimerService),
+                            )
+                        } catch (_: Exception) {
+                            BellCountdownNotifier.show(this@BellTimerService)
+                        }
                     }
 
-                    widgetRefreshCounter++
-                    if (widgetRefreshCounter >= 1) {
-                        widgetRefreshCounter = 0
-                        BellCountdownWidgetProvider.updateAll(this@BellTimerService)
+                    if (secondMode) {
+                        // только countdown-виджеты с включёнными секундами
+                        BellCountdownWidgetProvider.updateSecondsWidgets(this@BellTimerService)
+                    }
+
+                    if (minuteBoundary) {
+                        widgetRefreshCounter++
+                        if (widgetRefreshCounter >= 1) {
+                            widgetRefreshCounter = 0
+                            BellCountdownWidgetProvider.updateAll(this@BellTimerService)
+                        }
                     }
                 }
             }

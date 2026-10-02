@@ -70,6 +70,7 @@ object BellCountdownNotifier {
         WITH_APP_NAME("app_name", "С названием приложения"),
         WITH_LESSON("lesson", "С номером урока"),
         WITH_PROGRESS("progress", "С полосой прогресса"),
+        WITH_SECONDS("seconds", "С секундами"),
         ;
 
         companion object {
@@ -331,7 +332,16 @@ object BellCountdownNotifier {
     ): android.app.Notification {
         val style = getStyle(context)
 
-        val (title, progressPercent, hasProgress) = buildContent(info, style)
+        // Секунды: цель минутная, остаток = минуты*60 − текущая секунда (13:30:45 + 35 мин → 34:15).
+        val secondsNow = Calendar.getInstance().get(Calendar.SECOND)
+        val valueText =
+            if (style == Style.WITH_SECONDS) {
+                formatMinutesSeconds(info.first, secondsNow)
+            } else {
+                BellCountdownWidgetProvider.formatMinutes(info.first)
+            }
+
+        val (title, progressPercent, hasProgress) = buildContent(info, style, valueText)
 
         val openIntent =
             PendingIntent.getActivity(
@@ -371,9 +381,9 @@ object BellCountdownNotifier {
 
         // Кастомный RemoteViews: крупное значение + единица + подпись
         val views = android.widget.RemoteViews(context.packageName, R.layout.notification_bell_countdown)
-        val valueText = BellCountdownWidgetProvider.formatMinutes(info.first)
         // «25 мин» → value=«25», unit=«мин»; «1 ч 5 мин» → value=«1 ч 5», unit=«мин» —
-        // просто режем по последнему пробелу, цифры крупно, единица мелко
+        // просто режем по последнему пробелу, цифры крупно, единица мелко.
+        // «4:32» (стиль с секундами) пробела не содержит → всё значение крупно, unit пустой.
         val cut = valueText.lastIndexOf(' ')
         if (cut > 0) {
             views.setTextViewText(R.id.nbell_value, valueText.substring(0, cut))
@@ -449,22 +459,31 @@ object BellCountdownNotifier {
     private fun buildContent(
         info: Triple<Long, String, Int>?,
         style: Style,
+        valueText: String,
     ): Content {
         if (info == null || info.first < 0) {
             return Content(title = "Уроки закончились", progressPercent = 100, hasProgress = false)
         }
 
         val (minutesLeft, label, _) = info
-        val value = BellCountdownWidgetProvider.formatMinutes(minutesLeft)
 
         val progress = ((45 - minutesLeft).coerceIn(0, 45) * 100 / 45).toInt()
 
         return Content(
-            title = label.replaceFirstChar { it.uppercase() } + ": $value",
+            title = label.replaceFirstChar { it.uppercase() } + ": $valueText",
             progressPercent = progress,
             hasProgress = style == Style.WITH_PROGRESS,
         )
     }
+
+    /**
+     * Значение «с секундами» для стиля WITH_SECONDS: минуты + текущая секунда → mm:ss.
+     * Чистая функция (юнит-тесты); 0/отрицательный остаток → «0:00».
+     */
+    fun formatMinutesSeconds(
+        minutes: Long,
+        seconds: Int,
+    ): String = BellCountdownWidgetProvider.formatSeconds(minutes * 60 - seconds)
 
     private fun currentLessonLabel(info: Triple<Long, String, Int>?): String {
         val lessonNumber = info?.third ?: 0

@@ -1,5 +1,7 @@
 package com.politex.widget
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
 import kotlinx.coroutines.CoroutineScope
@@ -12,6 +14,37 @@ object WidgetUpdateHelper {
     private const val KEY_NOTIFY_NEXT_DAY = "notify_next_day_schedule"
 
     private val widgetScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Секунды в виджетах: кэш 60 с — проверка зовётся из цикла BellTimerService. */
+    @Volatile private var secondsWidgetsCache = false
+
+    @Volatile private var secondsCacheAt = 0L
+
+    /**
+     * Общий флаг посекундного режима: секунды хотя бы в одном countdown-виджете ИЛИ
+     * стиль уведомления «с секундами». Чистая функция (юнит-тесты).
+     */
+    fun needSecondTick(
+        secondsWidgetEnabled: Boolean,
+        notificationStyle: com.politex.util.BellCountdownNotifier.Style,
+    ): Boolean = secondsWidgetEnabled || notificationStyle == com.politex.util.BellCountdownNotifier.Style.WITH_SECONDS
+
+    /** Есть ли на экране countdown-виджет с включёнными секундами (кэш 60 с). */
+    fun hasSecondsWidgets(context: Context): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - secondsCacheAt < 60_000L) return secondsWidgetsCache
+        val manager = AppWidgetManager.getInstance(context)
+        val ids = manager.getAppWidgetIds(ComponentName(context, BellCountdownWidgetProvider::class.java))
+        val result = ids.any { WidgetOptions.seconds(context, it) }
+        secondsWidgetsCache = result
+        secondsCacheAt = now
+        return result
+    }
+
+    /** Сброс кэша секунд (вызов после смены настройки виджета). */
+    fun invalidateSecondsCache() {
+        secondsCacheAt = 0L
+    }
 
     fun getPrefs(context: Context): SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 

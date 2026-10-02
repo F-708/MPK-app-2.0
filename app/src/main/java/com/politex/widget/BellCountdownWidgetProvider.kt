@@ -48,6 +48,18 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             if (ids.isNotEmpty()) updateWidgets(context, manager, ids)
         }
 
+        /**
+         * Секундный тик (виджет с включёнными секундами): обновляем ТОЛЬКО countdown-виджеты
+         * с секундами — не все провайдеры и не все countdown-виджеты (без секунд им хватит
+         * минутного тика на границе минуты).
+         */
+        fun updateSecondsWidgets(context: Context) {
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(ComponentName(context, BellCountdownWidgetProvider::class.java))
+            val secondsIds = ids.filter { WidgetOptions.seconds(context, it) }.toIntArray()
+            if (secondsIds.isNotEmpty()) updateWidgets(context, manager, secondsIds)
+        }
+
         fun countdownInfo(
             context: Context,
             mode: CountdownMode = CountdownMode.GROUP_LESSONS,
@@ -274,11 +286,17 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
 
             // Тот же расчёт, что countdownInfo, но без повторного обращения к БД
             val info = if (dow == 7) null else countdownForMinute(minutes, dow, bells, mode, lastGroupLesson)
+            // Секунды: значение mm:ss досчитывается от текущей секунды календаря
+            // (цель минутная: 13:30:45 + 35 мин → 34:15 → «34:15»).
+            val secondsOn = WidgetOptions.seconds(context, appWidgetId)
+            val secondNow = cal.get(Calendar.SECOND)
+            fun valueText(minutesLeft: Long): String =
+                if (secondsOn) formatSeconds(minutesLeft * 60 - secondNow) else formatMinutes(minutesLeft)
             when {
                 info != null && info.first >= 0 -> {
                     val (minutesLeft, label, _) = info
                     views.setTextViewText(R.id.tv_countdown_label, label)
-                    views.setTextViewText(R.id.tv_countdown_value, formatMinutes(minutesLeft))
+                    views.setTextViewText(R.id.tv_countdown_value, valueText(minutesLeft))
                 }
                 // W3 (Т10+): вечер после конца уроков — «до 1 урока завтра» вместо пустоты
                 dow in 1..6 -> {
@@ -297,7 +315,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                         }
                         night != null -> {
                             views.setTextViewText(R.id.tv_countdown_label, night.second)
-                            views.setTextViewText(R.id.tv_countdown_value, formatMinutes(night.first))
+                            views.setTextViewText(R.id.tv_countdown_value, valueText(night.first))
                         }
                         else -> {
                             views.setTextViewText(R.id.tv_countdown_label, "")
@@ -342,6 +360,23 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
         fun formatHoursRounded(totalMinutes: Long): String {
             val hours = Math.round(totalMinutes / 60.0).toLong().coerceAtLeast(1L)
             return "$hours ч"
+        }
+
+        /**
+         * Секундный отсчёт: «0:59» (<1 мин), «4:32» (минуты), «1:02:33» (часы).
+         * Минуты и часы не дополняются нулями, секунды — всегда двухзначные.
+         * 0 и отрицательное (граница звонка) → «0:00».
+         */
+        fun formatSeconds(totalSeconds: Long): String {
+            val s = totalSeconds.coerceAtLeast(0L)
+            val h = s / 3600
+            val m = (s % 3600) / 60
+            val sec = s % 60
+            return if (h == 0L) {
+                String.format(java.util.Locale.US, "%d:%02d", m, sec)
+            } else {
+                String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, sec)
+            }
         }
     }
 }

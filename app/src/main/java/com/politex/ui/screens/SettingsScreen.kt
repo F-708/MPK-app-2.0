@@ -820,7 +820,7 @@ private fun BellCountdownNotificationCard() {
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Постоянная строка со временем до звонка — обновляется каждую минуту.",
+                text = "Постоянная строка со временем до звонка — обновляется каждую минуту (в стиле «с секундами» — каждую секунду).",
                 style = androidx.compose.ui.text.TextStyle(
                     color = ColorTextMuted,
                     fontSize = 11.sp,
@@ -892,7 +892,7 @@ private fun BellCountdownNotificationCard() {
                 Spacer(modifier = Modifier.height(6.dp))
 
                 // W26: стиль «Мой Политех» (WITH_APP_NAME) убран из выбора по заказчику —
-                // остаются: компактный / с номером урока / с полосой прогресса
+                // остаются: компактный / с номером урока / с полосой прогресса / с секундами
                 com.politex.util.BellCountdownNotifier.Style.entries
                     .filter { it != com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME }
                     .forEach { style ->
@@ -1092,6 +1092,7 @@ private fun stylePreviewTitle(style: com.politex.util.BellCountdownNotifier.Styl
     com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME -> "Мой Политех"
     com.politex.util.BellCountdownNotifier.Style.WITH_LESSON -> "До звонка: 12 мин"
     com.politex.util.BellCountdownNotifier.Style.WITH_PROGRESS -> "До звонка: 12 мин"
+    com.politex.util.BellCountdownNotifier.Style.WITH_SECONDS -> "До звонка: 11:32"
 }
 
 private fun stylePreviewBody(style: com.politex.util.BellCountdownNotifier.Style): String = when (style) {
@@ -1103,6 +1104,8 @@ private fun stylePreviewBody(style: com.politex.util.BellCountdownNotifier.Style
         "Плюс номер идущего урока или «Перемена»"
     com.politex.util.BellCountdownNotifier.Style.WITH_PROGRESS ->
         "С полосой прогресса урока"
+    com.politex.util.BellCountdownNotifier.Style.WITH_SECONDS ->
+        "Посекундный отсчёт — обновляется каждую секунду"
 }
 
 @Composable
