@@ -6,7 +6,6 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import com.politex.data.local.dao.MaterialDao
-import com.politex.data.local.entity.MaterialFolderEntity
 import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.data.local.entity.MaterialKind
 import kotlinx.coroutines.Dispatchers
@@ -199,7 +198,7 @@ object MaterialImporter {
     }
 
     /**
-     * M3: полный импорт выбранного материала в папку. Возвращает id новой строки.
+     * M3/W11: полный импорт выбранного материала в ПРЕДМЕТ. Возвращает id новой строки.
      *
      * Ошибка = исключение (IOException/SecurityException); вызывающий показывает сообщение.
      * Ровно один материал на вызов, кроме [PendingMaterial.Images] — там набор становится
@@ -208,16 +207,16 @@ object MaterialImporter {
     suspend fun importMaterial(
         context: Context,
         dao: MaterialDao,
-        folderId: Long,
+        subjectName: String,
         pending: PendingMaterial,
     ): Long {
-        val sortOrder = dao.nextItemSortOrder(folderId)
         val now = System.currentTimeMillis()
 
         return when (pending) {
             is PendingMaterial.Text -> {
                 val text = pending.text.trim()
                 require(text.isNotEmpty()) { "Пустой текст материала" }
+                require(subjectName.isNotBlank()) { "Не выбран предмет" }
                 val title =
                     text
                         .lineSequence()
@@ -227,11 +226,11 @@ object MaterialImporter {
                         .ifBlank { "Заметка" }
                 dao.insertItem(
                     MaterialItemEntity(
-                        folderId = folderId,
                         kind = MaterialKind.TEXT.name,
                         title = title,
                         ext = "txt",
-                        sortOrder = sortOrder,
+                        subjectName = subjectName,
+                        sortOrder = dao.nextItemSortOrder(subjectName),
                         textContent = text.take(MAX_INDEXED_CHARS),
                         createdAt = now,
                     ),
@@ -244,12 +243,12 @@ object MaterialImporter {
                 val id =
                     dao.insertItem(
                         MaterialItemEntity(
-                            folderId = folderId,
                             kind = MaterialKind.FILE.name,
                             title = titleOf(name),
                             fileName = name,
                             ext = ext,
-                            sortOrder = sortOrder,
+                            subjectName = subjectName,
+                            sortOrder = dao.nextItemSortOrder(subjectName),
                             createdAt = now,
                         ),
                     )
@@ -258,6 +257,7 @@ object MaterialImporter {
 
             is PendingMaterial.Images -> {
                 require(pending.uris.isNotEmpty()) { "Не выбрано ни одного изображения" }
+                require(subjectName.isNotBlank()) { "Не выбран предмет" }
                 val firstName = queryDisplayName(context, pending.uris.first())
                 val ext = extOf(firstName).ifBlank { "jpg" }.let { if (it in IMAGE_EXT) it else "jpg" }
                 val title =
@@ -269,13 +269,13 @@ object MaterialImporter {
                 val id =
                     dao.insertItem(
                         MaterialItemEntity(
-                            folderId = folderId,
                             kind = MaterialKind.IMAGES.name,
                             title = title,
                             fileName = firstName,
                             ext = ext,
                             pageCount = pending.uris.size,
-                            sortOrder = sortOrder,
+                            subjectName = subjectName,
+                            sortOrder = dao.nextItemSortOrder(subjectName),
                             createdAt = now,
                         ),
                     )
@@ -356,22 +356,5 @@ object MaterialImporter {
             dao.deleteBookmarksForItem(itemId)
             dao.deleteItemById(itemId)
         }
-    }
-
-    /**
-     * M3: папка «Архив» создаётся один раз при первом входе в раздел и больше не удаляется.
-     * Возвращает её id (созданную или уже существующую).
-     */
-    suspend fun ensureArchiveFolder(dao: MaterialDao): Long {
-        dao.getArchiveFolder()?.let { return it.id }
-        return dao.insertFolder(
-            MaterialFolderEntity(
-                subjectName = MaterialFolderEntity.ARCHIVE_SUBJECT,
-                name = MaterialFolderEntity.ARCHIVE_NAME,
-                isArchive = true,
-                sortOrder = Int.MAX_VALUE,
-                createdAt = System.currentTimeMillis(),
-            ),
-        )
     }
 }

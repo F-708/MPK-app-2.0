@@ -28,13 +28,13 @@ import com.politex.data.local.entity.TeacherLessonEntity
         StudentTaskEntity::class,
         TeacherLessonEntity::class,
         TaskReminderEntity::class,
-        MaterialFolderEntity::class,
+        @Suppress("DEPRECATION") MaterialFolderEntity::class,
         MaterialItemEntity::class,
         MaterialBookmarkEntity::class,
         GradeEntryEntity::class,
         GradeConfigEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class MpkDatabase : RoomDatabase() {
@@ -234,6 +234,31 @@ abstract class MpkDatabase : RoomDatabase() {
                 }
             }
 
+        /**
+         * W11: v6 → v7 — материалы принадлежат ПРЕДМЕТУ, папки выпилены из UI.
+         *
+         * `material_items` получают `subjectName` (предмет папки владельца, JOIN) и `archived`
+         * (1, если папка-владелец была архивом). Таблица `material_folders` и колонка
+         * `folderId` НЕ дропаются: лишняя таблица/колонка Room не ломают, а деструктивная
+         * правка рискует потерять данные. UI `folderId` больше не читает.
+         *
+         * DEFAULT-выражения повторяют @ColumnInfo(defaultValue=...) сущности побайтово —
+         * иначе Room упадёт на валидации схемы при открытии (см. MigrationV6ToV7Test).
+         */
+        private val migration6To7 =
+            object : Migration(6, 7) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `material_items` ADD COLUMN `subjectName` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `material_items` ADD COLUMN `archived` INTEGER NOT NULL DEFAULT 0")
+                    // Перенос данных: предмет = предмет папки-владельца, архив = её isArchive.
+                    db.execSQL(
+                        "UPDATE `material_items` SET " +
+                            "`subjectName` = COALESCE((SELECT f.`subjectName` FROM `material_folders` f WHERE f.`id` = `material_items`.`folderId`), ''), " +
+                            "`archived` = COALESCE((SELECT f.`isArchive` FROM `material_folders` f WHERE f.`id` = `material_items`.`folderId`), 0)",
+                    )
+                }
+            }
+
         @Volatile
         private var instance: MpkDatabase? = null
 
@@ -244,7 +269,7 @@ abstract class MpkDatabase : RoomDatabase() {
                         context.applicationContext,
                         MpkDatabase::class.java,
                         DATABASE_NAME,
-                    ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6)
+                    ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7)
                     // ponytail: оставлено как страховка от будущих незапланированных схем —
                     // для объявленных версий выше путь всегда идёт через migration1To2
                     .fallbackToDestructiveMigration()

@@ -205,42 +205,6 @@ fun UnsupportedFormatPlaque(ext: String, fileName: String, modifier: Modifier = 
     }
 }
 
-/**
- * M5: плашка про PDF в результатах поиска.
- *
- * ponytail: извлечение текста из PDF = pdfbox ≈ +5 МБ к APK. Пока PDF ищется по названию,
- * а внутри — закладками и номером страницы; объясняем это пользователю прямо в выдаче.
- */
-@Composable
-fun PdfSearchHintPlaque(modifier: Modifier = Modifier) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, ColorBorderLight),
-        color = ColorBgMain,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-            .testTag("pdf_search_hint"),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Default.PictureAsPdf,
-                contentDescription = null,
-                tint = Color(0xFFDC2626),
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "PDF не ищется по тексту — используйте закладки и номер страницы. По названию PDF находится.",
-                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-            )
-        }
-    }
-}
-
 /** M4: строка-карточка в стиле проекта (Surface + RoundedCornerShape(2.dp) + тонкая граница). */
 @Composable
 fun MaterialCard(

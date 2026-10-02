@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.model.GroupInfo
@@ -35,7 +36,6 @@ import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTopBar
-import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
 
 /**
@@ -68,9 +68,8 @@ fun LessonsHubScreen(
             .fillMaxSize()
             .background(ColorBgMain),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text(text = "Уроки", style = TextStylePageTitle, maxLines = 1)
-            Spacer(modifier = Modifier.height(6.dp))
+        // W10: заголовок «Уроки» убран — чипы сразу после баннера
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -97,15 +96,17 @@ fun LessonsHubScreen(
                             ) {
                                 Text(
                                     text = s.title,
+                                    // W10: «Материалы» обрезалось — шрифт 11sp и эллипсис вместо обреза
                                     softWrap = false,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     style =
                                     androidx.compose.ui.text.TextStyle(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 12.sp,
+                                        fontSize = 11.sp,
                                         color = if (isSelected) Color.White else ColorTextBody,
                                     ),
-                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    modifier = Modifier.padding(horizontal = 4.dp),
                                 )
                             }
                         }

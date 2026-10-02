@@ -23,17 +23,17 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,27 +63,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.politex.data.local.MpkDatabase
-import com.politex.data.local.entity.MaterialFolderEntity
 import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.data.local.entity.MaterialKind
 import com.politex.data.model.GroupInfo
 import com.politex.ui.screens.materials.BrandActionButton
 import com.politex.ui.screens.materials.MaterialCard
 import com.politex.ui.screens.materials.MaterialDeleteDialog
-import com.politex.ui.screens.materials.MaterialDestinationDialog
 import com.politex.ui.screens.materials.MaterialDocTextViewer
 import com.politex.ui.screens.materials.MaterialImageViewer
 import com.politex.ui.screens.materials.MaterialImportTypeDialog
 import com.politex.ui.screens.materials.MaterialPdfViewer
 import com.politex.ui.screens.materials.MaterialRenameDialog
+import com.politex.ui.screens.materials.MaterialSubjectDialog
 import com.politex.ui.screens.materials.MaterialTextDialog
-import com.politex.ui.screens.materials.PdfSearchHintPlaque
 import com.politex.ui.screens.materials.materialIconFor
 import com.politex.ui.screens.materials.materialIconTint
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
-import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorDangerFill
 import com.politex.ui.theme.ColorDividerLight
 import com.politex.ui.theme.ColorError
@@ -92,7 +89,6 @@ import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
-import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.FuzzySearch
 import com.politex.util.MaterialImporter
@@ -105,30 +101,37 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 // ─────────────────────────────────────────────────────────────────────────────
-// M1–M6: «Материальная база» — локальное хранилище раздаточных материалов.
+// M1–M6 + W11–W15: «Материалы» — локальное хранилище раздаточных материалов.
 //
 //  M1 хранение: байты в filesDir/materials, в БД только метаданные
 //  M2 просмотрщики: PDF (PdfRenderer + закладки), DOCX/TXT, изображения (зум + поворот)
-//  M3 импорт: SAF-пикеры → «куда положить» (предмет + папка), авто-папка «Архив»
-//  M4 список: предметы → папки → материалы, переименование/удаление/архив/порядок
-//  M5 поиск: Даммерау-Левенштейн ≤2 + префикс ≥4, ё→е, тогл регистра «Aa»
+//  M3 импорт: SAF-пикеры → диалог «предмет» (W11: БЕЗ папок)
+//  M4 список: W11: ПРЕДМЕТЫ (пустые скрыты) + Архив секцией внизу; внутри предмета —
+//      переименование/удаление/архив/порядок
+//  M5 поиск: W13: поле в шапке, FuzzySearch под капотом (Даммерау-Левенштейн ≤2),
+//      без тогла «Aa» и пояснительных текстов
 //  M6 навигация: sealed-состояния экранов и СВОЙ back-стек (без Navigation), системный back
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Сколько материалов показывать в корне под папкой, прежде чем предложить «показать все». */
-private const val ROOT_PREVIEW_LIMIT = 4
+/** W11: предмет для материалов, восстановленных из старого (до-v7) Архива без предмета. */
+private const val RESTORED_SUBJECT = "Восстановленные"
 
 /**
- * M6: запись back-стека. Кодирование строкой («f:12», «i:7», «s:-1») — чтобы стек переживал
+ * M6: запись back-стека. Кодирование строкой («s:ТОЭ», «i:7», «a») — чтобы стек переживал
  * смерть процесса через rememberSaveable без кастомного Saver'а: ArrayList<String> в Bundle
  * кладётся штатно, а sealed-класс пришлось бы писать Parcelable/Saver вручную.
  */
 private sealed interface MaterialRoute {
-    /** Экран папки. */
-    data class FolderScreen(
-        val folderId: Long,
+    /** W11: экран предмета. */
+    data class SubjectScreen(
+        val subjectName: String,
     ) : MaterialRoute {
-        override fun toString() = "f:$folderId"
+        override fun toString() = "s:$subjectName"
+    }
+
+    /** W11: Архив — спец-секция внизу списка предметов. */
+    object ArchiveScreen : MaterialRoute {
+        override fun toString() = "a"
     }
 
     /** Просмотрщик материала. */
@@ -138,33 +141,25 @@ private sealed interface MaterialRoute {
         override fun toString() = "i:$itemId"
     }
 
-    /** Поиск; folderId = -1 — по всей базе, иначе по содержимому папки. */
-    data class SearchScreen(
-        val folderId: Long,
-    ) : MaterialRoute {
-        override fun toString() = "s:$folderId"
-    }
-
     companion object {
-        fun decode(raw: String): MaterialRoute? {
-            val id = raw.substringAfter(':', "").toLongOrNull() ?: return null
-            return when (raw.substringBefore(':', "")) {
-                "f" -> FolderScreen(id)
-                "i" -> Viewer(id)
-                "s" -> SearchScreen(id)
+        fun decode(raw: String): MaterialRoute? =
+            when (raw.firstOrNull()) {
+                'a' -> if (raw == "a") ArchiveScreen else null
+                'i' -> raw.substringAfter(':', "").toLongOrNull()?.let { Viewer(it) }
+                's' -> raw.substringAfter(':', "").takeIf { it.isNotEmpty() }?.let { SubjectScreen(it) }
                 else -> null
             }
-        }
     }
 }
 
-/** Набор действий над материалом — передаётся в списки, чтобы не плодить 5 callback-параметров. */
+/** Набор действий над материалом — передаётся в списки, чтобы не плодить callback-параметры. */
 private class MaterialActions(
     val onOpen: (MaterialItemEntity) -> Unit,
     val onRename: (MaterialItemEntity) -> Unit,
-    val onArchive: (MaterialItemEntity) -> Unit,
+    /** W11: archived = true — в Архив, false — обратно в предмет. */
+    val onSetArchived: (MaterialItemEntity, Boolean) -> Unit,
     val onDelete: (MaterialItemEntity) -> Unit,
-    /** list — упорядоченный список той папки, где лежит item; delta = ±1. */
+    /** list — упорядоченный список того экрана, где лежит item; delta = ±1. */
     val onReorder: (List<MaterialItemEntity>, MaterialItemEntity, Int) -> Unit,
     /**
      * Размер файлов материала в байтах. Берётся из предпосчитанной карты, а НЕ вызовом
@@ -175,9 +170,9 @@ private class MaterialActions(
 )
 
 /**
- * Ф4/M1: «Материальная база».
+ * Ф4/M1+W11: «Материалы».
  *
- * Экран-состояние (список / папка / просмотрщик / поиск) с собственным back-стеком:
+ * Экран-состояние (корень-предметы / Архив / просмотрщик) с собственным back-стеком:
  * Navigation в проекте не используется, а вкладка «Уроки» живёт внутри LessonsHubScreen,
  * поэтому вложенная навигация сделана как rememberSaveable-стек + системный BackHandler.
  */
@@ -190,7 +185,6 @@ fun MaterialBaseScreen(
     val dao = remember { MpkDatabase.getInstance(context).materialDao() }
     val scope = rememberCoroutineScope()
 
-    val folders by dao.getAllFolders().collectAsState(initial = emptyList())
     val items by dao.getAllItems().collectAsState(initial = emptyList())
 
     // M4: размеры файлов считаем ВНЕ главного потока — File.length() это дисковый stat,
@@ -203,19 +197,19 @@ fun MaterialBaseScreen(
             }
     }
 
-    // M6: back-стек одной строкой через «|» (см. KDoc MaterialRoute)
+    // M6: back-стек одной строкой через «|» (см. KDoc MaterialRoute).
+    // W13/W14: поиск живёт прямо в шапке корня; вход в предмет/архив сбрасывает запрос.
+    var query by rememberSaveable { mutableStateOf("") }
     val stackState = rememberSaveable { mutableStateOf("") }
     val stack =
         remember(stackState.value) {
             if (stackState.value.isEmpty()) emptyList() else stackState.value.split('|').mapNotNull(MaterialRoute.Companion::decode)
         }
     val push: (MaterialRoute) -> Unit = { route ->
+        query = ""
         stackState.value = if (stackState.value.isEmpty()) route.toString() else stackState.value + "|" + route
     }
     val pop: () -> Unit = { stackState.value = stackState.value.substringBeforeLast('|', "") }
-
-    // M3: папка «Архив» появляется один раз при первом входе в раздел
-    LaunchedEffect(Unit) { MaterialImporter.ensureArchiveFolder(dao) }
 
     val curriculumSubjects =
         remember(groupInfo.specialtyCode, groupInfo.course) {
@@ -225,12 +219,10 @@ fun MaterialBaseScreen(
     // ── Состояния диалогов импорта/правок ────────────────────────────────────
     var showImportType by remember { mutableStateOf(false) }
     var showTextInput by remember { mutableStateOf(false) }
-    var showDestination by remember { mutableStateOf(false) }
+    var showSubject by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<PendingMaterial?>(null) }
     var renamingItem by remember { mutableStateOf<MaterialItemEntity?>(null) }
-    var renamingFolder by remember { mutableStateOf<MaterialFolderEntity?>(null) }
     var deletingItem by remember { mutableStateOf<MaterialItemEntity?>(null) }
-    var deletingFolder by remember { mutableStateOf<MaterialFolderEntity?>(null) }
     var importing by remember { mutableStateOf(false) }
     var banner by remember { mutableStateOf<Banner?>(null) }
 
@@ -254,57 +246,55 @@ fun MaterialBaseScreen(
                 return@rememberLauncherForActivityResult
             }
             pending = PendingMaterial.SingleFile(uri)
-            showDestination = true
+            showSubject = true
         }
     val imagesPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isNullOrEmpty()) return@rememberLauncherForActivityResult
             pending = PendingMaterial.Images(uris)
-            showDestination = true
+            showSubject = true
         }
 
     // ── Операции над данными ─────────────────────────────────────────────────
     fun importInto(
-        folderId: Long,
+        subject: String,
         material: PendingMaterial,
     ) {
         importing = true
         scope.launch {
-            val outcome = runCatching { MaterialImporter.importMaterial(context, dao, folderId, material) }
+            val outcome = runCatching { MaterialImporter.importMaterial(context, dao, subject, material) }
             importing = false
             outcome
-                .onSuccess { showOk("Материал добавлен") }
+                .onSuccess { showOk("Материал добавлен в «$subject»") }
                 .onFailure { showErr("Не удалось импортировать: ${it.message ?: it.javaClass.simpleName}") }
         }
     }
 
     fun deleteItem(item: MaterialItemEntity) {
         scope.launch {
-            // M1: файл стирается вместе с записью, иначе filesDir обрастает мусором
+            // M1: копия файла стирается вместе с записью (исходный файл пользователя
+            // не трогается — W15), иначе filesDir обрастает мусором
             MaterialImporter.deleteStoredFiles(item)
             dao.deleteItemWithBookmarks(item.id)
         }
     }
 
-    fun deleteFolder(folder: MaterialFolderEntity) {
+    /** W11: перенос в Архив (archived=1) и обратно. Мягкая альтернатива удалению (W15). */
+    fun setArchived(
+        item: MaterialItemEntity,
+        archived: Boolean,
+    ) {
         scope.launch {
-            dao.getForFolderOnce(folder.id).forEach {
-                MaterialImporter.deleteStoredFiles(it)
-                dao.deleteItemWithBookmarks(it.id)
+            if (archived) {
+                dao.setArchived(item.id, true, dao.nextArchiveSortOrder())
+                showOk("Убрано в Архив")
+            } else {
+                // Возврат в предмет. Старый (до-v7) Архив терял предмет — такие материалы
+                // собираем в «Восстановленные», чтобы не потерялись молча.
+                val subject = item.subjectName.ifBlank { RESTORED_SUBJECT }
+                dao.updateItem(item.copy(subjectName = subject, archived = false, sortOrder = dao.nextItemSortOrder(subject)))
+                showOk("Возвращено в «$subject»")
             }
-            dao.deleteFolderById(folder.id)
-        }
-    }
-
-    fun archiveItem(item: MaterialItemEntity) {
-        scope.launch {
-            val archiveId = MaterialImporter.ensureArchiveFolder(dao)
-            if (item.folderId == archiveId) {
-                showErr("Материал уже в Архиве")
-                return@launch
-            }
-            dao.moveItemToFolder(item.id, archiveId, dao.nextItemSortOrder(archiveId))
-            showOk("Перемещено в Архив")
         }
     }
 
@@ -313,7 +303,7 @@ fun MaterialBaseScreen(
             MaterialActions(
                 onOpen = { item -> push(MaterialRoute.Viewer(item.id)) },
                 onRename = { item -> renamingItem = item },
-                onArchive = { item -> archiveItem(item) },
+                onSetArchived = { item, archived -> setArchived(item, archived) },
                 onDelete = { item -> deletingItem = item },
                 onReorder = { list, item, delta ->
                     val index = list.indexOfFirst { it.id == item.id }
@@ -327,7 +317,6 @@ fun MaterialBaseScreen(
     // Системный back: сначала выходим из вложенного экрана, и только потом — из раздела
     BackHandler(enabled = stack.isNotEmpty()) { pop() }
 
-    val itemsByFolder = remember(items) { items.groupBy { it.folderId } }
     val currentRoute = stack.lastOrNull()
     val viewerItem = (currentRoute as? MaterialRoute.Viewer)?.let { route -> items.find { it.id == route.itemId } }
 
@@ -335,68 +324,87 @@ fun MaterialBaseScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             val viewer = currentRoute as? MaterialRoute.Viewer
             if (viewer != null && viewerItem != null) {
-                // M2: выбор просмотрщика — по типу материала, а не только по расширению
-                when {
-                    viewerItem.kindEnum == MaterialKind.IMAGES || viewerItem.imagePaths.isNotEmpty() ->
+                // W12: роутинг просмотрщика — ЯВНО по kind: TEXT всегда идёт в DocTextViewer
+                // и читает textContent, независимо от ext/папок.
+                when (viewerItem.kindEnum) {
+                    MaterialKind.IMAGES ->
                         MaterialImageViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
 
-                    viewerItem.ext == "pdf" ->
-                        MaterialPdfViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
+                    MaterialKind.FILE ->
+                        if (viewerItem.ext == "pdf") {
+                            MaterialPdfViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
+                        } else {
+                            MaterialDocTextViewer(item = viewerItem, onBack = pop, modifier = Modifier.fillMaxSize())
+                        }
 
-                    else ->
+                    MaterialKind.TEXT ->
                         MaterialDocTextViewer(item = viewerItem, onBack = pop, modifier = Modifier.fillMaxSize())
                 }
             } else if (viewer != null) {
-                // Материал удалён (или список ещё не доехал) — не держим пользователя в пустоте
-                LaunchedEffect(Unit) { pop() }
+                // W12: материал ещё не доехал из БД (поток Room асинхронный) — показываем
+                // загрузку и проверяем существование ОДНИМ запросом, а не выкидываем
+                // пользователя назад наугад: раньше тут был безусловный pop(), и при
+                // медленной выдаче просмотрщик закрывался сам собой.
+                LaunchedEffect(viewer.itemId) {
+                    if (dao.getItemById(viewer.itemId) == null) pop()
+                }
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = ColorBrandBlue, modifier = Modifier.testTag("material_viewer_loading"))
+                }
             } else {
-                val searchRoute = currentRoute as? MaterialRoute.SearchScreen
-                val folderRoute = currentRoute as? MaterialRoute.FolderScreen
-                val folder = folderRoute?.let { route -> folders.find { it.id == route.folderId } }
+                val subjectRoute = currentRoute as? MaterialRoute.SubjectScreen
+                val archiveRoute = currentRoute as? MaterialRoute.ArchiveScreen
 
+                // W14: шапка — только поиск и «Добавить», в одну строку
                 MaterialHeader(
-                    groupInfo = groupInfo,
-                    itemsCount = items.size,
-                    searchScope = folderRoute?.folderId ?: -1,
-                    onSearch = { scopeId -> push(MaterialRoute.SearchScreen(scopeId)) },
-                    searchEnabled = searchRoute == null,
+                    query = query,
+                    onQueryChange = { query = it },
                     onAdd = { showImportType = true },
-                    subtitleOverride = folder?.let { "${it.subjectName} • ${it.name}" },
                 )
 
-                when {
-                    searchRoute != null ->
-                        MaterialSearchContent(
-                            scopeFolderId = searchRoute.folderId,
-                            allItems = items,
-                            folders = folders,
-                            actions = actions,
-                            modifier = Modifier.weight(1f),
-                        )
-
-                    folder != null ->
-                        MaterialFolderContent(
-                            folder = folder,
-                            items = itemsByFolder[folder.id].orEmpty(),
-                            actions = actions,
-                            onRenameFolder = { renamingFolder = folder },
-                            onDeleteFolder = { deletingFolder = folder },
-                            modifier = Modifier.weight(1f),
-                        )
-
-                    folderRoute != null -> {
-                        // Папка удалена (или список папок ещё не доехал) — возвращаемся в корень
-                        LaunchedEffect(Unit) { pop() }
+                val subjectItems =
+                    remember(items, subjectRoute) {
+                        subjectRoute?.let { route -> items.filter { !it.archived && it.subjectName == route.subjectName } }
                     }
+                val archivedItems = remember(items, archiveRoute) { if (archiveRoute != null) items.filter { it.archived } else null }
+
+                when {
+                    subjectRoute != null && subjectItems != null ->
+                        MaterialSubjectContent(
+                            subjectName = subjectRoute.subjectName,
+                            isArchive = false,
+                            items = subjectItems,
+                            actions = actions,
+                            onBack = pop,
+                            modifier = Modifier.weight(1f),
+                        )
+
+                    archiveRoute != null && archivedItems != null ->
+                        MaterialSubjectContent(
+                            subjectName = null,
+                            isArchive = true,
+                            items = archivedItems,
+                            actions = actions,
+                            onBack = pop,
+                            modifier = Modifier.weight(1f),
+                        )
 
                     else ->
-                        MaterialRootList(
-                            folders = folders,
-                            itemsByFolder = itemsByFolder,
-                            actions = actions,
-                            onOpenFolder = { f -> push(MaterialRoute.FolderScreen(f.id)) },
-                            modifier = Modifier.weight(1f),
-                        )
+                        if (query.isBlank()) {
+                            MaterialRootList(
+                                items = items,
+                                onOpenSubject = { subject -> push(MaterialRoute.SubjectScreen(subject)) },
+                                onOpenArchive = { push(MaterialRoute.ArchiveScreen) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        } else {
+                            MaterialSearchContent(
+                                query = query,
+                                items = items,
+                                actions = actions,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                 }
             }
         }
@@ -455,41 +463,27 @@ fun MaterialBaseScreen(
             onConfirm = { text ->
                 showTextInput = false
                 pending = PendingMaterial.Text(text)
-                showDestination = true
+                showSubject = true
             },
         )
     }
 
-    if (showDestination) {
+    // W11: после выбора файла/текста спрашиваем ТОЛЬКО предмет — никаких папок
+    if (showSubject) {
         val material = pending
-        MaterialDestinationDialog(
+        MaterialSubjectDialog(
             curriculumSubjects = curriculumSubjects,
-            folders = folders,
+            usedSubjects = remember(items) {
+                items.filter { !it.archived && it.subjectName.isNotBlank() }.map { it.subjectName }.distinct()
+            },
             onDismiss = {
-                showDestination = false
+                showSubject = false
                 pending = null
             },
-            onConfirm = { subject, folderId, newFolderName ->
-                showDestination = false
+            onConfirm = { subject ->
+                showSubject = false
                 pending = null
-                if (material == null) return@MaterialDestinationDialog
-                scope.launch {
-                    val targetId =
-                        folderId ?: runCatching {
-                            dao.insertFolder(
-                                MaterialFolderEntity(
-                                    subjectName = subject,
-                                    name = newFolderName,
-                                    sortOrder = dao.nextFolderSortOrder(subject),
-                                ),
-                            )
-                        }.getOrElse { -1L }
-                    if (targetId < 0) {
-                        showErr("Не удалось создать папку «$newFolderName»")
-                        return@launch
-                    }
-                    importInto(targetId, material)
-                }
+                if (material != null) importInto(subject, material)
             },
         )
     }
@@ -506,47 +500,20 @@ fun MaterialBaseScreen(
         )
     }
 
-    renamingFolder?.let { folder ->
-        MaterialRenameDialog(
-            initial = folder.name,
-            label = "Переименовать папку",
-            onDismiss = { renamingFolder = null },
-            onConfirm = { newName ->
-                renamingFolder = null
-                scope.launch { dao.updateFolder(folder.copy(name = newName)) }
-            },
-        )
-    }
-
     deletingItem?.let { item ->
         MaterialDeleteDialog(
             title = "Удалить материал?",
-            message = "«${item.title}» будет удалён вместе с файлом (${MaterialImporter.humanSize(
-                actions.sizeOf(item),
-            )}). Отменить нельзя.",
+            // W15: честно — из приложения убирается копия, исходный файл на устройстве остаётся
+            message = "«${item.title}» уберётся из приложения. Исходный файл на устройстве останется.",
+            softActionText = if (item.archived) "ВЕРНУТЬ ИЗ АРХИВА" else "УБРАТЬ В АРХИВ",
+            onSoftAction = {
+                deletingItem = null
+                setArchived(item, !item.archived)
+            },
             onDismiss = { deletingItem = null },
             onConfirm = {
                 deletingItem = null
                 deleteItem(item)
-            },
-        )
-    }
-
-    deletingFolder?.let { folder ->
-        val count = itemsByFolder[folder.id]?.size ?: 0
-        MaterialDeleteDialog(
-            title = "Удалить папку?",
-            message =
-            if (count == 0) {
-                "Папка «${folder.name}» пуста и будет удалена."
-            } else {
-                "Вместе с папкой «${folder.name}» удалится материалов: $count (и их файлы). Отменить нельзя."
-            },
-            onDismiss = { deletingFolder = null },
-            onConfirm = {
-                deletingFolder = null
-                deleteFolder(folder)
-                pop()
             },
         )
     }
@@ -594,44 +561,33 @@ private fun MessageBanner(
     }
 }
 
-/** Шапка раздела: заголовок, счётчик, поиск и «+». Стиль — как у TasksScreen. */
+/** W14: шапка — строка [поиск] + [Добавить], без заголовка/группы/счётчика. */
 @Composable
 private fun MaterialHeader(
-    groupInfo: GroupInfo,
-    itemsCount: Int,
-    searchScope: Long,
-    onSearch: (Long) -> Unit,
+    query: String,
+    onQueryChange: (String) -> Unit,
     onAdd: () -> Unit,
-    subtitleOverride: String? = null,
-    // Уже внутри поиска — вторая кнопка поиска только плодила бы дубли в back-стеке
-    searchEnabled: Boolean = true,
 ) {
     Row(
         modifier =
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = "Материальная база", style = TextStylePageTitle, maxLines = 1)
-            Text(
-                text = subtitleOverride ?: "Группа ${groupInfo.canonicalName} • $itemsCount материалов",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ColorBrandBlue),
-            )
-        }
-        if (searchEnabled) {
-            BrandActionButton(
-                icon = Icons.Default.Search,
-                label = "",
-                testTag = "material_search_btn",
-                filled = false,
-                onClick = { onSearch(searchScope) },
-            )
-        }
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            placeholder = { Text("Поиск материалов", fontSize = 12.sp) }, // W13: плейсхолдер без пояснений
+            singleLine = true,
+            shape = RoundedCornerShape(2.dp),
+            modifier =
+            Modifier
+                .weight(1f)
+                .heightIn(min = 44.dp)
+                .testTag("material_search_field"),
+        )
         BrandActionButton(
             icon = Icons.Default.Add,
             label = "ДОБАВИТЬ",
@@ -641,70 +597,28 @@ private fun MaterialHeader(
     }
 }
 
-/** Строки корневого списка: секция предмета → папка → материалы (с лимитом превью). */
-private sealed interface RootRow {
-    data class SubjectHeader(
-        val subject: String,
-        val count: Int,
-    ) : RootRow
-
-    data class FolderHeader(
-        val folder: MaterialFolderEntity,
-        val count: Int,
-    ) : RootRow
-
-    data class ItemRow(
-        val item: MaterialItemEntity,
-        val siblings: List<MaterialItemEntity>,
-    ) : RootRow
-
-    data class MoreRow(
-        val folder: MaterialFolderEntity,
-        val hidden: Int,
-    ) : RootRow
-}
-
 /**
- * M4: корень — секции предметов. Пустые предметы из справочника НЕ показываем: у 4 курса их
- * десятки, и студент утонет в пустых заголовках. Архив всегда последним.
+ * W11: корень — список ПРЕДМЕТОВ, у которых есть материалы. Пустые предметы скрыты
+ * («если у предмета нет материала — не показываем предмет»). Архив — спец-строка В САМОМ
+ * НИЗУ, материалы из него в предметах не видны.
  */
 @Composable
 private fun MaterialRootList(
-    folders: List<MaterialFolderEntity>,
-    itemsByFolder: Map<Long, List<MaterialItemEntity>>,
-    actions: MaterialActions,
-    onOpenFolder: (MaterialFolderEntity) -> Unit,
+    items: List<MaterialItemEntity>,
+    onOpenSubject: (String) -> Unit,
+    onOpenArchive: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val rows =
-        remember(folders, itemsByFolder) {
-            val bySubject = folders.groupBy { it.subjectName }
-            buildList<RootRow> {
-                bySubject.keys
-                    .sortedWith(compareBy({ it == MaterialFolderEntity.ARCHIVE_SUBJECT }, { it }))
-                    .forEach { subject ->
-                        val subjectFolders = bySubject.getValue(subject)
-                        val total = subjectFolders.sumOf { itemsByFolder[it.id]?.size ?: 0 }
-                        add(RootRow.SubjectHeader(subject, total))
-                        subjectFolders.forEach { folder ->
-                            val list = itemsByFolder[folder.id].orEmpty()
-                            add(RootRow.FolderHeader(folder, list.size))
-                            list.take(ROOT_PREVIEW_LIMIT).forEach { add(RootRow.ItemRow(it, list)) }
-                            if (list.size > ROOT_PREVIEW_LIMIT) {
-                                add(RootRow.MoreRow(folder, list.size - ROOT_PREVIEW_LIMIT))
-                            }
-                        }
-                    }
-            }
-        }
+    val active = remember(items) { items.filter { !it.archived && it.subjectName.isNotBlank() } }
+    val subjects = remember(active) { active.groupBy { it.subjectName }.keys.sorted() }
+    val archiveCount = remember(items) { items.count { it.archived } }
 
-    val totalCount = itemsByFolder.values.sumOf { it.size }
-    if (rows.none { it is RootRow.ItemRow }) {
+    if (active.isEmpty() && archiveCount == 0) {
         MaterialEmptyState(
-            title = if (totalCount == 0) "Материалов пока нет" else "В этой папке пусто",
+            title = "Материалов пока нет",
             hint =
             "Нажмите «ДОБАВИТЬ» и выберите файл, набор изображений или текст. " +
-                "Материал ляжет в папку предмета — потом его можно переименовать, " +
+                "Материал ляжет в предмет — потом его можно переименовать, " +
                 "перенести в Архив и читать прямо в приложении.",
             modifier = modifier,
         )
@@ -716,67 +630,92 @@ private fun MaterialRootList(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        items(count = rows.size, key = { index -> rootRowKey(rows[index]) }) { index ->
-            when (val row = rows[index]) {
-                is RootRow.SubjectHeader -> SubjectHeaderRow(row.subject, row.count)
+        items(count = subjects.size, key = { "subject:${subjects[it]}" }) { index ->
+            val subject = subjects[index]
+            SubjectRow(
+                subjectName = subject,
+                count = active.count { it.subjectName == subject },
+                onOpen = { onOpenSubject(subject) },
+            )
+        }
 
-                is RootRow.FolderHeader ->
-                    FolderHeaderRow(
-                        folder = row.folder,
-                        count = row.count,
-                        onOpen = { onOpenFolder(row.folder) },
-                    )
-
-                is RootRow.ItemRow ->
-                    MaterialItemRow(
-                        item = row.item,
-                        actions = actions,
-                        showReorder = false,
-                        matchCount = null,
-                    )
-
-                is RootRow.MoreRow ->
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBgMain,
-                        modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 44.dp)
-                            .bouncyClickable { onOpenFolder(row.folder) }
-                            .testTag("material_more_${row.folder.id}"),
-                    ) {
-                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
+        // W11: Архив — последняя, спец-секция: показывается только когда есть что показать
+        if (archiveCount > 0) {
+            item(key = "archive") {
+                MaterialCard(testTag = "material_archive_section", onClick = onOpenArchive) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Icon(
+                            imageVector = Icons.Default.Inventory2,
+                            contentDescription = null,
+                            tint = ColorTopBar,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Показать все (ещё ${row.hidden})",
-                                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ColorBrandBlue),
+                                text = "Архив",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ColorTextTitle),
+                            )
+                            Text(
+                                text = "$archiveCount отложенных",
+                                maxLines = 1,
+                                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                             )
                         }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = ColorTextMuted, modifier = Modifier.size(18.dp))
                     }
+                }
             }
         }
     }
 }
 
-/** Ключ строки списка: стабильный, иначе LazyColumn пересоздаёт элементы при любом изменении. */
-private fun rootRowKey(row: RootRow): Any = when (row) {
-    is RootRow.SubjectHeader -> "subject:${row.subject}"
-    is RootRow.FolderHeader -> "folder:${row.folder.id}"
-    is RootRow.ItemRow -> "item:${row.item.id}"
-    is RootRow.MoreRow -> "more:${row.folder.id}"
+/** W11: строка предмета в корне. Тап открывает материалы только этого предмета. */
+@Composable
+private fun SubjectRow(
+    subjectName: String,
+    count: Int,
+    onOpen: () -> Unit,
+) {
+    MaterialCard(testTag = "material_subject_$subjectName", onClick = onOpen) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Icon(
+                imageVector = Icons.Default.Folder,
+                contentDescription = null,
+                tint = ColorBrandBlue,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = subjectName,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+                style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ColorTextTitle),
+            )
+            Text(
+                text = "$count",
+                style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = ColorTextMuted),
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = ColorTextMuted, modifier = Modifier.size(18.dp))
+        }
+    }
 }
 
 /**
- * M4: экран папки — тот же список материалов, но с кнопками порядка (◀ ▶) и правкой папки.
- * Кнопки порядка видны только здесь: в корне они бессмысленны (материалы показаны обрезком).
+ * W11: экран предмета (или Архива, isArchive = true) — список его материалов с кнопками
+ * порядка и правкой. У Архива вместо кнопки-архива кнопка восстановления.
  */
 @Composable
-private fun MaterialFolderContent(
-    folder: MaterialFolderEntity,
+private fun MaterialSubjectContent(
+    subjectName: String?,
+    isArchive: Boolean,
     items: List<MaterialItemEntity>,
     actions: MaterialActions,
-    onRenameFolder: () -> Unit,
-    onDeleteFolder: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -785,35 +724,32 @@ private fun MaterialFolderContent(
             modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 4.dp),
         ) {
-            Icon(
-                imageVector = if (folder.isArchive) Icons.Default.Inventory2 else Icons.Default.Folder,
-                contentDescription = null,
-                tint = ColorBrandBlue,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag(if (isArchive) "archive_back_btn" else "subject_back_btn")) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад", tint = ColorTextTitle)
+            }
+            if (isArchive) {
+                Icon(
+                    imageVector = Icons.Default.Inventory2,
+                    contentDescription = null,
+                    tint = ColorTopBar,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = folder.name,
+                    text = subjectName ?: "Архив",
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
                 )
                 Text(
-                    text = "${folder.subjectName} • ${items.size} материалов",
+                    text = if (isArchive) "${items.size} отложенных" else "${items.size} материалов",
                     maxLines = 1,
                     style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                 )
-            }
-            IconButton(onClick = onRenameFolder, modifier = Modifier.size(44.dp).testTag("folder_rename_btn")) {
-                Icon(Icons.Default.Edit, contentDescription = "Переименовать папку", tint = ColorTextMuted, modifier = Modifier.size(18.dp))
-            }
-            if (!folder.isArchive) {
-                IconButton(onClick = onDeleteFolder, modifier = Modifier.size(44.dp).testTag("folder_delete_btn")) {
-                    Icon(Icons.Default.Delete, contentDescription = "Удалить папку", tint = ColorTextMuted, modifier = Modifier.size(18.dp))
-                }
             }
         }
 
@@ -828,12 +764,12 @@ private fun MaterialFolderContent(
 
         if (items.isEmpty()) {
             MaterialEmptyState(
-                title = if (folder.isArchive) "В Архиве пусто" else "В папке пока ничего нет",
+                title = if (isArchive) "В Архиве пусто" else "Материалов пока нет",
                 hint =
-                if (folder.isArchive) {
+                if (isArchive) {
                     "Сюда переносятся материалы кнопкой-архивом: не удаляются, а убираются с глаз."
                 } else {
-                    "Нажмите «ДОБАВИТЬ» вверху и выберите этот предмет — файл ляжет в эту папку."
+                    "Нажмите «ДОБАВИТЬ» на главном экране материалов и выберите этот предмет."
                 },
                 modifier = Modifier.weight(1f),
             )
@@ -843,7 +779,7 @@ private fun MaterialFolderContent(
                 Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .testTag("material_folder_list"),
+                    .testTag(if (isArchive) "material_archive_list" else "material_subject_list"),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -851,8 +787,7 @@ private fun MaterialFolderContent(
                     MaterialItemRow(
                         item = items[index],
                         actions = actions,
-                        showReorder = true,
-                        matchCount = null,
+                        isArchiveRow = isArchive,
                         canMoveUp = index > 0,
                         canMoveDown = index < items.size - 1,
                         siblings = items,
@@ -864,136 +799,57 @@ private fun MaterialFolderContent(
 }
 
 /**
- * M5: поиск по текущей области (папка или вся база).
- *
- * Ищем НЕЧЁТКО по `title + textContent`: FuzzySearch допускает опечатки (Даммерау-Левенштейн ≤2
- * для слов от 4 символов) и совпадение префикса от 4 символов, «ё» приводится к «е».
- * Тогл «Aa» включает регистр-чувствительность.
- *
- * PDF в выдаче участвует только названием: текста внутри PDF мы не читаем (pdfbox = +5 МБ к APK),
- * поэтому показываем честную плашку-подсказку.
+ * M5/W13: поиск по всей базе (кроме Архива). Нечётко по `title + textContent`
+ * (FuzzySearch: Даммерау-Левенштейн ≤2 для слов от 4 символов, «ё»→«е»), пояснительных
+ * текстов и тогла «Aa» больше нет — только поле в шапке и результаты.
  */
 @Composable
 private fun MaterialSearchContent(
-    scopeFolderId: Long,
-    allItems: List<MaterialItemEntity>,
-    folders: List<MaterialFolderEntity>,
+    query: String,
+    items: List<MaterialItemEntity>,
     actions: MaterialActions,
     modifier: Modifier = Modifier,
 ) {
-    var query by rememberSaveable { mutableStateOf("") }
-    var caseSensitive by rememberSaveable { mutableStateOf(false) }
-
-    val scope =
-        remember(allItems, scopeFolderId) {
-            if (scopeFolderId < 0) allItems else allItems.filter { it.folderId == scopeFolderId }
-        }
+    val scope = remember(items) { items.filter { !it.archived } }
 
     // Тяжёлая часть (разбор текста на слова) считается на каждый запрос; для сотен материалов
     // это доли миллисекунд. См. ponytail-комментарий в FuzzySearch про порог перехода на FTS.
     val hits =
-        remember(scope, query, caseSensitive) {
+        remember(scope, query) {
             val q = query.trim()
             if (q.isEmpty()) return@remember emptyList()
             scope
                 .mapNotNull { item ->
-                    val score = FuzzySearch.score(item.title + "\n" + item.textContent, q, caseSensitive)
+                    val score = FuzzySearch.score(item.title + "\n" + item.textContent, q)
                     if (score > 0) item to score else null
                 }.sortedWith(compareByDescending<Pair<MaterialItemEntity, Int>> { it.second }.thenBy { it.first.title })
         }
 
-    val queryWords = remember(query, caseSensitive) { FuzzySearch.queryWordCount(query, caseSensitive) }
+    val queryWords = remember(query) { FuzzySearch.queryWordCount(query) }
 
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                label = { Text("Поиск по материалам", fontSize = 12.sp) },
-                singleLine = true,
-                shape = RoundedCornerShape(2.dp),
-                modifier =
-                Modifier
-                    .weight(1f)
-                    .heightIn(min = 44.dp)
-                    .testTag("material_search_field"),
-            )
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                border = BorderStroke(1.dp, if (caseSensitive) ColorBrandBlue else ColorBorderLight),
-                color = if (caseSensitive) ColorBrandFill else ColorBgMain,
-                modifier =
-                Modifier
-                    .size(44.dp)
-                    .bouncyClickable { caseSensitive = !caseSensitive }
-                    .testTag("material_search_case_btn"),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "Aa",
-                        style =
-                        TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = if (caseSensitive) Color.White else ColorTextBody,
-                        ),
-                    )
-                }
-            }
-        }
-
-        val scopeName =
-            if (scopeFolderId < 0) {
-                "вся база"
-            } else {
-                folders.find { it.id == scopeFolderId }?.let { "${it.subjectName} • ${it.name}" } ?: "папка"
-            }
-        Text(
-            text = if (query.isBlank()) "Область поиска: $scopeName" else "Найдено ${hits.size} • область: $scopeName",
-            style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp).testTag("material_search_status"),
+    if (hits.isEmpty()) {
+        MaterialEmptyState(
+            title = "Ничего не нашлось",
+            hint = "",
+            modifier = modifier,
         )
+        return
+    }
 
-        if (query.isNotBlank()) {
-            PdfSearchHintPlaque()
-        }
-
-        if (query.isBlank()) {
-            MaterialEmptyState(
-                title = "Что ищем?",
-                hint =
-                "Ищем по названию и по тексту DOCX/TXT — с допуском опечаток: " +
-                    "«матиматика» найдет «математика». PDF находится только по названию.",
-                modifier = Modifier.weight(1f),
+    LazyColumn(
+        modifier = modifier.fillMaxWidth().testTag("material_search_list"),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items(count = hits.size, key = { hits[it].first.id }) { index ->
+            val (item, score) = hits[index]
+            MaterialItemRow(
+                item = item,
+                actions = actions,
+                isArchiveRow = false,
+                showReorder = false,
+                matchCount = score to queryWords,
             )
-        } else if (hits.isEmpty()) {
-            MaterialEmptyState(
-                title = "Ничего не нашлось",
-                hint =
-                "Попробуйте короче (первые 4 буквы слова уже считаются совпадением) " +
-                    "или выключите тогл «Aa», если текст набран в другом регистре.",
-                modifier = Modifier.weight(1f),
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f).testTag("material_search_list"),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(count = hits.size, key = { hits[it].first.id }) { index ->
-                    val (item, score) = hits[index]
-                    MaterialItemRow(
-                        item = item,
-                        actions = actions,
-                        showReorder = false,
-                        matchCount = score to queryWords,
-                    )
-                }
-            }
         }
     }
 }
@@ -1001,7 +857,7 @@ private fun MaterialSearchContent(
 /**
  * M4: строка материала. Верх — иконка по расширению, название, «тип • размер • страницы»;
  * для набора изображений под названием горизонтальная мини-лента превью.
- * Низ — действия: порядок (только в папке), переименовать, в Архив, удалить.
+ * Низ — действия: порядок, переименовать, в Архив/обратно, удалить.
  * Действия отдельной строкой, а не тремя иконками в одну линию: хитбокс каждой кнопки 44dp,
  * иначе на телефоне промахиваешься и случайно удаляешь материал.
  */
@@ -1009,11 +865,12 @@ private fun MaterialSearchContent(
 private fun MaterialItemRow(
     item: MaterialItemEntity,
     actions: MaterialActions,
-    showReorder: Boolean,
-    matchCount: Pair<Int, Int>?,
+    isArchiveRow: Boolean = false,
+    showReorder: Boolean = true,
     canMoveUp: Boolean = true,
     canMoveDown: Boolean = true,
     siblings: List<MaterialItemEntity> = emptyList(),
+    matchCount: Pair<Int, Int>? = null,
 ) {
     MaterialCard(testTag = "material_item_${item.id}", onClick = { actions.onOpen(item) }) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -1126,12 +983,22 @@ private fun MaterialItemRow(
                     enabled = true,
                     testTag = "material_rename_${item.id}",
                 ) { actions.onRename(item) }
-                RowIconButton(
-                    icon = Icons.Default.Archive,
-                    description = "Переместить в Архив",
-                    enabled = true,
-                    testTag = "material_archive_${item.id}",
-                ) { actions.onArchive(item) }
+                if (isArchiveRow) {
+                    // W11: в Архиве кнопка-архив превращается в восстановление
+                    RowIconButton(
+                        icon = Icons.Default.Unarchive,
+                        description = "Вернуть из Архива",
+                        enabled = true,
+                        testTag = "material_restore_${item.id}",
+                    ) { actions.onSetArchived(item, false) }
+                } else {
+                    RowIconButton(
+                        icon = Icons.Default.Inventory2,
+                        description = "Убрать в Архив",
+                        enabled = true,
+                        testTag = "material_archive_${item.id}",
+                    ) { actions.onSetArchived(item, true) }
+                }
                 RowIconButton(
                     icon = Icons.Default.Delete,
                     description = "Удалить",
@@ -1196,68 +1063,6 @@ private fun RowIconButton(
     }
 }
 
-/** Заголовок секции предмета. */
-@Composable
-private fun SubjectHeaderRow(
-    subject: String,
-    count: Int,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier =
-        Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 2.dp)
-            .testTag("material_subject_$subject"),
-    ) {
-        Text(
-            text = subject,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
-        )
-        Text(
-            text = "$count",
-            style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = ColorTextMuted),
-        )
-    }
-}
-
-/** Строка папки: тап открывает экран папки. У Архива своя иконка. */
-@Composable
-private fun FolderHeaderRow(
-    folder: MaterialFolderEntity,
-    count: Int,
-    onOpen: () -> Unit,
-) {
-    MaterialCard(testTag = "material_folder_${folder.id}", onClick = onOpen) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Icon(
-                imageVector = if (folder.isArchive) Icons.Default.Inventory2 else Icons.Default.Folder,
-                contentDescription = null,
-                tint = if (folder.isArchive) ColorTopBar else ColorBrandBlue,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = folder.name,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ColorTextTitle),
-                )
-                Text(
-                    text = if (folder.isArchive) "отложенное, не удаляется" else "$count материалов",
-                    maxLines = 1,
-                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-                )
-            }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = ColorTextMuted, modifier = Modifier.size(18.dp))
-        }
-    }
-}
-
 /** M6: пустое состояние с объяснением «как добавить» — экран не должен выглядеть сломанным. */
 @Composable
 private fun MaterialEmptyState(
@@ -1287,19 +1092,21 @@ private fun MaterialEmptyState(
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(title, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = ColorTextTitle))
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = hint,
-                textAlign = TextAlign.Center,
-                style = TextStyle(fontSize = 13.sp, color = ColorTextMuted),
-                modifier = Modifier.padding(horizontal = 12.dp).testTag("material_empty_hint"),
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "Материалы хранятся только на этом телефоне",
-                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-                modifier = Modifier.padding(horizontal = 12.dp),
-            )
+            if (hint.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = hint,
+                    textAlign = TextAlign.Center,
+                    style = TextStyle(fontSize = 13.sp, color = ColorTextMuted),
+                    modifier = Modifier.padding(horizontal = 12.dp).testTag("material_empty_hint"),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Материалы хранятся только на этом телефоне",
+                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+            }
         }
     }
 }

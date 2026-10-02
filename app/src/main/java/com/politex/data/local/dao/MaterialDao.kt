@@ -11,39 +11,46 @@ import com.politex.data.local.entity.MaterialItemEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
- * M1: DAO материальной базы. Только метаданные — байты файлов живут в filesDir
+ * M1/W11: DAO материальной базы. Только метаданные — байты файлов живут в filesDir
  * (util/MaterialImporter), поэтому `deleteItem` ОБЯЗАТЕЛЬНО сопровождается удалением файла
  * на стороне вызывающего (UI делает это в одном coroutine-блоке).
  *
- * `getSubjects` — список предметов, в которых уже есть папки: корневой экран «Материальной
- * базы» строится секциями по нему, а не по всему справочнику MpkCurriculum (иначе студент
- * 4 курса видит 60 пустых предметов).
+ * W11: материал принадлежит ПРЕДМЕТУ (`subjectName`), архив — флаг `archived`.
+ * Запросы по папкам помечены @Deprecated и UI больше не вызывает; таблица остаётся в БД.
  */
 @Dao
 interface MaterialDao {
-    // ── Папки ────────────────────────────────────────────────────────────────
+    // ── Папки (W11: выпилены из UI, оставлены для совместимости таблицы) ─────────
 
+    @Deprecated("W11: папки удалены из UI")
     @Query("SELECT * FROM material_folders ORDER BY sortOrder ASC, id ASC")
     fun getAllFolders(): Flow<List<MaterialFolderEntity>>
 
+    @Deprecated("W11: папки удалены из UI")
     @Query("SELECT DISTINCT subjectName FROM material_folders ORDER BY subjectName ASC")
     fun getSubjects(): Flow<List<String>>
 
+    @Deprecated("W11: папки удалены из UI")
     @Query("SELECT * FROM material_folders WHERE id = :folderId")
     suspend fun getFolderById(folderId: Long): MaterialFolderEntity?
 
+    @Deprecated("W11: папки удалены из UI")
     @Query("SELECT * FROM material_folders WHERE isArchive = 1 LIMIT 1")
     suspend fun getArchiveFolder(): MaterialFolderEntity?
 
+    @Deprecated("W11: папки удалены из UI")
     @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM material_folders WHERE subjectName = :subjectName")
     suspend fun nextFolderSortOrder(subjectName: String): Int
 
+    @Deprecated("W11: папки удалены из UI")
     @Insert
     suspend fun insertFolder(folder: MaterialFolderEntity): Long
 
+    @Deprecated("W11: папки удалены из UI")
     @Update
     suspend fun updateFolder(folder: MaterialFolderEntity)
 
+    @Deprecated("W11: папки удалены из UI")
     @Query("DELETE FROM material_folders WHERE id = :folderId")
     suspend fun deleteFolderById(folderId: Long)
 
@@ -52,18 +59,26 @@ interface MaterialDao {
     @Query("SELECT * FROM material_items ORDER BY sortOrder ASC, id ASC")
     fun getAllItems(): Flow<List<MaterialItemEntity>>
 
-    @Query("SELECT * FROM material_items WHERE folderId = :folderId ORDER BY sortOrder ASC, id ASC")
-    fun getForFolder(folderId: Long): Flow<List<MaterialItemEntity>>
-
-    /** Синхронный снимок папки — нужен при удалении папки (список файлов на стирание). */
-    @Query("SELECT * FROM material_items WHERE folderId = :folderId ORDER BY sortOrder ASC, id ASC")
-    suspend fun getForFolderOnce(folderId: Long): List<MaterialItemEntity>
+    /** W11: материалы предмета (или Архива, если archived = true). */
+    @Query(
+        "SELECT * FROM material_items WHERE subjectName = :subject AND archived = :archived " +
+            "ORDER BY sortOrder ASC, id ASC",
+    )
+    fun getForSubject(
+        subject: String,
+        archived: Boolean,
+    ): Flow<List<MaterialItemEntity>>
 
     @Query("SELECT * FROM material_items WHERE id = :itemId")
     suspend fun getItemById(itemId: Long): MaterialItemEntity?
 
-    @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM material_items WHERE folderId = :folderId")
-    suspend fun nextItemSortOrder(folderId: Long): Int
+    /** W11: следующий порядок в предмете (не-архивные материалы предмета). */
+    @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM material_items WHERE subjectName = :subject AND archived = 0")
+    suspend fun nextItemSortOrder(subject: String): Int
+
+    /** W11: следующий порядок в Архиве (архивные материалы всех предметов). */
+    @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM material_items WHERE archived = 1")
+    suspend fun nextArchiveSortOrder(): Int
 
     @Insert
     suspend fun insertItem(item: MaterialItemEntity): Long
@@ -74,20 +89,26 @@ interface MaterialDao {
     @Query("DELETE FROM material_items WHERE id = :itemId")
     suspend fun deleteItemById(itemId: Long)
 
-    @Query("DELETE FROM material_items WHERE folderId = :folderId")
-    suspend fun deleteItemsOfFolder(folderId: Long)
-
-    @Query("UPDATE material_items SET title = :title WHERE id = :itemId")
-    suspend fun renameItem(
-        itemId: Long,
-        title: String,
-    )
-
+    @Deprecated("W11: перенос между папками заменён setArchived")
     @Query("UPDATE material_items SET folderId = :folderId, sortOrder = :sortOrder WHERE id = :itemId")
     suspend fun moveItemToFolder(
         itemId: Long,
         folderId: Long,
         sortOrder: Int,
+    )
+
+    /** W11: перенос в Архив и обратно. sortOrder задаётся вызывающим (конец списка приёмника). */
+    @Query("UPDATE material_items SET archived = :archived, sortOrder = :sortOrder WHERE id = :itemId")
+    suspend fun setArchived(
+        itemId: Long,
+        archived: Boolean,
+        sortOrder: Int,
+    )
+
+    @Query("UPDATE material_items SET title = :title WHERE id = :itemId")
+    suspend fun renameItem(
+        itemId: Long,
+        title: String,
     )
 
     @Query("UPDATE material_items SET lastPage = :page WHERE id = :itemId")
@@ -119,11 +140,12 @@ interface MaterialDao {
 
     /**
      * M4: перестановка соседних материалов (кнопки-стрелки в строке материала).
-     * sortOrder внутри папки уникален (вставка всегда берёт MAX+1), поэтому обмен
-     * значениями корректен. Транзакция — иначе читатель увидит две строки с одним порядком.
+     * W11: sortOrder уникален внутри (предмет + не-архив) или Архива — вставка всегда берёт
+     * MAX+1, поэтому обмен значениями корректен. Транзакция — иначе читатель увидит две
+     * строки с одним порядком.
      *
      * ponytail: обмен двух соседей вместо drag&drop-переноса на произвольную позицию;
-     * если понадобится drag — тот же sortOrder, только пересчёт всего хвоста папки.
+     * если понадобится drag — тот же sortOrder, только пересчёт всего хвоста списка.
      */
     @Transaction
     suspend fun swapSortOrder(

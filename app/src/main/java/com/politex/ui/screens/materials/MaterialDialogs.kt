@@ -17,9 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
@@ -33,7 +31,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,7 +46,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
-import com.politex.data.local.entity.MaterialFolderEntity
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -155,24 +151,20 @@ fun MaterialTextDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
 }
 
 /**
- * M3: шаг 2 для файлов и изображений — КУДА положить.
- * Предмет: справочник MpkCurriculum для специальности/курса группы + уже использованные
- * предметы + «Другое…» (своё название). Папка: существующие папки предмета + «Новая папка».
- * Архив в список назначения не попадает — в него переносят кнопкой, а не при импорте.
+ * W11: шаг 2 импорта — ТОЛЬКО предмет. Список: справочник MpkCurriculum для
+ * специальности/курса группы + предметы, в которых уже есть материалы, + «Другое…»
+ * (своё название, текстовое поле). Никаких папок — их больше не существует.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MaterialDestinationDialog(
+fun MaterialSubjectDialog(
     curriculumSubjects: List<String>,
-    folders: List<MaterialFolderEntity>,
+    usedSubjects: List<String>,
     onDismiss: () -> Unit,
-    onConfirm: (subject: String, folderId: Long?, newFolderName: String) -> Unit,
+    onConfirm: (subject: String) -> Unit,
 ) {
-    val knownSubjects = remember(folders) {
-        folders.filterNot { it.isArchive }.map { it.subjectName }.distinct()
-    }
-    val subjectOptions = remember(curriculumSubjects, knownSubjects) {
-        (curriculumSubjects + knownSubjects).distinct().sorted()
+    val subjectOptions = remember(curriculumSubjects, usedSubjects) {
+        (curriculumSubjects + usedSubjects).distinct().filter { it.isNotBlank() }.sorted()
     }
 
     var subjectExpanded by remember { mutableStateOf(false) }
@@ -181,21 +173,7 @@ fun MaterialDestinationDialog(
     var selectedSubject by remember { mutableStateOf(subjectOptions.firstOrNull() ?: "") }
 
     val subject = if (isCustomSubject) customSubject.trim() else selectedSubject
-    val subjectFolders = remember(folders, subject) {
-        folders.filter { !it.isArchive && it.subjectName.equals(subject, ignoreCase = true) }
-    }
-    var selectedFolderId by remember { mutableStateOf<Long?>(null) }
-    var newFolderMode by remember { mutableStateOf(false) }
-    var newFolderName by remember { mutableStateOf("") }
-
-    // смена предмета сбрасывает выбор папки: папки принадлежат предмету
-    LaunchedEffect(subject) {
-        selectedFolderId = null
-        newFolderMode = folders.none { !it.isArchive && it.subjectName.equals(subject, ignoreCase = true) }
-    }
-
-    val canConfirm = subject.isNotBlank() &&
-        (if (newFolderMode) newFolderName.trim().isNotBlank() else selectedFolderId != null)
+    val canConfirm = subject.isNotBlank()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -247,73 +225,12 @@ fun MaterialDestinationDialog(
                                     text = { Text(option, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                     onClick = {
                                         selectedSubject = option
-                                        selectedFolderId = null
                                         subjectExpanded = false
                                     },
                                 )
                             }
                         }
                     }
-                }
-
-                Text("Папка:", style = TextStyle(fontSize = 12.sp, color = ColorTextMuted))
-
-                if (subjectFolders.isEmpty() && !newFolderMode) {
-                    Text(
-                        text = "У предмета пока нет папок — создайте первую.",
-                        style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-                    )
-                }
-                subjectFolders.forEach { folder ->
-                    FolderPickRow(folder = folder, selected = selectedFolderId == folder.id) {
-                        selectedFolderId = folder.id
-                        newFolderMode = false
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    border = BorderStroke(1.dp, if (newFolderMode) ColorBrandBlue else ColorBorderLight),
-                    color = if (newFolderMode) ColorBrandBlue.copy(alpha = 0.08f) else ColorBgMain,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 44.dp)
-                        .bouncyClickable {
-                            newFolderMode = true
-                            selectedFolderId = null
-                        }
-                        .testTag("dest_new_folder_row"),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CreateNewFolder,
-                            contentDescription = null,
-                            tint = ColorBrandBlue,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Новая папка",
-                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = ColorTextTitle),
-                        )
-                    }
-                }
-
-                if (newFolderMode) {
-                    OutlinedTextField(
-                        value = newFolderName,
-                        onValueChange = { newFolderName = it },
-                        label = { Text("Название папки", fontSize = 12.sp) },
-                        placeholder = { Text("Например: Лекции, Лабораторные", fontSize = 12.sp) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(2.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("dest_new_folder_field"),
-                    )
                 }
             }
         },
@@ -324,7 +241,7 @@ fun MaterialDestinationDialog(
                 enabled = canConfirm,
                 testTag = "dest_confirm_btn",
             ) {
-                onConfirm(subject, selectedFolderId, newFolderName.trim())
+                onConfirm(subject)
             }
         },
         dismissButton = {
@@ -371,15 +288,39 @@ fun MaterialRenameDialog(
     )
 }
 
-/** M4: подтверждение удаления — операция стирает и запись, и файл с диска, отменить нельзя. */
+/**
+ * M4/W15: подтверждение удаления. Удаляется только копия в приложении — исходный файл
+ * на устройстве остаётся (так и работает: байты копируются в filesDir при импорте).
+ * `softActionText`/`onSoftAction` — мягкий путь: убрать в Архив вместо удаления.
+ */
 @Composable
-fun MaterialDeleteDialog(title: String, message: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+fun MaterialDeleteDialog(
+    title: String,
+    message: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    softActionText: String? = null,
+    onSoftAction: (() -> Unit)? = null,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(2.dp),
         containerColor = ColorBgMain,
         title = { Text(title, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ColorTextTitle)) },
-        text = { Text(message, style = TextStyle(fontSize = 13.sp, color = ColorTextBody)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(message, style = TextStyle(fontSize = 13.sp, color = ColorTextBody))
+                if (softActionText != null && onSoftAction != null) {
+                    DialogButton(
+                        text = softActionText,
+                        color = ColorBrandBlue,
+                        testTag = "delete_soft_btn",
+                        onClick = onSoftAction,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        },
         confirmButton = {
             DialogButton(text = "УДАЛИТЬ", color = ColorDangerFill, testTag = "delete_confirm_btn", onClick = onConfirm)
         },
@@ -443,43 +384,6 @@ private fun DialogActionRow(
 }
 
 @Composable
-private fun FolderPickRow(folder: MaterialFolderEntity, selected: Boolean, onClick: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, if (selected) ColorBrandBlue else ColorBorderLight),
-        color = if (selected) ColorBrandBlue.copy(alpha = 0.08f) else ColorBgMain,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-            .bouncyClickable(onClick = onClick)
-            .testTag("dest_folder_${folder.id}"),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Default.Folder,
-                contentDescription = null,
-                tint = if (selected) ColorBrandBlue else ColorTextMuted,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = folder.name,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(
-                    fontSize = 13.sp,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    color = ColorTextTitle,
-                ),
-            )
-        }
-    }
-}
-
-@Composable
 private fun ToggleChip(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(2.dp),
@@ -502,12 +406,13 @@ private fun DialogButton(
     color: Color,
     testTag: String,
     enabled: Boolean = true,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = Color.Transparent,
-        modifier = Modifier
+        modifier = modifier
             .heightIn(min = 44.dp)
             .bouncyClickable(enabled = enabled, onClick = onClick)
             .testTag(testTag),

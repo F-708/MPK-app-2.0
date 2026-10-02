@@ -1,5 +1,6 @@
 package com.politex.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -16,15 +17,21 @@ enum class MaterialKind { FILE, IMAGES, TEXT }
  * `context.filesDir/materials/<itemId>.<ext>` (см. util/MaterialImporter). Удаление
  * материала обязано удалить и файл, иначе filesDir обрастает мусором.
  *
- * Поля-состояние просмотрщика живут здесь же, а не в отдельной таблице:
+ * Поля-состояния просмотрщика живут здесь же, а не в отдельной таблице:
  * `pageCount`/`lastPage` — PDF (запомнить, где остановился студент), `rotationDeg` —
  * набор изображений (скан «боком»: повернули один раз, при следующем открытии применится).
  *
- * `textContent` — извлечённый при импорте текст (TXT/DOCX). По нему работает нечёткий поиск
- * (util/FuzzySearch). Для PDF пустой: извлечение текста из PDF требует pdfbox (~+5 МБ к APK),
- * поэтому PDF ищется только по названию, а внутри — закладки и страница.
+ * `textContent` — извлечённый при импорте текст (TXT/DOCX) или набранный вручную (TEXT).
+ * По нему работает нечёткий поиск (util/FuzzySearch). Для PDF пустой: извлечение текста
+ * из PDF требует pdfbox (~+5 МБ к APK), поэтому PDF ищется только по названию.
  *
- * Индекс по `folderId`: список папки — самый частый запрос экрана.
+ * W11: материал принадлежит ПРЕДМЕТУ (`subjectName`), папок больше нет. `archived` = 1 —
+ * материал перенесён в Архив: не показывается в предметах, только в секции «Архив».
+ * Колонка `folderId` и её индекс ОСТАЮТСЯ в таблице (миграция v6→v7 не дропает их —
+ * безопаснее не трогать старую колонку), но UI их больше не читает.
+ *
+ * DefaultValue у новых колонок объявлены через @ColumnInfo и повторены в MIGRATION_6_7
+ * побайтово — иначе Room упадёт на валидации схемы у всех обновившихся.
  */
 @Entity(
     tableName = "material_items",
@@ -33,7 +40,10 @@ enum class MaterialKind { FILE, IMAGES, TEXT }
 data class MaterialItemEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val folderId: Long,
+    /** W11: колонка больше не используется UI (папки выпилены), оставлена в таблице ради миграции. */
+    @Suppress("DEPRECATION")
+    @Deprecated("W11: папки удалены из UI; колонка остаётся в таблице для совместимости")
+    val folderId: Long = 0,
     val kind: String,
     val title: String,
     /** Оригинальное имя файла из SAF (DISPLAY_NAME). Для TEXT — пусто. */
@@ -50,6 +60,12 @@ data class MaterialItemEntity(
     val rotationDeg: Int = 0,
     val sortOrder: Int = 0,
     val textContent: String = "",
+    /** W11: предмет-владелец (строка из MpkCurriculum или своё название). */
+    @ColumnInfo(defaultValue = "''")
+    val subjectName: String = "",
+    /** W11: 1 = в Архиве (не показывается в предметах). */
+    @ColumnInfo(defaultValue = "0")
+    val archived: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
 ) {
     val kindEnum: MaterialKind
