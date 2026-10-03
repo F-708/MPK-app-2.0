@@ -237,7 +237,7 @@ fun SettingsScreen(
                             color = ColorBrandFill,
                             modifier = Modifier
                                 // ST4: хитбокс «СМЕНИТЬ» 48dp — смена группы важное действие
-                                .heightIn(min = 48.dp)
+                                .heightIn(min = com.politex.ui.theme.Tokens.ButtonHeight) // V15: токен 44dp
                                 .bouncyClickable { showGroupDialog = true },
                         ) {
                             // Surface — это Box с выравниванием TopStart: без обёртки текст 11sp
@@ -1134,7 +1134,7 @@ private fun ActionChip(
         border = BorderStroke(1.dp, if (filled) ColorBrandFill else ColorBorderLight),
         modifier = modifier
             // ST3: хитбокс чипа 48dp
-            .heightIn(min = 48.dp)
+            .heightIn(min = com.politex.ui.theme.Tokens.ButtonHeight) // V15: токен 44dp
             .bouncyClickable(onClick = onClick),
     ) {
         Box(
