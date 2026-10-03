@@ -134,8 +134,9 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             )
             row.setTextColor(R.id.row_subject, textColor)
 
-            // N8: кабинет — кликабельный чип (как в NowNext): акцентный цвет + рамка-фон,
-            // тап открывает карту с этим кабинетом БЕЗ маршрута (нет EXTRA_SHOW_ROUTE).
+            // N8/V21: кабинет — кликабельный чип (как в NowNext): акцентный цвет + рамка-фон,
+            // тап открывает карту с этим кабинетом И маршрутом (EXTRA_SHOW_ROUTE — старт от
+            // главного входа; на экране гейтится тоглом map_routes_enabled).
             val room = lesson.roomFirst.takeIf { it.isNotBlank() } ?: lesson.roomSecond
             if (showRoom && room.isNotBlank()) {
                 row.setTextViewText(R.id.row_room, "каб. $room")
@@ -153,6 +154,8 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                         .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                         .putExtra("EXTRA_OPEN_TAB", "MAP")
                         .putExtra("EXTRA_ROOM", room)
+                        // V21: маршрут ВСЕГДА при запросе — раньше чип открывал карту без пути
+                        .putExtra("EXTRA_SHOW_ROUTE", true)
                 row.setOnClickPendingIntent(
                     R.id.row_room,
                     PendingIntent.getActivity(

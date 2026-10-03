@@ -10,6 +10,7 @@ import android.widget.RemoteViews
 import com.politex.R
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
+import com.politex.ui.util.RouteStartResolver
 import com.politex.util.SubjectFormatter
 
 class NowNextWidgetProvider : AppWidgetProvider() {
@@ -61,6 +62,15 @@ class NowNextWidgetProvider : AppWidgetProvider() {
 
             val current = lessons.firstOrNull { now in it.startMinutes()..it.endMinutes() }
 
+            // V21: старт маршрута — «где студент сейчас»: для «ДАЛЬШЕ» это кабинет текущего
+            // слота, для «СЕЙЧАС» — кабинет предыдущего (в том же слоте from == to и маршрут
+            // вырождается). null → карта построит маршрут от главного входа (N8).
+            val nextFromRoom = RouteStartResolver.previousRoomNow(lessons, now)
+            val nowFromRoom =
+                current?.let { c ->
+                    RouteStartResolver.previousRoomNow(lessons.filter { it.lessonNumber < c.lessonNumber }, now)
+                }
+
             val next =
                 when {
                     current != null -> lessons.firstOrNull { it.lessonNumber > current.lessonNumber }
@@ -89,12 +99,12 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.tv_now_label, "СЕЙЧАС")
                 views.setTextViewText(R.id.tv_now_subject, SubjectFormatter.getShortName(current.subjectRaw))
                 views.setTextViewText(R.id.tv_now_details, detailsOf(current, showRoom))
-                applyRoomChip(context, views, R.id.tv_now_room, current, showRoom, appWidgetId, "now")
+                applyRoomChip(context, views, R.id.tv_now_room, current, showRoom, appWidgetId, "now", nowFromRoom)
                 if (next != null) {
                     views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                     views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next.subjectRaw))
                     views.setTextViewText(R.id.tv_next_details, detailsOf(next, showRoom))
-                    applyRoomChip(context, views, R.id.tv_next_room, next, showRoom, appWidgetId, "next")
+                    applyRoomChip(context, views, R.id.tv_next_room, next, showRoom, appWidgetId, "next", nextFromRoom)
                 } else {
                     views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                     views.setTextViewText(R.id.tv_next_subject, "Уроков больше нет")
@@ -120,7 +130,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                 views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next!!.subjectRaw))
                 views.setTextViewText(R.id.tv_next_details, detailsOf(next, showRoom))
-                applyRoomChip(context, views, R.id.tv_next_room, next, showRoom, appWidgetId, "next")
+                applyRoomChip(context, views, R.id.tv_next_room, next, showRoom, appWidgetId, "next", nextFromRoom)
             }
 
             val open =
@@ -160,6 +170,8 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             showRoom: Boolean,
             appWidgetId: Int,
             slot: String,
+            // V21: кабинет «где студент сейчас» — старт маршрута вместо главного входа
+            fromRoom: String? = null,
         ) {
             val rooms =
                 listOf(lesson.roomFirst, lesson.roomSecond)
@@ -178,8 +190,10 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     .putExtra("EXTRA_OPEN_TAB", "SCHEDULE")
                     .putExtra("EXTRA_ROOM", room)
-                    // N8: тап по кабинету в NowNext — карта С маршрутом от главного входа
+                    // N8: тап по кабинету в NowNext — карта С маршрутом
                     .putExtra("EXTRA_SHOW_ROUTE", true)
+            // V21: старт маршрута — кабинет текущего слота, если он есть (иначе главный вход)
+            if (!fromRoom.isNullOrBlank()) intent.putExtra("EXTRA_FROM_ROOM", fromRoom)
             views.setOnClickPendingIntent(
                 viewId,
                 PendingIntent.getActivity(

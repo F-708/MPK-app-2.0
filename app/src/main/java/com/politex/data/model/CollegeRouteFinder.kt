@@ -487,6 +487,83 @@ object CollegeRouteFinder {
 
     private const val ORTHO_EPS = 1e-4f
 
+    /**
+     * V23: чистка «крюков» полилинии маршрута до фикс-поинта, три правила на проход:
+     * 1) дубли подряд (dist < 1e-4) — убираем;
+     * 2) коллинеарная середина: |cross(b-a, c-b)| < [eps] && dot >= 0 — b убираем;
+     * 3) шип (возврат назад): c между a и b (dist(a,c) < dist(a,b)) и перпендикуляр
+     *    из c к прямой ab < [eps] — b убираем.
+     * Концы пути никогда не удаляются. RDP ([rdpEps]) по умолчанию ВЫКЛЮЧЕН (null) —
+     * поперёк коридора упрощать нельзя, включается явно при необходимости.
+     */
+    fun simplifyRoute(points: List<MapPoint>, eps: Float = 1e-3f, rdpEps: Float? = null): List<MapPoint> {
+        var pts = if (rdpEps != null) rdp(points, rdpEps) else points
+        while (true) {
+            val next = simplifyPass(pts, eps)
+            if (next.size == pts.size) return next // только удаления — равный размер = фикс-поинт
+            pts = next
+        }
+    }
+
+    private fun simplifyPass(pts: List<MapPoint>, eps: Float): List<MapPoint> {
+        // 1) дубли подряд
+        val d = ArrayList<MapPoint>(pts.size)
+        for (p in pts) if (d.isEmpty() || distP(d.last(), p) >= 1e-4f) d.add(p)
+        // 2)+3) потоково: каждая новая точка проверяется как «c» против хвоста (a, b) —
+        // удаление b повторно проверяет новый хвост, поэтому каскады схлопываются за проход
+        val out = ArrayList<MapPoint>(d.size)
+        for (p in d) {
+            out.add(p)
+            while (out.size >= 3) {
+                val a = out[out.size - 3]
+                val b = out[out.size - 2]
+                val c = out[out.size - 1]
+                val abx = b.x - a.x
+                val aby = b.y - a.y
+                val cross = abx * (c.y - b.y) - aby * (c.x - b.x)
+                val dot = abx * (c.x - b.x) + aby * (c.y - b.y)
+                val collinear = Math.abs(cross) < eps && dot >= 0f
+                val abLen = distP(a, b)
+                val perp = if (abLen < 1e-6f) distP(a, c) else Math.abs(abx * (c.y - a.y) - aby * (c.x - a.x)) / abLen
+                val spike = distP(a, c) < abLen && perp < eps
+                if (collinear || spike) out.removeAt(out.size - 2) else break
+            }
+        }
+        return out
+    }
+
+    /** RDP (Рамер–Дуглас–Пекер), итеративно через стек; вызывается только при явном rdpEps. */
+    private fun rdp(pts: List<MapPoint>, eps: Float): List<MapPoint> {
+        if (pts.size < 3) return pts
+        val keep = BooleanArray(pts.size)
+        keep[0] = true
+        keep[pts.size - 1] = true
+        val stack = ArrayDeque<IntArray>()
+        stack.addLast(intArrayOf(0, pts.size - 1))
+        while (stack.isNotEmpty()) {
+            val (s, e) = stack.removeLast()
+            if (e - s < 2) continue
+            val a = pts[s]
+            val b = pts[e]
+            val len = distP(a, b)
+            var maxD = -1f
+            var idx = -1
+            for (i in s + 1 until e) {
+                val d = if (len < 1e-6f) distP(a, pts[i]) else Math.abs((b.x - a.x) * (pts[i].y - a.y) - (b.y - a.y) * (pts[i].x - a.x)) / len
+                if (d > maxD) {
+                    maxD = d
+                    idx = i
+                }
+            }
+            if (maxD > eps && idx > 0) {
+                keep[idx] = true
+                stack.addLast(intArrayOf(s, idx))
+                stack.addLast(intArrayOf(idx, e))
+            }
+        }
+        return pts.filterIndexed { i, _ -> keep[i] }
+    }
+
     private fun shortestPathGlobal(
         adjacency: List<List<Pair<Int, Float>>>,
         n: Int,

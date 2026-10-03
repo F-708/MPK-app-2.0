@@ -91,7 +91,9 @@ class MainActivity : ComponentActivity() {
     /**
      * E4: интенты виджетов/уведомлений → nav-аргументы вместо pending*-полей VM.
      * Б7: тап по кнопке кабинета в виджете — сразу на карту с этим кабинетом.
-     * N8: EXTRA_SHOW_ROUTE (виджет NowNext) — открыть карту С маршрутом от главного входа.
+     * N8: EXTRA_SHOW_ROUTE (виджеты Today/NowNext) — открыть карту С маршрутом.
+     * V21: EXTRA_FROM_ROOM (NowNext) — старт маршрута от кабинета текущего слота,
+     * а не всегда от главного входа; null = главный вход.
      */
     private fun handleIntent(
         intent: Intent?,
@@ -100,7 +102,11 @@ class MainActivity : ComponentActivity() {
         val room = intent?.getStringExtra("EXTRA_ROOM")
         if (!room.isNullOrBlank()) {
             navController.navigate(
-                buildMapRoute(room, from = null, showRoute = intent.getBooleanExtra("EXTRA_SHOW_ROUTE", false)),
+                buildMapRoute(
+                    room,
+                    from = intent.getStringExtra("EXTRA_FROM_ROOM"),
+                    showRoute = intent.getBooleanExtra("EXTRA_SHOW_ROUTE", false),
+                ),
             )
             return
         }
