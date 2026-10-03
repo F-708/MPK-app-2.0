@@ -146,7 +146,9 @@ object NotificationHelper {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra("EXTRA_OPEN_TAB", "TASKS")
             }
-        val requestCode = (REMINDER_NOTIFICATION_BASE + reminder.id).toInt()
+        // QA#19: reminder.id — Long; без modulo переполнение Int дало бы коллизию
+        // notification-id (второе напоминание молча заменило бы первое)
+        val requestCode = (REMINDER_NOTIFICATION_BASE + reminder.id % 1_000_000L).toInt()
         val pendingIntent =
             PendingIntent.getActivity(
                 context,

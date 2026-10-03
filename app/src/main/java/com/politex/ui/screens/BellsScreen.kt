@@ -129,8 +129,9 @@ fun BellsScreen(
     val now =
         com.politex.ui.util
             .rememberToday()
+    // QA#6: ключ now — производные пересчитываются после полуночи/ON_RESUME
     val todayDow =
-        remember {
+        remember(now) {
             Dow.of(now)
         }
     val todayLessons by scheduleRepository
@@ -141,7 +142,7 @@ fun BellsScreen(
             todayLessons.maxOfOrNull { it.lessonNumber }
         }
 
-    val todayType = remember { CollegeBellSchedule.getTypeForDay(todayDow) }
+    val todayType = remember(todayDow) { CollegeBellSchedule.getTypeForDay(todayDow) }
     var selectedScheduleType by remember { mutableStateOf(todayType) }
 
     var currentTimeMinutes by remember {
