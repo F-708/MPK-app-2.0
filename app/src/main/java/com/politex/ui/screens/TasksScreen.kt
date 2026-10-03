@@ -55,6 +55,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -112,6 +113,9 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
+import com.politex.ui.components.TutorialController
+import com.politex.ui.components.TutorialFeature
+import com.politex.ui.components.tutorialAnchor
 import com.politex.util.MpkCurriculum
 import kotlinx.coroutines.launch
 
@@ -179,6 +183,20 @@ fun TasksScreen(
             if (result == SnackbarResult.ActionPerformed) {
                 taskRepository.addTask(task.copy())
             }
+        }
+    }
+
+    // V14: туториал «Удаление свайпом» — по первому входу во вкладку, и ТОЛЬКО если есть
+    // задания. При пустом списке цели нет → запрос не делаем, флаг не ставим: туториал
+    // откладывается до момента, когда задание появится (переживёт обновление приложения).
+    val firstTaskId = filteredTasks.firstOrNull()?.id
+    LaunchedEffect(firstTaskId) {
+        if (firstTaskId != null) TutorialController.request(context, TutorialFeature.TASK_SWIPE)
+    }
+    // Уход с вкладки при живом туториале — снимаем БЕЗ флага (покажем при следующем входе).
+    DisposableEffect(Unit) {
+        onDispose {
+            if (TutorialController.active == TutorialFeature.TASK_SWIPE) TutorialController.clear()
         }
     }
 
@@ -350,9 +368,22 @@ fun TasksScreen(
                 ) {
                     items(filteredTasks, key = { it.id }) { task ->
                         // V13: удаление свайпом влево (кнопка ✕ из карточки убрана)
-                        SwipeToDeleteBox(onDelete = { deleteWithUndo(task) }) {
+                        // V14: свайп-удаление = успех туториала task_swipe
+                        SwipeToDeleteBox(
+                            onDelete = {
+                                deleteWithUndo(task)
+                                TutorialController.success(TutorialFeature.TASK_SWIPE)
+                            },
+                        ) {
                             TaskItemCard(
                                 task = task,
+                                // V14: первая карточка — цель туториала «Удаление свайпом»
+                                modifier =
+                                if (task.id == firstTaskId) {
+                                    Modifier.tutorialAnchor("task_card_first")
+                                } else {
+                                    Modifier
+                                },
                                 onToggleCompleted = {
                                     coroutineScope.launch {
                                         taskRepository.toggleTaskCompleted(task.id, !task.isCompleted)

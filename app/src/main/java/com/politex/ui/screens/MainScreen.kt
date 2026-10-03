@@ -53,6 +53,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.politex.data.model.GroupInfo
 import com.politex.ui.components.MainTopBar
+import com.politex.ui.components.TutorialOverlay
 import com.politex.ui.components.UndoSnackbar
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBrandBlue
@@ -184,280 +185,287 @@ fun MainScreen(
         AppTab.entries.firstOrNull { it.route == base }?.let { selectedTab = it }
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        // W16: в режиме чтения PDF баннер и нижняя навигация скрыты — сверху остаётся синяя
-        // строка самого просмотрщика (она же рисует отступ под статусбар), снизу — текст.
-        // Scaffold пересчитает innerPadding, контент растягивается на весь экран.
-        topBar = {
-            if (!ViewerMode.active) MainTopBar()
-        },
-        bottomBar = {
-            if (!ViewerMode.active) Column(modifier = Modifier.fillMaxWidth()) {
-                Box(
-                    modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(ColorDividerLight),
-                )
-                NavigationBar(
-                    containerColor = ColorBgMain,
-                    tonalElevation = 0.dp,
-                    modifier = Modifier.testTag("main_bottom_nav"),
-                ) {
-                    val tabs =
-                        listOf(
-                            Triple(AppTab.SCHEDULE, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
-                            Triple(AppTab.TASKS, Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
-                            Triple(AppTab.BELLS, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
-                            Triple(AppTab.COLLEGE, Icons.Filled.Apps, Icons.Outlined.Apps),
-                        )
+    // V14: корневой Box — хост оверлея интерактивных туториалов поверх всего контента.
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            // W16: в режиме чтения PDF баннер и нижняя навигация скрыты — сверху остаётся синяя
+            // строка самого просмотрщика (она же рисует отступ под статусбар), снизу — текст.
+            // Scaffold пересчитает innerPadding, контент растягивается на весь экран.
+            topBar = {
+                if (!ViewerMode.active) MainTopBar()
+            },
+            bottomBar = {
+                if (!ViewerMode.active) Column(modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(ColorDividerLight),
+                    )
+                    NavigationBar(
+                        containerColor = ColorBgMain,
+                        tonalElevation = 0.dp,
+                        modifier = Modifier.testTag("main_bottom_nav"),
+                    ) {
+                        val tabs =
+                            listOf(
+                                Triple(AppTab.SCHEDULE, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
+                                Triple(AppTab.TASKS, Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
+                                Triple(AppTab.BELLS, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
+                                Triple(AppTab.COLLEGE, Icons.Filled.Apps, Icons.Outlined.Apps),
+                            )
 
-                    tabs.forEach { (tab, filledIcon, outlinedIcon) ->
-                        val isSelected = selectedTab == tab
-                        NavigationBarItem(
-                            selected = isSelected,
-                            onClick = { navController.navigateToTab(tab.route) },
-                            icon = {
-                                Icon(
-                                    imageVector = if (isSelected) filledIcon else outlinedIcon,
-                                    contentDescription = tab.title,
-                                    modifier = Modifier.size(24.dp),
-                                )
-                            },
-                            label = {
-                                Text(
-                                    // N1: без капса — меньше букв, влезает при +15% шрифта;
-                                    // Ellipsis вместо тихой обрезки по букве
-                                    text = tab.title,
-                                    softWrap = false,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style =
-                                    androidx.compose.ui.text.TextStyle(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 10.sp,
-                                        letterSpacing = 0.sp,
-                                    ),
-                                )
-                            },
-                            colors =
-                            NavigationBarItemDefaults.colors(
-                                selectedIconColor = ColorBrandBlue,
-                                selectedTextColor = ColorBrandBlue,
-                                indicatorColor = ColorSurfaceHighlight,
-                                unselectedIconColor = ColorTextMuted,
-                                unselectedTextColor = ColorTextMuted,
-                            ),
-                        )
+                        tabs.forEach { (tab, filledIcon, outlinedIcon) ->
+                            val isSelected = selectedTab == tab
+                            NavigationBarItem(
+                                selected = isSelected,
+                                onClick = { navController.navigateToTab(tab.route) },
+                                icon = {
+                                    Icon(
+                                        imageVector = if (isSelected) filledIcon else outlinedIcon,
+                                        contentDescription = tab.title,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        // N1: без капса — меньше букв, влезает при +15% шрифта;
+                                        // Ellipsis вместо тихой обрезки по букве
+                                        text = tab.title,
+                                        softWrap = false,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style =
+                                        androidx.compose.ui.text.TextStyle(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 10.sp,
+                                            letterSpacing = 0.sp,
+                                        ),
+                                    )
+                                },
+                                colors =
+                                NavigationBarItemDefaults.colors(
+                                    selectedIconColor = ColorBrandBlue,
+                                    selectedTextColor = ColorBrandBlue,
+                                    indicatorColor = ColorSurfaceHighlight,
+                                    unselectedIconColor = ColorTextMuted,
+                                    unselectedTextColor = ColorTextMuted,
+                                ),
+                            )
+                        }
                     }
                 }
-            }
-        },
-        snackbarHost = {
-            // V13: фирменный undo-снекбар с полосой-таймером 5 с. Показ идёт с Indefinite
-            // (в SnackbarDuration нет «5 с») — по исчерпании полосы гасим хост сами.
-            SnackbarHost(hostState = snackbarHostState) { data ->
-                UndoSnackbar(data, onExpire = { snackbarHostState.currentSnackbarData?.dismiss() })
-            }
-        },
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = ROUTE_SCHEDULE,
-            modifier =
-            Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
-            val scrollArg =
-                listOf(
-                    navArgument(ARG_SCROLL) {
-                        type = NavType.StringType
-                        defaultValue = ""
-                    },
-                )
+            },
+            snackbarHost = {
+                // V13: фирменный undo-снекбар с полосой-таймером 5 с. Показ идёт с Indefinite
+                // (в SnackbarDuration нет «5 с») — по исчерпании полосы гасим хост сами.
+                SnackbarHost(hostState = snackbarHostState) { data ->
+                    UndoSnackbar(data, onExpire = { snackbarHostState.currentSnackbarData?.dismiss() })
+                }
+            },
+        ) { innerPadding ->
+            NavHost(
+                navController = navController,
+                startDestination = ROUTE_SCHEDULE,
+                modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
+                val scrollArg =
+                    listOf(
+                        navArgument(ARG_SCROLL) {
+                            type = NavType.StringType
+                            defaultValue = ""
+                        },
+                    )
 
-            composable(scrollRoutePattern(ROUTE_SCHEDULE), arguments = scrollArg) { entry ->
-                // C3: расписание и домашка читаются из VM (кэш переживает смену вкладок);
-                // чтение внутри записи — эмиссии Room не рекомпозировали поддеревья других табов.
-                val groupLessons by viewModel.groupLessons.collectAsState()
-                val pendingTasks by viewModel.pendingTasks.collectAsState()
-                // O1/D: выбранный день — rememberSaveable записи: saveState/restoreState
-                // паттерна вкладок возвращает его при возврате на таб.
-                var scheduleSlot by rememberSaveable { mutableIntStateOf(0) }
-                var scheduleDate by rememberSaveable { mutableStateOf("") }
-                val scrollRequest = rememberScrollRequest(entry)
-                ScheduleScreen(
-                    groupInfo = currentGroupInfo,
-                    groupLessonsFromVm = groupLessons,
-                    pendingTasksFromVm = pendingTasks,
-                    scheduleRepository = viewModel.scheduleRepository,
-                    onSyncRequest = { viewModel.syncSchedule() },
-                    // SUI-02: сетевой сбой не должен маскироваться под «не опубликовано»
-                    hasSyncError = uiState.hasSyncError,
-                    isSyncing = uiState.isSyncing,
-                    // N18: тап по значку домашки открывает вкладку заданий
-                    onOpenTasks = { navController.navigateToTab(ROUTE_LESSONS) },
-                    onTeacherClick = { name -> navController.navigate(buildTeacherRoute(name)) },
-                    onRoomClick = { room, fromRoom ->
-                        navController.navigate(buildMapRoute(room, fromRoom, showRoute = false))
-                    },
-                    scrollToCurrentRequested = scrollRequest == "CURRENT_LESSON",
-                    onScrollToCurrentConsumed = { entry.savedStateHandle[ARG_SCROLL] = "" },
-                    selectedSlot = scheduleSlot,
-                    onSlotChange = { scheduleSlot = it },
-                    selectedDateString = scheduleDate,
-                    onDateChange = { scheduleDate = it },
-                )
-            }
+                composable(scrollRoutePattern(ROUTE_SCHEDULE), arguments = scrollArg) { entry ->
+                    // C3: расписание и домашка читаются из VM (кэш переживает смену вкладок);
+                    // чтение внутри записи — эмиссии Room не рекомпозировали поддеревья других табов.
+                    val groupLessons by viewModel.groupLessons.collectAsState()
+                    val pendingTasks by viewModel.pendingTasks.collectAsState()
+                    // O1/D: выбранный день — rememberSaveable записи: saveState/restoreState
+                    // паттерна вкладок возвращает его при возврате на таб.
+                    var scheduleSlot by rememberSaveable { mutableIntStateOf(0) }
+                    var scheduleDate by rememberSaveable { mutableStateOf("") }
+                    val scrollRequest = rememberScrollRequest(entry)
+                    ScheduleScreen(
+                        groupInfo = currentGroupInfo,
+                        groupLessonsFromVm = groupLessons,
+                        pendingTasksFromVm = pendingTasks,
+                        scheduleRepository = viewModel.scheduleRepository,
+                        onSyncRequest = { viewModel.syncSchedule() },
+                        // SUI-02: сетевой сбой не должен маскироваться под «не опубликовано»
+                        hasSyncError = uiState.hasSyncError,
+                        isSyncing = uiState.isSyncing,
+                        // N18: тап по значку домашки открывает вкладку заданий
+                        onOpenTasks = { navController.navigateToTab(ROUTE_LESSONS) },
+                        onTeacherClick = { name -> navController.navigate(buildTeacherRoute(name)) },
+                        onRoomClick = { room, fromRoom ->
+                            navController.navigate(buildMapRoute(room, fromRoom, showRoute = false))
+                        },
+                        scrollToCurrentRequested = scrollRequest == "CURRENT_LESSON",
+                        onScrollToCurrentConsumed = { entry.savedStateHandle[ARG_SCROLL] = "" },
+                        selectedSlot = scheduleSlot,
+                        onSlotChange = { scheduleSlot = it },
+                        selectedDateString = scheduleDate,
+                        onDateChange = { scheduleDate = it },
+                    )
+                }
 
-            composable(ROUTE_LESSONS) {
-                LessonsHubScreen(
-                    groupInfo = currentGroupInfo,
-                    taskRepository = viewModel.taskRepository,
-                    modifier = Modifier.fillMaxSize(),
-                    // T1: undo-снекбар удаления задания — хост уже висит в Scaffold
-                    snackbarHostState = snackbarHostState,
-                )
-            }
+                composable(ROUTE_LESSONS) {
+                    LessonsHubScreen(
+                        groupInfo = currentGroupInfo,
+                        taskRepository = viewModel.taskRepository,
+                        modifier = Modifier.fillMaxSize(),
+                        // T1: undo-снекбар удаления задания — хост уже висит в Scaffold
+                        snackbarHostState = snackbarHostState,
+                    )
+                }
 
-            composable(scrollRoutePattern(ROUTE_BELLS), arguments = scrollArg) { entry ->
-                val scrollRequest = rememberScrollRequest(entry)
-                BellsScreen(
-                    groupInfo = currentGroupInfo,
-                    scheduleRepository = viewModel.scheduleRepository,
-                    scrollToCurrentRequested = scrollRequest == "CURRENT_BELL",
-                    onScrollToCurrentConsumed = { entry.savedStateHandle[ARG_SCROLL] = "" },
-                )
-            }
+                composable(scrollRoutePattern(ROUTE_BELLS), arguments = scrollArg) { entry ->
+                    val scrollRequest = rememberScrollRequest(entry)
+                    BellsScreen(
+                        groupInfo = currentGroupInfo,
+                        scheduleRepository = viewModel.scheduleRepository,
+                        scrollToCurrentRequested = scrollRequest == "CURRENT_BELL",
+                        onScrollToCurrentConsumed = { entry.savedStateHandle[ARG_SCROLL] = "" },
+                    )
+                }
 
-            composable(ROUTE_COLLEGE) {
-                CollegeScreen(
-                    groupInfo = currentGroupInfo,
-                    onOpenSpecialty = { navController.navigate(ROUTE_SPECIALTY) },
-                    onOpenTeachers = { navController.navigate(ROUTE_TEACHERS) },
-                    onOpenSettings = { navController.navigate(ROUTE_SETTINGS) },
-                    onOpenStudents = { navController.navigate(ROUTE_STUDENTS) },
-                    onOpenGroupSchedule = { navController.navigate(buildGroupScheduleRoute(null)) },
-                    onOpenMap = { navController.navigate(buildMapRoute(null, null, showRoute = false)) },
-                )
-            }
+                composable(ROUTE_COLLEGE) {
+                    CollegeScreen(
+                        groupInfo = currentGroupInfo,
+                        onOpenSpecialty = { navController.navigate(ROUTE_SPECIALTY) },
+                        onOpenTeachers = { navController.navigate(ROUTE_TEACHERS) },
+                        onOpenSettings = { navController.navigate(ROUTE_SETTINGS) },
+                        onOpenStudents = { navController.navigate(ROUTE_STUDENTS) },
+                        onOpenGroupSchedule = { navController.navigate(buildGroupScheduleRoute(null)) },
+                        onOpenMap = { navController.navigate(buildMapRoute(null, null, showRoute = false)) },
+                    )
+                }
 
-            composable(ROUTE_SPECIALTY) {
-                SpecialtyRoute(
-                    groupInfo = currentGroupInfo,
-                    onBack = { navController.popBackStack() },
-                )
-            }
+                composable(ROUTE_SPECIALTY) {
+                    SpecialtyRoute(
+                        groupInfo = currentGroupInfo,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
 
-            composable(ROUTE_TEACHERS) {
-                TeachersRoute(
-                    groupInfo = currentGroupInfo,
-                    scheduleRepository = viewModel.scheduleRepository,
-                    onOpenTeacher = { teacher ->
-                        navController.navigate(buildTeacherRoute(teacher.name))
-                    },
-                    onBack = { navController.popBackStack() },
-                )
-            }
+                composable(ROUTE_TEACHERS) {
+                    TeachersRoute(
+                        groupInfo = currentGroupInfo,
+                        scheduleRepository = viewModel.scheduleRepository,
+                        onOpenTeacher = { teacher ->
+                            navController.navigate(buildTeacherRoute(teacher.name))
+                        },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
 
-            composable(
-                ROUTE_TEACHER,
-                arguments =
-                listOf(
-                    navArgument("name") {
-                        type = NavType.StringType
-                        defaultValue = ""
-                    },
-                ),
-            ) { entry ->
-                TeacherCardRoute(
-                    teacherName = entry.arguments?.getString("name").orEmpty(),
-                    groupInfo = currentGroupInfo,
-                    scheduleRepository = viewModel.scheduleRepository,
-                    onOpenRoom = { room ->
-                        navController.navigate(buildMapRoute(room, null, showRoute = false))
-                    },
-                    onNotFound = { navController.popBackStack() },
-                    onBack = { navController.popBackStack() },
-                )
-            }
+                composable(
+                    ROUTE_TEACHER,
+                    arguments =
+                    listOf(
+                        navArgument("name") {
+                            type = NavType.StringType
+                            defaultValue = ""
+                        },
+                    ),
+                ) { entry ->
+                    TeacherCardRoute(
+                        teacherName = entry.arguments?.getString("name").orEmpty(),
+                        groupInfo = currentGroupInfo,
+                        scheduleRepository = viewModel.scheduleRepository,
+                        onOpenRoom = { room ->
+                            navController.navigate(buildMapRoute(room, null, showRoute = false))
+                        },
+                        onNotFound = { navController.popBackStack() },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
 
-            composable(
-                ROUTE_MAP,
-                arguments =
-                listOf(
-                    navArgument("room") {
-                        type = NavType.StringType
-                        defaultValue = null
-                        nullable = true
-                    },
-                    navArgument("from") {
-                        type = NavType.StringType
-                        defaultValue = null
-                        nullable = true
-                    },
-                    navArgument("route") {
-                        type = NavType.BoolType
-                        defaultValue = false
-                    },
-                ),
-            ) { entry ->
-                CollegeMapScreen(
-                    initialRoom = entry.arguments?.getString("room"),
-                    // "" (не null!) = маршрут от главного входа — см. buildMapRoute/R1
-                    fromRoom = entry.arguments?.getString("from"),
-                    showRoute = entry.arguments?.getBoolean("route") == true,
-                    onBack = { navController.popBackStack() },
-                    onOpenTeacher = { name -> navController.navigate(buildTeacherRoute(name)) },
-                )
-            }
+                composable(
+                    ROUTE_MAP,
+                    arguments =
+                    listOf(
+                        navArgument("room") {
+                            type = NavType.StringType
+                            defaultValue = null
+                            nullable = true
+                        },
+                        navArgument("from") {
+                            type = NavType.StringType
+                            defaultValue = null
+                            nullable = true
+                        },
+                        navArgument("route") {
+                            type = NavType.BoolType
+                            defaultValue = false
+                        },
+                    ),
+                ) { entry ->
+                    CollegeMapScreen(
+                        initialRoom = entry.arguments?.getString("room"),
+                        // "" (не null!) = маршрут от главного входа — см. buildMapRoute/R1
+                        fromRoom = entry.arguments?.getString("from"),
+                        showRoute = entry.arguments?.getBoolean("route") == true,
+                        onBack = { navController.popBackStack() },
+                        onOpenTeacher = { name -> navController.navigate(buildTeacherRoute(name)) },
+                    )
+                }
 
-            composable(
-                ROUTE_GROUP_SCHEDULE,
-                arguments =
-                listOf(
-                    navArgument("group") {
-                        type = NavType.StringType
-                        defaultValue = ""
-                    },
-                ),
-            ) { entry ->
-                GroupScheduleRoute(
-                    group = entry.arguments?.getString("group").orEmpty(),
-                    groupInfo = currentGroupInfo,
-                    scheduleRepository = viewModel.scheduleRepository,
-                    onGroupPicked = { group ->
-                        navController.navigate(buildGroupScheduleRoute(group))
-                    },
-                    // N15: «СМЕНИТЬ» и системное «назад» — popBackStack на запись выбора
-                    // группы (group="), состояние курса в ней сохранено (rememberSaveable).
-                    onChangeGroup = { navController.popBackStack() },
-                    onTeacherClick = { name -> navController.navigate(buildTeacherRoute(name)) },
-                    onRoomClick = { room, fromRoom ->
-                        navController.navigate(buildMapRoute(room, fromRoom, showRoute = false))
-                    },
-                )
-            }
+                composable(
+                    ROUTE_GROUP_SCHEDULE,
+                    arguments =
+                    listOf(
+                        navArgument("group") {
+                            type = NavType.StringType
+                            defaultValue = ""
+                        },
+                    ),
+                ) { entry ->
+                    GroupScheduleRoute(
+                        group = entry.arguments?.getString("group").orEmpty(),
+                        groupInfo = currentGroupInfo,
+                        scheduleRepository = viewModel.scheduleRepository,
+                        onGroupPicked = { group ->
+                            navController.navigate(buildGroupScheduleRoute(group))
+                        },
+                        // N15: «СМЕНИТЬ» и системное «назад» — popBackStack на запись выбора
+                        // группы (group="), состояние курса в ней сохранено (rememberSaveable).
+                        onChangeGroup = { navController.popBackStack() },
+                        onTeacherClick = { name -> navController.navigate(buildTeacherRoute(name)) },
+                        onRoomClick = { room, fromRoom ->
+                            navController.navigate(buildMapRoute(room, fromRoom, showRoute = false))
+                        },
+                    )
+                }
 
-            composable(ROUTE_SETTINGS) {
-                SettingsRoute(
-                    groupInfo = currentGroupInfo,
-                    onGroupChanged = { newGroup -> viewModel.setGroup(newGroup) },
-                    onRunConnectionTest = { viewModel.syncSchedule() },
-                    onBack = { navController.popBackStack() },
-                )
-            }
+                composable(ROUTE_SETTINGS) {
+                    SettingsRoute(
+                        groupInfo = currentGroupInfo,
+                        onGroupChanged = { newGroup -> viewModel.setGroup(newGroup) },
+                        onRunConnectionTest = { viewModel.syncSchedule() },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
 
-            composable(ROUTE_STUDENTS) {
-                StudentsRoute(
-                    scheduleRepository = viewModel.scheduleRepository,
-                    onBack = { navController.popBackStack() },
-                )
+                composable(ROUTE_STUDENTS) {
+                    StudentsRoute(
+                        scheduleRepository = viewModel.scheduleRepository,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
             }
         }
+
+        // V14: интерактивный туториал — затемнение с «дыркой» вокруг цели, демо-жест и
+        // ожидание повторения. Координаты цели — boundsInWindow, совпадают с этим Box.
+        TutorialOverlay()
     }
 }
 
