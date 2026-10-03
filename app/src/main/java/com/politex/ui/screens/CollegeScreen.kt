@@ -1,5 +1,6 @@
 package com.politex.ui.screens
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -1125,18 +1126,110 @@ private fun TeacherCardPageWrapper(
         .getAllLessonsForGroup(groupInfo.canonicalName)
         .collectAsState(initial = emptyList())
 
-    val insights = remember(teachers, allLessons) { TeacherInsights(teachers, allLessons) }
+    // X41: инкремент после записи в prefs → пересборка insights с новыми отметками
+    var leadsTick by remember { mutableIntStateOf(0) }
+
+    val insights =
+        remember(teachers, allLessons, leadsTick) {
+            TeacherInsights(
+                teachers,
+                allLessons,
+                // X41: ручные отметки «ведёт у вас» из prefs
+                leadsOffTs = { LeadsMarks.offTs(context, it) },
+                leadsOn = { LeadsMarks.isOn(context, it) },
+            )
+        }
 
     TeacherCardPage(
         teacher = teacher,
         roomsFromSchedule = insights.rooms(teacher.name),
         subjectsFromSchedule = insights.subjects(teacher.name),
-        isActive = insights.isActive(teacher.name),
+        isActive = insights.isLeadsNow(teacher.name),
+        autoActive = insights.isActive(teacher.name),
         lessonsWithGroup = insights.lessonCount(teacher.name),
+        onLeadsChipClick = {
+            // X41: одна точка на все три состояния чипа
+            val name = teacher.name
+            when {
+                insights.isLeadsNow(name) -> LeadsMarks.markOff(context, name, System.currentTimeMillis())
+                insights.isActive(name) -> LeadsMarks.clear(context, name)
+                else -> LeadsMarks.markOn(context, name)
+            }
+            leadsTick++
+        },
         teacherLessonDao = teacherLessonDao,
         onOpenRoom = onOpenRoom,
         onBack = onBack,
     )
+}
+
+/**
+ * X41: ручная отметка «ведёт у вас» — prefs «mpk_prefs» (тот же файл, что GradeSettings /
+ * WidgetUpdateHelper). Ключи: «leads_off_<фамилия>» = timestamp снятия (Long),
+ * «leads_on_<фамилия>» = принудительная отметка (Boolean). Нет ключей = авто-логика W28.
+ * Снятие возвращается само, когда появится урок с датой ПОЗЖЕ timestamp снятия.
+ */
+// ponytail: ключ — фамилия без инициалов; однофамильцы делят отметку. Полное ФИО в ключ, если станет мешать.
+private object LeadsMarks {
+    private const val PREFS = "mpk_prefs"
+
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    private fun key(
+        name: String,
+        prefix: String,
+    ) = "${prefix}_${TeacherInsights.surnameOf(name)}"
+
+    fun offTs(
+        ctx: Context,
+        name: String,
+    ): Long? {
+        val p = prefs(ctx)
+        val k = key(name, "leads_off")
+        return if (p.contains(k)) p.getLong(k, 0L) else null
+    }
+
+    fun isOn(
+        ctx: Context,
+        name: String,
+    ): Boolean = prefs(ctx).getBoolean(key(name, "leads_on"), false)
+
+    /** Снять отметку: принудительную «on» стираем, пишем timestamp снятия. */
+    fun markOff(
+        ctx: Context,
+        name: String,
+        ts: Long,
+    ) {
+        prefs(ctx)
+            .edit()
+            .putLong(key(name, "leads_off"), ts)
+            .remove(key(name, "leads_on"))
+            .apply()
+    }
+
+    /** Принудительно пометить «ведёт»: снятие стираем. */
+    fun markOn(
+        ctx: Context,
+        name: String,
+    ) {
+        prefs(ctx)
+            .edit()
+            .putBoolean(key(name, "leads_on"), true)
+            .remove(key(name, "leads_off"))
+            .apply()
+    }
+
+    /** Вернуть авто-логику: удалить оба ключа. */
+    fun clear(
+        ctx: Context,
+        name: String,
+    ) {
+        prefs(ctx)
+            .edit()
+            .remove(key(name, "leads_off"))
+            .remove(key(name, "leads_on"))
+            .apply()
+    }
 }
 
 @Composable
@@ -1145,7 +1238,9 @@ private fun TeacherCardPage(
     roomsFromSchedule: List<String>,
     subjectsFromSchedule: List<String>,
     isActive: Boolean,
+    autoActive: Boolean = false,
     lessonsWithGroup: Int,
+    onLeadsChipClick: () -> Unit = {},
     teacherLessonDao: com.politex.data.local.dao.TeacherLessonDao? = null,
     onOpenRoom: (String) -> Unit = {},
     onBack: () -> Unit,
@@ -1187,17 +1282,12 @@ private fun TeacherCardPage(
                         maxLines = 2,
                     )
                 }
-                if (isActive) {
-                    Text(
-                        text = "ВЕДЁТ У ВАШЕЙ ГРУППЫ",
-                        style =
-                        androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 9.sp,
-                            color = ColorActiveBlue,
-                        ),
-                    )
-                }
+                // X41: переключаемый шильдик «Ведёт у вас» (тап = снять/вернуть/пометить)
+                LeadsChip(
+                    leadsNow = isActive,
+                    autoActive = autoActive,
+                    onClick = onLeadsChipClick,
+                )
             }
         }
 
@@ -1267,6 +1357,53 @@ private fun TeacherCardPage(
                     onOpenRoom,
                 )
             1 -> TeacherScheduleTab(teacher, teacherLessonDao, onOpenRoom)
+        }
+    }
+}
+
+/**
+ * X41: чип ручной отметки «ведёт у вас» в шапке карточки преподавателя.
+ * Синий «ВЕДЁТ У ВАС» (показан) → тап снимает; серый «ОТМЕТКА СНЯТА» (авто-факт
+ * активен, но снят) → тап возвращает авто-логику; серый «НЕ ВЕДЁТ У ВАС» → тап
+ * принудительно помечает.
+ */
+@Composable
+private fun LeadsChip(
+    leadsNow: Boolean,
+    autoActive: Boolean,
+    onClick: () -> Unit,
+) {
+    val text =
+        when {
+            leadsNow -> "ВЕДЁТ У ВАС"
+            autoActive -> "ОТМЕТКА СНЯТА"
+            else -> "НЕ ВЕДЁТ У ВАС"
+        }
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = if (leadsNow) ColorActiveBlue else ColorSurfaceVariantLight,
+        border = BorderStroke(1.dp, if (leadsNow) ColorActiveBlue else ColorBorderLight),
+        modifier =
+        Modifier
+            // P2: хитбокс кликабельного элемента не меньше 44dp
+            .heightIn(min = 44.dp)
+            .bouncyClickable(scaleDown = 0.97f, onClick = onClick)
+            .testTag("teacher_leads_chip"),
+    ) {
+        Box(
+            contentAlignment = Alignment.CenterStart,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        ) {
+            Text(
+                text = text,
+                softWrap = false,
+                style =
+                androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 9.sp,
+                    color = if (leadsNow) Color.White else ColorTextMuted,
+                ),
+            )
         }
     }
 }
@@ -1454,6 +1591,18 @@ private fun AboutTeacherTab(
     }
 }
 
+/**
+ * X42: чистая функция выбора дня вкладки «Расписание» преподавателя: дата из календаря
+ * побеждает «сегодня/завтра» (dayOffset). Вынесена из remember, чтобы выбор дня можно
+ * было проверить юнит-тестом (TeacherScheduleDayPickTest).
+ */
+internal fun teacherTargetCalendar(
+    dayOffset: Int,
+    customDate: Calendar?,
+    base: Calendar = Calendar.getInstance(),
+): Calendar =
+    customDate ?: (base.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, dayOffset) }
+
 @Composable
 private fun TeacherScheduleTab(
     teacher: Teacher,
@@ -1483,13 +1632,7 @@ private fun TeacherScheduleTab(
 
     val targetCalendar =
         remember(dayOffset, customDate) {
-            customDate ?: (
-                java.util.Calendar
-                    .getInstance()
-                    .clone() as Calendar
-                ).apply {
-                add(Calendar.DAY_OF_YEAR, dayOffset)
-            }
+            teacherTargetCalendar(dayOffset, customDate)
         }
 
     val surname =
