@@ -53,6 +53,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.politex.data.model.GroupInfo
 import com.politex.ui.components.MainTopBar
+import com.politex.ui.components.UndoSnackbar
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorDividerLight
@@ -254,7 +255,13 @@ fun MainScreen(
                 }
             }
         },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        snackbarHost = {
+            // V13: фирменный undo-снекбар с полосой-таймером 5 с. Показ идёт с Indefinite
+            // (в SnackbarDuration нет «5 с») — по исчерпании полосы гасим хост сами.
+            SnackbarHost(hostState = snackbarHostState) { data ->
+                UndoSnackbar(data, onExpire = { snackbarHostState.currentSnackbarData?.dismiss() })
+            }
+        },
     ) { innerPadding ->
         NavHost(
             navController = navController,

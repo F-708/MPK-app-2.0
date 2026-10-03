@@ -1,7 +1,16 @@
 package com.politex.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,8 +55,10 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,13 +68,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
@@ -73,6 +91,7 @@ import com.politex.data.local.entity.TaskReminderEntity
 import com.politex.data.model.GroupInfo
 import com.politex.data.model.TaskType
 import com.politex.data.repository.TaskRepository
+import com.politex.ui.screens.materials.BrandActionButton
 import com.politex.ui.theme.ColorBadgeCourse
 import com.politex.ui.theme.ColorBadgeDiploma
 import com.politex.ui.theme.ColorBadgeExam
@@ -83,6 +102,7 @@ import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorBrandFill
+import com.politex.ui.theme.ColorDangerFill
 import com.politex.ui.theme.ColorDividerLight
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorSurfaceVariantLight
@@ -90,6 +110,7 @@ import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.MpkCurriculum
 import kotlinx.coroutines.launch
@@ -114,6 +135,8 @@ fun TasksScreen(
     val reminderDao = remember { MpkDatabase.getInstance(context).taskReminderDao() }
     var editingTask by remember { mutableStateOf<StudentTaskEntity?>(null) }
     var editingReminders by remember { mutableStateOf<List<Long>>(emptyList()) }
+    // V13 (доступность): долгий тап по карточке — диалог подтверждения удаления
+    var deleteConfirmTask by remember { mutableStateOf<StudentTaskEntity?>(null) }
 
     val allTasksFlow =
         remember(groupInfo.canonicalName) {
@@ -136,8 +159,10 @@ fun TasksScreen(
         }
 
     /**
-     * T1: удаление с undo. Удаляем сразу; снекбар 8 с («Отменить»)
-     * возвращает задание тем же id. Без soft-delete — прямой delete + re-insert.
+     * T1/V13: удаление с undo. Удаляем сразу; снекбар «ОТМЕНИТЬ» возвращает задание ТЕМ ЖЕ id
+     * (напоминания в task_reminders остаются привязаны). Окно undo — ровно 5 с: показываем с
+     * Indefinite (в SnackbarDuration нет «5 с»), UndoSnackbar в MainScreen рисует полосу-таймер
+     * и по её исчерпании сам гасит хост (onExpire → dismissSnackbar).
      * В снекбар уходит не сама сущность, а её копия — Room мог бы дергать
      * этот же объект при повторном удалении, копия исключает гонки.
      */
@@ -149,7 +174,7 @@ fun TasksScreen(
                 snackbarHostState.showSnackbar(
                     message = "Задание удалено",
                     actionLabel = "ОТМЕНИТЬ",
-                    duration = SnackbarDuration.Long,
+                    duration = SnackbarDuration.Indefinite,
                 )
             if (result == SnackbarResult.ActionPerformed) {
                 taskRepository.addTask(task.copy())
@@ -164,75 +189,55 @@ fun TasksScreen(
             .background(ColorBgMain),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // W23: заголовок «Учебное задание», группа и «активных N» убраны по замечанию
-            // заказчика — остаются только кнопка «Добавить» и фильтр категорий под ней.
+            // V12: шапка одной строкой — слева фирменная «ДОБАВИТЬ» (BrandActionButton,
+            // высота 44 = Tokens.ButtonHeight), справа скроллящийся Row wrap-content чипов
+            // (Все + типы по курсу, Tokens.ChipScreen=40) с автоскроллом к выбранному.
             Row(
                 modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.End,
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    border = BorderStroke(1.dp, ColorBrandBlue),
-                    color = ColorBrandFill,
+                BrandActionButton(
+                    icon = Icons.Default.Add,
+                    label = "ДОБАВИТЬ",
+                    testTag = "add_task_top_btn",
+                    onClick = { showAddDialog = true },
+                )
+
+                val chipScroll = rememberScrollState()
+                // Смещения чипов в координатах контента (positionInParent не зависит от
+                // скролла) — для автоскролла к выбранному фильтру.
+                val chipOffsets = remember { mutableMapOf<Int, Int>() }
+                LaunchedEffect(selectedFilter) {
+                    val index = if (selectedFilter == null) 0 else availableTypes.indexOf(selectedFilter) + 1
+                    chipOffsets[index]?.let { chipScroll.animateScrollTo(it.coerceAtLeast(0)) }
+                }
+                Row(
                     modifier =
                     Modifier
-                        // T8: хитбокс 48dp — видимый размер кнопки меньше
-                        .heightIn(min = 48.dp)
-                        .bouncyClickable { showAddDialog = true }
-                        .testTag("add_task_top_btn"),
+                        .weight(1f)
+                        .horizontalScroll(chipScroll),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Добавить",
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "ДОБАВИТЬ",
-                            softWrap = false,
-                            maxLines = 1,
-                            style =
-                            androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                color = Color.White,
-                            ),
+                    TaskFilterChip(
+                        label = "Все",
+                        isSelected = selectedFilter == null,
+                        index = 0,
+                        offsets = chipOffsets,
+                        onClick = { selectedFilter = null },
+                    )
+                    availableTypes.forEachIndexed { i, type ->
+                        TaskFilterChip(
+                            label = type.shortFilterLabel(),
+                            isSelected = selectedFilter == type,
+                            index = i + 1,
+                            offsets = chipOffsets,
+                            onClick = { selectedFilter = type },
                         )
                     }
-                }
-            }
-
-            // W23: фильтр категорий — фиксированный Row сегментов (Все + доступные типы),
-            // каждый weight(1f): НЕ скроллится и не требует листания (LazyRow убран).
-            Row(
-                modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                TaskFilterSegment(
-                    label = "Все",
-                    isSelected = selectedFilter == null,
-                    modifier = Modifier.weight(1f),
-                    onClick = { selectedFilter = null },
-                )
-                availableTypes.forEach { type ->
-                    TaskFilterSegment(
-                        label = type.shortFilterLabel(),
-                        isSelected = selectedFilter == type,
-                        modifier = Modifier.weight(1f),
-                        onClick = { selectedFilter = type },
-                    )
                 }
             }
 
@@ -295,7 +300,8 @@ fun TasksScreen(
                                 contentColor = Color.White,
                                 modifier =
                                 Modifier
-                                    .heightIn(min = 48.dp)
+                                    // V15: высота кнопки — токен 44
+                                    .heightIn(min = Tokens.ButtonHeight)
                                     .bouncyClickable { selectedFilter = null }
                                     .testTag("reset_filter_btn"),
                             ) {
@@ -311,7 +317,8 @@ fun TasksScreen(
                                         style =
                                         androidx.compose.ui.text.TextStyle(
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
+                                            // V15: CAPS-текст кнопок — токен 12sp
+                                            fontSize = Tokens.ButtonText,
                                             color = Color.White,
                                         ),
                                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -342,22 +349,25 @@ fun TasksScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(filteredTasks, key = { it.id }) { task ->
-                        TaskItemCard(
-                            task = task,
-                            onToggleCompleted = {
-                                coroutineScope.launch {
-                                    taskRepository.toggleTaskCompleted(task.id, !task.isCompleted)
-                                }
-                            },
-                            // H1: тап по карточке — редактирование (не «выполнено»)
-                            onEdit = {
-                                coroutineScope.launch {
-                                    editingReminders = reminderDao.getForTask(task.id).map { it.triggerAtMillis }
-                                    editingTask = task
-                                }
-                            },
-                            onDelete = { deleteWithUndo(task) },
-                        )
+                        // V13: удаление свайпом влево (кнопка ✕ из карточки убрана)
+                        SwipeToDeleteBox(onDelete = { deleteWithUndo(task) }) {
+                            TaskItemCard(
+                                task = task,
+                                onToggleCompleted = {
+                                    coroutineScope.launch {
+                                        taskRepository.toggleTaskCompleted(task.id, !task.isCompleted)
+                                    }
+                                },
+                                // H1: тап по карточке — редактирование (не «выполнено»)
+                                onEdit = {
+                                    coroutineScope.launch {
+                                        editingReminders = reminderDao.getForTask(task.id).map { it.triggerAtMillis }
+                                        editingTask = task
+                                    }
+                                },
+                                onLongPressDelete = { deleteConfirmTask = task },
+                            )
+                        }
                     }
                 }
             }
@@ -406,14 +416,84 @@ fun TasksScreen(
             },
         )
     }
+
+    // V13 (доступность): свайп недоступен без жеста — долгий тап даёт тот же путь
+    // удаления через подтверждающий диалог, дальше работает deleteWithUndo.
+    deleteConfirmTask?.let { task ->
+        AlertDialog(
+            onDismissRequest = { deleteConfirmTask = null },
+            shape = RoundedCornerShape(2.dp),
+            containerColor = ColorBgMain,
+            title = {
+                Text(
+                    text = "Удалить задание?",
+                    style =
+                    androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = ColorTextTitle,
+                    ),
+                )
+            },
+            confirmButton = {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorDangerFill,
+                    modifier =
+                    Modifier
+                        .testTag("delete_confirm_btn")
+                        .bouncyClickable {
+                            deleteConfirmTask = null
+                            deleteWithUndo(task)
+                        },
+                ) {
+                    Text(
+                        text = "УДАЛИТЬ",
+                        softWrap = false,
+                        maxLines = 1,
+                        style =
+                        androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = Tokens.ButtonText,
+                            color = Color.White,
+                        ),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    )
+                }
+            },
+            dismissButton = {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    color = Color.Transparent,
+                    modifier = Modifier.bouncyClickable { deleteConfirmTask = null },
+                ) {
+                    Text(
+                        text = "ОТМЕНА",
+                        softWrap = false,
+                        maxLines = 1,
+                        style =
+                        androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = Tokens.ButtonText,
+                            color = ColorTextBody,
+                        ),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    )
+                }
+            },
+        )
+    }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun TaskItemCard(
     task: StudentTaskEntity,
     onToggleCompleted: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
+    // V13: долгий тап — подтверждение удаления (доступность вместо свайпа)
+    onLongPressDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val badgeColor =
@@ -434,8 +514,14 @@ fun TaskItemCard(
         modifier =
         modifier
             .fillMaxWidth()
-            // H1: тап по карточке открывает редактирование; «выполнено» — только на чекбоксе слева
-            .bouncyClickable(onClick = onEdit)
+            // H1: тап по карточке открывает редактирование; «выполнено» — только на чекбоксе слева.
+            // V13: combinedClickable разводит тап и долгий тап (bouncyClickable longClick не умеет).
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onEdit,
+                onLongClick = onLongPressDelete,
+            )
             .testTag("task_item_${task.id}"),
     ) {
         Row(
@@ -449,8 +535,8 @@ fun TaskItemCard(
                 onClick = onToggleCompleted,
                 modifier =
                 Modifier
-                    // T2: чекбокс — самое частое действие; зона 48dp, иконка та же
-                    .size(48.dp)
+                    // T2/V15: чекбокс — самое частое действие; хитбокс = Tokens.IconHit (44)
+                    .size(Tokens.IconHit)
                     .bouncyClickable(onClick = onToggleCompleted),
             ) {
                 Icon(
@@ -463,20 +549,9 @@ fun TaskItemCard(
             Spacer(modifier = Modifier.width(6.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                // W24: бейдж ДЗ/курсовая вытеснял название предмета — заменён на цветную
-                // точку 8dp слева + тонкую подполосу цвета категории. Полный тип задания
-                // виден при тапе на карточку (диалог редактирования, блок «Категория»).
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Box(
-                        modifier =
-                        Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(badgeColor),
-                    )
+                // V16: строка 1 — предмет (вес на всю ширину) + справа бейдж типа задания.
+                // Цветная точка 8dp и подполоса 2dp из W24 удалены.
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     if (task.subjectName.isNotBlank()) {
                         Text(
                             text = task.shortSubjectName,
@@ -486,7 +561,6 @@ fun TaskItemCard(
                                 fontSize = 12.sp,
                                 color = ColorBrandBlue,
                             ),
-                            // W24: предмету отдан весь остаток строки, 2 строки
                             modifier = Modifier.weight(1f),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
@@ -494,16 +568,26 @@ fun TaskItemCard(
                     } else {
                         Spacer(modifier = Modifier.weight(1f))
                     }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = badgeColor.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, badgeColor),
+                    ) {
+                        Text(
+                            text = task.taskTypeEnum.badge,
+                            softWrap = false,
+                            maxLines = 1,
+                            style =
+                            androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                color = badgeColor,
+                            ),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
                 }
-                // W24: подполоса — компактный цветовой маркер категории под предметом
-                Box(
-                    modifier =
-                    Modifier
-                        .padding(top = 2.dp)
-                        .width(32.dp)
-                        .height(2.dp)
-                        .background(badgeColor.copy(alpha = 0.6f)),
-                )
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -555,22 +639,7 @@ fun TaskItemCard(
                     }
                 }
             }
-
-            IconButton(
-                onClick = onDelete,
-                modifier =
-                Modifier
-                    // T1: 48dp-хитбокс на разрушительном действии (иконка 16dp та же)
-                    .size(48.dp)
-                    .bouncyClickable(onClick = onDelete),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Удалить",
-                    tint = ColorTextMuted.copy(alpha = 0.7f),
-                    modifier = Modifier.size(16.dp),
-                )
-            }
+            // V13: кнопка ✕ Delete удалена — только свайп влево / долгий тап + подтверждение
         }
     }
 }
@@ -586,12 +655,17 @@ private fun TaskType.shortFilterLabel(): String =
         TaskType.DIPLOMA -> "Дипл"
     }
 
-/** W23: сегмент фильтра категорий — фиксированной ширины (weight(1f) снаружи), без скролла. */
+/**
+ * V12: чип фильтра категорий — wrap-content, высота Tokens.ChipScreen (40),
+ * selected = ColorTopBar + белый Bold. Пишет своё смещение в [offsets] (координаты
+ * скроллящегося родителя) — по ним шапка автоскроллит к выбранному чипу.
+ */
 @Composable
-private fun TaskFilterSegment(
+private fun TaskFilterChip(
     label: String,
     isSelected: Boolean,
-    modifier: Modifier = Modifier,
+    index: Int,
+    offsets: MutableMap<Int, Int>,
     onClick: () -> Unit,
 ) {
     Surface(
@@ -599,14 +673,14 @@ private fun TaskFilterSegment(
         border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
         color = if (isSelected) ColorTopBar else ColorBgMain,
         modifier =
-        modifier
-            // T7: хитбокс чипа 44dp
-            .heightIn(min = 44.dp)
+        Modifier
+            .height(Tokens.ChipScreen)
+            .onGloballyPositioned { offsets[index] = it.positionInParent().x.toInt() }
             .bouncyClickable(onClick = onClick),
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
         ) {
             Text(
                 text = label,
@@ -616,10 +690,121 @@ private fun TaskFilterSegment(
                 style =
                 androidx.compose.ui.text.TextStyle(
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                    fontSize = 10.sp,
+                    fontSize = Tokens.ChipText,
                     color = if (isSelected) Color.White else ColorTextBody,
                 ),
             )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V13: swipe-to-delete — контейнер карточки + чистая функция порогов (юнит-тест)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Флинг: кадровое смещение больше этого (в сторону удаления) считается броском. */
+private val SwipeFlingThreshold = 24.dp
+
+/** Возврат карточки после свайпа ниже порога — пружина по спеке V13. */
+private val SwipeReturnSpring: FiniteAnimationSpec<Float> =
+    spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow)
+
+/**
+ * V13: удалять ли при отпускании. Чистая функция для юнит-тестов.
+ * Условия: утянули влево дальше половины ширины (|offsetX| > 0.5·width)
+ * ИЛИ флинг влево (кадровый Δx ≤ -порог). offsetX ∈ [-width, 0];
+ * флинг вправо — это жест возврата, удалять он не должен.
+ */
+internal fun shouldDelete(
+    offsetX: Float,
+    widthPx: Float,
+    lastFrameDeltaPx: Float,
+    flingThresholdPx: Float,
+): Boolean =
+    widthPx > 0f &&
+        (-offsetX > widthPx * 0.5f || lastFrameDeltaPx <= -flingThresholdPx)
+
+/**
+ * V13: свайп-контейнер задания. Тянем строго влево (x ∈ [-width, 0]); под карточкой —
+ * красный слой ColorDangerFill с иконкой удаления. При превышении порога ([shouldDelete])
+ * две фазы: выезд до -width (150 мс), затем схлопывание высоты measured→0 и alpha→0
+ * (200 мс), после чего вызывается [onDelete] (deleteWithUndo). Ниже порога — возврат
+ * пружиной [SwipeReturnSpring].
+ */
+@Composable
+private fun SwipeToDeleteBox(
+    onDelete: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val offsetX = remember { Animatable(0f) }
+    // фаза 2: доля высоты/непрозрачности, 1 → 0 за 200 мс
+    val collapse = remember { Animatable(1f) }
+    var widthPx by remember { mutableFloatStateOf(0f) }
+    var heightPx by remember { mutableIntStateOf(0) }
+    var startHeight by remember { mutableStateOf(Dp.Unspecified) }
+    var deleting by remember { mutableStateOf(false) }
+    var lastDragDelta by remember { mutableFloatStateOf(0f) }
+
+    Box(
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .then(if (deleting) Modifier.height(startHeight * collapse.value) else Modifier)
+            .graphicsLayer { alpha = collapse.value }
+            .onSizeChanged {
+                if (!deleting) {
+                    widthPx = it.width.toFloat()
+                    heightPx = it.height
+                }
+            }
+            .pointerInput(deleting) {
+                if (deleting) return@pointerInput
+                val flingThresholdPx = with(density) { SwipeFlingThreshold.toPx() }
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (shouldDelete(offsetX.value, widthPx, lastDragDelta, flingThresholdPx)) {
+                            deleting = true
+                            startHeight = with(density) { heightPx.toDp() }
+                            scope.launch {
+                                offsetX.animateTo(-widthPx, tween(durationMillis = 150))
+                                collapse.animateTo(0f, tween(durationMillis = 200))
+                                onDelete()
+                            }
+                        } else {
+                            scope.launch { offsetX.animateTo(0f, SwipeReturnSpring) }
+                        }
+                    },
+                    onDragCancel = {
+                        scope.launch { offsetX.animateTo(0f, SwipeReturnSpring) }
+                    },
+                ) { change, dragAmount ->
+                    change.consume()
+                    lastDragDelta = dragAmount
+                    scope.launch { offsetX.snapTo((offsetX.value + dragAmount).coerceIn(-widthPx, 0f)) }
+                }
+            },
+    ) {
+        Box(
+            modifier =
+            Modifier
+                .matchParentSize()
+                .background(ColorDangerFill),
+            contentAlignment = Alignment.CenterEnd,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Удалить",
+                tint = Color.White,
+                modifier =
+                Modifier
+                    .padding(end = 20.dp)
+                    .size(20.dp),
+            )
+        }
+        Box(modifier = Modifier.graphicsLayer { translationX = offsetX.value }) {
+            content()
         }
     }
 }
@@ -692,8 +877,8 @@ fun TaskEditDialog(
                 )
                 IconButton(
                     onClick = onDismissRequest,
-                    // D4: хитбокс крестика 48dp
-                    modifier = Modifier.size(48.dp),
+                    // D4/V15: хитбокс крестика — Tokens.IconHit (44)
+                    modifier = Modifier.size(Tokens.IconHit),
                 ) {
                     Icon(imageVector = Icons.Default.Close, contentDescription = "Закрыть", tint = ColorTextMuted)
                 }
