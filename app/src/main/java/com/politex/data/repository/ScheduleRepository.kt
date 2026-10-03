@@ -479,7 +479,13 @@ class ScheduleRepository(
             // V6a: «документ найден» — только если байты реально doc/docx. HTML-страница
             // (event-страница, soft-404) с кодом 200 документом не считается — иначе она
             // глушила бы фолбэк-водопад и F5-диагностику.
-            if (looksLikeDocument(bytes)) documentFound(true)
+            if (looksLikeDocument(bytes)) {
+                // X1: документ ДРУГОЙ даты (водопад/event-iframe отдаёт свежий документ
+                // любой дате) НЕ принимается как «найденный для этой даты» — продолжаем
+                // водопад. Исчерпан → documentFound останется false → «ещё не опубликовано».
+                if (!MpkScheduleParser.documentMatchesDate(bytes, date)) return@forEachDocumentUrl false
+                documentFound(true)
+            }
             val parsed = MpkScheduleParser.parseFileAllGroups(bytes, date, candidateGroups)
             if (parsed.isNotEmpty()) {
                 found = parsed

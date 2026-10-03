@@ -478,6 +478,18 @@ fun ScheduleScreen(
                         } ?: dateStr,
                 )
             },
+            // X4: кабинет → карта БЕЗ маршрута (from=null → buildMapRoute(room, null,
+            // showRoute=false) → «map?room=X», routeActive=false); преподаватель → его
+            // карточка. Диалог закрываем до навигации, чтобы не висел поверх нового экрана.
+            onOpenRoom = { room ->
+                showArchiveDialog = false
+                onRoomClick(room, null)
+            },
+            onOpenTeacher = { name ->
+                showArchiveDialog = false
+                onTeacherClick(name)
+            },
+            isTeacherKnown = isTeacherKnown,
         )
     }
 

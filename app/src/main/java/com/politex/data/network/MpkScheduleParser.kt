@@ -395,6 +395,29 @@ object MpkScheduleParser {
         }
     }
 
+    /**
+     * X1: относится ли документ к ЗАПРОШЕННОЙ дате [dateDot] («dd.MM.yyyy»)?
+     * Дата заголовка («РАСПИСАНИЕ на DD.MM.YYYY …») сравнивается с запрошенной:
+     *  - дата заголовка найдена и НЕ равна запрошенной → false (чужой документ — НЕ
+     *    принимается как «найденный для этой даты»);
+     *  - равна → true;
+     *  - даты в заголовке нет (или байты не документ/HTML) → true — не опровергли,
+     *    парсер сам отвергнет HTML, а [applyHeaderDate] откатится к запрошенной дате.
+     *
+     * Root cause бага «Найдено, скачиваю» для даты без документа: водопад/event-iframe
+     * отдаёт СВЕЖИЙ документ любой дате, поэтому дату документа сверяем с запрошенной
+     * на этапе ПРИНЯТИЯ (в [com.politex.data.repository.ScheduleRepository] и
+     * [MpkNetworkClient.fetchScheduleForGroup]).
+     */
+    fun documentMatchesDate(bytes: ByteArray, dateDot: String): Boolean {
+        val headerDate = extractHeaderDate(extractHeaderText(bytes)) ?: return true
+        val doc = parseDotDate(headerDate) ?: return true
+        val req = parseDotDate(dateDot) ?: return true
+        return doc.get(java.util.Calendar.YEAR) == req.get(java.util.Calendar.YEAR) &&
+            doc.get(java.util.Calendar.MONTH) == req.get(java.util.Calendar.MONTH) &&
+            doc.get(java.util.Calendar.DAY_OF_MONTH) == req.get(java.util.Calendar.DAY_OF_MONTH)
+    }
+
     fun parseDocBinary(
         bytes: ByteArray,
         targetGroup: String,

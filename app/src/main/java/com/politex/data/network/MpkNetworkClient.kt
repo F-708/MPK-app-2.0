@@ -60,6 +60,18 @@ internal fun probeUrlOutcome(
     else -> UrlProbe(found = false, code = if (rangeGetCode > 0) rangeGetCode else headCode)
 }
 
+/**
+ * X1: содержит ли прямой URL документа ЗАПРОШЕННУЮ дату в имени файла?
+ * Имя файла — «dd.MM.yyyy-raspisanie-…» или «dd_MM_yyyy-…». probe честен: [ProbeResult.Found]
+ * только по прямым URL, чья дата совпала с запрошенной (event/portal-ветки probe не
+ * использует — они отдают свежий документ любой дате, это и был false-positive «найдено»).
+ */
+internal fun directUrlHasRequestedDate(url: String, dateDot: String): Boolean {
+    if (!Regex("""\d{2}\.\d{2}\.\d{4}""").matches(dateDot)) return false
+    val underscore = "${dateDot.substring(0, 2)}_${dateDot.substring(3, 5)}_${dateDot.substring(6, 10)}"
+    return url.contains(dateDot) || url.contains(underscore)
+}
+
 class MpkNetworkClient {
 
     companion object {
@@ -292,6 +304,10 @@ class MpkNetworkClient {
                     val docBytes = downloadFileBytes(url)
                     if (docBytes == null || docBytes.isEmpty()) {
                         false
+                    } else if (!MpkScheduleParser.documentMatchesDate(docBytes, dateDotStr)) {
+                        // X1: документ другой даты (водопад отдаёт свежий документ любой
+                        // дате) не принимаем — продолжаем водопад за документом нужной даты.
+                        false
                     } else {
                         totalBytesReceived += docBytes.size
                         lastHttpCode = 200
@@ -491,7 +507,12 @@ class MpkNetworkClient {
         calendar: Calendar,
         nameBase: String = "raspisanie-uchashhihsya",
     ): ProbeResult = withContext(Dispatchers.IO) {
-        val candidates = generateCandidateDirectUrls(calendar, nameBase).map { it.first }
+        val dateDot = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(calendar.time)
+        // X1: probe идёт ТОЛЬКО по прямым URL, чьё имя содержит запрошенную дату —
+        // Found не может родиться из адреса, указывающего на документ другой даты.
+        val candidates = generateCandidateDirectUrls(calendar, nameBase)
+            .map { it.first }
+            .filter { directUrlHasRequestedDate(it, dateDot) }
         var lastCode = 0
         for (url in candidates) {
             val (head, headType) = safeHeadInfo { executeHead(url) }

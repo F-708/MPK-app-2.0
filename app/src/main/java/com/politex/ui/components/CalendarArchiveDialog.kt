@@ -92,6 +92,12 @@ fun CalendarArchiveDialog(
     scheduleRepository: ScheduleRepository,
     onDismiss: () -> Unit,
     onDateSelected: ((dayOfWeek: Int, dateString: String) -> Unit)? = null,
+    // X4: кабинет/преподаватель в архив-режиме кликабельны — те же колбэки, что и у
+    // основного списка. Маршрут из календаря НЕ строится (вызывающая сторона передаёт
+    // from=null, showRoute=false — см. ScheduleScreen).
+    onOpenRoom: (String) -> Unit = {},
+    onOpenTeacher: (String) -> Unit = {},
+    isTeacherKnown: (String) -> Boolean = { false },
     modifier: Modifier = Modifier,
 ) {
     // SUI-01: «сегодня» с ключом дня — иначе открытый ночью диалог подсвечивал вчерашнюю дату
@@ -337,7 +343,12 @@ fun CalendarArchiveDialog(
                         ) {
                             items(searchResults, key = { it.id }) { lesson ->
 
-                                LessonCard(lesson = lesson, isTeacherKnown = { false })
+                                LessonCard(
+                                    lesson = lesson,
+                                    isTeacherKnown = isTeacherKnown,
+                                    onTeacherClick = onOpenTeacher,
+                                    onRoomClick = onOpenRoom,
+                                )
                             }
                         }
                     }
@@ -551,7 +562,7 @@ fun CalendarArchiveDialog(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "ПАРЫ НА $selectedDateString (${selectedDateLessons.size})",
+                                text = "УРОКИ НА $selectedDateString (${selectedDateLessons.size})",
                                 style =
                                 androidx.compose.ui.text.TextStyle(
                                     fontWeight = FontWeight.Bold,
@@ -599,7 +610,12 @@ fun CalendarArchiveDialog(
                             ) {
                                 items(selectedDateLessons, key = { it.id }) { lesson ->
 
-                                    LessonCard(lesson = lesson, isTeacherKnown = { false })
+                                    LessonCard(
+                                        lesson = lesson,
+                                        isTeacherKnown = isTeacherKnown,
+                                        onTeacherClick = onOpenTeacher,
+                                        onRoomClick = onOpenRoom,
+                                    )
                                 }
                             }
                         }

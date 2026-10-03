@@ -51,6 +51,16 @@ class NavRouteTest {
     }
 
     @Test
+    fun `X4 карта из календаря-архива — кабинет без маршрута (from=null, route=false)`() {
+        // Архив-ветка ScheduleScreen: onRoomClick(room, null) → buildMapRoute(room, null, false).
+        // Колледж-карта читает from=null и route=false → routeActive=false, маршрут НЕ строится.
+        val route = buildMapRoute("214", null, false)
+        assertEquals("map?room=214", route)
+        assertFalse(route.contains("from="))
+        assertFalse(route.contains("route="))
+    }
+
+    @Test
     fun `ФИО с пробелами и кириллицей — round-trip`() {
         val name = "Иванова Мария Петровна"
         val route = buildTeacherRoute(name)
