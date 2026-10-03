@@ -1,17 +1,23 @@
 package com.politex.ui.screens.materials
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
@@ -25,6 +31,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -61,6 +68,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.roundToInt
 
 /** Расширения, которые встроенный просмотрщик показывает как текст (M2). */
 private val TEXT_LIKE_EXT = setOf("txt", "md", "markdown", "csv", "log", "json", "xml")
@@ -105,6 +113,11 @@ fun MaterialDocTextViewer(
     var textValue by remember(item.id) { mutableStateOf(TextFieldValue()) }
     val undoStack = remember(item.id) { ArrayDeque<String>() }
     val redoStack = remember(item.id) { ArrayDeque<String>() }
+
+    // ── Y3: единый зум документа (как в PDF): session-only, щипок 2 пальца, двойной тап — сброс.
+    // Масштабируется колонка (width=container*docZoom), fontSize и padding — как Word: при <1
+    // текст мельче и видны поля, при >1 — крупнее + общий горизонтальный скролл.
+    val docZoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
 
     fun startEdit() {
         textValue = TextFieldValue(paragraphs?.joinToString("\n") { it.text } ?: item.textContent)
@@ -164,6 +177,25 @@ fun MaterialDocTextViewer(
 
     Column(modifier = modifier.fillMaxSize().background(ColorBgMain)) {
         MaterialViewerTopBar(title = item.title, testTag = "doc_top_bar", onBack = onBack) {
+            if (!editMode) {
+                // Y3: индикатор зума — «140%», тап = сброс к 100%
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = Color.Transparent,
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .bouncyClickable(onClick = { docZoomState.floatValue = DocZoom.DEFAULT })
+                        .testTag("doc_zoom_indicator"),
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
+                        Text(
+                            "${(docZoomState.floatValue * 100).roundToInt()}%",
+                            maxLines = 1,
+                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
+                        )
+                    }
+                }
+            }
             if (canEdit) {
                 ViewerAction(
                     icon = Icons.Default.Edit,
@@ -212,28 +244,45 @@ fun MaterialDocTextViewer(
                     )
                 }
 
-                else -> LazyColumn(
+                else -> BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxSize()
-                        .testTag("doc_paragraph_list"),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                        .docZoomGestures(docZoomState),
                 ) {
-                    items(content.size) { index ->
-                        val p = content[index]
-                        Text(
-                            // V10: токены разметки (**/*/__) и «- » → «• » рендерятся в AnnotatedString
-                            text = parseInlineMarks(p.text),
+                    val z = docZoomState.floatValue
+                    val containerW = maxWidth
+                    val pageW = containerW * z
+                    Box(
+                        modifier = Modifier
+                            .horizontalScroll(rememberScrollState())
+                            .width(maxOf(containerW, pageW)),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
+                        LazyColumn(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .then(if (p.heading) Modifier.padding(top = 10.dp) else Modifier)
-                                .testTag("doc_paragraph_$index"),
-                            style = when {
-                                p.heading -> TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle, lineHeight = 21.sp)
-                                p.bold -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle, lineHeight = 19.sp)
-                                else -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, color = ColorTextBody, lineHeight = 19.sp)
-                            },
-                        )
+                                .fillMaxHeight()
+                                .width(pageW)
+                                .testTag("doc_paragraph_list"),
+                            contentPadding = PaddingValues(horizontal = (16 * z).dp, vertical = (12 * z).dp),
+                            verticalArrangement = Arrangement.spacedBy((6 * z).dp),
+                        ) {
+                            items(content.size) { index ->
+                                val p = content[index]
+                                Text(
+                                    // V10: токены разметки (**/*/__) и «- » → «• » рендерятся в AnnotatedString
+                                    text = parseInlineMarks(p.text),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .then(if (p.heading) Modifier.padding(top = (10 * z).dp) else Modifier)
+                                        .testTag("doc_paragraph_$index"),
+                                    style = when {
+                                        p.heading -> TextStyle(fontSize = (16 * z).sp, fontWeight = FontWeight.Bold, color = ColorTextTitle, lineHeight = (21 * z).sp)
+                                        p.bold -> TextStyle(fontSize = (14 * z).sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle, lineHeight = (19 * z).sp)
+                                        else -> TextStyle(fontSize = (14 * z).sp, fontWeight = FontWeight.Normal, color = ColorTextBody, lineHeight = (19 * z).sp)
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
