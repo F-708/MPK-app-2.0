@@ -1,5 +1,6 @@
 package com.politex.ui.screens.materials
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +51,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -58,6 +62,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -71,6 +76,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
@@ -160,6 +166,8 @@ fun MaterialPdfViewer(
                 pageCount = 0,
                 bookmarkListActive = false,
                 drawActive = false,
+                keepZoomActive = false,
+                onKeepZoomToggle = {},
                 onBack = onBack,
                 onPageClick = {},
                 onBookmarks = {},
@@ -188,6 +196,34 @@ fun MaterialPdfViewer(
     var drawMode by remember { mutableStateOf(false) }
     var drawColor by remember { mutableIntStateOf(ANNOTATION_COLORS.first()) }
     var drawWidth by remember { mutableFloatStateOf(4f) }
+    // X5: ластик — режим саб-тулбара, касание удаляет целый штрих
+    var eraserActive by remember { mutableStateOf(false) }
+
+    // ── X34: «держать зум страницы» — общий зум/пан всех страниц + prefs на материал ──
+    val context = LocalContext.current
+    var keepZoom by remember(item.id) { mutableStateOf(PdfZoomStore.keep(context, item.id)) }
+    val sharedZoomState = remember(item.id) { mutableFloatStateOf(1f) }
+    val sharedPanState = remember(item.id) { mutableStateOf(Offset.Zero) }
+
+    // Тумблер переключает и СРАЗУ применяет сохранённое (вкл) / сбрасывает (выкл).
+    LaunchedEffect(item.id, keepZoom) {
+        if (keepZoom) {
+            PdfZoomStore.loadZoom(context, item.id)?.let { (z, p) ->
+                sharedZoomState.floatValue = z
+                sharedPanState.value = p
+            }
+        } else {
+            PdfZoomStore.clearZoom(context, item.id)
+            sharedZoomState.floatValue = 1f
+            sharedPanState.value = Offset.Zero
+        }
+    }
+    // Дебаунс 400мс: серия pinch-событий — одна запись prefs (как у аннотаций).
+    LaunchedEffect(keepZoom, sharedZoomState.floatValue, sharedPanState.value) {
+        if (!keepZoom) return@LaunchedEffect
+        delay(400)
+        PdfZoomStore.saveZoom(context, item.id, sharedZoomState.floatValue, sharedPanState.value)
+    }
 
     val annotations by dao.getAnnotationsFlow(item.id).collectAsState(initial = emptyList())
     // Источник истины для рендера: стартует из БД, правки копятся локально и пишутся дебаунсом.
@@ -232,6 +268,8 @@ fun MaterialPdfViewer(
         val pages = dirtyPages.toList()
         dirtyPages.clear()
         if (pages.isNotEmpty()) runBlocking(Dispatchers.IO) { persistPages(pages) }
+        // X34: зум, изменённый <400мс назад, тоже обязан пережить выход
+        if (keepZoom) PdfZoomStore.saveZoom(context, item.id, sharedZoomState.floatValue, sharedPanState.value)
         onBack()
     }
     BackHandler(enabled = dirtyPages.isNotEmpty()) { flushAndBack() }
@@ -254,12 +292,17 @@ fun MaterialPdfViewer(
             pageCount = pageCount,
             bookmarkListActive = showBookmarkList,
             drawActive = drawMode,
+            keepZoomActive = keepZoom,
+            onKeepZoomToggle = {
+                keepZoom = !keepZoom
+                PdfZoomStore.setKeep(context, item.id, keepZoom)
+            },
             onBack = flushAndBack,
             onPageClick = { showPageJump = true },
             onBookmarks = { showBookmarkList = !showBookmarkList },
             onDrawToggle = {
                 drawMode = !drawMode
-                if (drawMode) showBookmarkList = false
+                if (drawMode) showBookmarkList = false else eraserActive = false
             },
         )
 
@@ -268,6 +311,8 @@ fun MaterialPdfViewer(
             AnnotationToolbar(
                 color = drawColor,
                 widthDp = drawWidth,
+                eraserActive = eraserActive,
+                onEraserToggle = { eraserActive = !eraserActive },
                 onColor = { drawColor = it },
                 onWidth = { drawWidth = it },
                 onUndo = {
@@ -334,8 +379,16 @@ fun MaterialPdfViewer(
                         drawMode = drawMode,
                         drawColor = drawColor,
                         drawWidthDp = drawWidth,
+                        eraserActive = eraserActive,
+                        keepZoom = keepZoom,
+                        sharedZoomState = sharedZoomState,
+                        sharedPanState = sharedPanState,
                         onStrokeFinished = { stroke ->
                             pageStrokes[index] = pageStrokes[index].orEmpty() + stroke
+                            markDirty(index)
+                        },
+                        onStrokesReplaced = { list ->
+                            pageStrokes[index] = list
                             markDirty(index)
                         },
                     )
@@ -382,6 +435,50 @@ private fun kotlinx.coroutines.CoroutineScope.jumpToPage(
 }
 
 /**
+ * X34: «держать зум страницы». SharedPreferences `mpk_prefs`, ключи на материал:
+ * `pdf_keep_zoom_<itemId>` (Boolean) — флаг тумблера, `pdf_zoom_<itemId>` (Float) и
+ * `pdf_pan_<itemId>` («x,y») — сохранённый зум/пан. serializePan/parsePan — чистые
+ * функции, покрыты unit-тестом; битая строка → null (зум остаётся сохранённым, пан нулевым).
+ */
+object PdfZoomStore {
+    private const val PREFS = "mpk_prefs"
+
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    fun keep(ctx: Context, itemId: Long): Boolean = prefs(ctx).getBoolean("pdf_keep_zoom_$itemId", false)
+
+    fun setKeep(ctx: Context, itemId: Long, on: Boolean) {
+        prefs(ctx).edit().putBoolean("pdf_keep_zoom_$itemId", on).apply()
+    }
+
+    fun saveZoom(ctx: Context, itemId: Long, zoom: Float, pan: Offset) {
+        prefs(ctx).edit().putFloat("pdf_zoom_$itemId", zoom).putString("pdf_pan_$itemId", serializePan(pan)).apply()
+    }
+
+    /** null — сохранять нечего (zoom≈1); вызывающий оставляет зум страниц по умолчанию. */
+    fun loadZoom(ctx: Context, itemId: Long): Pair<Float, Offset>? {
+        val p = prefs(ctx)
+        val z = p.getFloat("pdf_zoom_$itemId", 1f)
+        if (z <= 1.01f) return null
+        return z to (parsePan(p.getString("pdf_pan_$itemId", null)) ?: Offset.Zero)
+    }
+
+    fun clearZoom(ctx: Context, itemId: Long) {
+        prefs(ctx).edit().remove("pdf_zoom_$itemId").remove("pdf_pan_$itemId").apply()
+    }
+
+    fun serializePan(p: Offset): String = "${p.x},${p.y}"
+
+    fun parsePan(s: String?): Offset? =
+        s?.split(",")?.let { parts ->
+            if (parts.size != 2) return@let null
+            val x = parts[0].trim().toFloatOrNull() ?: return@let null
+            val y = parts[1].trim().toFloatOrNull() ?: return@let null
+            Offset(x, y)
+        }
+}
+
+/**
  * W16: синяя строка чтения ВМЕСТО баннера (просмотрщик самодостаточен, баннер и нижняя
  * навигация в MainScreen скрыты). Состав: [стрелка назад 48dp] [«12/340» — тап открывает
  * диалог перехода] … [кнопка списка закладок]. statusBarsPadding оставляет место под строку
@@ -395,6 +492,8 @@ private fun PdfReaderBar(
     pageCount: Int,
     bookmarkListActive: Boolean,
     drawActive: Boolean,
+    keepZoomActive: Boolean,
+    onKeepZoomToggle: () -> Unit,
     onBack: () -> Unit,
     onPageClick: () -> Unit,
     onBookmarks: () -> Unit,
@@ -446,6 +545,14 @@ private fun PdfReaderBar(
                     }
                 }
                 Spacer(modifier = Modifier.weight(1f))
+                // X34: тумблер «держать зум страницы» — зум/пан переживают листание и выход
+                ViewerAction(
+                    icon = Icons.Default.ZoomIn,
+                    description = "Держать зум страницы",
+                    testTag = "pdf_keep_zoom",
+                    active = keepZoomActive,
+                    onClick = onKeepZoomToggle,
+                )
                 // V9: карандаш ПЕРЕД закладками — режим рисования включают чаще, чем список
                 ViewerAction(
                     icon = Icons.Default.Edit,
@@ -492,12 +599,11 @@ private fun newPageBitmapCache(): LruCache<Int, Bitmap> {
  * Одна страница: растр из кэша или рендер по мере появления. Плейсхолдер пропорций A4 —
  * иначе высота элемента скачет при дорисовке и список «прыгает» под пальцем.
  *
- * V7/V8: pinch-to-zoom 1..4× с паном и двойным тапом-сбросом. Жест страницы обрабатываем
- * ТОЛЬКО при ≥2 пальцев: одиночный палец всегда остаётся скроллом LazyColumn (прежнее
- * «залипание» handled=zoom>1.01 блокировало листание при любом зуме). События потребляем
- * лишь когда pan реально двигает страницу (canX/canY по границам) или идёт pinch — на границе
- * пана жест утекает в список и продолжает его листать; горизонталь при зуме потребляем всегда.
- * Зум-out ниже 1.05× дощёлкивает до ровно 1f и сбрасывает pan — без пылевых 1.001×.
+ * V7/V8/X33: pinch-to-zoom 1..4× с паном и двойным тапом-сбросом. При zoom==1 одиночный
+ * палец — всегда скролл LazyColumn. При zoom>1 одиночный палец СНАЧАЛА двигает pan страницы
+ * (consume), а на границе пана события НЕ потребляем — жест утекает в список и листает
+ * документ (X33: «сначала пан внутри зума, у границы — страница»). Горизонталь при зуме
+ * потребляем всегда. Зум-out ниже 1.05× дощёлкивает до ровно 1f и сбрасывает pan.
  *
  * V9: поверх растра — AnnotationLayer (внутри graphicsLayer, штрихи масштабируются со страницей).
  */
@@ -514,13 +620,28 @@ private fun PdfPageRow(
     drawMode: Boolean,
     drawColor: Int,
     drawWidthDp: Float,
+    eraserActive: Boolean,
+    keepZoom: Boolean,
+    sharedZoomState: MutableFloatState,
+    sharedPanState: MutableState<Offset>,
     onStrokeFinished: (Stroke) -> Unit,
+    onStrokesReplaced: (List<Stroke>) -> Unit,
 ) {
     var bitmap by remember(pageIndex) { mutableStateOf(cache.get(pageIndex)) }
-    var zoom by remember(pageIndex) { mutableStateOf(1f) }
-    var pan by remember(pageIndex) { mutableStateOf(Offset.Zero) }
+    // X34: keepZoom вкл → страница читает/пишет ОБЩЕЕ состояние (его же пишем в prefs),
+    // выкл → своё remember(pageIndex): прежний сброс при уходе страницы из композиции.
+    val localZoomState = remember(pageIndex) { mutableFloatStateOf(1f) }
+    val localPanState = remember(pageIndex) { mutableStateOf(Offset.Zero) }
+    val zoomState = if (keepZoom) sharedZoomState else localZoomState
+    val panState = if (keepZoom) sharedPanState else localPanState
+    var zoom by zoomState
+    var pan by panState
     var currentStroke by remember(pageIndex) { mutableStateOf<Stroke?>(null) }
     var boxSize by remember(pageIndex) { mutableStateOf(IntSize.Zero) }
+    val density = LocalDensity.current
+    // X5: жестовый closure AnnotationLayer не перезапускается на каждый штрих —
+    // ластик обязан видеть АКТУАЛЬНЫЙ список (rememberUpdatedState).
+    val latestStrokes by rememberUpdatedState(strokes)
 
     LaunchedEffect(pageIndex, renderer) {
         if (bitmap != null) return@LaunchedEffect
@@ -541,11 +662,14 @@ private fun PdfPageRow(
             .padding(horizontal = 4.dp)
             .testTag("pdf_page_$pageIndex")
             .onSizeChanged { boxSize = it }
-            .pointerInput(pageIndex) {
+            .pointerInput(pageIndex, keepZoom) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
-                    // V7/V8: одиночный палец — всегда скролл списка; жест страницы начинается со второго пальца
-                    var handled = false
+                    // X33: при zoom>1 одиночный палец СНУТРЫ панорамирует страницу; consume
+                    // снимаем только на границе пана (movedY=false) — там жест забирает
+                    // LazyColumn и листает документ. При zoom==1 одиночный палец — сразу
+                    // скролл списка (handled=false, событий не потребляем).
+                    var handled = zoom > 1.05f
                     do {
                         val event = awaitPointerEvent()
                         if (!handled && event.changes.count { it.pressed } >= 2) handled = true
@@ -576,7 +700,7 @@ private fun PdfPageRow(
                     } while (event.changes.any { it.pressed })
                 }
             }
-            .pointerInput(pageIndex) {
+            .pointerInput(pageIndex, keepZoom) {
                 // W16: двойной тап — сброс зума (жест заметнее кнопки, кнопку не дублируем)
                 detectTapGestures(
                     onDoubleTap = {
@@ -629,7 +753,25 @@ private fun PdfPageRow(
             strokeWidthDp = drawWidthDp,
             onCurrentChange = { currentStroke = it },
             onStrokeFinished = onStrokeFinished,
+            eraserActive = eraserActive,
+            transformKey = keepZoom,
+            onEraseAt = { p ->
+                // X5: hit-test в нормализованных координатах с учётом aspect бокса страницы;
+                // порог на штрих = полутолщина + допуск, dp→px→нормаль по ширине.
+                val bw = boxSize.width.toFloat()
+                val bh = boxSize.height.toFloat()
+                if (bw > 1f && bh > 1f) {
+                    val aspect = bh / bw
+                    val remaining =
+                        latestStrokes.filterNot { st ->
+                            val th = with(density) { (st.widthDp / 2f + ERASER_TOUCH_EXTRA_DP).dp.toPx() } / bw
+                            eraserHitTest(st, p, th, aspect)
+                        }
+                    if (remaining.size != latestStrokes.size) onStrokesReplaced(remaining)
+                }
+            },
             transformGestures = { panChange, zoomChange ->
+                val z = zoom
                 val newZoom = (zoom * zoomChange).coerceIn(1f, 4f)
                 val maxX = max(0f, (newZoom - 1f) * boxSize.width / 2f)
                 val maxY = max(0f, (newZoom - 1f) * boxSize.height / 2f)
@@ -638,10 +780,13 @@ private fun PdfPageRow(
                     pan = Offset.Zero
                 } else {
                     zoom = newZoom
+                    // X32: слой внутри graphicsLayer(scaleX/Y=zoom) — локальные координаты
+                    // пальца в zoom раз мельче экранных. Умножаем pan на zoom, иначе пан
+                    // «применялся», но двигал страницу в разы медленнее пальцев.
                     pan =
                         Offset(
-                            (pan.x + panChange.x).coerceIn(-maxX, maxX),
-                            (pan.y + panChange.y).coerceIn(-maxY, maxY),
+                            (pan.x + panChange.x * z).coerceIn(-maxX, maxX),
+                            (pan.y + panChange.y * z).coerceIn(-maxY, maxY),
                         )
                 }
             },

@@ -22,9 +22,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FormatColorReset
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -41,8 +47,10 @@ import androidx.compose.ui.unit.dp
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
+import com.politex.ui.theme.ColorDangerFill
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.util.bouncyClickable
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -101,6 +109,43 @@ val ANNOTATION_WIDTHS = listOf(2f, 4f, 8f)
 /** Порог добавления точки в нормализованных координатах — дрожащий палец не плодит точки. */
 private const val MIN_POINT_DIST = 0.004f
 
+/** X5: допуск ластика сверх полутолщины штриха, dp — «навёл примерно» тоже считается попаданием. */
+const val ERASER_TOUCH_EXTRA_DP = 8f
+
+/**
+ * X5: hit-test ластика — ЧИСТАЯ функция, покрыта unit-тестом (X5X34AnnotationToolsTest).
+ *
+ * Все координаты нормализованы (0..1 от габаритов бокса страницы). Бокс не квадратный,
+ * поэтому вертикаль домножается на aspect = height/width — расстояние считается в
+ * изотропном пространстве «ширин страницы». [threshold] — в тех же единицах:
+ * (widthDp/2 + ERASER_TOUCH_EXTRA_DP) в px, делённое на ширину бокса в px.
+ *
+ * Касание считается попаданием, если точка ближе [threshold] к ЛЮБОМУ сегменту полилинии
+ * штриха (штрих удаляется ЦЕЛИКОМ). Штрих из одной точки (тычок) — расстояние до точки.
+ */
+fun eraserHitTest(
+    stroke: Stroke,
+    point: Offset,
+    threshold: Float,
+    aspect: Float = 1f,
+): Boolean {
+    if (stroke.pts.isEmpty()) return false
+    fun iso(o: Offset) = Offset(o.x, o.y * aspect)
+    val p = iso(point)
+    if (stroke.pts.size == 1) return (p - iso(stroke.pts[0])).getDistance() <= threshold
+    return stroke.pts.zipWithNext { a, b -> distPointToSegment(p, iso(a), iso(b)) }.min() <= threshold
+}
+
+/** Расстояние от точки до отрезка (проекция на отрезок, иначе — до ближайшего конца). */
+private fun distPointToSegment(p: Offset, a: Offset, b: Offset): Float {
+    val ab = b - a
+    val len2 = ab.x * ab.x + ab.y * ab.y
+    if (len2 == 0f) return (p - a).getDistance()
+    val ap = p - a
+    val t = ((ap.x * ab.x + ap.y * ab.y) / len2).coerceIn(0f, 1f)
+    return (ap - ab * t).getDistance()
+}
+
 /**
  * Слой рисования. Кладётся ВНУТРИ graphicsLayer страницы (matchParentSize), поверх контента,
  * ПОД кнопками страницы (закладка/номер остаются кликабельными).
@@ -122,10 +167,17 @@ fun AnnotationLayer(
     onStrokeFinished: (Stroke) -> Unit,
     transformGestures: ((pan: Offset, zoom: Float) -> Unit)?,
     modifier: Modifier = Modifier,
+    eraserActive: Boolean = false,
+    onEraseAt: ((Offset) -> Unit)? = null,
+    /** Ключ перезапуска жеста для внешних состояний (X34: keepZoom) — иначе closure устаревает. */
+    transformKey: Any? = null,
 ) {
+    // X5: позиция ластика (нормализованная) — Canvas рисует кружок-радиус под пальцем
+    var eraserPos by remember { mutableStateOf<Offset?>(null) }
+
     val gestureModifier =
         if (drawMode) {
-            Modifier.pointerInput(drawMode, strokeColor, strokeWidthDp) {
+            Modifier.pointerInput(drawMode, eraserActive, strokeColor, strokeWidthDp, transformKey) {
                 val w = size.width.toFloat().coerceAtLeast(1f)
                 val h = size.height.toFloat().coerceAtLeast(1f)
                 awaitEachGesture {
@@ -139,7 +191,12 @@ fun AnnotationLayer(
                             onCurrentChange(Stroke(strokeColor, strokeWidthDp, pts))
                         }
                     }
-                    addPoint(down.position)
+                    fun eraseAt(pos: Offset) {
+                        val n = Offset(pos.x / w, pos.y / h)
+                        eraserPos = n
+                        onEraseAt?.invoke(n)
+                    }
+                    if (eraserActive) eraseAt(down.position) else addPoint(down.position)
                     var transformed = false
                     do {
                         val event = awaitPointerEvent()
@@ -148,6 +205,7 @@ fun AnnotationLayer(
                             if (!transformed) {
                                 transformed = true
                                 pts = emptyList()
+                                eraserPos = null
                                 onCurrentChange(null)
                             }
                             val zoomChange = event.calculateZoom()
@@ -159,14 +217,17 @@ fun AnnotationLayer(
                         } else if (!transformed) {
                             event.changes.forEach { c ->
                                 if (c.pressed) {
-                                    if (c.positionChanged()) addPoint(c.position)
+                                    if (c.positionChanged()) {
+                                        if (eraserActive) eraseAt(c.position) else addPoint(c.position)
+                                    }
                                     c.consume()
                                 }
                             }
                         }
                     } while (event.changes.any { it.pressed })
-                    if (!transformed && pts.isNotEmpty()) onStrokeFinished(Stroke(strokeColor, strokeWidthDp, pts))
+                    if (!transformed && !eraserActive && pts.isNotEmpty()) onStrokeFinished(Stroke(strokeColor, strokeWidthDp, pts))
                     onCurrentChange(null)
+                    eraserPos = null
                 }
             }
         } else {
@@ -175,6 +236,15 @@ fun AnnotationLayer(
 
     Canvas(modifier = modifier.then(gestureModifier).testTag("annotation_layer")) {
         (strokes + listOfNotNull(current)).forEach { drawStroke(it) }
+        // X5: курсор-фидбек ластика — кружок радиуса касания (полутолщина + допуск)
+        if (eraserActive) {
+            eraserPos?.let { p ->
+                val r = (strokeWidthDp / 2f + ERASER_TOUCH_EXTRA_DP).dp.toPx()
+                val center = Offset(p.x * size.width, p.y * size.height)
+                drawCircle(color = Color(0x22E53935), radius = r, center = center)
+                drawCircle(color = Color(0x99E53935), radius = r, center = center, style = DrawStroke(width = 1.5.dp.toPx()))
+            }
+        }
     }
 }
 
@@ -218,7 +288,18 @@ fun AnnotationToolbar(
     onClear: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
+    eraserActive: Boolean = false,
+    onEraserToggle: () -> Unit = {},
 ) {
+    // X5: корзина требует ДВОЙНОГО нажатия подряд: первое → «Точно?» (подсветка danger,
+    // авто-сброс через 2.5с), второе → очистка. Одиночное случайно не чистит.
+    var clearConfirm by remember { mutableStateOf(false) }
+    LaunchedEffect(clearConfirm) {
+        if (clearConfirm) {
+            delay(2_500)
+            clearConfirm = false
+        }
+    }
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
@@ -264,9 +345,28 @@ fun AnnotationToolbar(
                 horizontalArrangement = Arrangement.End,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             ) {
-                ToolbarAction(Icons.AutoMirrored.Filled.Undo, "Отменить штрих", "draw_undo_btn", onUndo)
-                ToolbarAction(Icons.Default.Delete, "Очистить страницу", "draw_clear_btn", onClear)
-                ToolbarAction(Icons.Default.Close, "Выйти из рисования", "draw_exit_btn", onExit)
+                ToolbarAction(
+                    icon = Icons.Default.FormatColorReset,
+                    description = if (eraserActive) "Ластик (включён)" else "Ластик",
+                    tag = "draw_eraser_btn",
+                    active = eraserActive,
+                    onClick = onEraserToggle,
+                )
+                ToolbarAction(Icons.AutoMirrored.Filled.Undo, "Отменить штрих", "draw_undo_btn", onClick = onUndo)
+                ToolbarAction(
+                    icon = Icons.Default.Delete,
+                    description = if (clearConfirm) "Точно? Нажмите ещё раз" else "Очистить страницу",
+                    tag = "draw_clear_btn",
+                    tint = if (clearConfirm) ColorDangerFill else ColorBrandBlue,
+                ) {
+                    if (clearConfirm) {
+                        clearConfirm = false
+                        onClear()
+                    } else {
+                        clearConfirm = true
+                    }
+                }
+                ToolbarAction(Icons.Default.Close, "Выйти из рисования", "draw_exit_btn", onClick = onExit)
             }
         }
     }
@@ -277,15 +377,17 @@ private fun ToolbarAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     tag: String,
+    tint: Color = ColorBrandBlue,
+    active: Boolean = false,
     onClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        color = Color.Transparent,
+        color = if (active) ColorBrandBlue.copy(alpha = 0.15f) else Color.Transparent,
         modifier = Modifier.size(40.dp).bouncyClickable(onClick = onClick).testTag(tag),
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(imageVector = icon, contentDescription = description, tint = ColorBrandBlue, modifier = Modifier.size(20.dp))
+            Icon(imageVector = icon, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
         }
     }
 }

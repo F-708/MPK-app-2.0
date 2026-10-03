@@ -125,6 +125,8 @@ fun MaterialImageViewer(
     var drawMode by remember { mutableStateOf(false) }
     var drawColor by remember { mutableIntStateOf(ANNOTATION_COLORS.first()) }
     var drawWidth by remember { mutableFloatStateOf(4f) }
+    // X5: ластик — касание удаляет ЦЕЛЫЙ штрих (hit-test в AnnotationOverlay)
+    var eraserActive by remember { mutableStateOf(false) }
 
     val annotations by dao.getAnnotationsFlow(item.id).collectAsState(initial = emptyList())
     val pageStrokes = remember(item.id) { mutableStateMapOf<Int, List<Stroke>>() }
@@ -181,7 +183,10 @@ fun MaterialImageViewer(
                 description = "Рисование",
                 testTag = "image_draw_btn",
                 active = drawMode,
-                onClick = { drawMode = !drawMode },
+                onClick = {
+                    drawMode = !drawMode
+                    if (!drawMode) eraserActive = false
+                },
             )
             ViewerAction(
                 icon = Icons.Default.RotateRight,
@@ -218,6 +223,8 @@ fun MaterialImageViewer(
             AnnotationToolbar(
                 color = drawColor,
                 widthDp = drawWidth,
+                eraserActive = eraserActive,
+                onEraserToggle = { eraserActive = !eraserActive },
                 onColor = { drawColor = it },
                 onWidth = { drawWidth = it },
                 onUndo = {
@@ -251,8 +258,9 @@ fun MaterialImageViewer(
                     .background(Color.Black),
                 contentAlignment = Alignment.Center,
             ) {
-                val boxW = with(LocalDensity.current) { maxWidth.toPx() }
-                val boxH = with(LocalDensity.current) { maxHeight.toPx() }
+                val density = LocalDensity.current
+                val boxW = with(density) { maxWidth.toPx() }
+                val boxH = with(density) { maxHeight.toPx() }
                 var currentStroke by remember(page) { mutableStateOf<Stroke?>(null) }
                 // M4: поворот через graphicsLayer + вписывающий масштаб.
                 //
@@ -331,7 +339,39 @@ fun MaterialImageViewer(
                             pageStrokes[page] = pageStrokes[page].orEmpty() + stroke
                             markDirty(page)
                         },
+                        eraserActive = eraserActive,
+                        transformKey = rotation,
+                        onEraseAt = { p ->
+                            // X5: hit-test в нормализованных координатах бокса страницы
+                            // (координаты жеста приходят уже в повёрнутом/нескалированном
+                            // пространстве слоя — там же, где живут штрихи).
+                            if (boxW > 1f && boxH > 1f) {
+                                val aspect = boxH / boxW
+                                val current = pageStrokes[page].orEmpty()
+                                val remaining =
+                                    current.filterNot { st ->
+                                        val th = with(density) { (st.widthDp / 2f + ERASER_TOUCH_EXTRA_DP).dp.toPx() } / boxW
+                                        eraserHitTest(st, p, th, aspect)
+                                    }
+                                if (remaining.size != current.size) {
+                                    pageStrokes[page] = remaining
+                                    markDirty(page)
+                                }
+                            }
+                        },
                         transformGestures = { panChange, zoomChange ->
+                            // X32: слой внутри graphicsLayer (rotation + scale=zoom*fit) —
+                            // локальный panChange пальца переводим в экранный сдвиг:
+                            // повернуть на rotation и умножить на суммарный масштаб.
+                            val scale = zoom * fit
+                            val rad = Math.toRadians(rotation.toDouble())
+                            val cs = kotlin.math.cos(rad).toFloat()
+                            val sn = kotlin.math.sin(rad).toFloat()
+                            val screenPan =
+                                Offset(
+                                    (panChange.x * cs - panChange.y * sn) * scale,
+                                    (panChange.x * sn + panChange.y * cs) * scale,
+                                )
                             val newZoom = (zoom * zoomChange).coerceIn(1f, 4f)
                             val maxX = max(0f, (newZoom - 1f) * boxW / 2f)
                             val maxY = max(0f, (newZoom - 1f) * boxH / 2f)
@@ -342,8 +382,8 @@ fun MaterialImageViewer(
                                 zoom = newZoom
                                 pan =
                                     Offset(
-                                        (pan.x + panChange.x).coerceIn(-maxX, maxX),
-                                        (pan.y + panChange.y).coerceIn(-maxY, maxY),
+                                        (pan.x + screenPan.x).coerceIn(-maxX, maxX),
+                                        (pan.y + screenPan.y).coerceIn(-maxY, maxY),
                                     )
                             }
                         },
