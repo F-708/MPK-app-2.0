@@ -28,7 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -331,7 +331,7 @@ private fun GradeSubjectScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("grades_back")) {
-                Icon(Icons.Default.ChevronLeft, contentDescription = "Назад", tint = ColorTextTitle)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад", tint = ColorTextTitle)
             }
             Text(
                 text = subject,
@@ -707,7 +707,7 @@ private fun GradeSubjectSettingsScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(44.dp).testTag("grades_settings_back")) {
-                Icon(Icons.Default.ChevronLeft, contentDescription = "Назад", tint = ColorTextTitle)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад", tint = ColorTextTitle)
             }
             Column(
                 modifier =
