@@ -15,6 +15,7 @@ import com.politex.data.local.dao.TeacherLessonDao
 import com.politex.data.local.entity.GradeConfigEntity
 import com.politex.data.local.entity.GradeEntryEntity
 import com.politex.data.local.entity.LessonEntity
+import com.politex.data.local.entity.MaterialAnnotationEntity
 import com.politex.data.local.entity.MaterialBookmarkEntity
 import com.politex.data.local.entity.MaterialFolderEntity
 import com.politex.data.local.entity.MaterialItemEntity
@@ -31,10 +32,11 @@ import com.politex.data.local.entity.TeacherLessonEntity
         @Suppress("DEPRECATION") MaterialFolderEntity::class,
         MaterialItemEntity::class,
         MaterialBookmarkEntity::class,
+        MaterialAnnotationEntity::class,
         GradeEntryEntity::class,
         GradeConfigEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class MpkDatabase : RoomDatabase() {
@@ -262,6 +264,38 @@ abstract class MpkDatabase : RoomDatabase() {
         @Volatile
         private var instance: MpkDatabase? = null
 
+
+        /**
+         * V7 → V8 (V9 аннотации + V10 правка текста + V18 веса/округление оценок).
+         * Новая таблица material_annotations (unique itemId+pageIndex), колонка
+         * material_items.textEdited и три колонки grade_config. DEFAULT-выражения
+         * побайтово как в @ColumnInfo сущностей, иначе Room упадёт на валидации.
+         */
+        private val migration7To8 =
+            object : Migration(7, 8) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `material_annotations` (
+                            `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            `itemId` INTEGER NOT NULL,
+                            `pageIndex` INTEGER NOT NULL,
+                            `strokesJson` TEXT NOT NULL,
+                            `updatedAt` INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS `index_material_annotations_itemId_pageIndex` " +
+                            "ON `material_annotations` (`itemId`, `pageIndex`)",
+                    )
+                    db.execSQL("ALTER TABLE `material_items` ADD COLUMN `textEdited` INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE `grade_config` ADD COLUMN `weightsJson` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `grade_config` ADD COLUMN `roundingMode` TEXT NOT NULL DEFAULT '0.1'")
+                    db.execSQL("ALTER TABLE `grade_config` ADD COLUMN `roundUp` INTEGER NOT NULL DEFAULT 0")
+                }
+            }
+
         fun getInstance(context: Context): MpkDatabase = instance ?: synchronized(this) {
             val built =
                 Room
@@ -269,7 +303,7 @@ abstract class MpkDatabase : RoomDatabase() {
                         context.applicationContext,
                         MpkDatabase::class.java,
                         DATABASE_NAME,
-                    ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7)
+                    ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8)
                     // ponytail: оставлено как страховка от будущих незапланированных схем —
                     // для объявленных версий выше путь всегда идёт через migration1To2
                     .fallbackToDestructiveMigration()

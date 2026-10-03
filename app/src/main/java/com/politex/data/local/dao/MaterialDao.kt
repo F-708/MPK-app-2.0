@@ -2,9 +2,11 @@ package com.politex.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.politex.data.local.entity.MaterialAnnotationEntity
 import com.politex.data.local.entity.MaterialBookmarkEntity
 import com.politex.data.local.entity.MaterialFolderEntity
 import com.politex.data.local.entity.MaterialItemEntity
@@ -177,13 +179,38 @@ interface MaterialDao {
     @Query("DELETE FROM material_bookmarks WHERE itemId = :itemId")
     suspend fun deleteBookmarksForItem(itemId: Long)
 
+    // ===== V9: аннотации (рисование поверх страниц) =====
+
+    @Query("SELECT * FROM material_annotations WHERE itemId = :itemId")
+    fun getAnnotationsFlow(itemId: Long): Flow<List<MaterialAnnotationEntity>>
+
+    @Query("SELECT * FROM material_annotations WHERE itemId = :itemId AND pageIndex = :pageIndex")
+    suspend fun getAnnotation(itemId: Long, pageIndex: Int): MaterialAnnotationEntity?
+
+    /** REPLACE по unique-индексу (itemId, pageIndex) — частичное сохранение страницы. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAnnotation(annotation: MaterialAnnotationEntity)
+
+    @Query("DELETE FROM material_annotations WHERE itemId = :itemId AND pageIndex = :pageIndex")
+    suspend fun deletePageAnnotations(itemId: Long, pageIndex: Int)
+
+    @Query("DELETE FROM material_annotations WHERE itemId = :itemId")
+    suspend fun deleteAnnotationsForItem(itemId: Long)
+
+    // ===== V10: правка текста материала =====
+
+    /** Правка живёт в БД (textContent) + флаг textEdited; файл на диске не трогаем. */
+    @Query("UPDATE material_items SET textContent = :text, textEdited = 1 WHERE id = :id")
+    suspend fun updateTextContent(id: Long, text: String)
+
     /**
-     * M2: удаление материала целиком — записи + его закладки одной транзакцией.
+     * M2: удаление материала целиком — записи + закладки + аннотации одной транзакцией.
      * Файл стирает вызывающий (у DAO нет Context).
      */
     @Transaction
     suspend fun deleteItemWithBookmarks(itemId: Long) {
         deleteBookmarksForItem(itemId)
+        deleteAnnotationsForItem(itemId)
         deleteItemById(itemId)
     }
 }

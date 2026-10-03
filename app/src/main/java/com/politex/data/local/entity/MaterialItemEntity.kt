@@ -66,6 +66,12 @@ data class MaterialItemEntity(
     /** W11: 1 = в Архиве (не показывается в предметах). */
     @ColumnInfo(defaultValue = "0")
     val archived: Boolean = false,
+    /**
+     * V10: текст материала правился пользователем во встроенном редакторе.
+     * 1 = просмотрщик читает `textContent` из БД, а не пересобирает с диска/DOCX.
+     */
+    @ColumnInfo(defaultValue = "0")
+    val textEdited: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
 ) {
     val kindEnum: MaterialKind
