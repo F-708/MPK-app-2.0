@@ -57,6 +57,57 @@ internal fun syncedCountForGroup(
     groupName: String,
 ): Int = finalLessons.count { it.groupName == groupName }
 
+/**
+ * Y1: различимый исход синка. Раньше `success(0)` одинаково означал и «документ не
+ * опубликован», и «документ есть, но твоей группы в нём нет» — UI показывал «Найдено,
+ * скачиваю…»/«обновлено», вводя в заблуждение. [count] — уроки ЗАПРОШЕННОЙ группы.
+ */
+sealed class SyncOutcome {
+    abstract val count: Int
+
+    /** Ни один кандидат/водопад не дал документ нужной даты (probe 404 / чужой документ). */
+    object NotFound : SyncOutcome() {
+        override val count = 0
+    }
+
+    /** Документ даты опубликован и принят (прошёл date-валидацию), но запрошенной группы в нём нет. */
+    data class FoundNoGroup(val date: String) : SyncOutcome() {
+        override val count = 0
+    }
+
+    /** Документ разобран, у запрошенной группы [count] уроков. */
+    data class Ok(override val count: Int) : SyncOutcome()
+}
+
+/**
+ * Y1: исход из сигналов (чисто, тестируемо). [groupLessons] — уроки запрошенной группы
+ * после разбора; [documentFound] — принят ли документ, ПРОШЕДШИЙ date-валидацию
+ * (`documentMatchesDate`). Рассинхрон даты / чужой документ → documentFound=false → NotFound.
+ */
+internal fun resolveSyncOutcome(
+    groupLessons: Int,
+    documentFound: Boolean,
+    targetDate: String,
+): SyncOutcome = when {
+    groupLessons > 0 -> SyncOutcome.Ok(groupLessons)
+    documentFound -> SyncOutcome.FoundNoGroup(targetDate)
+    else -> SyncOutcome.NotFound
+}
+
+/** Y1: честная строка статуса (diagnosticInfo / empty-state) по исходу. */
+internal fun statusMessageFor(outcome: SyncOutcome): String = when (outcome) {
+    is SyncOutcome.Ok -> "Расписание загружено (${outcome.count} ${lessonsWord(outcome.count)})"
+    is SyncOutcome.FoundNoGroup -> "Расписание на ${outcome.date} опубликовано, но вашей группы в нём пока нет"
+    SyncOutcome.NotFound -> "Расписание ещё не опубликовано"
+}
+
+/** Y1: честная строка тоста (AppViewModel) по исходу. */
+internal fun toastFor(outcome: SyncOutcome, group: String): String = when (outcome) {
+    is SyncOutcome.Ok -> "Расписание группы $group обновлено (${outcome.count} ${lessonsWord(outcome.count)})"
+    is SyncOutcome.FoundNoGroup -> "Расписание на ${outcome.date} опубликовано, но вашей группы ($group) в нём пока нет"
+    SyncOutcome.NotFound -> "Расписание ещё не опубликовано"
+}
+
 internal fun isStaleDate(
     date: String,
     cutoffMs: Long,
@@ -249,10 +300,26 @@ class ScheduleRepository(
         lessonDao.getDistinctGroupsForDateOrDay(dateString, dayOfWeek)
     }
 
+    /**
+     * Y1: обёртка для вызовов, которым достаточно числа уроков своей группы (StudentsScreens).
+     * Подробный различимый исход — в [syncScheduleDetailed].
+     */
     suspend fun syncScheduleFromWeb(
         groupName: String,
         force: Boolean = false,
-    ): Result<Int> = withContext(Dispatchers.IO) {
+    ): Result<Int> = syncScheduleDetailed(groupName, force)
+        .fold({ Result.success(it.count) }, { Result.failure(it) })
+
+    /**
+     * Y1: честные статусы синка. Возвращает различимый [SyncOutcome], чтобы UI/тосты не
+     * показывали «Найдено, скачиваю…»/«обновлено» там, где документа нужной даты нет или
+     * в нём нет запрошенной группы. «Найдено, скачиваю…» ставится ТОЛЬКО когда документ
+     * прошёл date-валидацию и сейчас будет разобран (колбэк documentFound ниже).
+     */
+    suspend fun syncScheduleDetailed(
+        groupName: String,
+        force: Boolean = false,
+    ): Result<SyncOutcome> = withContext(Dispatchers.IO) {
         val today = Calendar.getInstance()
         // W1/V2: «завтра» = первый кандидат (завтра → суббота → понедельник), который либо
         // уже лежит в кэше, либо документ которого probe нашёл на сайте. Не нашёл ничего —
@@ -297,12 +364,16 @@ class ScheduleRepository(
         val needTomorrow = force || tomorrowCached == 0
 
         if (!needToday && !needTomorrow) {
-            return@withContext Result.success(todayCached + tomorrowCached)
+            // Y1(d): финальный статус + isSyncing=false — иначе «Проверяю расписание…» залипает
+            networkClient.publishStatus(statusMessage = "Расписание уже загружено", isSyncing = false)
+            return@withContext Result.success(SyncOutcome.Ok(todayCached + tomorrowCached))
         }
-        when {
-            probeFoundUrl.isNotEmpty() -> networkClient.publishStatus(statusMessage = "Найдено, скачиваю…")
+        // Y1: «Найдено, скачиваю…» больше НЕ ставится по одному факту probe-Found. Его ставит
+        // колбэк documentFound в момент, когда документ ПРОШЁЛ date-валидацию и будет разобран.
+        // Здесь — только честное «ищу» (когда probe ничего не нашёл и сеть жива).
+        if (probeFoundUrl.isEmpty() && !probeNetworkError) {
             // V6a: probe ничего не нашёл — впереди полный водопад (event-страницы + портал)
-            !probeNetworkError -> networkClient.publishStatus(statusMessage = "Ищу на портале…")
+            networkClient.publishStatus(statusMessage = "Ищу на портале…")
         }
 
         val fetched = mutableListOf<LessonEntity>()
@@ -322,7 +393,16 @@ class ScheduleRepository(
             for ((calendar, _) in days) {
                 val date = formatDate(calendar)
                 // W1a: probe уже знает URL этого дня — качаем его первым
-                runCatching { fetchAllGroupsForDate(calendar, date, allGroups, probeFoundUrl[date]) { documentFound = documentFound || it } }
+                runCatching {
+                    fetchAllGroupsForDate(calendar, date, allGroups, probeFoundUrl[date]) { found ->
+                        if (found) {
+                            documentFound = true
+                            // Y1: документ прошёл documentMatchesDate и сейчас будет разобран —
+                            // только теперь честно сказать «Найдено, скачиваю…»
+                            networkClient.publishStatus(statusMessage = "Найдено, скачиваю…")
+                        }
+                    }
+                }
                     .onSuccess { dayLessons ->
                         // F1: частичный/чужой документ под тем же именем не принимаем —
                         // replaceForDate затрёт полные данные других групп
@@ -373,34 +453,26 @@ class ScheduleRepository(
         val finalLessons =
             fetched
                 .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
-        return@withContext when {
-            finalLessons.isNotEmpty() -> {
-                writeByGroup(finalLessons)
-                // Б3: заодно кэшируем расписание преподавателей тех же дней — тогда карточка
-                // преподавателя открывается офлайн, как группа и кабинет. Ошибка этой
-                // догрузки не должна портить основной результат: она вспомогательная.
-                days.forEach { (calendar, _) ->
-                    runCatching { syncTeacherScheduleForDate(calendar) }
-                }
-                pruneOldLessons()
-                // N2: возвращаем число уроков СВОЕЙ группы, а не всех разобранных из документа
-                val synced = syncedCountForGroup(finalLessons, groupName)
-                // N1: финальный статус на экран (catalog-путь сам diagnosticInfo не трогает)
-                networkClient.publishStatus(statusMessage = "Расписание загружено ($synced ${lessonsWord(synced)})", isSyncing = false)
-                Result.success(synced)
-            }
-            // Сеть отвалилась — честная ошибка (тост «проверьте интернет»).
-            // Пустая успешная загрузка («расписание ещё не опубликовано») ошибкой не
-            // считается: success(0) → тост «новых данных пока нет», как и раньше.
-            fetchFailed -> {
-                networkClient.publishStatus(statusMessage = "Не удалось получить расписание", isSyncing = false)
-                Result.failure(IOException("Не удалось получить расписание"))
-            }
-            else -> {
-                // V6a: водопад отработал, но по группе ничего не разобралось
-                networkClient.publishStatus(statusMessage = "Расписание ещё не опубликовано", isSyncing = false)
-                Result.success(0)
-            }
+
+        // Y1: пишем разбор (в т.ч. чужие группы — кэш для карты/преподавателя), если есть что
+        if (finalLessons.isNotEmpty()) {
+            writeByGroup(finalLessons)
+            // Б3: кэшируем расписание преподавателей тех же дней (ошибка догрузки не портит исход)
+            days.forEach { (calendar, _) -> runCatching { syncTeacherScheduleForDate(calendar) } }
+            pruneOldLessons()
+        }
+
+        // Y1: различимый исход по своей группе + documentFound (date-валидированный документ).
+        // documentFound важнее fetchFailed: документ нужной даты получен — это не сетевая ошибка.
+        val groupCount = syncedCountForGroup(finalLessons, groupName)
+        val outcome = resolveSyncOutcome(groupCount, documentFound, tomorrowStr)
+        return@withContext if (outcome is SyncOutcome.NotFound && fetchFailed) {
+            // Сеть отвалилась и ничего не получили — честная ошибка (тост «проверьте интернет»).
+            networkClient.publishStatus(statusMessage = "Не удалось получить расписание", isSyncing = false)
+            Result.failure(IOException("Не удалось получить расписание"))
+        } else {
+            networkClient.publishStatus(statusMessage = statusMessageFor(outcome), isSyncing = false)
+            Result.success(outcome)
         }
     }
 

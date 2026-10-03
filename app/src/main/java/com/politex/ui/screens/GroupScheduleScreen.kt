@@ -193,22 +193,17 @@ fun GroupScheduleScreen(
         syncError = null
         syncEmptyNotice = null
         scope.launch {
-            val result = scheduleRepository.syncScheduleFromWeb(group, force = force)
+            val result = scheduleRepository.syncScheduleDetailed(group, force = force)
             isSyncing = false
             result.fold(
-                onSuccess = { count ->
-                    if (count == 0) {
-                        // N1: различаем «сайт ещё не опубликовал файл» (probe NOT_FOUND) и
-                        // «файл есть, но этой группы в нём нет» — по живому статусу синка.
-                        val notPublished =
-                            scheduleRepository.diagnosticInfo.value.statusMessage
-                                .contains("не опубликовано", ignoreCase = true)
-                        syncEmptyNotice =
-                            if (notPublished) {
-                                "Расписание ещё не опубликовано на ближайшие даты"
-                            } else {
-                                "Группы $group нет в опубликованном расписании на ближайшие даты"
-                            }
+                onSuccess = { outcome ->
+                    // Y1: различимый исход вместо угадывания по строке статуса
+                    syncEmptyNotice = when (outcome) {
+                        is com.politex.data.repository.SyncOutcome.FoundNoGroup ->
+                            "Группы $group нет в опубликованном расписании на ${outcome.date}"
+                        com.politex.data.repository.SyncOutcome.NotFound ->
+                            "Расписание ещё не опубликовано на ближайшие даты"
+                        is com.politex.data.repository.SyncOutcome.Ok -> null
                     }
                 },
                 onFailure = { syncError = "Не удалось загрузить расписание: проверьте интернет" },

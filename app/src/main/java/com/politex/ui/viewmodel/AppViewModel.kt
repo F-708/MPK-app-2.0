@@ -7,7 +7,9 @@ import com.politex.data.local.MpkDatabase
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.local.entity.StudentTaskEntity
 import com.politex.data.model.GroupInfo
+import com.politex.data.repository.SyncOutcome
 import com.politex.data.repository.TaskRepository
+import com.politex.data.repository.toastFor
 import com.politex.util.GroupParser
 import com.politex.widget.WidgetUpdateHelper
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -165,18 +167,15 @@ class AppViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true, hasSyncError = false) }
 
-            val result = scheduleRepository.syncScheduleFromWeb(targetGroup, force = !isAutoSync)
+            val result = scheduleRepository.syncScheduleDetailed(targetGroup, force = !isAutoSync)
 
             result.fold(
-                onSuccess = { count ->
+                onSuccess = { outcome ->
                     _uiState.update { it.copy(isSyncing = false, hasSyncError = false) }
-                    if (count > 0) {
-                        _toastEvent.emit("Расписание группы $targetGroup обновлено ($count ${com.politex.util.lessonsWord(count)})")
-                    } else {
-                        if (!isAutoSync) {
-                            _toastEvent.emit("Расписание группы $targetGroup: новых данных на сайте пока нет")
-                        }
-                    }
+                    // Y1: честные тосты по различимому исходу. NotFound на авто-синке
+                    // (холодный старт) не показываем — как раньше; Ok и FoundNoGroup — всегда.
+                    val showToast = outcome !is SyncOutcome.NotFound || !isAutoSync
+                    if (showToast) _toastEvent.emit(toastFor(outcome, targetGroup))
                 },
                 onFailure = {
                     _uiState.update { it.copy(isSyncing = false, hasSyncError = true) }
