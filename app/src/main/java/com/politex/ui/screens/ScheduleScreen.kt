@@ -1257,7 +1257,8 @@ private fun SubgroupPane(
             }
 
             if (room.isNotBlank()) {
-                // S5: чип кабинета в подгрупповой панели — зона нажатия 44dp
+                // S5/X13: чип кабинета в подгрупповой панели — ТОТ ЖЕ визуал кнопки,
+                // что у одиночных уроков (Surface+рамка+иконка), зона нажатия 44dp
                 Box(
                     modifier =
                     Modifier
@@ -1265,15 +1266,34 @@ private fun SubgroupPane(
                         .bouncyClickable(scaleDown = 0.97f) { onRoomClick(room) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = "каб. $room",
-                        style =
-                        androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            color = ColorBrandBlue,
-                            fontSize = 11.sp,
-                        ),
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        color = ColorSurfaceHighlight,
+                        modifier = Modifier.wrapContentWidth(),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = ColorBrandBlue,
+                                modifier = Modifier.size(12.dp),
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = "каб. $room",
+                                style =
+                                androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    color = ColorBrandBlue,
+                                    fontSize = 11.sp,
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         }

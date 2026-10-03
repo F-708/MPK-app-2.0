@@ -588,17 +588,13 @@ private fun MaterialHeader(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        OutlinedTextField(
+        // X14: общий SearchBar (высота = Tokens.SearchHeight = высоте кнопки «Добавить»)
+        com.politex.ui.components.SearchBar(
             value = query,
             onValueChange = onQueryChange,
-            placeholder = { Text("Поиск материалов", fontSize = 12.sp) }, // W13: плейсхолдер без пояснений
-            singleLine = true,
-            shape = RoundedCornerShape(2.dp),
-            modifier =
-            Modifier
-                .weight(1f)
-                .heightIn(min = 44.dp)
-                .testTag("material_search_field"),
+            placeholder = "Поиск материалов",
+            testTag = "material_search_field",
+            modifier = Modifier.weight(1f),
         )
         BrandActionButton(
             icon = Icons.Default.Add,
