@@ -19,6 +19,7 @@
 
         <!-- Блок «сейчас» -->
         <LinearLayout
+            android:id="@+id/ll_now_block"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
@@ -90,12 +91,14 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/v_divider"
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="#E2E8F0" />
 
         <!-- Блок «дальше» -->
         <LinearLayout
+            android:id="@+id/ll_next_block"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
@@ -159,6 +162,18 @@
                     android:visibility="gone" />
             </LinearLayout>
         </LinearLayout>
+
+        <!-- V3: пустое состояние на весь виджет (группа не выбрана / уроков нет /
+             уроки закончились). Текст и цвет ставятся из кода, блоки и разделитель
+             при этом прячутся (gone). -->
+        <TextView
+            android:id="@+id/tv_empty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text=""
+            android:textSize="13sp"
+            android:visibility="gone" />
     </LinearLayout>
 
     </FrameLayout>

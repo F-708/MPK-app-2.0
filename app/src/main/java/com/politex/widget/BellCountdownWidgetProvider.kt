@@ -72,7 +72,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 Calendar.THURSDAY -> 4
                 Calendar.FRIDAY -> 5
                 Calendar.SATURDAY -> 6
-                else -> return null
+                else -> 7
             }
             val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
             val bells = CollegeBellSchedule.getBellsForDay(dow)
@@ -85,17 +85,19 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 null
             }
 
+            // V4: воскресенье больше не мёртвое — countdownForMinute на Вс даёт null,
+            // воскресную/субботнюю ветку («до 1 урока в пн») подхватывает tomorrow-лейбл.
             return countdownForMinute(minutes, dow, bells, mode, lastGroupLesson)
+                ?: tomorrowFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
         }
 
         /**
-         * W3: «До 1 урока завтра: N ч» — вечернее окно (после конца уроков сегодня,
-         * до полуночи) вместо пустой строки. Чистая функция, те же входные, что
-         * countdownForMinute; null → показать пусто (как раньше).
+         * W3/V4: отсчёт до первого урока ближайшего дня со звонками вместо пустой строки.
+         * Чистая функция, те же входные, что countdownForMinute; null → показать пусто.
          *
-         * Границы: сегодня Пн-Сб (в Вс строка скрыта весь день), минуты после
-         * конца последнего звонка дня. Завтрашний первый звонок берётся из
-         * звонков следующего дня недели (Вс → Пн).
+         * Границы: минуты после конца последнего звонка дня (для GROUP_LESSONS — конца
+         * последнего урока группы). Вс и сб-вечер: ближайший день со звонками — понедельник,
+         * подпись «до 1 урока в пн»; Вс считается с 07:00. Остальные вечера — «до 1 урока завтра».
          */
         fun tomorrowFirstLessonLabel(
             minutes: Int,
@@ -104,8 +106,11 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             mode: CountdownMode,
             lastGroupLesson: Int?,
         ): Triple<Long, String, Int>? {
-            if (dayOfWeek == 7 || bells.isEmpty()) return null
             if (minutes < SHOW_FROM_MINUTE) return null
+
+            // V4: воскресенье — уроков нет весь день, с 07:00 считаем до понедельника
+            if (dayOfWeek == 7) return nextBellsDayLabel(minutes, dayOfWeek)
+            if (bells.isEmpty()) return null
 
             // Тот же критерий «уроки закончились», что в countdownForMinute:
             // GROUP_LESSONS — конец последнего урока группы, ALL_BELLS — конец дня.
@@ -117,16 +122,29 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             } ?: return null
             if (minutes <= lastEnd) return null
 
-            // Завтра: следующий день недели. Вс (7) пропускаем: завтра понедельник,
-            // а «до 1 урока завтра» в субботу вечером было бы ложью — урок не завтра,
-            // а через день. Суббота вечером → null (пусто, как до Т10).
-            val tomorrowDow = if (dayOfWeek == 6) 7 else dayOfWeek + 1
-            if (tomorrowDow == 7) return null
-            val tomorrowBells = CollegeBellSchedule.getBellsForDay(tomorrowDow)
-            val first = tomorrowBells.firstOrNull { !it.isInfoHour } ?: return null
+            return nextBellsDayLabel(minutes, dayOfWeek)
+        }
 
-            val minutesToStart = (24 * 60 - minutes) + first.startMinutes
-            return Triple(minutesToStart.toLong(), "до 1 урока завтра", 0)
+        /**
+         * V4: отсчёт до первого звонка ближайшего дня со звонками. Вс пропускаем
+         * (сб-вечер → пн через 2 дня, вс → пн через день) — «до 1 урока завтра»
+         * в субботу было бы ложью. Подпись: «в пн» когда цель не завтра.
+         */
+        private fun nextBellsDayLabel(
+            minutes: Int,
+            dayOfWeek: Int,
+        ): Triple<Long, String, Int>? {
+            var daysAhead = 1
+            var dow = if (dayOfWeek == 7) 1 else dayOfWeek + 1
+            if (dow == 7) {
+                dow = 1
+                daysAhead = 2
+            }
+            val first = CollegeBellSchedule.getBellsForDay(dow).firstOrNull { !it.isInfoHour }
+                ?: return null
+            val minutesToStart = (daysAhead * 24 * 60 - minutes) + first.startMinutes
+            val label = if (daysAhead > 1 || dayOfWeek == 7) "до 1 урока в пн" else "до 1 урока завтра"
+            return Triple(minutesToStart.toLong(), label, 0)
         }
 
         /**
@@ -284,8 +302,10 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 null
             }
 
-            // Тот же расчёт, что countdownInfo, но без повторного обращения к БД
-            val info = if (dow == 7) null else countdownForMinute(minutes, dow, bells, mode, lastGroupLesson)
+            // Тот же расчёт, что countdownInfo, но без повторного обращения к БД.
+            // V4: для Вс countdownForMinute сам даёт null — воскресную ветку
+            // («до 1 урока в пн», с 07:00) подхватывает tomorrowFirstLessonLabel.
+            val info = countdownForMinute(minutes, dow, bells, mode, lastGroupLesson)
             // Секунды: значение mm:ss досчитывается от текущей секунды календаря
             // (цель минутная: 13:30:45 + 35 мин → 34:15 → «34:15»).
             val secondsOn = WidgetOptions.seconds(context, appWidgetId)
@@ -299,7 +319,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                     views.setTextViewText(R.id.tv_countdown_value, valueText(minutesLeft))
                 }
                 // W3 (Т10+): вечер после конца уроков — «до 1 урока завтра» вместо пустоты
-                dow in 1..6 -> {
+                else -> {
                     val tomorrow = tomorrowFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
                     // O6/C: ночь (00:00–07:00) — виджет виден на экране, пустая плашка
                     // читается как поломка. Показываем отсчёт до первого урока сегодня.
@@ -317,16 +337,23 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                             views.setTextViewText(R.id.tv_countdown_label, night.second)
                             views.setTextViewText(R.id.tv_countdown_value, valueText(night.first))
                         }
+                        // V4: пустая плашка читается как поломка — причина словами,
+                        // крупное значение прячем (RemoteViews каждый раз свежий,
+                        // видимость сама вернётся к дефолтной)
+                        dow in 1..6 && mode == CountdownMode.GROUP_LESSONS && lastGroupLesson == null -> {
+                            views.setTextViewText(R.id.tv_countdown_label, "Уроков нет")
+                            views.setViewVisibility(R.id.tv_countdown_value, android.view.View.GONE)
+                        }
+                        dow in 1..6 && mode == CountdownMode.ALL_BELLS && bells.isEmpty() -> {
+                            views.setTextViewText(R.id.tv_countdown_label, "Звонков сегодня нет")
+                            views.setViewVisibility(R.id.tv_countdown_value, android.view.View.GONE)
+                        }
                         else -> {
+                            // До 07:00 (в т.ч. воскресная ночь) — пусто, как раньше.
                             views.setTextViewText(R.id.tv_countdown_label, "")
                             views.setTextViewText(R.id.tv_countdown_value, "")
                         }
                     }
-                }
-                else -> {
-                    // Т10: строка скрыта до 07:00 / после конца уроков / в день без уроков.
-                    views.setTextViewText(R.id.tv_countdown_label, "")
-                    views.setTextViewText(R.id.tv_countdown_value, "")
                 }
             }
 

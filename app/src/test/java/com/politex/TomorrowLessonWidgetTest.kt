@@ -47,17 +47,19 @@ class TomorrowLessonWidgetTest {
     }
 
     @Test
-    fun saturdayEvening_tomorrowSunday_null() {
-        // Сб вечер: завтра Вс, уроков нет — «до 1 урока завтра» было бы ложью.
-        assertNull(
+    fun saturdayEvening_countsToMonday() {
+        // V4: сб вечер — ближайший день со звонками понедельник, «до 1 урока завтра»
+        // было бы ложью. Сб 20:00 → пн 08:15: 2*1440-1200+495 = 2175 мин.
+        val info =
             BellCountdownWidgetProvider.tomorrowFirstLessonLabel(
                 20 * 60,
                 6,
                 CollegeBellSchedule.getBellsForDay(6),
                 CountdownMode.GROUP_LESSONS,
                 8,
-            ),
-        )
+            )
+        assertEquals("до 1 урока в пн", info?.second)
+        assertEquals(2175L, info?.first)
     }
 
     @Test
@@ -88,10 +90,26 @@ class TomorrowLessonWidgetTest {
     }
 
     @Test
-    fun sunday_null() {
-        assertNull(
+    fun sunday_showsMondayCountdown() {
+        // V4: воскресенье с 07:00 — «до 1 урока в пн». Вс 20:00 → пн 08:15:
+        // 1440-1200+495 = 735 мин.
+        val info =
             BellCountdownWidgetProvider.tomorrowFirstLessonLabel(
                 20 * 60,
+                7,
+                standard,
+                CountdownMode.GROUP_LESSONS,
+                6,
+            )
+        assertEquals("до 1 урока в пн", info?.second)
+        assertEquals(735L, info?.first)
+    }
+
+    @Test
+    fun sunday_before07_null() {
+        assertNull(
+            BellCountdownWidgetProvider.tomorrowFirstLessonLabel(
+                6 * 60 + 59,
                 7,
                 standard,
                 CountdownMode.GROUP_LESSONS,

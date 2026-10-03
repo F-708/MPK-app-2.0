@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,8 +48,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -177,9 +180,23 @@ fun BellsScreen(
             result
         }
 
+    // V5: один рельс на уровне списка — Canvas под карточками рисует по замеренным
+    // позициям строк (индекс строки → top/height в px относительно списка).
+    val rowTops = remember { mutableStateMapOf<Int, Float>() }
+    val rowHeights = remember { mutableStateMapOf<Int, Float>() }
+    LaunchedEffect(rows) {
+        // Полный clear() ломает рельс: при смене графика одинаковые по размеру строки
+        // не перекладываются и onGloballyPositioned не вызывается повторно — чистим
+        // только индексы, которых в новом списке уже нет.
+        val stale = rowTops.keys.filter { it !in rows.indices }
+        stale.forEach {
+            rowTops.remove(it)
+            rowHeights.remove(it)
+        }
+    }
+
     // Тап по виджету «До звонка»/«Звонки»: проскроллить к текущему звонку
     // (или к последнему, если уроки уже закончились). Одноразово.
-    val density = androidx.compose.ui.platform.LocalDensity.current
     var viewportPx by remember { mutableStateOf(0) }
     // N17: кратковременная подсветка текущего звонка после входа из виджета — фидбэк глазу
     var flashCurrent by remember { mutableStateOf(false) }
@@ -199,17 +216,13 @@ fun BellsScreen(
                 ?: rows.lastOrNull { it is BellRow.Lesson }?.let { (it as BellRow.Lesson).item }
         val idx = rows.indexOfFirst { (it as? BellRow.Lesson)?.item == target }
         if (idx >= 0) {
-            with(density) {
-                // Позиция верха целевой строки: карточка урока ~56dp, перемена ~26dp + отступ 6dp
-                var posPx = 0f
-                rows.take(idx).forEach { row ->
-                    posPx += (if (row is BellRow.Lesson) 56.dp else 26.dp).toPx() + 6.dp.toPx()
-                }
-                val cardH = 56.dp.toPx()
-                // Центр карточки — в середине вьюпорта
-                val scrollTo = (posPx + cardH / 2 - viewportPx / 2).toInt()
-                scrollState.animateScrollTo(scrollTo.coerceIn(0, scrollState.maxValue))
-            }
+            // V5-бонус: позиция строки из замеров onGloballyPositioned вместо хардкода 56/26dp
+            snapshotFlow { rowTops[idx] != null && rowHeights[idx] != null }.first { it }
+            val top = rowTops[idx] ?: 0f
+            val h = rowHeights[idx] ?: 0f
+            // Центр карточки — в середине вьюпорта
+            val scrollTo = (top + h / 2 - viewportPx / 2).toInt()
+            scrollState.animateScrollTo(scrollTo.coerceIn(0, scrollState.maxValue))
             flashCurrent = true
         }
         onScrollToCurrentConsumed()
@@ -334,6 +347,23 @@ fun BellsScreen(
             NowContextCard(context = context)
         }
 
+        // V5: точка «сейчас» — только сегодня и в окне первого..последнего звонка
+        val showNowDot =
+            isTodaySelected &&
+            bells.isNotEmpty() &&
+            currentTimeMinutes in bells.first().startMinutes..bells.last().endMinutes
+        val pulseRadius by
+            if (showNowDot) {
+                rememberInfiniteTransition(label = "RailDotPulse").animateFloat(
+                    initialValue = 4.5f,
+                    targetValue = 7f,
+                    animationSpec = infiniteRepeatable(tween(durationMillis = 900), RepeatMode.Reverse),
+                    label = "RailDotPulseRadius",
+                )
+            } else {
+                remember { mutableStateOf(4.5f) }
+            }
+
         Column(
             modifier =
             Modifier
@@ -342,38 +372,125 @@ fun BellsScreen(
                 .onSizeChanged { viewportPx = it.height }
                 .verticalScroll(scrollState)
                 .padding(start = 16.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            rows.forEach { row ->
-                when (row) {
-                    is BellRow.Lesson ->
-                        LessonBellCard(
-                            item = row.item,
-                            isActive = activeSlot == row.item,
-                            highlight = flashCurrent && activeSlot == row.item,
-                            railTopColor = railColor(row.item.startMinutes, blueEndMinutes, isTodaySelected),
-                            railBottomColor = railColor(row.item.endMinutes, blueEndMinutes, isTodaySelected),
-                            inBlue = row.item.startMinutes < (blueEndMinutes ?: -1),
-                            dotProgress = dotProgressIn(row.item, currentTimeMinutes, isTodaySelected),
+            Box(modifier = Modifier.fillMaxWidth()) {
+                // V5: рельс — первый ребёнок Box, т.е. ПОД карточками; x — в end-паддинге
+                // списка (24dp), карточек не касается.
+                Canvas(modifier = Modifier.matchParentSize()) {
+                    if (rowTops.isEmpty()) return@Canvas
+                    val cx = size.width + 10.dp.toPx()
+                    val tickLen = 5.dp.toPx()
+
+                    fun rangeOf(row: BellRow): Pair<Int, Int> =
+                        when (row) {
+                            is BellRow.Lesson -> row.item.startMinutes to row.item.endMinutes
+                            is BellRow.Break -> row.startMinutes to row.endMinutes
+                        }
+
+                    // Минута → y: линейно внутри строки и линейно по 6dp-зазору между строками
+                    fun yForMinute(m: Int): Float? {
+                        for (i in rows.indices) {
+                            val top = rowTops[i] ?: continue
+                            val h = rowHeights[i] ?: continue
+                            val (rs, re) = rangeOf(rows[i])
+                            if (m in rs..re) {
+                                return top + (m - rs).toFloat() / (re - rs).coerceAtLeast(1) * h
+                            }
+                            if (m < rs) return null
+                            if (i + 1 < rows.size) {
+                                val nextTop = rowTops[i + 1] ?: return null
+                                val (ns, _) = rangeOf(rows[i + 1])
+                                if (m < ns) {
+                                    val bottom = top + h
+                                    return bottom +
+                                        (m - re).toFloat() / (ns - re).coerceAtLeast(1) * (nextTop - bottom)
+                                }
+                            }
+                        }
+                        return null
+                    }
+
+                    // 1) сегменты уроков: прошедшее — серое, до blueEnd — синее, дальше — приглушённое
+                    bells.forEach { bell ->
+                        val y0 = yForMinute(bell.startMinutes) ?: return@forEach
+                        val y1 = yForMinute(bell.endMinutes) ?: return@forEach
+                        val color =
+                            when {
+                                !isTodaySelected -> RAIL_GRAY_SOFT
+                                bell.endMinutes <= currentTimeMinutes -> RAIL_GRAY_SOFT
+                                blueEndMinutes != null && bell.startMinutes <= blueEndMinutes -> RAIL_BLUE
+                                else -> RAIL_GRAY
+                            }
+                        drawLine(
+                            color = color,
+                            start = Offset(cx, y0),
+                            end = Offset(cx, y1),
+                            strokeWidth = 2.dp.toPx(),
+                            cap = StrokeCap.Round,
                         )
-                    is BellRow.Break ->
-                        BreakRow(
-                            row = row,
-                            dotProgress = dotProgressInBreak(row, currentTimeMinutes, isTodaySelected),
-                        )
+                    }
+
+                    // 2) чёрточки-границы уроков поверх линии
+                    bells.forEach { bell ->
+                        listOf(bell.startMinutes, bell.endMinutes).forEach { m ->
+                            val y = yForMinute(m) ?: return@forEach
+                            val color =
+                                if (isTodaySelected && blueEndMinutes != null && m <= blueEndMinutes) {
+                                    RAIL_BLUE
+                                } else {
+                                    RAIL_GRAY_SOFT
+                                }
+                            drawLine(
+                                color = color,
+                                start = Offset(cx - tickLen, y),
+                                end = Offset(cx + tickLen, y),
+                                strokeWidth = 1.5.dp.toPx(),
+                            )
+                        }
+                    }
+
+                    // 3) точка «сейчас»: ядро + пульс-ореол
+                    if (showNowDot) {
+                        val y = yForMinute(currentTimeMinutes)
+                        if (y != null) {
+                            drawCircle(
+                                color = RAIL_BLUE_SOFT,
+                                radius = pulseRadius.dp.toPx(),
+                                center = Offset(cx, y),
+                            )
+                            drawCircle(
+                                color = RAIL_BLUE,
+                                radius = 4.5.dp.toPx(),
+                                center = Offset(cx, y),
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    rows.forEachIndexed { index, row ->
+                        Box(
+                            modifier =
+                            Modifier.onGloballyPositioned {
+                                rowTops[index] = it.positionInParent().y
+                                rowHeights[index] = it.size.height.toFloat()
+                            },
+                        ) {
+                            when (row) {
+                                is BellRow.Lesson ->
+                                    LessonBellCard(
+                                        item = row.item,
+                                        isActive = activeSlot == row.item,
+                                        highlight = flashCurrent && activeSlot == row.item,
+                                    )
+                                is BellRow.Break -> BreakRow(row = row)
+                            }
+                        }
+                    }
                 }
             }
         }
     }
-}
-
-private fun railColor(
-    minutes: Int,
-    blueEnd: Int?,
-    isActive: Boolean,
-): Color {
-    if (!isActive) return RAIL_GRAY_SOFT
-    return if (blueEnd != null && minutes <= blueEnd) RAIL_BLUE else RAIL_GRAY
 }
 
 /** B3: контекст карточки «СЕЙЧАС» — активный слот либо пограничное состояние. */
@@ -460,89 +577,18 @@ private fun NowContextCard(context: NowContext) {
     }
 }
 
-private fun dotProgressIn(
-    bell: BellItem,
-    nowMinutes: Int,
-    isActive: Boolean,
-): Float? {
-    if (!isActive) return null
-    if (nowMinutes in bell.startMinutes..bell.endMinutes) {
-        return (nowMinutes - bell.startMinutes).toFloat() /
-            (bell.endMinutes - bell.startMinutes).coerceAtLeast(1)
-    }
-    return null
-}
-
-/** N12: точка бежит и по строке перемены — «точка не видна во время перемен» (заказчик). */
-private fun dotProgressInBreak(
-    row: BellRow.Break,
-    nowMinutes: Int,
-    isActive: Boolean,
-): Float? {
-    if (!isActive) return null
-    if (nowMinutes in row.startMinutes..row.endMinutes) {
-        return (nowMinutes - row.startMinutes).toFloat() /
-            (row.endMinutes - row.startMinutes).coerceAtLeast(1)
-    }
-    return null
-}
-
-/**
- * N12: бегущая точка на рельсе — общая для уроков и перемен. DrawScope сам реализует
- * Density, поэтому dp.toPx() доступен напрямую. fraction — доля высоты строки (0..1).
- */
-private fun DrawScope.drawRailDot(
-    cx: Float,
-    fraction: Float,
-    pulseRadiusDp: Float,
-    insetDp: Float,
-) {
-    val inset = insetDp.dp.toPx()
-    val travel = (size.height - inset * 2).coerceAtLeast(1f)
-    val y = inset + travel * fraction
-    drawCircle(
-        color = RAIL_BLUE_SOFT,
-        radius = pulseRadiusDp.dp.toPx() + 4.dp.toPx(),
-        center = Offset(cx, y),
-    )
-    drawCircle(
-        color = RAIL_BLUE,
-        radius = 4.5.dp.toPx(),
-        center = Offset(cx, y),
-    )
-}
-
-/** N12: зазор между строками списка (Arrangement.spacedBy) — рельс продлевается на него,
- *  чтобы полоса времени была СПЛОШНОЙ, а не разбитой на куски по карточкам. */
-private const val RAIL_GAP_DP = 6
-
 @Composable
 private fun LessonBellCard(
     item: BellItem,
     isActive: Boolean,
-    railTopColor: Color,
-    railBottomColor: Color,
-    inBlue: Boolean,
-    dotProgress: Float?,
     highlight: Boolean = false,
 ) {
-    val tickColor = if (inBlue) RAIL_BLUE else RAIL_GRAY_SOFT
     // N17: вспышка-подсветка текущей строки при входе из виджета (~1.6s, гаснет)
     val flashAlpha by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (highlight) 0.16f else 0f,
         animationSpec = tween(durationMillis = if (highlight) 150 else 900),
         label = "BellFlash",
     )
-    val pulseRadius by if (dotProgress != null) {
-        rememberInfiniteTransition(label = "DotPulse").animateFloat(
-            initialValue = 4.5f,
-            targetValue = 7f,
-            animationSpec = infiniteRepeatable(tween(durationMillis = 900), RepeatMode.Reverse),
-            label = "DotPulseRadius",
-        )
-    } else {
-        remember { mutableStateOf(0f) }
-    }
 
     Surface(
         shape = RoundedCornerShape(2.dp),
@@ -567,58 +613,6 @@ private fun LessonBellCard(
                         color = ColorActiveBlue.copy(alpha = flashAlpha),
                         size = size,
                     )
-                }
-                val cx = size.width + 10.dp.toPx()
-                val tickLen = 5.dp.toPx()
-                // N12: рельс продлён на зазор между строками — полоса времени сплошная,
-                // чёрточки-границы уроков остаются метками НА линии, не разрывами.
-                val gap = RAIL_GAP_DP.dp.toPx()
-
-                drawLine(
-                    color = railTopColor,
-                    start = Offset(cx, -gap),
-                    end = Offset(cx, size.height / 2f),
-                    strokeWidth = 2.dp.toPx(),
-                    cap = StrokeCap.Round,
-                )
-                drawLine(
-                    color = railBottomColor,
-                    start = Offset(cx, size.height / 2f),
-                    end = Offset(cx, size.height + gap),
-                    strokeWidth = 2.dp.toPx(),
-                    cap = StrokeCap.Round,
-                )
-
-                // W25: «вырез» в рельсе на границе урока (фон карточки) + чёрточка поверх —
-                // рельс НЕ перекрывает чёрточки, полоса остаётся сплошной между ними
-                val cutHalf = 3.dp.toPx()
-                val cutW = tickLen * 2 + 4.dp.toPx()
-                drawRect(
-                    color = ColorBgMain,
-                    topLeft = Offset(cx - cutW / 2, -cutHalf),
-                    size = androidx.compose.ui.geometry.Size(cutW, cutHalf * 2),
-                )
-                drawRect(
-                    color = ColorBgMain,
-                    topLeft = Offset(cx - cutW / 2, size.height - cutHalf),
-                    size = androidx.compose.ui.geometry.Size(cutW, cutHalf * 2),
-                )
-
-                drawLine(
-                    color = tickColor,
-                    start = Offset(cx - tickLen, 0f),
-                    end = Offset(cx + tickLen, 0f),
-                    strokeWidth = 1.5.dp.toPx(),
-                )
-                drawLine(
-                    color = tickColor,
-                    start = Offset(cx - tickLen, size.height),
-                    end = Offset(cx + tickLen, size.height),
-                    strokeWidth = 1.5.dp.toPx(),
-                )
-
-                if (dotProgress != null) {
-                    drawRailDot(cx, dotProgress, pulseRadius, 16f)
                 }
             },
     ) {
@@ -691,40 +685,13 @@ private fun LessonBellCard(
 }
 
 @Composable
-private fun BreakRow(
-    row: BellRow.Break,
-    dotProgress: Float? = null,
-) {
+private fun BreakRow(row: BellRow.Break) {
     val range = "${minutesToTime(row.startMinutes)} – ${minutesToTime(row.endMinutes)}"
-    // N12: точка видна и во время перемены — тот же пульс, что у урока
-    val pulseRadius by if (dotProgress != null) {
-        rememberInfiniteTransition(label = "BreakDotPulse").animateFloat(
-            initialValue = 4.5f,
-            targetValue = 7f,
-            animationSpec = infiniteRepeatable(tween(durationMillis = 900), RepeatMode.Reverse),
-            label = "BreakDotPulseRadius",
-        )
-    } else {
-        remember { mutableStateOf(0f) }
-    }
     Row(
         modifier =
         Modifier
             .fillMaxWidth()
-            .drawBehind {
-                val cx = size.width + 10.dp.toPx()
-                val gap = RAIL_GAP_DP.dp.toPx()
-                drawLine(
-                    color = RAIL_GRAY_SOFT,
-                    start = Offset(cx, -gap),
-                    end = Offset(cx, size.height + gap),
-                    strokeWidth = 2.dp.toPx(),
-                    cap = StrokeCap.Round,
-                )
-                if (dotProgress != null) {
-                    drawRailDot(cx, dotProgress, pulseRadius, 3f)
-                }
-            }.padding(start = 12.dp, end = 4.dp),
+            .padding(start = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {

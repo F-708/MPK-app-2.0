@@ -67,50 +67,60 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                     else -> lessons.firstOrNull { it.startMinutes() > now }
                 }
 
-            if (current != null) {
+            // V3: пустые состояния — одна строка по центру виджета вместо двух
+            // полупустых блоков. RemoteViews каждый раз свежий, видимость блоков
+            // возвращается к дефолтной (visible) сама.
+            val groupBlank = WidgetUpdateHelper.getSelectedGroup(context).isBlank()
+            val emptyText =
+                when {
+                    groupBlank -> "Выберите группу в приложении"
+                    lessons.isEmpty() -> "Сегодня уроков нет"
+                    current == null && next == null -> "Уроки закончились"
+                    else -> null
+                }
+            if (emptyText != null) {
+                views.setTextViewText(R.id.tv_empty, emptyText)
+                views.setTextColor(R.id.tv_empty, if (groupBlank) style.mainColor else style.subColor)
+                views.setViewVisibility(R.id.tv_empty, android.view.View.VISIBLE)
+                listOf(R.id.ll_now_block, R.id.ll_next_block, R.id.v_divider).forEach {
+                    views.setViewVisibility(it, android.view.View.GONE)
+                }
+            } else if (current != null) {
                 views.setTextViewText(R.id.tv_now_label, "СЕЙЧАС")
                 views.setTextViewText(R.id.tv_now_subject, SubjectFormatter.getShortName(current.subjectRaw))
                 views.setTextViewText(R.id.tv_now_details, detailsOf(current, showRoom))
                 applyRoomChip(context, views, R.id.tv_now_room, current, showRoom, appWidgetId, "now")
+                if (next != null) {
+                    views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
+                    views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next.subjectRaw))
+                    views.setTextViewText(R.id.tv_next_details, detailsOf(next, showRoom))
+                    applyRoomChip(context, views, R.id.tv_next_room, next, showRoom, appWidgetId, "next")
+                } else {
+                    views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
+                    views.setTextViewText(R.id.tv_next_subject, "Уроков больше нет")
+                    views.setTextViewText(R.id.tv_next_details, "")
+                    views.setViewVisibility(R.id.tv_next_room, android.view.View.GONE)
+                }
             } else {
-                // W8: пусто из-за группы не выбрана ≠ «уроков нет»
-                val groupBlank = WidgetUpdateHelper.getSelectedGroup(context).isBlank()
-                views.setTextViewText(
-                    R.id.tv_now_label,
-                    if (lessons.isEmpty()) "СЕГОДНЯ" else "СЕЙЧАС",
-                )
-                views.setTextViewText(
-                    R.id.tv_now_subject,
-                    when {
-                        groupBlank -> "Выберите группу в приложении"
-                        lessons.isEmpty() -> "Уроков нет"
-                        else -> "Перемена"
-                    },
-                )
-                // W4: причина пустой строки «Перемена» — не пустое место
+                // V3: до первого звонка — «Перемена» с внятной причиной (W4), время из bells
+                val bells = CollegeBellSchedule.getBellsForDay(WidgetData.dayOfWeek(context))
+                val firstBell = bells.firstOrNull()
+                views.setTextViewText(R.id.tv_now_label, "СЕЙЧАС")
+                views.setTextViewText(R.id.tv_now_subject, "Перемена")
                 views.setTextViewText(
                     R.id.tv_now_details,
-                    when {
-                        groupBlank || lessons.isEmpty() -> ""
-                        else -> WidgetData.breakInfo(context, now) ?: "по расписанию звонков"
+                    if (firstBell != null && now < firstBell.startMinutes) {
+                        "первый урок в ${firstBell.start}"
+                    } else {
+                        WidgetData.breakInfo(context, now) ?: "по расписанию звонков"
                     },
                 )
                 views.setViewVisibility(R.id.tv_now_room, android.view.View.GONE)
-            }
-
-            if (next != null) {
+                // current == null && next == null исключён выше → next здесь всегда есть
                 views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
-                views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next.subjectRaw))
+                views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next!!.subjectRaw))
                 views.setTextViewText(R.id.tv_next_details, detailsOf(next, showRoom))
                 applyRoomChip(context, views, R.id.tv_next_room, next, showRoom, appWidgetId, "next")
-            } else {
-                views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
-                views.setTextViewText(
-                    R.id.tv_next_subject,
-                    if (lessons.isEmpty()) "—" else "Уроков больше нет",
-                )
-                views.setTextViewText(R.id.tv_next_details, "")
-                views.setViewVisibility(R.id.tv_next_room, android.view.View.GONE)
             }
 
             val open =
