@@ -1,5 +1,6 @@
 package com.politex.ui.screens.materials
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,11 +25,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +53,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,8 +92,9 @@ private val TEXT_LIKE_EXT = setOf("txt", "md", "markdown", "csv", "log", "json",
  * V10: встроенный редактор (карандаш в шапке для TEXT/текстоподобных/docx): ОДИН multiline
  * TextField вместо списка абзацев, разметка токенами **жирный** / *курсив* / __подчёркнутый__
  * и «- » → маркер списка. Сохранение ТОЛЬКО явной кнопкой (dao.updateTextContent → textContent
- * + textEdited=1 в БД; файл на диске не трогаем). Toggle-off карандаша возвращает в чтение
- * БЕЗ автосохранения — правка теряется, это осознанно: «передумал» не должно молча писать в БД.
+ * + textEdited=1 в БД; файл на диске не трогаем). Находка 3: выход из редактора (карандаш
+ * toggle-off И системный back) с несохранёнными правками спрашивает «СОХРАНИТЬ / ВЫЙТИ БЕЗ
+ * СОХРАНЕНИЯ» — текст больше не сгорает молча, и «передумал» по-прежнему не пишет в БД.
  *
  * .doc (бинарный OLE2) — честная заглушка, см. [UnsupportedFormatPlaque].
  */
@@ -111,6 +117,9 @@ fun MaterialDocTextViewer(
     // ── V10: состояние редактора ──────────────────────────────────────────────
     var editMode by remember(item.id) { mutableStateOf(false) }
     var textValue by remember(item.id) { mutableStateOf(TextFieldValue()) }
+    // Находка 3: исходный текст на момент входа в редактор — для сравнения «есть ли правки»
+    var originalText by remember(item.id) { mutableStateOf("") }
+    var showUnsavedDialog by remember(item.id) { mutableStateOf(false) }
     val undoStack = remember(item.id) { ArrayDeque<String>() }
     val redoStack = remember(item.id) { ArrayDeque<String>() }
 
@@ -120,10 +129,18 @@ fun MaterialDocTextViewer(
     val docZoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
 
     fun startEdit() {
-        textValue = TextFieldValue(paragraphs?.joinToString("\n") { it.text } ?: item.textContent)
+        val initial = paragraphs?.joinToString("\n") { it.text } ?: item.textContent
+        textValue = TextFieldValue(initial)
+        originalText = initial
         undoStack.clear()
         redoStack.clear()
         editMode = true
+    }
+
+    // Находка 3: выход из редактора (карандаш toggle-off И системный back) — если текст
+    // изменён, спрашиваем «СОХРАНИТЬ / ВЫЙТИ БЕЗ СОХРАНЕНИЯ», иначе молча закрываем.
+    fun requestExitEdit() {
+        if (textValue.text != originalText) showUnsavedDialog = true else editMode = false
     }
 
     // ponytail: снапшоты на каждое изменение, стек cap 10; для текстов >100КБ снапшоты
@@ -175,6 +192,9 @@ fun MaterialDocTextViewer(
 
     val canEdit = item.kindEnum == MaterialKind.TEXT || item.ext in TEXT_LIKE_EXT || item.ext == "docx"
 
+    // Находка 3: системный «назад» в режиме правки — тот же путь, что toggle-off карандаша
+    BackHandler(enabled = editMode) { requestExitEdit() }
+
     Column(modifier = modifier.fillMaxSize().background(ColorBgMain)) {
         MaterialViewerTopBar(title = item.title, testTag = "doc_top_bar", onBack = onBack) {
             if (!editMode) {
@@ -202,7 +222,7 @@ fun MaterialDocTextViewer(
                     description = "Редактировать текст",
                     testTag = "doc_edit_btn",
                     active = editMode,
-                    onClick = { if (editMode) editMode = false else startEdit() },
+                    onClick = { if (editMode) requestExitEdit() else startEdit() },
                 )
             }
         }
@@ -237,11 +257,33 @@ fun MaterialDocTextViewer(
                 }
 
                 content.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "Текст не найден: документ пустой или не читается встроенным просмотрщиком.",
-                        style = TextStyle(fontSize = 13.sp),
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(24.dp),
-                    )
+                    ) {
+                        Text(
+                            text = "Текст не найден: документ пустой или не читается встроенным просмотрщиком.",
+                            style = TextStyle(fontSize = 13.sp),
+                            textAlign = TextAlign.Center,
+                        )
+                        // Находка 12: у пустого состояния есть действие — «НАЗАД» (onBack)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            color = ColorBrandBlue,
+                            modifier = Modifier.bouncyClickable(onClick = onBack).testTag("doc_empty_back"),
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                            ) {
+                                Text(
+                                    "НАЗАД",
+                                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White),
+                                )
+                            }
+                        }
+                    }
                 }
 
                 else -> BoxWithConstraints(
@@ -287,6 +329,49 @@ fun MaterialDocTextViewer(
                 }
             }
         }
+    }
+
+    // Находка 3: выход из редактора с несохранёнными правками — СОХРАНИТЬ / ВЫЙТИ БЕЗ СОХРАНЕНИЯ
+    if (showUnsavedDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedDialog = false },
+            shape = RoundedCornerShape(2.dp),
+            containerColor = ColorBgMain,
+            title = {
+                Text(
+                    "Правки не сохранены",
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ColorTextTitle),
+                )
+            },
+            text = {
+                Text(
+                    "Сохранить изменения перед выходом?",
+                    style = TextStyle(fontSize = 13.sp, color = ColorTextBody),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showUnsavedDialog = false
+                        save()
+                    },
+                    modifier = Modifier.testTag("doc_unsaved_save"),
+                ) {
+                    Text("СОХРАНИТЬ", style = TextStyle(fontWeight = FontWeight.Bold, color = ColorBrandBlue))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showUnsavedDialog = false
+                        editMode = false
+                    },
+                    modifier = Modifier.testTag("doc_unsaved_discard"),
+                ) {
+                    Text("ВЫЙТИ БЕЗ СОХРАНЕНИЯ", style = TextStyle(fontWeight = FontWeight.Bold, color = ColorTextBody))
+                }
+            },
+        )
     }
 }
 

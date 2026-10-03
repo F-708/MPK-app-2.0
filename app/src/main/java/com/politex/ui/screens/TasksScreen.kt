@@ -67,6 +67,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -572,13 +573,14 @@ fun TaskItemCard(
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(
-                onClick = onToggleCompleted,
+            // T2/V15: чекбокс — самое частое действие; хитбокс = Tokens.IconHit (44).
+            // ОДИН обработчик на узле (паттерн HomeworkBadge): Box+bouncyClickable, Icon внутри.
+            Box(
                 modifier =
                 Modifier
-                    // T2/V15: чекбокс — самое частое действие; хитбокс = Tokens.IconHit (44)
                     .size(Tokens.IconHit)
                     .bouncyClickable(onClick = onToggleCompleted),
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = if (task.isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
@@ -965,7 +967,7 @@ fun TaskEditDialog(
                             contentColor = if (isSelected) Color.White else ColorTextBody,
                             modifier =
                             Modifier
-                                .height(30.dp)
+                                .height(Tokens.ChipForm)
                                 .bouncyClickable { selectedType = type },
                         ) {
                             Box(
@@ -1056,7 +1058,7 @@ fun TaskEditDialog(
                         contentColor = if (!isCustomSubject) Color.White else ColorTextBody,
                         modifier =
                         Modifier
-                            .height(30.dp)
+                            .height(Tokens.ChipForm)
                             .bouncyClickable { isCustomSubject = false },
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
@@ -1077,7 +1079,7 @@ fun TaskEditDialog(
                         contentColor = if (isCustomSubject) Color.White else ColorTextBody,
                         modifier =
                         Modifier
-                            .height(30.dp)
+                            .height(Tokens.ChipForm)
                             .bouncyClickable { isCustomSubject = true },
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
@@ -1142,41 +1144,43 @@ fun TaskEditDialog(
             }
         },
         confirmButton = {
+            // Находка 1: пустое название/предмет → кнопка физически disabled и затемнена,
+            // вместо «тап молча ничего не делает»
+            val canSave = title.isNotBlank() && effectiveSubject.isNotBlank()
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 color = ColorBrandFill,
                 modifier =
                 Modifier
                     .testTag("task_edit_confirm")
-                    .bouncyClickable {
-                    if (title.isNotBlank() && effectiveSubject.isNotBlank()) {
-                        // W32: срок сдачи в диалоге больше не выбирается — новое задание
-                        // пишется с пустым deadlineDate, правка не затирает прежний срок.
-                        val dueIso = task?.deadlineDate ?: ""
-                        // H1: новое → собираем сущность; правка → copy (id/group/completed/createdAt сохраняются)
-                        val entity =
-                            if (task == null) {
-                                StudentTaskEntity(
-                                    groupName = groupInfo.canonicalName,
-                                    course = groupInfo.course,
-                                    subjectName = effectiveSubject,
-                                    taskType = selectedType.displayName,
-                                    title = title.trim(),
-                                    description = description.trim(),
-                                    deadlineDate = dueIso,
-                                    createdAt = System.currentTimeMillis(),
-                                )
-                            } else {
-                                task.copy(
-                                    subjectName = effectiveSubject,
-                                    taskType = selectedType.displayName,
-                                    title = title.trim(),
-                                    description = description.trim(),
-                                    deadlineDate = dueIso,
-                                )
-                            }
-                        onTaskSaved(entity, reminders)
-                    }
+                    .alpha(if (canSave) 1f else 0.4f)
+                    .bouncyClickable(enabled = canSave) {
+                    // W32: срок сдачи в диалоге больше не выбирается — новое задание
+                    // пишется с пустым deadlineDate, правка не затирает прежний срок.
+                    val dueIso = task?.deadlineDate ?: ""
+                    // H1: новое → собираем сущность; правка → copy (id/group/completed/createdAt сохраняются)
+                    val entity =
+                        if (task == null) {
+                            StudentTaskEntity(
+                                groupName = groupInfo.canonicalName,
+                                course = groupInfo.course,
+                                subjectName = effectiveSubject,
+                                taskType = selectedType.displayName,
+                                title = title.trim(),
+                                description = description.trim(),
+                                deadlineDate = dueIso,
+                                createdAt = System.currentTimeMillis(),
+                            )
+                        } else {
+                            task.copy(
+                                subjectName = effectiveSubject,
+                                taskType = selectedType.displayName,
+                                title = title.trim(),
+                                description = description.trim(),
+                                deadlineDate = dueIso,
+                            )
+                        }
+                    onTaskSaved(entity, reminders)
                 },
             ) {
                 Text(
@@ -1310,7 +1314,7 @@ private fun ReminderQuickChip(
         contentColor = ColorTextBody,
         modifier =
         Modifier
-            .height(30.dp)
+            .height(Tokens.ChipForm)
             .bouncyClickable(onClick = onClick)
             .let { if (tag != null) it.testTag(tag) else it },
     ) {
@@ -1353,7 +1357,8 @@ private fun ReminderChip(
                 ),
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
+            // V15/находка 7: зона крестика — Tokens.IconHit (44), визуальный размер иконки прежний
+            IconButton(onClick = onRemove, modifier = Modifier.size(Tokens.IconHit)) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Удалить напоминание",
@@ -1378,7 +1383,7 @@ private fun TimeChip(
         contentColor = if (selected) Color.White else ColorTextBody,
         modifier =
         Modifier
-            .height(30.dp)
+            .height(Tokens.ChipForm)
             .bouncyClickable(onClick = onClick),
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
@@ -1545,18 +1550,19 @@ private fun ReminderComposer(
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
+                // Находка 1: та же enabled+alpha-логика — невалидное «своё» время → кнопка disabled
+                val h = if (customTime) hourInput.toIntOrNull() ?: -1 else presetHour
+                val m = if (customTime) minuteInput.toIntOrNull() ?: -1 else presetMinute
+                val canAdd = h in 0..23 && m in 0..59
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBrandFill,
                     modifier =
                     Modifier
                         .testTag("reminder_composer_confirm")
-                        .bouncyClickable {
-                            val h = if (customTime) hourInput.toIntOrNull() ?: -1 else presetHour
-                            val m = if (customTime) minuteInput.toIntOrNull() ?: -1 else presetMinute
-                            if (h in 0..23 && m in 0..59) {
-                                reminderMillisFrom(dateIso, h, m, 0)?.let(onAdd)
-                            }
+                        .alpha(if (canAdd) 1f else 0.4f)
+                        .bouncyClickable(enabled = canAdd) {
+                            reminderMillisFrom(dateIso, h, m, 0)?.let(onAdd)
                         },
                 ) {
                     Text(

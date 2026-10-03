@@ -306,6 +306,24 @@ private fun GradeSubjectScreen(
         scope.launch { dao.insert(entry) }
     }
 
+    // Находка 2: удаление оценки больше НЕ мгновенное безвозвратное — тап удаляет и показывает
+    // undo-строку на 5 с; «ОТМЕНИТЬ» вставляет ТУ ЖЕ запись (id сохранён, т.к. строка удалена).
+    var lastDeleted by remember { mutableStateOf<GradeEntryEntity?>(null) }
+    LaunchedEffect(lastDeleted) {
+        if (lastDeleted != null) {
+            kotlinx.coroutines.delay(5000)
+            lastDeleted = null
+        }
+    }
+    fun deleteGrade(e: GradeEntryEntity) {
+        lastDeleted = e
+        scope.launch { dao.deleteById(e.id) }
+    }
+    fun restoreGrade(e: GradeEntryEntity) {
+        lastDeleted = null
+        scope.launch { dao.insert(e) }
+    }
+
     Column(
         modifier =
         Modifier
@@ -430,27 +448,33 @@ private fun GradeSubjectScreen(
                         // ponytail: DAO отдаёт ASC — самая свежая оценка справа без reversed()
                         // (спека писала «reversed», предполагая DESC-порядок)
                         activeEntries.forEach { e ->
-                            Surface(
-                                shape = RoundedCornerShape(2.dp),
-                                color = ColorBgMain,
-                                border = BorderStroke(1.dp, ColorBorderLight),
+                            // Находка 2: хитбокс 44dp, визуальный квадрат 28dp ВНУТРИ (паттерн HomeworkBadge)
+                            Box(
                                 modifier =
                                 Modifier
-                                    .size(28.dp)
+                                    .size(44.dp)
                                     .testTag("grades_recent_${e.id}")
-                                    .bouncyClickable { scope.launch { dao.deleteById(e.id) } },
+                                    .bouncyClickable { deleteGrade(e) },
+                                contentAlignment = Alignment.Center,
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = e.value.toString(),
-                                        maxLines = 1,
-                                        style =
-                                        TextStyle(
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = gradeColor(e.value.toDouble()),
-                                        ),
-                                    )
+                                Surface(
+                                    shape = RoundedCornerShape(2.dp),
+                                    color = ColorBgMain,
+                                    border = BorderStroke(1.dp, ColorBorderLight),
+                                    modifier = Modifier.size(28.dp),
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = e.value.toString(),
+                                            maxLines = 1,
+                                            style =
+                                            TextStyle(
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = gradeColor(e.value.toDouble()),
+                                            ),
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -473,6 +497,50 @@ private fun GradeSubjectScreen(
                     ) {
                         (6..9).forEach { NumberKey(value = it, onSubmit = ::submit) }
                         NumberKey(value = 10, onSubmit = ::submit)
+                    }
+                }
+
+                // Находка 2: undo-строка (5 с) — «Удалено N» + «ОТМЕНИТЬ» возвращает запись
+                lastDeleted?.let { deleted ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorSurfaceHighlight,
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag("grades_undo_row"),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier =
+                            Modifier
+                                .padding(start = 12.dp)
+                                .heightIn(min = 44.dp),
+                        ) {
+                            Text(
+                                text = "Удалено: ${deleted.value}",
+                                maxLines = 1,
+                                style = TextStyle(fontSize = 12.sp, color = ColorTextBody),
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = "ОТМЕНИТЬ",
+                                maxLines = 1,
+                                style =
+                                TextStyle(
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ColorBrandBlue,
+                                ),
+                                modifier =
+                                Modifier
+                                    .testTag("grades_undo_btn")
+                                    .bouncyClickable { restoreGrade(deleted) }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                            )
+                        }
                     }
                 }
             }
