@@ -33,15 +33,15 @@ import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 
-/** Окно undo (и длительность полосы-таймера) — спек V13: 5 с. */
-const val UNDO_WINDOW_MS = 5000
+/** Окно undo (и длительность полосы-таймера) — X11b: 7 с. */
+const val UNDO_WINDOW_MS = 7000
 
 /**
  * V13: фирменный snackbar «Задание удалено / ОТМЕНИТЬ» с полосой-таймером.
  * Текст и кнопку берёт из data.visuals — логика восстановления живёт у вызывающего
  * (TasksScreen.deleteWithUndo ждёт SnackbarResult.ActionPerformed), здесь только рендер.
  * Полоса идёт 1→0 за [UNDO_WINDOW_MS] (Linear), по исчерпании вызывается [onExpire] —
- * MainScreen гасит snackbar сам: showSnackbar идёт с Indefinite, т.к. значения «5 с»
+ * MainScreen гасит snackbar сам: showSnackbar идёт с Indefinite, т.к. значения «7 с»
  * в SnackbarDuration нет. Ранний «ОТМЕНИТЬ»/замена data отменяет эффект — onExpire не зовётся.
  */
 @Composable
@@ -51,6 +51,8 @@ fun UndoSnackbar(
 ) {
     val progress = remember { Animatable(1f) }
     LaunchedEffect(data) {
+        // X11b: снап к 1f — при замене data (второе удаление подряд) полоса стартует полной
+        progress.snapTo(1f)
         progress.animateTo(0f, tween(durationMillis = UNDO_WINDOW_MS, easing = LinearEasing))
         onExpire()
     }

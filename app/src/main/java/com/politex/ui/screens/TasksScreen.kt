@@ -164,8 +164,8 @@ fun TasksScreen(
 
     /**
      * T1/V13: удаление с undo. Удаляем сразу; снекбар «ОТМЕНИТЬ» возвращает задание ТЕМ ЖЕ id
-     * (напоминания в task_reminders остаются привязаны). Окно undo — ровно 5 с: показываем с
-     * Indefinite (в SnackbarDuration нет «5 с»), UndoSnackbar в MainScreen рисует полосу-таймер
+     * (напоминания в task_reminders остаются привязаны). Окно undo — ровно 7 с (X11b): показываем с
+     * Indefinite (в SnackbarDuration нет «7 с»), UndoSnackbar в MainScreen рисует полосу-таймер
      * и по её исчерпании сам гасит хост (onExpire → dismissSnackbar).
      * В снекбар уходит не сама сущность, а её копия — Room мог бы дергать
      * этот же объект при повторном удалении, копия исключает гонки.
@@ -226,12 +226,22 @@ fun TasksScreen(
                 )
 
                 val chipScroll = rememberScrollState()
-                // Смещения чипов в координатах контента (positionInParent не зависит от
-                // скролла) — для автоскролла к выбранному фильтру.
-                val chipOffsets = remember { mutableMapOf<Int, Int>() }
+                // Позиции чипов в координатах контента (positionInParent не зависит от
+                // скролла): start → width. X15: автоскролл ЦЕНТРИРУЕТ выбранный чип.
+                val chipOffsets = remember { mutableMapOf<Int, Pair<Int, Int>>() }
                 LaunchedEffect(selectedFilter) {
                     val index = if (selectedFilter == null) 0 else availableTypes.indexOf(selectedFilter) + 1
-                    chipOffsets[index]?.let { chipScroll.animateScrollTo(it.coerceAtLeast(0)) }
+                    if (index == 0) {
+                        // «Все» — первый чип, скролл в начало
+                        chipScroll.animateScrollTo(0)
+                    } else {
+                        chipOffsets[index]?.let { (start, width) ->
+                            chipScroll.animateScrollTo(
+                                // viewportSize в ScrollState 1.7 — Int (ширина вьюпорта, px)
+                                centerScrollOffset(start, width, chipScroll.viewportSize, chipScroll.maxValue),
+                            )
+                        }
+                    }
                 }
                 Row(
                     modifier =
@@ -688,15 +698,15 @@ private fun TaskType.shortFilterLabel(): String =
 
 /**
  * V12: чип фильтра категорий — wrap-content, высота Tokens.ChipScreen (40),
- * selected = ColorTopBar + белый Bold. Пишет своё смещение в [offsets] (координаты
- * скроллящегося родителя) — по ним шапка автоскроллит к выбранному чипу.
+ * selected = ColorTopBar + белый Bold. Пишет свои (start, width) в [offsets] (координаты
+ * скроллящегося родителя) — по ним шапка центрирует выбранный чип (X15).
  */
 @Composable
 private fun TaskFilterChip(
     label: String,
     isSelected: Boolean,
     index: Int,
-    offsets: MutableMap<Int, Int>,
+    offsets: MutableMap<Int, Pair<Int, Int>>,
     onClick: () -> Unit,
 ) {
     Surface(
@@ -706,7 +716,7 @@ private fun TaskFilterChip(
         modifier =
         Modifier
             .height(Tokens.ChipScreen)
-            .onGloballyPositioned { offsets[index] = it.positionInParent().x.toInt() }
+            .onGloballyPositioned { offsets[index] = it.positionInParent().x.toInt() to it.size.width }
             .bouncyClickable(onClick = onClick),
     ) {
         Box(
@@ -729,20 +739,31 @@ private fun TaskFilterChip(
     }
 }
 
+/**
+ * X15: скролл, при котором центр чипа совпадает с центром вьюпорта; клампится в [0, maxScroll]
+ * (первый чип → 0, последний → maxScroll). Чистая функция для юнит-тестов, все значения в px.
+ */
+internal fun centerScrollOffset(
+    chipStart: Int,
+    chipWidth: Int,
+    viewport: Int,
+    maxScroll: Int,
+): Int = (chipStart + chipWidth / 2 - viewport / 2).coerceIn(0, maxScroll)
+
 // ─────────────────────────────────────────────────────────────────────────────
 // V13: swipe-to-delete — контейнер карточки + чистая функция порогов (юнит-тест)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Флинг: кадровое смещение больше этого (в сторону удаления) считается броском. */
-private val SwipeFlingThreshold = 24.dp
+/** Флинг: кадровое смещение больше этого (в сторону удаления) считается броском. X11a: 24→12. */
+private val SwipeFlingThreshold = 12.dp
 
 /** Возврат карточки после свайпа ниже порога — пружина по спеке V13. */
 private val SwipeReturnSpring: FiniteAnimationSpec<Float> =
     spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow)
 
 /**
- * V13: удалять ли при отпускании. Чистая функция для юнит-тестов.
- * Условия: утянули влево дальше половины ширины (|offsetX| > 0.5·width)
+ * V13/X11a: удалять ли при отпускании. Чистая функция для юнит-тестов.
+ * Условия: утянули влево на 35% ширины или дальше (|offsetX| ≥ 0.35·width)
  * ИЛИ флинг влево (кадровый Δx ≤ -порог). offsetX ∈ [-width, 0];
  * флинг вправо — это жест возврата, удалять он не должен.
  */
@@ -753,7 +774,7 @@ internal fun shouldDelete(
     flingThresholdPx: Float,
 ): Boolean =
     widthPx > 0f &&
-        (-offsetX > widthPx * 0.5f || lastFrameDeltaPx <= -flingThresholdPx)
+        (-offsetX >= widthPx * 0.35f || lastFrameDeltaPx <= -flingThresholdPx)
 
 /**
  * V13: свайп-контейнер задания. Тянем строго влево (x ∈ [-width, 0]); под карточкой —
