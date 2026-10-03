@@ -156,7 +156,19 @@ class TeacherInsightsTest {
         val ti = insights(lessons)
         assertTrue(ti.isActive("Мешалкина Ирина Владимировна"))
         assertEquals(1, ti.lessonCount("Мешалкина Ирина Владимировна"))
-        assertEquals("2026.09.15", ti.lastSeenDate("Мешалкина Ирина Владимировна"))
+        // QA#15: lastDate теперь выводится из max epoch в каноническом dd.MM.yyyy
+        assertEquals("15.09.2026", ti.lastSeenDate("Мешалкина Ирина Владимировна"))
+    }
+
+    @Test
+    fun `QA15 lastDate выбирается по epoch а не лексикографически на стыке месяцев`() {
+        val lessons =
+            listOf(
+                lesson(teacherFirst = "Зыбин О.Л.", date = "30.09.2026"),
+                lesson(teacherFirst = "Зыбин О.Л.", date = "01.10.2026"),
+            )
+        // лексикографически «30.09.2026» > «01.10.2026» — старый код брал сентябрь
+        assertEquals("01.10.2026", insights(lessons).lastSeenDate("Зыбин Олег Львович"))
     }
 
     @Test

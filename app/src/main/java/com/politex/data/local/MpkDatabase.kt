@@ -310,19 +310,27 @@ abstract class MpkDatabase : RoomDatabase() {
             }
 
         fun getInstance(context: Context): MpkDatabase = instance ?: synchronized(this) {
-            val built =
-                Room
-                    .databaseBuilder(
-                        context.applicationContext,
-                        MpkDatabase::class.java,
-                        DATABASE_NAME,
-                    ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8, migration8To9)
-                    // ponytail: оставлено как страховка от будущих незапланированных схем —
-                    // для объявленных версий выше путь всегда идёт через migration1To2
-                    .fallbackToDestructiveMigration()
-                    .build()
-            instance = built
-            built
+            // QA#16: повторная проверка под замком обязательна — без неё два потока,
+            // прошедшие первый `instance ?:` одновременно, построят ДВЕ базы (вторая
+            // перезапишет instance, у подписчиков первой останутся висящие соединения).
+            instance ?: run {
+                val built =
+                    Room
+                        .databaseBuilder(
+                            context.applicationContext,
+                            MpkDatabase::class.java,
+                            DATABASE_NAME,
+                        ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8, migration8To9)
+                        // ВНИМАНИЕ (QA#16): fallbackToDestructiveMigration СОЗНАТЕЛЬНО оставлен —
+                        // краш при даунгрейде/неописанной схеме хуже потери кэша. Но он СТИРАЕТ
+                        // ВСЕ данные пользователя (включая student_tasks — ДЗ, восстановлению не
+                        // подлежит) при ЛЮБОЙ версии без явной миграции выше. Каждая новая версия
+                        // схемы ОБЯЗАНА получать свою migrationNToN+1 в addMigrations.
+                        .fallbackToDestructiveMigration()
+                        .build()
+                instance = built
+                built
+            }
         }
     }
 }

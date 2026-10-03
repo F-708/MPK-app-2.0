@@ -36,8 +36,19 @@ object MpkScheduleParser {
     @Volatile
     var lastParseStats: ParseStats = ParseStats()
 
+    /**
+     * QA#3: lastParseStats жил read-modify-write копиями (`lastParseStats = lastParseStats.copy(…)`)
+     * из нескольких параллельных IO-синков — гонка теряла/смешивала поля. Все мутации теперь
+     * атомарны под одним замком: RMW целиком внутри synchronized.
+     */
+    private val statsLock = Any()
+
+    private fun mutateStats(block: (ParseStats) -> ParseStats) {
+        synchronized(statsLock) { lastParseStats = block(lastParseStats) }
+    }
+
     private fun resetStats(format: String) {
-        lastParseStats = ParseStats(format = format)
+        mutateStats { ParseStats(format = format) }
     }
 
     private val CP1251 = Charset.forName("windows-1251")
@@ -71,8 +82,6 @@ object MpkScheduleParser {
     private val DATE_IN_TEXT_REGEX = Regex(
         "([0-3]?[0-9])[.\\-/]([0-1]?[0-9])[.\\-/](202[0-9])",
     )
-
-    private val DOT_FORMAT = java.text.SimpleDateFormat("dd.MM.yyyy", Locale.ROOT)
 
     /**
      * «15.09.2026» / «15-09-2026» / ISO «2026-09-15» -> Calendar (приведённая дата).
@@ -114,10 +123,15 @@ object MpkScheduleParser {
         lessons: List<LessonEntity>,
         anchorCal: java.util.Calendar,
         anchorDow: Int,
-    ): List<LessonEntity> = lessons.map { lesson ->
-        val cal = (anchorCal.clone() as java.util.Calendar)
-        cal.add(java.util.Calendar.DAY_OF_YEAR, (lesson.dayOfWeek - anchorDow).coerceIn(-6, 6))
-        lesson.copy(dateString = DOT_FORMAT.format(cal.time))
+    ): List<LessonEntity> {
+        // QA#3: SimpleDateFormat НЕ потокобезопасен — общий static давал битые dateString
+        // при параллельных IO-синках. Локальный экземпляр на вызов, гонка невозможна.
+        val dotFormat = java.text.SimpleDateFormat("dd.MM.yyyy", Locale.ROOT)
+        return lessons.map { lesson ->
+            val cal = (anchorCal.clone() as java.util.Calendar)
+            cal.add(java.util.Calendar.DAY_OF_YEAR, (lesson.dayOfWeek - anchorDow).coerceIn(-6, 6))
+            lesson.copy(dateString = dotFormat.format(cal.time))
+        }
     }
 
     fun findSchedulePostLinks(html: String, baseUrl: String = "https://guo-mpk.by/"): List<SchedulePostLink> {
@@ -266,7 +280,7 @@ object MpkScheduleParser {
         val head = String(bytes.copyOfRange(0, minOf(600, bytes.size)), Charsets.UTF_8)
             .lowercase(Locale.ROOT)
         if (head.contains("<!doctype html") || head.contains("<html")) {
-            lastParseStats = ParseStats(format = "html", wasHtml = true, groupFound = false)
+            mutateStats { ParseStats(format = "html", wasHtml = true, groupFound = false) }
             return emptyList()
         }
 
@@ -291,9 +305,9 @@ object MpkScheduleParser {
         val textUtf8 = String(bytes, Charsets.UTF_8)
         val textLessons = runCatching { parsePlainTextSchedule(textUtf8, targetGroup, targetDate) }
             .onFailure {
-                lastParseStats = lastParseStats.copy(
-                    parseError = (lastParseStats.parseError + "; text:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '),
-                )
+                mutateStats { s ->
+                    s.copy(parseError = (s.parseError + "; text:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '))
+                }
             }
             .getOrDefault(emptyList())
         if (textLessons.isNotEmpty()) return textLessons
@@ -302,9 +316,9 @@ object MpkScheduleParser {
         val textCp1251 = String(bytes, CP1251)
         return runCatching { parsePlainTextSchedule(textCp1251, targetGroup, targetDate) }
             .onFailure {
-                lastParseStats = lastParseStats.copy(
-                    parseError = (lastParseStats.parseError + "; cp1251-text:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '),
-                )
+                mutateStats { s ->
+                    s.copy(parseError = (s.parseError + "; cp1251-text:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '))
+                }
             }
             .getOrDefault(emptyList())
     }
@@ -424,14 +438,14 @@ object MpkScheduleParser {
         targetDate: String = "",
     ): List<LessonEntity> {
         val utf16Runs = extractUtf16LeRuns(bytes)
-        lastParseStats = lastParseStats.copy(format = "doc-utf16", runsExtracted = utf16Runs.size)
+        mutateStats { it.copy(format = "doc-utf16", runsExtracted = utf16Runs.size) }
         val utf16Text = utf16Runs.joinToString("\n")
         if (utf16Text.isNotBlank()) {
             val utf16Lessons = runCatching { parsePlainTextSchedule(utf16Text, targetGroup, targetDate) }
                 .onFailure {
-                    lastParseStats = lastParseStats.copy(
-                        parseError = (lastParseStats.parseError + "; utf16:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '),
-                    )
+                    mutateStats { s ->
+                        s.copy(parseError = (s.parseError + "; utf16:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '))
+                    }
                 }
                 .getOrDefault(emptyList())
             if (utf16Lessons.isNotEmpty()) return utf16Lessons
@@ -439,26 +453,32 @@ object MpkScheduleParser {
 
         val utf16Stats = lastParseStats.copy()
         val cp1251Runs = extractCp1251Runs(bytes)
-        lastParseStats = lastParseStats.copy(format = "doc-cp1251", runsExtracted = cp1251Runs.size)
+        mutateStats { it.copy(format = "doc-cp1251", runsExtracted = cp1251Runs.size) }
         val cp1251Text = cp1251Runs.joinToString("\n")
         if (cp1251Text.isNotBlank()) {
             val cp1251Lessons = runCatching { parsePlainTextSchedule(cp1251Text, targetGroup, targetDate) }
                 .onFailure {
-                    lastParseStats = lastParseStats.copy(
-                        parseError = (lastParseStats.parseError + "; cp1251:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '),
-                    )
+                    mutateStats { s ->
+                        s.copy(parseError = (s.parseError + "; cp1251:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '))
+                    }
                 }
                 .getOrDefault(emptyList())
             if (cp1251Lessons.isNotEmpty()) return cp1251Lessons
         }
 
-        if (lastParseStats.parseError.isBlank() && lastParseStats.textPreview.isBlank()) {
-            lastParseStats = utf16Stats
-        } else if (utf16Stats.textPreview.isNotBlank()) {
-            lastParseStats = lastParseStats.copy(
-                textPreview = utf16Stats.textPreview,
-                runsExtracted = utf16Stats.runsExtracted,
-            )
+        // QA#3: read-check-write целиком под замком — иначе параллельный синк мог
+        // вклиниться между проверкой и присвоением, и «откат к utf16Stats» затирал его stats.
+        synchronized(statsLock) {
+            lastParseStats = if (lastParseStats.parseError.isBlank() && lastParseStats.textPreview.isBlank()) {
+                utf16Stats
+            } else if (utf16Stats.textPreview.isNotBlank()) {
+                lastParseStats.copy(
+                    textPreview = utf16Stats.textPreview,
+                    runsExtracted = utf16Stats.runsExtracted,
+                )
+            } else {
+                lastParseStats
+            }
         }
 
         return emptyList()
@@ -792,16 +812,16 @@ object MpkScheduleParser {
             }
         }
 
-        lastParseStats = lastParseStats.copy(
-            textPreview = text.replace(Regex("\\s+"), " ").take(120),
-        )
+        mutateStats {
+            it.copy(textPreview = text.replace(Regex("\\s+"), " ").take(120))
+        }
         val strategyErrors = mutableListOf<String>()
 
         val tableLessons = runCatching { parseTableGridSchedule(lines, cleanTargetGroup, detectedDay, detectedDate) }
             .onFailure { strategyErrors.add("grid:${it.javaClass.simpleName}: ${it.message}") }
             .getOrDefault(emptyList())
         if (tableLessons.isNotEmpty()) {
-            lastParseStats = lastParseStats.copy(strategy = "grid", groupFound = true, parseError = strategyErrors.joinToString("; "))
+            mutateStats { it.copy(strategy = "grid", groupFound = true, parseError = strategyErrors.joinToString("; ")) }
             return tableLessons
         }
 
@@ -809,17 +829,19 @@ object MpkScheduleParser {
             .onFailure { strategyErrors.add("cells:${it.javaClass.simpleName}: ${it.message}") }
             .getOrDefault(emptyList())
         if (cellLessons.isNotEmpty()) {
-            lastParseStats = lastParseStats.copy(strategy = "cells", groupFound = true, parseError = strategyErrors.joinToString("; "))
+            mutateStats { it.copy(strategy = "cells", groupFound = true, parseError = strategyErrors.joinToString("; ")) }
             return cellLessons
         }
 
         val lineLessons = runCatching { parseLineByLineFallback(lines, cleanTargetGroup, detectedDay, detectedDate) }
             .onFailure { strategyErrors.add("line:${it.javaClass.simpleName}: ${it.message}") }
             .getOrDefault(emptyList())
-        lastParseStats = lastParseStats.copy(
-            strategy = if (lineLessons.isNotEmpty()) "line" else strategyErrors.joinToString("; ").ifBlank { "none" },
-            parseError = strategyErrors.joinToString("; "),
-        )
+        mutateStats {
+            it.copy(
+                strategy = if (lineLessons.isNotEmpty()) "line" else strategyErrors.joinToString("; ").ifBlank { "none" },
+                parseError = strategyErrors.joinToString("; "),
+            )
+        }
         return lineLessons
     }
 
@@ -871,7 +893,7 @@ object MpkScheduleParser {
         }
 
         if (!targetBlockFound) {
-            lastParseStats = lastParseStats.copy(groupFound = false)
+            mutateStats { it.copy(groupFound = false) }
         }
         return lessons
     }

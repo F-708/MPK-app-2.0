@@ -70,7 +70,6 @@ class TeacherInsights(
         val rooms = mutableMapOf<String, MutableList<String>>()
         val subjects = mutableMapOf<String, MutableList<String>>()
         val counts = mutableMapOf<String, Int>()
-        val dates = mutableMapOf<String, String>()
         val weekly = mutableMapOf<String, Boolean>()
         val dateMillis = mutableMapOf<String, Long>()
 
@@ -92,10 +91,9 @@ class TeacherInsights(
 
                 val dateKey = lesson.dateString.replace("-", ".")
                 if (dateKey.isNotBlank()) {
-                    val prev = dates[full]
-                    if (prev == null || dateKey > prev) dates[full] = dateKey
-                    // W28: максимальная дата в epoch (сравнение дат — только через epoch,
-                    // лексикографика dd.MM.yyyy запрещена конвенцией)
+                    // W28/QA#15: сравнение дат — только через epoch, лексикографика
+                    // dd.MM.yyyy запрещена конвенцией (на стыке месяцев «30.09» > «01.10»
+                    // строково, но это неверно). lastDate тоже выводится из max epoch.
                     parseDotDateMillis(dateKey)?.let { ms ->
                         val prevMs = dateMillis[full]
                         if (prevMs == null || ms > prevMs) dateMillis[full] = ms
@@ -108,6 +106,8 @@ class TeacherInsights(
             }
         }
 
+        // QA#15: локальный форматтер (SimpleDateFormat не потокобезопасен — не поднимаем в поле)
+        val lastDateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
         return counts.keys.associateWith { full ->
             TeacherFacts(
                 rooms =
@@ -120,7 +120,7 @@ class TeacherInsights(
                     .map { it.key },
                 subjects = subjects[full].orEmpty().distinct().take(6),
                 count = counts[full] ?: 0,
-                lastDate = dates[full].orEmpty(),
+                lastDate = dateMillis[full]?.let { lastDateFormat.format(java.util.Date(it)) }.orEmpty(),
                 lastMillis = dateMillis[full],
                 activeNow =
                 weekly[full] == true ||

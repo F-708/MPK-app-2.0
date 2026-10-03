@@ -15,8 +15,11 @@ import kotlinx.coroutines.withContext
 /**
  * H1: периодическая (15 мин) доставка напоминаний о заданиях.
  *
- * Логика: берём все напоминания, у которых `triggerAtMillis <= now + 15мин` (due-окно воркера),
- * для каждого грузим задание; если задание ещё не выполнено — показываем уведомление.
+ * QA#8: берём ТОЛЬКО наступившие напоминания (`triggerAtMillis <= now`). Раньше окно было
+ * `now + 15 мин` — напоминание доставлялось ДО срока (вплоть до 15 минут рано). Lookahead
+ * не нужен: воркер периодический (15 мин) и подберёт напоминание на следующем прогоне,
+ * когда срок реально наступит.
+ * Для каждого due грузим задание; если задание ещё не выполнено — показываем уведомление.
  * Строку напоминания удаляем после доставки; если задание уже выполнено/удалено — тоже
  * (иначе «залипшее» напоминание долбило бы каждые 15 минут).
  *
@@ -40,10 +43,6 @@ class ReminderCheckWorker(
 
     companion object {
         const val WORK_NAME = "mpk_reminder_check_worker"
-
-        // 15 минут — совпадает с периодом PeriodicWorkRequest, чтобы каждое напоминание
-        // попадало ровно в одно due-окно (следующий запуск его уже удалит).
-        internal const val LOOKAHEAD_MILLIS = 15L * 60L * 1000L
     }
 }
 
@@ -55,8 +54,9 @@ internal suspend fun deliverDueReminders(
     val reminderDao = db.taskReminderDao()
     val taskDao = db.taskDao()
 
-    val until = System.currentTimeMillis() + ReminderCheckWorker.LOOKAHEAD_MILLIS
-    val due = reminderDao.getDueUntil(until)
+    // QA#8: только наступившие (triggerAt <= now), без lookahead — будущие напоминания
+    // догонит следующий периодический запуск воркера (15 мин).
+    val due = reminderDao.getDueUntil(System.currentTimeMillis())
 
     for (reminder in due) {
         val task = taskDao.getTaskById(reminder.taskId)

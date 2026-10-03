@@ -33,8 +33,9 @@ import org.robolectric.annotation.Config
  *    неверная таблица — напоминание в БД не доедет.
  *
  * 2. W31 ROOT CAUSE — воркер доставки. `ReminderCheckWorker` раз в 15 минут берёт все
- *    напоминания с triggerAt <= now+15мин (в т.ч. ПРОШЕДШИЕ) и ПОСЛЕ ПОПЫТКИ доставки
- *    удаляет строку. Если POST_NOTIFICATIONS не выдано — уведомление молча не показывается,
+ *    напоминания с triggerAt <= now (QA#8: только НАСТУПИВШИЕ, без lookahead — будущие
+ *    подберёт следующий прогон) и ПОСЛЕ ПОПЫТКИ доставки удаляет строку. Если
+ *    POST_NOTIFICATIONS не выдано — уведомление молча не показывается,
  *    а строка удалялась ВСЁ РАВНО: напоминание, записанное в БД, исчезало в течение
  *    15 минут («не сохраняется»). Специфика: композер по умолчанию ставит «сегодня 18:00»,
  *    вечером такое напоминание уже в прошлом → сразу due → молчаливое удаление.
@@ -164,5 +165,19 @@ class ReminderSaveRoundTripTest {
         deliverDueReminders(db, context)
 
         assertEquals(1, db.taskReminderDao().getForTask(id).size)
+    }
+
+    @Test
+    fun `QA8 напоминание через 10 минут не доставляется рано даже у выполненного задания`() = runBlocking {
+        val id = repo.saveTask(task())
+        db.taskDao().setTaskCompleted(id, true)
+        // +10 мин: старый lookahead (now+15мин) уже считал такое напоминание due и удалял
+        // строку ДО срока; теперь воркер берёт только наступившие (triggerAt <= now).
+        val soon = System.currentTimeMillis() + 10 * 60_000L
+        db.taskReminderDao().replaceForTask(id, listOf(TaskReminderEntity(taskId = id, triggerAtMillis = soon)))
+
+        deliverDueReminders(db, context)
+
+        assertEquals("не наступило — не тронуто", 1, db.taskReminderDao().getForTask(id).size)
     }
 }

@@ -18,9 +18,11 @@ import org.robolectric.RobolectricTestRunner
 /**
  * H1 (Задача 3.2): due-логика напоминаний + атомарная замена + одноразовость.
  *
- * `getDueUntil(until)` возвращает все строки с `triggerAtMillis <= until`: напоминание
- * в прошлом (просрочено, приложение было закрыто), в будущем внутри окна и ровно на границе.
- * За границей — не возвращается. `replaceForTask` заменяет атомо, `deleteById` — одноразовая отправка.
+ * `getDueUntil(until)` возвращает все строки с `triggerAtMillis <= until`. QA#8: воркер
+ * передаёт until = now (ТОЛЬКО наступившие) — будущее напоминание не доставляется рано,
+ * его подберёт следующий периодический запуск. Просроченное (приложение было закрыто в
+ * момент срабатывания) и ровно на границе — возвращаются.
+ * `replaceForTask` заменяет атомо, `deleteById` — одноразовая отправка.
  */
 @RunWith(RobolectricTestRunner::class)
 class ReminderDaoTest {
@@ -52,30 +54,27 @@ class ReminderDaoTest {
     )
 
     @Test
-    fun `getDueUntil returns past, in-window and boundary but not beyond`() = runBlocking {
+    fun `getDueUntil(now) returns past and boundary but not future`() = runBlocking {
         val dao = db.taskReminderDao()
         val taskId = insertTask()
         val now = System.currentTimeMillis()
-        val until = now + 15 * 60_000L
 
         val past = now - 60_000L // просрочено
-        val inWindow = now + 10 * 60_000L // внутри 15-мин окна
-        val boundary = until // ровно на границе (<=)
-        val beyond = until + 1L // за окном
+        val boundary = now // ровно на границе (<=)
+        val future = now + 10 * 60_000L // QA#8: внутри старого lookahead-окна — рано доставлять нельзя
 
         dao.insertAll(
             listOf(
                 TaskReminderEntity(taskId = taskId, triggerAtMillis = past),
-                TaskReminderEntity(taskId = taskId, triggerAtMillis = inWindow),
                 TaskReminderEntity(taskId = taskId, triggerAtMillis = boundary),
-                TaskReminderEntity(taskId = taskId, triggerAtMillis = beyond),
+                TaskReminderEntity(taskId = taskId, triggerAtMillis = future),
             ),
         )
 
-        val due = dao.getDueUntil(until)
-        assertEquals("прошлое + окно + граница = 3, за окном не входит", 3, due.size)
+        val due = dao.getDueUntil(now)
+        assertEquals("прошлое + граница = 2, будущее не входит", 2, due.size)
         assertTrue("граница включительно", due.any { it.triggerAtMillis == boundary })
-        assertTrue("за окном не возвращается", due.none { it.triggerAtMillis == beyond })
+        assertTrue("будущее не возвращается (QA#8)", due.none { it.triggerAtMillis == future })
     }
 
     @Test

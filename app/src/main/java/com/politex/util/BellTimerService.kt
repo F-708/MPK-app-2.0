@@ -1,5 +1,6 @@
 package com.politex.util
 
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -108,15 +109,30 @@ class BellTimerService : Service() {
         @Volatile
         var isRunning: Boolean = false
 
-        fun start(context: Context) {
+        /**
+         * QA#1: возвращает true, если старт принял вызов. На Android 12+ старт FGS из
+         * фона бросает ForegroundServiceStartNotAllowedException — раньше он тонул в
+         * пустом catch, и страховка (watchdog) считала сервис поднятым. Теперь вызывающий
+         * получает false и заводит точный будильник (см. BellServiceWatchdogWorker).
+         */
+        fun start(context: Context): Boolean {
             val intent = Intent(context, BellTimerService::class.java)
-            try {
+            return try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
                 } else {
                     context.startService(intent)
                 }
-            } catch (_: Exception) {
+                true
+            } catch (e: Exception) {
+                val fgsBlocked = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    e is ForegroundServiceStartNotAllowedException
+                android.util.Log.w(
+                    "BellTimerService",
+                    if (fgsBlocked) "FGS start not allowed from background — caller should schedule fallback alarm" else "start failed",
+                    e,
+                )
+                false
             }
         }
 

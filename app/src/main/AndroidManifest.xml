@@ -118,6 +118,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- QA#1: fallback-будильник watchdog'а — старт BellTimerService из exempt-контекста
+             (точный будильник), когда прямой startForegroundService из воркера запрещён (12+) -->
+        <receiver
+            android:name=".worker.BellServiceAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.politex.worker.ACTION_START_BELL_SERVICE" />
+            </intent-filter>
+        </receiver>
+
         <!-- X43: смена даты/времени/часового пояса системы — перепланировать виджеты,
              будильник и воркеры (иначе они залипают в старом состоянии). Эти системные
              broadcasts в списке исключений фонового ограничения, манифест-ресивер их
