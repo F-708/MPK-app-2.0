@@ -326,6 +326,14 @@ fun MaterialBaseScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             val viewer = currentRoute as? MaterialRoute.Viewer
             if (viewer != null && viewerItem != null) {
+                // V7/V8: полноэкранный режим для ЛЮБОГО просмотрщика (PDF, изображения,
+                // DOCX/текст) — баннер и нижняя навигация скрыты, пока читалка открыта.
+                // onDispose покрывает ЛЮБОЙ выход: back из читалки, системный back, удаление
+                // материала из другого экрана; при смерти процесса object-состояние сбрасывается само.
+                DisposableEffect(viewerItem.id) {
+                    ViewerMode.active = true
+                    onDispose { ViewerMode.active = false }
+                }
                 // W12: роутинг просмотрщика — ЯВНО по kind: TEXT всегда идёт в DocTextViewer
                 // и читает textContent, независимо от ext/папок.
                 when (viewerItem.kindEnum) {
@@ -334,21 +342,13 @@ fun MaterialBaseScreen(
 
                     MaterialKind.FILE ->
                         if (viewerItem.ext == "pdf") {
-                            // W16: полноэкранное чтение — баннер и нижняя навигация скрыты,
-                            // пока жив PDF-просмотрщик. onDispose покрывает ЛЮБОЙ выход:
-                            // back из читалки, системный back, удаление материала из другого
-                            // экрана; при смерти процесса object-состояние сбрасывается само.
-                            DisposableEffect(viewerItem.id) {
-                                ViewerMode.active = true
-                                onDispose { ViewerMode.active = false }
-                            }
                             MaterialPdfViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
                         } else {
-                            MaterialDocTextViewer(item = viewerItem, onBack = pop, modifier = Modifier.fillMaxSize())
+                            MaterialDocTextViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
                         }
 
                     MaterialKind.TEXT ->
-                        MaterialDocTextViewer(item = viewerItem, onBack = pop, modifier = Modifier.fillMaxSize())
+                        MaterialDocTextViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
                 }
             } else if (viewer != null) {
                 // W12: материал ещё не доехал из БД (поток Room асинхронный) — показываем

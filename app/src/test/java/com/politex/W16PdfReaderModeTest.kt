@@ -24,10 +24,10 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 /**
- * W16: полноэкранный режим чтения PDF. Материал-route с ext=pdf обязан включать ViewerMode
- * (MainScreen по нему прячет баннер и нижнюю навигацию), а любой выход из просмотрщика —
- * системный back, стрелка «назад» — обязан флаг СБРАСЫВАТЬ, иначе панель пропадёт на всём
- * приложении. Non-PDF просмотрщики (текст) флаг не трогают.
+ * W16/V7-V8: полноэкранный режим чтения. Любой Материал-route (PDF, изображения, текст)
+ * обязан включать ViewerMode (MainScreen по нему прячет баннер и нижнюю навигацию), а любой
+ * выход из просмотрщика — системный back, стрелка «назад» — обязан флаг СБРАСЫВАТЬ, иначе
+ * панель пропадёт на всём приложении.
  *
  * PdfRenderer в Robolectric не работает (native) — файл-пустышка уводит просмотрщик в
  * аварийный путь с плашкой, но Lifecycle флага от этого не меняется: DisposableEffect
@@ -115,7 +115,7 @@ class W16PdfReaderModeTest {
     }
 
     @Test
-    fun `текстовый просмотрщик не включает полноэкранный режим`() {
+    fun `текстовый просмотрщик тоже включает полноэкранный режим`() {
         val id = runBlocking {
             db.materialDao().insertItem(
                 MaterialItemEntity(
@@ -137,8 +137,17 @@ class W16PdfReaderModeTest {
         composeRule.waitForIdle()
         waitForNode("doc_top_bar")
 
-        // W16: прятать нижнюю навигацию нужно ТОЛЬКО в PDF-читалке
-        assertFalse("W16: DocTextViewer не должен включать ViewerMode", ViewerMode.active)
+        // V7/V8: полноэкранный режим теперь для ЛЮБОГО просмотрщика — текст тоже прячет
+        // баннер и нижнюю навигацию (DisposableEffect вынесен на уровень «viewer открыт»)
+        assertTrue("V7/V8: DocTextViewer обязан включать ViewerMode", ViewerMode.active)
+
+        // Выход сбрасывает флаг (onDispose покрывает любой выход)
+        composeRule.onNodeWithTag("doc_top_bar_back").performClick()
+        composeRule.waitForIdle()
+        assertFalse("V7/V8: ViewerMode обязан сбрасываться при выходе", ViewerMode.active)
+        // даём списку материалов перевыпуститься и успокоиться до tearDown (иначе getAllItems
+        // гонит запрос в уже закрытый пул соединений)
+        waitForNode("material_item_$id")
     }
 
     private fun resetSingleton() {

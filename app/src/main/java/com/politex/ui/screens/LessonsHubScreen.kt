@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.model.GroupInfo
 import com.politex.data.repository.TaskRepository
+import com.politex.ui.screens.materials.ViewerMode
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -68,8 +69,11 @@ fun LessonsHubScreen(
             .fillMaxSize()
             .background(ColorBgMain),
     ) {
-        // W10: заголовок «Уроки» убран — чипы сразу после баннера
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        // W10: заголовок «Уроки» убран — чипы сразу после баннера.
+        // V7/V8: в полноэкранном просмотрщике материала чипы скрыты — максимум места для чтения.
+        // V7/V17: чипы хаба скрыты в полноэкранном просмотрщике И в детальном экране оценок
+        if (!ViewerMode.active && !GradeDetailMode.active) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -123,6 +127,7 @@ fun LessonsHubScreen(
                         )
                     }
                 }
+            }
             }
         }
 

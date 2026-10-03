@@ -1,7 +1,11 @@
 package com.politex.ui.screens.materials
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -11,12 +15,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -27,6 +37,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -36,18 +47,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.politex.data.local.dao.MaterialDao
+import com.politex.data.local.entity.MaterialAnnotationEntity
 import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.util.bouncyClickable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.math.max
 import kotlin.math.min
 
 /**
  * M4: просмотрщик набора изображений — HorizontalPager + Coil AsyncImage (обе зависимости
- * уже в проекте), зум/пан `detectTransformGestures` (1…4×), поворот на 90° кнопкой.
+ * уже в проекте), зум/пан (1…4×), поворот на 90° кнопкой.
  *
  * ПОВОРОТ делается `graphicsLayer { rotationZ }` плюс вписывающий масштаб min(w/h, h/w) при
  * повороте на 90/270: без него повёрнутое полотно вылезает за границы бокса и обрезается.
@@ -62,7 +77,14 @@ import kotlin.math.min
  * ponytail: per-image поворот потребовал бы отдельной таблицы/JSON-колонки на страницу;
  * добавить, если наборы окажутся разноориентированными.
  *
- * pan ограничен габаритами контейнера: иначе картинку можно увезти за экран и потерять.
+ * V8 (свайп): detectTransformGestures заменён на awaitEachGesture — прежний жест потреблял
+ * ЛЮБОЙ одиночный свайп и pager было не листнуть. Теперь handled = zoom>1.05f (рассматриваем —
+ * одиночный палец двигает картинку) ИЛИ пальцев ≥2; при zoom==1 одиночный свайп НЕ потребляем
+ * и его забирает HorizontalPager. На границе пана события тоже не потребляем — листание доступно.
+ *
+ * V9 (рисование): AnnotationLayer внутри graphicsLayer страницы — штрихи в нормализованных
+ * координатах 0..1 переживают зум/поворот и листание; сохранение — как в PdfViewer (дебаунс
+ * 500мс + синхронный flush перед выходом).
  */
 @Composable
 fun MaterialImageViewer(
@@ -99,12 +121,68 @@ fun MaterialImageViewer(
         pan = Offset.Zero
     }
 
+    // ── V9: рисование (тот же механизм, что в PdfViewer) ─────────────────────
+    var drawMode by remember { mutableStateOf(false) }
+    var drawColor by remember { mutableIntStateOf(ANNOTATION_COLORS.first()) }
+    var drawWidth by remember { mutableFloatStateOf(4f) }
+
+    val annotations by dao.getAnnotationsFlow(item.id).collectAsState(initial = emptyList())
+    val pageStrokes = remember(item.id) { mutableStateMapOf<Int, List<Stroke>>() }
+    val dirtyPages = remember(item.id) { mutableStateListOf<Int>() }
+    var saveVersion by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(annotations) {
+        annotations.forEach { if (it.pageIndex !in dirtyPages) pageStrokes[it.pageIndex] = Stroke.parse(it.strokesJson) }
+    }
+
+    suspend fun persistPages(pages: List<Int>) {
+        pages.forEach { p ->
+            dao.upsertAnnotation(
+                MaterialAnnotationEntity(
+                    itemId = item.id,
+                    pageIndex = p,
+                    strokesJson = Stroke.serialize(pageStrokes[p].orEmpty()),
+                ),
+            )
+        }
+    }
+
+    fun markDirty(page: Int) {
+        if (page !in dirtyPages) dirtyPages += page
+        saveVersion++
+    }
+
+    LaunchedEffect(saveVersion) {
+        if (saveVersion == 0) return@LaunchedEffect
+        delay(500)
+        val pages = dirtyPages.toList()
+        dirtyPages.clear()
+        persistPages(pages)
+    }
+
+    val currentPage = pagerState.currentPage
+    val flushAndBack: () -> Unit = {
+        val pages = dirtyPages.toList()
+        dirtyPages.clear()
+        if (pages.isNotEmpty()) runBlocking(Dispatchers.IO) { persistPages(pages) }
+        onBack()
+    }
+    BackHandler(enabled = dirtyPages.isNotEmpty()) { flushAndBack() }
+
     Column(modifier = modifier.fillMaxSize().background(Color.Black)) {
         MaterialViewerTopBar(
             title = item.title,
             testTag = "image_top_bar",
-            onBack = onBack,
+            onBack = flushAndBack,
         ) {
+            // V9: карандаш ПЕРЕД кнопкой поворота
+            ViewerAction(
+                icon = Icons.Default.Edit,
+                description = "Рисование",
+                testTag = "image_draw_btn",
+                active = drawMode,
+                onClick = { drawMode = !drawMode },
+            )
             ViewerAction(
                 icon = Icons.Default.RotateRight,
                 description = "Повернуть на 90°",
@@ -135,6 +213,29 @@ fun MaterialImageViewer(
             }
         }
 
+        // V9: саб-тулбар рисования — под хедером, пока активен режим
+        if (drawMode) {
+            AnnotationToolbar(
+                color = drawColor,
+                widthDp = drawWidth,
+                onColor = { drawColor = it },
+                onWidth = { drawWidth = it },
+                onUndo = {
+                    val s = pageStrokes[currentPage].orEmpty()
+                    if (s.isNotEmpty()) {
+                        pageStrokes[currentPage] = s.dropLast(1)
+                        markDirty(currentPage)
+                    }
+                },
+                onClear = {
+                    pageStrokes[currentPage] = emptyList()
+                    dirtyPages.remove(currentPage)
+                    scope.launch { dao.deletePageAnnotations(item.id, currentPage) }
+                },
+                onExit = { drawMode = false },
+            )
+        }
+
         HorizontalPager(
             state = pagerState,
             modifier =
@@ -152,41 +253,56 @@ fun MaterialImageViewer(
             ) {
                 val boxW = with(LocalDensity.current) { maxWidth.toPx() }
                 val boxH = with(LocalDensity.current) { maxHeight.toPx() }
+                var currentStroke by remember(page) { mutableStateOf<Stroke?>(null) }
                 // M4: поворот через graphicsLayer + вписывающий масштаб.
                 //
                 // Просто `rotationZ` крутит уже свёрстанное полотно: портретный кадр в альбомном
                 // боксе после поворота на 90° вылезает за границы и обрезается. Поэтому при
                 // повороте на 90/270 дополнительно умножаем масштаб на min(w/h, h/w) — повёрнутая
                 // картинка гарантированно влезает в бокс.
-                //
-                // Coil-трансформации здесь не помощник: в coil-base 2.7 лежат только CircleCrop и
-                // RoundedCorners, RotateTransformation нет, а тянуть отдельный модуль ради поворота
-                // дороже, чем четыре строки математики.
                 val fit =
                     if (rotation % 180 != 0 && boxW > 0f && boxH > 0f) {
                         min(boxW / boxH, boxH / boxW)
                     } else {
                         1f
                     }
-                AsyncImage(
-                    model = File(paths[page]),
-                    contentDescription = "Изображение ${page + 1} из ${paths.size}",
-                    contentScale = ContentScale.Fit,
+                Box(
                     modifier =
                     Modifier
                         .fillMaxSize()
                         .pointerInput(page) {
-                            detectTransformGestures { _, gesturePan, gestureZoom, _ ->
-                                val newZoom = (zoom * gestureZoom).coerceIn(1f, 4f)
-                                // Границы сдвига: чем больше зум, тем дальше можно уехать
-                                val maxX = max(0f, (newZoom - 1f) * size.width / 2f)
-                                val maxY = max(0f, (newZoom - 1f) * size.height / 2f)
-                                zoom = newZoom
-                                pan =
-                                    Offset(
-                                        (pan.x + gesturePan.x).coerceIn(-maxX, maxX),
-                                        (pan.y + gesturePan.y).coerceIn(-maxY, maxY),
-                                    )
+                            // V8: одиночный палец при zoom==1 НЕ потребляем — pager листает набор;
+                            // при zoom>1.05 или ≥2 пальцев жест наш (пан/зум картинки).
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                var handled = zoom > 1.05f
+                                do {
+                                    val event = awaitPointerEvent()
+                                    if (!handled && event.changes.count { it.pressed } >= 2) handled = true
+                                    if (!handled) continue
+                                    val zoomChange = event.calculateZoom()
+                                    val panChange = event.calculatePan()
+                                    val zooming = zoomChange != 1f
+                                    val newZoom = (zoom * zoomChange).coerceIn(1f, 4f)
+                                    val maxX = max(0f, (newZoom - 1f) * size.width / 2f)
+                                    val maxY = max(0f, (newZoom - 1f) * size.height / 2f)
+                                    val newX = (pan.x + panChange.x).coerceIn(-maxX, maxX)
+                                    val newY = (pan.y + panChange.y).coerceIn(-maxY, maxY)
+                                    val movedY = newY != pan.y
+                                    val zoomed = newZoom > 1.01f
+                                    // Границы пана: не двигаем картинку — не потребляем,
+                                    // свайп утекает в pager; горизонталь при зуме — всегда наша.
+                                    if (zooming || movedY || (zoomed && panChange.x != 0f)) {
+                                        event.changes.forEach { if (it.positionChanged()) it.consume() }
+                                        if (newZoom < 1.05f) {
+                                            zoom = 1f
+                                            pan = Offset.Zero
+                                        } else {
+                                            zoom = newZoom
+                                            pan = Offset(newX, newY)
+                                        }
+                                    }
+                                } while (event.changes.any { it.pressed })
                             }
                         }.graphicsLayer {
                             rotationZ = rotation.toFloat()
@@ -195,7 +311,45 @@ fun MaterialImageViewer(
                             translationX = pan.x
                             translationY = pan.y
                         },
-                )
+                ) {
+                    AsyncImage(
+                        model = File(paths[page]),
+                        contentDescription = "Изображение ${page + 1} из ${paths.size}",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    // V9: слой рисования внутри graphicsLayer — штрихи масштабируются/крутятся
+                    // вместе со страницей; pageIndex = страница pager'а.
+                    AnnotationLayer(
+                        strokes = pageStrokes[page].orEmpty(),
+                        current = currentStroke,
+                        drawMode = drawMode,
+                        strokeColor = drawColor,
+                        strokeWidthDp = drawWidth,
+                        onCurrentChange = { currentStroke = it },
+                        onStrokeFinished = { stroke ->
+                            pageStrokes[page] = pageStrokes[page].orEmpty() + stroke
+                            markDirty(page)
+                        },
+                        transformGestures = { panChange, zoomChange ->
+                            val newZoom = (zoom * zoomChange).coerceIn(1f, 4f)
+                            val maxX = max(0f, (newZoom - 1f) * boxW / 2f)
+                            val maxY = max(0f, (newZoom - 1f) * boxH / 2f)
+                            if (newZoom < 1.05f) {
+                                zoom = 1f
+                                pan = Offset.Zero
+                            } else {
+                                zoom = newZoom
+                                pan =
+                                    Offset(
+                                        (pan.x + panChange.x).coerceIn(-maxX, maxX),
+                                        (pan.y + panChange.y).coerceIn(-maxY, maxY),
+                                    )
+                            }
+                        },
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
             }
         }
 

@@ -136,7 +136,7 @@ fun MaterialViewerTopBar(
     }
 }
 
-/** M2: маленькая кнопка-действие в тёмной шапке (хитбокс 44dp). */
+/** M2: маленькая кнопка-действие в тёмной шапке (хитбокс 44dp, V11: иконка 24dp). */
 @Composable
 fun ViewerAction(
     icon: ImageVector,
@@ -158,7 +158,7 @@ fun ViewerAction(
                 imageVector = icon,
                 contentDescription = description,
                 tint = Color.White,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(24.dp),
             )
         }
     }

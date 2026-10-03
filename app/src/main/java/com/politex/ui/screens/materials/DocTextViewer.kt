@@ -5,35 +5,60 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.politex.data.local.dao.MaterialDao
 import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.data.local.entity.MaterialKind
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBrandBlue
+import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextTitle
+import com.politex.ui.util.bouncyClickable
 import com.politex.util.DocxParagraph
 import com.politex.util.DocxTextExtractor
 import com.politex.util.MaterialImporter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -51,63 +76,293 @@ private val TEXT_LIKE_EXT = setOf("txt", "md", "markdown", "csv", "log", "json",
  * абзацам вместо одного гигантского Text в verticalScroll — на методичке в 300 КБ разница
  * в скорости прокрутки кратная, потому что LazyColumn меряет только видимое.
  *
+ * V10: встроенный редактор (карандаш в шапке для TEXT/текстоподобных/docx): ОДИН multiline
+ * TextField вместо списка абзацев, разметка токенами **жирный** / *курсив* / __подчёркнутый__
+ * и «- » → маркер списка. Сохранение ТОЛЬКО явной кнопкой (dao.updateTextContent → textContent
+ * + textEdited=1 в БД; файл на диске не трогаем). Toggle-off карандаша возвращает в чтение
+ * БЕЗ автосохранения — правка теряется, это осознанно: «передумал» не должно молча писать в БД.
+ *
  * .doc (бинарный OLE2) — честная заглушка, см. [UnsupportedFormatPlaque].
  */
 @Composable
 fun MaterialDocTextViewer(
     item: MaterialItemEntity,
+    dao: MaterialDao,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val scope = rememberCoroutineScope()
     var paragraphs by remember(item.id, item.uriPath) { mutableStateOf<List<DocxParagraph>?>(null) }
     var failed by remember(item.id, item.uriPath) { mutableStateOf(false) }
 
-    LaunchedEffect(item.id, item.uriPath, item.kind) {
+    LaunchedEffect(item.id, item.uriPath, item.kind, item.textEdited) {
         paragraphs = withContext(Dispatchers.IO) { loadParagraphs(item) }
         failed = paragraphs == null
     }
 
+    // ── V10: состояние редактора ──────────────────────────────────────────────
+    var editMode by remember(item.id) { mutableStateOf(false) }
+    var textValue by remember(item.id) { mutableStateOf(TextFieldValue()) }
+    val undoStack = remember(item.id) { ArrayDeque<String>() }
+    val redoStack = remember(item.id) { ArrayDeque<String>() }
+
+    fun startEdit() {
+        textValue = TextFieldValue(paragraphs?.joinToString("\n") { it.text } ?: item.textContent)
+        undoStack.clear()
+        redoStack.clear()
+        editMode = true
+    }
+
+    // ponytail: снапшоты на каждое изменение, стек cap 10; для текстов >100КБ снапшоты
+    // скипаем (10×100КБ строк в памяти того не стоят) — undo на больших текстах не работает.
+    fun snapshot() {
+        if (textValue.text.length > 100_000) return
+        undoStack.addLast(textValue.text)
+        if (undoStack.size > 10) undoStack.removeFirst()
+        redoStack.clear()
+    }
+
+    fun wrapSelection(marker: String) {
+        snapshot()
+        val t = textValue.text
+        val sel = textValue.selection
+        val newText = t.substring(0, sel.start) + marker + t.substring(sel.start, sel.end) + marker + t.substring(sel.end)
+        textValue = TextFieldValue(newText, selection = TextRange(sel.start + marker.length, sel.end + marker.length))
+    }
+
+    fun bulletLine() {
+        snapshot()
+        val t = textValue.text
+        val cursor = textValue.selection.min
+        val lineStart = if (cursor == 0) 0 else t.lastIndexOf('\n', cursor - 1) + 1
+        textValue = TextFieldValue(t.substring(0, lineStart) + "- " + t.substring(lineStart), selection = TextRange(cursor + 2))
+    }
+
+    fun undo() {
+        val prev = undoStack.removeLastOrNull() ?: return
+        redoStack.addLast(textValue.text)
+        if (redoStack.size > 10) redoStack.removeFirst()
+        textValue = TextFieldValue(prev)
+    }
+
+    fun redo() {
+        val next = redoStack.removeLastOrNull() ?: return
+        undoStack.addLast(textValue.text)
+        if (undoStack.size > 10) undoStack.removeFirst()
+        textValue = TextFieldValue(next)
+    }
+
+    fun save() {
+        val text = textValue.text
+        scope.launch { dao.updateTextContent(item.id, text) }
+        paragraphs = text.split('\n').map { DocxParagraph(it.trimEnd()) }
+        failed = false
+        editMode = false
+    }
+
+    val canEdit = item.kindEnum == MaterialKind.TEXT || item.ext in TEXT_LIKE_EXT || item.ext == "docx"
+
     Column(modifier = modifier.fillMaxSize().background(ColorBgMain)) {
-        MaterialViewerTopBar(title = item.title, testTag = "doc_top_bar", onBack = onBack)
-
-        val content = paragraphs
-        when {
-            // Нечитаемый/неподдерживаемый формат — плашка, а не пустой экран
-            failed -> UnsupportedFormatPlaque(ext = item.ext, fileName = item.fileName.ifBlank { item.title })
-
-            content == null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = ColorBrandBlue, modifier = Modifier.testTag("doc_loading"))
-            }
-
-            content.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "Текст не найден: документ пустой или не читается встроенным просмотрщиком.",
-                    style = TextStyle(fontSize = 13.sp),
-                    modifier = Modifier.padding(24.dp),
+        MaterialViewerTopBar(title = item.title, testTag = "doc_top_bar", onBack = onBack) {
+            if (canEdit) {
+                ViewerAction(
+                    icon = Icons.Default.Edit,
+                    description = "Редактировать текст",
+                    testTag = "doc_edit_btn",
+                    active = editMode,
+                    onClick = { if (editMode) editMode = false else startEdit() },
                 )
             }
+        }
 
-            else -> LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .testTag("doc_paragraph_list"),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(content.size) { index ->
-                    val p = content[index]
+        if (editMode) {
+            TextEditToolbar(
+                onBold = { wrapSelection("**") },
+                onItalic = { wrapSelection("*") },
+                onUnderline = { wrapSelection("__") },
+                onBullet = ::bulletLine,
+                onUndo = ::undo,
+                onRedo = ::redo,
+                onSave = ::save,
+            )
+            TextField(
+                value = textValue,
+                onValueChange = { next ->
+                    snapshot()
+                    textValue = next
+                },
+                modifier = Modifier.fillMaxSize().testTag("doc_edit_field"),
+                textStyle = TextStyle(fontSize = 14.sp, color = ColorTextBody, lineHeight = 19.sp),
+            )
+        } else {
+            val content = paragraphs
+            when {
+                // Нечитаемый/неподдерживаемый формат — плашка, а не пустой экран
+                failed -> UnsupportedFormatPlaque(ext = item.ext, fileName = item.fileName.ifBlank { item.title })
+
+                content == null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = ColorBrandBlue, modifier = Modifier.testTag("doc_loading"))
+                }
+
+                content.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = p.text,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .then(if (p.heading) Modifier.padding(top = 10.dp) else Modifier)
-                            .testTag("doc_paragraph_$index"),
-                        style = when {
-                            p.heading -> TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle, lineHeight = 21.sp)
-                            p.bold -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle, lineHeight = 19.sp)
-                            else -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, color = ColorTextBody, lineHeight = 19.sp)
-                        },
+                        text = "Текст не найден: документ пустой или не читается встроенным просмотрщиком.",
+                        style = TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.padding(24.dp),
                     )
+                }
+
+                else -> LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("doc_paragraph_list"),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(content.size) { index ->
+                        val p = content[index]
+                        Text(
+                            // V10: токены разметки (**/*/__) и «- » → «• » рендерятся в AnnotatedString
+                            text = parseInlineMarks(p.text),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (p.heading) Modifier.padding(top = 10.dp) else Modifier)
+                                .testTag("doc_paragraph_$index"),
+                            style = when {
+                                p.heading -> TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle, lineHeight = 21.sp)
+                                p.bold -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle, lineHeight = 19.sp)
+                                else -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, color = ColorTextBody, lineHeight = 19.sp)
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** V10: панель редактора [B][I][U][•][undo][redo][СОХРАНИТЬ] под хедером. */
+@Composable
+private fun TextEditToolbar(
+    onBold: () -> Unit,
+    onItalic: () -> Unit,
+    onUnderline: () -> Unit,
+    onBullet: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onSave: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorSurfaceHighlight,
+        modifier = Modifier.fillMaxWidth().testTag("doc_edit_toolbar"),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+        ) {
+            EditMarkButton("B", "doc_bold_btn", TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle), onBold)
+            EditMarkButton("I", "doc_italic_btn", TextStyle(fontStyle = FontStyle.Italic, fontSize = 15.sp, color = ColorTextTitle), onItalic)
+            EditMarkButton(
+                "U",
+                "doc_underline_btn",
+                TextStyle(textDecoration = TextDecoration.Underline, fontSize = 15.sp, color = ColorTextTitle),
+                onUnderline,
+            )
+            EditMarkButton("•", "doc_bullet_btn", TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ColorTextTitle), onBullet)
+            EditMarkIcon(Icons.AutoMirrored.Filled.Undo, "Отменить", "doc_undo_btn", onUndo)
+            EditMarkIcon(Icons.AutoMirrored.Filled.Redo, "Повторить", "doc_redo_btn", onRedo)
+            Spacer(modifier = Modifier.weight(1f))
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBrandBlue,
+                modifier = Modifier.size(width = 104.dp, height = 36.dp).bouncyClickable(onClick = onSave).testTag("doc_save_btn"),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text("СОХРАНИТЬ", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.White))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditMarkButton(
+    label: String,
+    tag: String,
+    style: TextStyle,
+    onClick: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = Color.Transparent,
+        modifier = Modifier.size(40.dp).bouncyClickable(onClick = onClick).testTag(tag),
+    ) {
+        Box(contentAlignment = Alignment.Center) { Text(label, style = style) }
+    }
+}
+
+@Composable
+private fun EditMarkIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    tag: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = Color.Transparent,
+        modifier = Modifier.size(40.dp).bouncyClickable(onClick = onClick).testTag(tag),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(imageVector = icon, contentDescription = description, tint = ColorTextBody, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/**
+ * V10: рендер инлайн-разметки абзаца: `**жирный**`, `*курсив*`, `__подчёркнутый__` →
+ * span'ы AnnotatedString, ведущий «- » → «• ». Незакрытый токен остаётся литералом
+ * (текст конспекта важнее «красивой» разметки). Чистая функция — покрыта unit-тестом.
+ *
+ * ponytail: токенайзер в один проход без вложенности (`*a **b** c*` разберется плоско);
+ * полноценный markdown-парсер тащить только если появится реальная вложенная разметка.
+ */
+internal fun parseInlineMarks(par: String): AnnotatedString {
+    val s = if (par.startsWith("- ")) "• " + par.substring(2) else par
+    return buildAnnotatedString {
+        var i = 0
+        while (i < s.length) {
+            when {
+                s.startsWith("**", i) -> {
+                    val end = s.indexOf("**", i + 2)
+                    if (end > i) {
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(s.substring(i + 2, end)) }
+                        i = end + 2
+                    } else {
+                        append(s[i]); i++
+                    }
+                }
+                s[i] == '*' -> {
+                    val end = s.indexOf('*', i + 1)
+                    if (end > i) {
+                        withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(s.substring(i + 1, end)) }
+                        i = end + 1
+                    } else {
+                        append(s[i]); i++
+                    }
+                }
+                s.startsWith("__", i) -> {
+                    val end = s.indexOf("__", i + 2)
+                    if (end > i) {
+                        withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) { append(s.substring(i + 2, end)) }
+                        i = end + 2
+                    } else {
+                        append(s[i]); i++
+                    }
+                }
+                else -> {
+                    append(s[i]); i++
                 }
             }
         }
@@ -119,6 +374,11 @@ fun MaterialDocTextViewer(
  * «умеем, но текста нет». Различение нужно, чтобы .xls не выглядел пустой заметкой.
  */
 private fun loadParagraphs(item: MaterialItemEntity): List<DocxParagraph>? {
+    // V10: ПЕРВЫМ делом — пользовательская правка: она приоритетнее любого файла
+    if (item.textEdited) {
+        return item.textContent.split('\n').map { DocxParagraph(it.trimEnd()) }
+    }
+
     // Текст, набранный в приложении: байтов на диске нет, всё уже в БД
     if (item.kindEnum == MaterialKind.TEXT) {
         if (item.textContent.isBlank()) return emptyList()

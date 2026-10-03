@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import android.util.LruCache
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +51,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -63,14 +70,17 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.local.dao.MaterialDao
+import com.politex.data.local.entity.MaterialAnnotationEntity
 import com.politex.data.local.entity.MaterialBookmarkEntity
 import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.ui.theme.ColorBgMain
@@ -83,8 +93,10 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.util.bouncyClickable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -147,9 +159,11 @@ fun MaterialPdfViewer(
                 currentPage = 0,
                 pageCount = 0,
                 bookmarkListActive = false,
+                drawActive = false,
                 onBack = onBack,
                 onPageClick = {},
                 onBookmarks = {},
+                onDrawToggle = {},
             )
             UnsupportedFormatPlaque(ext = "pdf", fileName = item.fileName.ifBlank { file.name })
         }
@@ -170,6 +184,58 @@ fun MaterialPdfViewer(
     var bookmarkDraftPage by remember { mutableStateOf<Int?>(null) }
     var showPageJump by remember { mutableStateOf(false) }
 
+    // ── V9: рисование поверх страниц ──────────────────────────────────────────
+    var drawMode by remember { mutableStateOf(false) }
+    var drawColor by remember { mutableIntStateOf(ANNOTATION_COLORS.first()) }
+    var drawWidth by remember { mutableFloatStateOf(4f) }
+
+    val annotations by dao.getAnnotationsFlow(item.id).collectAsState(initial = emptyList())
+    // Источник истины для рендера: стартует из БД, правки копятся локально и пишутся дебаунсом.
+    val pageStrokes = remember(item.id) { mutableStateMapOf<Int, List<Stroke>>() }
+    val dirtyPages = remember(item.id) { mutableStateListOf<Int>() }
+    var saveVersion by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(annotations) {
+        // Грязные страницы НЕ перетираем: эмиссия потока может доехать позже локальной правки.
+        annotations.forEach { if (it.pageIndex !in dirtyPages) pageStrokes[it.pageIndex] = Stroke.parse(it.strokesJson) }
+    }
+
+    suspend fun persistPages(pages: List<Int>) {
+        pages.forEach { p ->
+            dao.upsertAnnotation(
+                MaterialAnnotationEntity(
+                    itemId = item.id,
+                    pageIndex = p,
+                    strokesJson = Stroke.serialize(pageStrokes[p].orEmpty()),
+                ),
+            )
+        }
+    }
+
+    fun markDirty(page: Int) {
+        if (page !in dirtyPages) dirtyPages += page
+        saveVersion++
+    }
+
+    // Дебаунс 500мс: серия штрихов одной страницы — один upsert (unique itemId+pageIndex).
+    LaunchedEffect(saveVersion) {
+        if (saveVersion == 0) return@LaunchedEffect
+        delay(500)
+        val pages = dirtyPages.toList()
+        dirtyPages.clear()
+        persistPages(pages)
+    }
+
+    // V9: синхронный flush ДО pop — иначе штрих, нарисованный <500мс назад, теряется:
+    // при выходе compose-scope отменяется и дебаунс-сохранение не успевает.
+    val flushAndBack: () -> Unit = {
+        val pages = dirtyPages.toList()
+        dirtyPages.clear()
+        if (pages.isNotEmpty()) runBlocking(Dispatchers.IO) { persistPages(pages) }
+        onBack()
+    }
+    BackHandler(enabled = dirtyPages.isNotEmpty()) { flushAndBack() }
+
     // M2: запоминаем первую видимую страницу — «где остановился» переживает смерть процесса.
     LaunchedEffect(listState, item.id) {
         snapshotFlow { listState.firstVisibleItemIndex }
@@ -187,10 +253,38 @@ fun MaterialPdfViewer(
             currentPage = currentPage,
             pageCount = pageCount,
             bookmarkListActive = showBookmarkList,
-            onBack = onBack,
+            drawActive = drawMode,
+            onBack = flushAndBack,
             onPageClick = { showPageJump = true },
             onBookmarks = { showBookmarkList = !showBookmarkList },
+            onDrawToggle = {
+                drawMode = !drawMode
+                if (drawMode) showBookmarkList = false
+            },
         )
+
+        // V9: саб-тулбар рисования — под хедером, пока активен режим
+        if (drawMode) {
+            AnnotationToolbar(
+                color = drawColor,
+                widthDp = drawWidth,
+                onColor = { drawColor = it },
+                onWidth = { drawWidth = it },
+                onUndo = {
+                    val s = pageStrokes[currentPage].orEmpty()
+                    if (s.isNotEmpty()) {
+                        pageStrokes[currentPage] = s.dropLast(1)
+                        markDirty(currentPage)
+                    }
+                },
+                onClear = {
+                    pageStrokes[currentPage] = emptyList()
+                    dirtyPages.remove(currentPage)
+                    scope.launch { dao.deletePageAnnotations(item.id, currentPage) }
+                },
+                onExit = { drawMode = false },
+            )
+        }
 
         if (showBookmarkList) {
             BookmarkPanel(
@@ -203,7 +297,8 @@ fun MaterialPdfViewer(
             )
         }
 
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f)) {
+        // V9: clipToBounds — увеличенная страница (и слой рисования на ней) не налезает на хедер.
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f).clipToBounds()) {
             val density = LocalDensity.current
             val renderWidthPx = with(density) { (maxWidth - 8.dp).roundToPx() }.coerceIn(320, 1400)
 
@@ -234,6 +329,14 @@ fun MaterialPdfViewer(
                             } else {
                                 bookmarkDraftPage = index
                             }
+                        },
+                        strokes = pageStrokes[index].orEmpty(),
+                        drawMode = drawMode,
+                        drawColor = drawColor,
+                        drawWidthDp = drawWidth,
+                        onStrokeFinished = { stroke ->
+                            pageStrokes[index] = pageStrokes[index].orEmpty() + stroke
+                            markDirty(index)
                         },
                     )
                 }
@@ -291,9 +394,11 @@ private fun PdfReaderBar(
     currentPage: Int,
     pageCount: Int,
     bookmarkListActive: Boolean,
+    drawActive: Boolean,
     onBack: () -> Unit,
     onPageClick: () -> Unit,
     onBookmarks: () -> Unit,
+    onDrawToggle: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
@@ -341,6 +446,14 @@ private fun PdfReaderBar(
                     }
                 }
                 Spacer(modifier = Modifier.weight(1f))
+                // V9: карандаш ПЕРЕД закладками — режим рисования включают чаще, чем список
+                ViewerAction(
+                    icon = Icons.Default.Edit,
+                    description = "Рисование",
+                    testTag = "pdf_draw_btn",
+                    active = drawActive,
+                    onClick = onDrawToggle,
+                )
                 ViewerAction(
                     icon = Icons.Default.Bookmark,
                     description = "Закладки",
@@ -379,10 +492,14 @@ private fun newPageBitmapCache(): LruCache<Int, Bitmap> {
  * Одна страница: растр из кэша или рендер по мере появления. Плейсхолдер пропорций A4 —
  * иначе высота элемента скачет при дорисовке и список «прыгает» под пальцем.
  *
- * W16: pinch-to-zoom 1..4× с паном и двойным тапом-сбросом. Пан обрабатываем ТОЛЬКО когда
- * страница уже приближена (или пальцев ≥ 2): одиночный палец при zoom=1 остаётся скроллом
- * списка — потребляем события лишь в приближённом состоянии, иначе читалка перестала бы
- * листаться. Границы пана — габариты страницы (как в MaterialImageViewer).
+ * V7/V8: pinch-to-zoom 1..4× с паном и двойным тапом-сбросом. Жест страницы обрабатываем
+ * ТОЛЬКО при ≥2 пальцев: одиночный палец всегда остаётся скроллом LazyColumn (прежнее
+ * «залипание» handled=zoom>1.01 блокировало листание при любом зуме). События потребляем
+ * лишь когда pan реально двигает страницу (canX/canY по границам) или идёт pinch — на границе
+ * пана жест утекает в список и продолжает его листать; горизонталь при зуме потребляем всегда.
+ * Зум-out ниже 1.05× дощёлкивает до ровно 1f и сбрасывает pan — без пылевых 1.001×.
+ *
+ * V9: поверх растра — AnnotationLayer (внутри graphicsLayer, штрихи масштабируются со страницей).
  */
 @Composable
 private fun PdfPageRow(
@@ -393,10 +510,17 @@ private fun PdfPageRow(
     renderWidthPx: Int,
     bookmarked: Boolean,
     onBookmarkClick: (bookmarked: Boolean) -> Unit,
+    strokes: List<Stroke>,
+    drawMode: Boolean,
+    drawColor: Int,
+    drawWidthDp: Float,
+    onStrokeFinished: (Stroke) -> Unit,
 ) {
     var bitmap by remember(pageIndex) { mutableStateOf(cache.get(pageIndex)) }
     var zoom by remember(pageIndex) { mutableStateOf(1f) }
     var pan by remember(pageIndex) { mutableStateOf(Offset.Zero) }
+    var currentStroke by remember(pageIndex) { mutableStateOf<Stroke?>(null) }
+    var boxSize by remember(pageIndex) { mutableStateOf(IntSize.Zero) }
 
     LaunchedEffect(pageIndex, renderer) {
         if (bitmap != null) return@LaunchedEffect
@@ -416,28 +540,38 @@ private fun PdfPageRow(
             .fillMaxWidth()
             .padding(horizontal = 4.dp)
             .testTag("pdf_page_$pageIndex")
+            .onSizeChanged { boxSize = it }
             .pointerInput(pageIndex) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
-                    // уже приближена — одиночный палец двигает страницу, а не список
-                    var handled = zoom > 1.01f
+                    // V7/V8: одиночный палец — всегда скролл списка; жест страницы начинается со второго пальца
+                    var handled = false
                     do {
                         val event = awaitPointerEvent()
                         if (!handled && event.changes.count { it.pressed } >= 2) handled = true
                         if (!handled) continue
                         val zoomChange = event.calculateZoom()
                         val panChange = event.calculatePan()
-                        if (zoomChange != 1f || panChange != Offset.Zero) {
+                        val zooming = zoomChange != 1f
+                        val newZoom = (zoom * zoomChange).coerceIn(1f, 4f)
+                        val maxX = max(0f, (newZoom - 1f) * size.width / 2f)
+                        val maxY = max(0f, (newZoom - 1f) * size.height / 2f)
+                        val newX = (pan.x + panChange.x).coerceIn(-maxX, maxX)
+                        val newY = (pan.y + panChange.y).coerceIn(-maxY, maxY)
+                        val movedY = newY != pan.y
+                        val zoomed = newZoom > 1.01f
+                        // Nested scroll: consume только когда жест реально двигает страницу
+                        // (вертикаль по границам) или зумит; горизонталь при зуме — всегда.
+                        // Иначе НЕ consume → LazyColumn листает страницы.
+                        if (zooming || movedY || (zoomed && panChange.x != 0f)) {
                             event.changes.forEach { if (it.positionChanged()) it.consume() }
-                            val newZoom = (zoom * zoomChange).coerceIn(1f, 4f)
-                            val maxX = max(0f, (newZoom - 1f) * size.width / 2f)
-                            val maxY = max(0f, (newZoom - 1f) * size.height / 2f)
-                            zoom = newZoom
-                            pan =
-                                Offset(
-                                    (pan.x + panChange.x).coerceIn(-maxX, maxX),
-                                    (pan.y + panChange.y).coerceIn(-maxY, maxY),
-                                )
+                            if (newZoom < 1.05f) {
+                                zoom = 1f
+                                pan = Offset.Zero
+                            } else {
+                                zoom = newZoom
+                                pan = Offset(newX, newY)
+                            }
                         }
                     } while (event.changes.any { it.pressed })
                 }
@@ -485,7 +619,36 @@ private fun PdfPageRow(
             }
         }
 
-        // W16: закладка — ВДВОЕ меньше прежней (22dp) и в ЛЕВОМ верхнем углу; повторный тап
+        // V9: слой рисования — ВНУТРИ graphicsLayer страницы (штрихи масштабируются с зумом),
+        // между растром и кнопками страницы. !drawMode — прозрачен для событий.
+        AnnotationLayer(
+            strokes = strokes,
+            current = currentStroke,
+            drawMode = drawMode,
+            strokeColor = drawColor,
+            strokeWidthDp = drawWidthDp,
+            onCurrentChange = { currentStroke = it },
+            onStrokeFinished = onStrokeFinished,
+            transformGestures = { panChange, zoomChange ->
+                val newZoom = (zoom * zoomChange).coerceIn(1f, 4f)
+                val maxX = max(0f, (newZoom - 1f) * boxSize.width / 2f)
+                val maxY = max(0f, (newZoom - 1f) * boxSize.height / 2f)
+                if (newZoom < 1.05f) {
+                    zoom = 1f
+                    pan = Offset.Zero
+                } else {
+                    zoom = newZoom
+                    pan =
+                        Offset(
+                            (pan.x + panChange.x).coerceIn(-maxX, maxX),
+                            (pan.y + panChange.y).coerceIn(-maxY, maxY),
+                        )
+                }
+            },
+            modifier = Modifier.matchParentSize(),
+        )
+
+        // V11: кнопка закладки 26dp (иконка 14dp) в ЛЕВОМ верхнем углу; повторный тап
         // по закрашенной убирает её (см. onBookmarkClick в MaterialPdfViewer)
         Surface(
             shape = RoundedCornerShape(2.dp),
@@ -495,7 +658,7 @@ private fun PdfPageRow(
             Modifier
                 .align(Alignment.TopStart)
                 .padding(4.dp)
-                .size(22.dp)
+                .size(26.dp)
                 .bouncyClickable(onClick = { onBookmarkClick(bookmarked) })
                 .testTag("pdf_bookmark_add_$pageIndex"),
         ) {
@@ -504,7 +667,7 @@ private fun PdfPageRow(
                     imageVector = if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                     contentDescription = "Закладка на странице ${pageIndex + 1}",
                     tint = if (bookmarked) Color.White else ColorBrandBlue,
-                    modifier = Modifier.size(12.dp),
+                    modifier = Modifier.size(14.dp),
                 )
             }
         }
