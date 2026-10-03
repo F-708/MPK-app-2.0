@@ -399,7 +399,13 @@ object SubjectFormatter {
             "под",
         )
 
-    fun normalize(rawTitle: String): String {
+    // QA#13: fuzzy-проход по ALL_SUBJECTS дорогой, а словарь предметов замкнут —
+    // кэш без ограничения размера. getOrPut не атомарен: гонка даст лишний пересчёт, не битый результат.
+    private val normalizeCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    fun normalize(rawTitle: String): String = normalizeCache.getOrPut(rawTitle) { normalizeUncached(rawTitle) }
+
+    private fun normalizeUncached(rawTitle: String): String {
         val cleaned = cleanRawTitle(rawTitle)
         if (cleaned.isBlank()) return rawTitle.trim()
 

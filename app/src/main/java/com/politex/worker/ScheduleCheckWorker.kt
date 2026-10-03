@@ -43,7 +43,8 @@ class ScheduleCheckWorker(
         // ponytail: в пятницу (сб+пн живые) probe — пара HEAD-запросов раз в 15 минут;
         // если станет дорого, кэшировать NotFound в prefs до конца дня.
         val repository = com.politex.AppGraph.scheduleRepository
-        val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+        // QA#4: Locale.ROOT — ключ prefs и dateString сравниваются с БД (ASCII dd.MM.yyyy)
+        val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT)
         val prefs = WidgetUpdateHelper.getPrefs(applicationContext)
         fun marked(cal: Calendar): Boolean {
             val ds = dateFormat.format(cal.time)

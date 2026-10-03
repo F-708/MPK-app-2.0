@@ -243,14 +243,19 @@ fun ScheduleScreen(
         remember(selectedDateString, activeCal) {
             if (selectedDateString.isNotBlank()) {
                 com.politex.data.network.MpkScheduleParser.parseDotDate(selectedDateString)?.let {
-                    "%02d.%02d.%04d".format(
+                    // QA#4: Locale.ROOT — формат даты БД, не UI-подпись
+                    String.format(
+                        java.util.Locale.ROOT,
+                        "%02d.%02d.%04d",
                         it.get(Calendar.DAY_OF_MONTH),
                         it.get(Calendar.MONTH) + 1,
                         it.get(Calendar.YEAR),
                     )
                 } ?: selectedDateString
             } else {
-                "%02d.%02d.%04d".format(
+                String.format(
+                    java.util.Locale.ROOT,
+                    "%02d.%02d.%04d",
                     activeCal.get(Calendar.DAY_OF_MONTH),
                     activeCal.get(Calendar.MONTH) + 1,
                     activeCal.get(Calendar.YEAR),
@@ -370,8 +375,11 @@ fun ScheduleScreen(
 
     // N18: урок → типы заданий на день (для цветных бейджей); ключи = уроки с домашкой.
     // Одна и та же разметка, что и раньше (markerLessonNumbers), но с типами заданий.
+    // QA#13: selectedSlot НЕ ключ — матчинг зависит от дня (lessons/activeDayOfWeek/
+    // selectedDateString), а слоты «сегодня/завтра» всегда разные дни недели: день
+    // поменялся — ключи тоже. Лишний ключ гонял fuzzy-матчинг на каждый тап вкладки.
     val homeworkByLesson: Map<Int, List<TaskType>> =
-        remember(lessons, pendingTasks, activeDayOfWeek, selectedSlot, selectedDateString) {
+        remember(lessons, pendingTasks, activeDayOfWeek, selectedDateString) {
             val now = System.currentTimeMillis()
             val dayIso =
                 com.politex.util.HomeworkMarkers
@@ -506,7 +514,9 @@ fun ScheduleScreen(
                     com.politex.data.network.MpkScheduleParser
                         .parseDotDate(dateStr)
                         ?.let { cal ->
-                            "%02d.%02d.%04d".format(
+                            String.format(
+                                java.util.Locale.ROOT,
+                                "%02d.%02d.%04d",
                                 cal.get(Calendar.DAY_OF_MONTH),
                                 cal.get(Calendar.MONTH) + 1,
                                 cal.get(Calendar.YEAR),

@@ -726,11 +726,16 @@ class ScheduleRepository(
 
     // W1: nextSchoolDay теперь единая internal-функция файла — с субботой по курсу (см. выше)
 
-    private fun formatDate(calendar: Calendar): String = "%02d.%02d.%04d".format(
-        calendar.get(Calendar.DAY_OF_MONTH),
-        calendar.get(Calendar.MONTH) + 1,
-        calendar.get(Calendar.YEAR),
-    )
+    // QA#4: Locale.ROOT — дата идёт в БД/сравнения; в ar-локали %02d дал бы арабско-индийские цифры.
+    // internal — для LocaleRootDateTest.
+    internal fun formatDate(calendar: Calendar): String =
+        String.format(
+            java.util.Locale.ROOT,
+            "%02d.%02d.%04d",
+            calendar.get(Calendar.DAY_OF_MONTH),
+            calendar.get(Calendar.MONTH) + 1,
+            calendar.get(Calendar.YEAR),
+        )
 
     suspend fun replaceSyncedLessons(
         groupName: String,
