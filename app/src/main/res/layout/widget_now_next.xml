@@ -31,7 +31,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="СЕЙЧАС"
-                android:textSize="9sp"
+                android:textSize="11sp"
                 android:textStyle="bold"
                 android:textColor="#6B7280"
                 android:maxLines="1" />
@@ -41,8 +41,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="—"
-                android:textSize="15sp"
-                android:textStyle="bold"
+                android:textSize="14sp"
                 android:textColor="#111827"
                 android:maxLines="2"
                 android:ellipsize="end" />
@@ -62,7 +61,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text=""
-                    android:textSize="11sp"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif-medium"
                     android:textColor="#0B3564"
                     android:maxLines="1"
                     android:ellipsize="end" />
@@ -110,7 +110,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="ДАЛЬШЕ"
-                android:textSize="9sp"
+                android:textSize="11sp"
                 android:textStyle="bold"
                 android:textColor="#6B7280"
                 android:maxLines="1" />
@@ -120,8 +120,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="—"
-                android:textSize="15sp"
-                android:textStyle="bold"
+                android:textSize="14sp"
                 android:textColor="#111827"
                 android:maxLines="2"
                 android:ellipsize="end" />
@@ -139,7 +138,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text=""
-                    android:textSize="11sp"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif-medium"
                     android:textColor="#0B3564"
                     android:maxLines="1"
                     android:ellipsize="end" />

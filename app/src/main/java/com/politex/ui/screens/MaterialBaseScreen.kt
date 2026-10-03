@@ -338,7 +338,13 @@ fun MaterialBaseScreen(
                 // и читает textContent, независимо от ext/папок.
                 when (viewerItem.kindEnum) {
                     MaterialKind.IMAGES ->
-                        MaterialImageViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
+                        MaterialImageViewer(
+                            item = viewerItem,
+                            dao = dao,
+                            onBack = pop,
+                            onDelete = { actions.onDelete(viewerItem) },
+                            modifier = Modifier.fillMaxSize(),
+                        )
 
                     MaterialKind.FILE ->
                         if (viewerItem.ext == "pdf") {
@@ -414,6 +420,7 @@ fun MaterialBaseScreen(
                                 query = query,
                                 items = items,
                                 actions = actions,
+                                onClear = { query = "" },
                                 modifier = Modifier.weight(1f),
                             )
                         }
@@ -816,6 +823,7 @@ private fun MaterialSearchContent(
     query: String,
     items: List<MaterialItemEntity>,
     actions: MaterialActions,
+    onClear: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = remember(items) { items.filter { !it.archived } }
@@ -836,10 +844,21 @@ private fun MaterialSearchContent(
     val queryWords = remember(query) { FuzzySearch.queryWordCount(query) }
 
     if (hits.isEmpty()) {
+        // N12: тупик поиска — подсказка (архив не ищется) + кнопка «Очистить» как выход
         MaterialEmptyState(
             title = "Ничего не нашлось",
-            hint = "",
+            hint = "Архив в поиске не участвует",
+            showStorageNote = false,
             modifier = modifier,
+            action = {
+                BrandActionButton(
+                    icon = Icons.Default.Close,
+                    label = "Очистить",
+                    testTag = "material_search_clear",
+                    filled = false,
+                    onClick = onClear,
+                )
+            },
         )
         return
     }
@@ -1077,6 +1096,8 @@ private fun MaterialEmptyState(
     title: String,
     hint: String,
     modifier: Modifier = Modifier,
+    showStorageNote: Boolean = true,
+    action: (@Composable () -> Unit)? = null,
 ) {
     Box(
         modifier = modifier.fillMaxWidth().padding(24.dp),
@@ -1108,12 +1129,19 @@ private fun MaterialEmptyState(
                     style = TextStyle(fontSize = 13.sp, color = ColorTextMuted),
                     modifier = Modifier.padding(horizontal = 12.dp).testTag("material_empty_hint"),
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "Материалы хранятся только на этом телефоне",
-                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                )
+                if (showStorageNote) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Материалы хранятся только на этом телефоне",
+                        style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
+            }
+            // N12: опциональное действие — выход из тупикового пустого состояния
+            if (action != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                action()
             }
         }
     }

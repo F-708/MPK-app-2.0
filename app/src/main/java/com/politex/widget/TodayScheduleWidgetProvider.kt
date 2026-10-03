@@ -149,8 +149,11 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 row.setTextColor(R.id.row_room, style.mainColor)
                 row.setInt(R.id.row_room, "setBackgroundColor", style.highlightColor)
                 val d = context.resources.displayMetrics.density
-                val ph = (7 * d + 0.5f).toInt()
-                val pv = (2 * d + 0.5f).toInt()
+                // N7(44dp): отступы чипа 10dp (были 7/2) — тап-зона выше, меньше
+                // промахов в корневой intent. В плотном списке (12 строк) высота
+                // строки всё равно ограничена весом — чип заполняет её, не overflowing.
+                val ph = (10 * d + 0.5f).toInt()
+                val pv = (10 * d + 0.5f).toInt()
                 row.setViewPadding(R.id.row_room, ph, pv, ph, pv)
                 val intent =
                     Intent(context, com.politex.MainActivity::class.java)

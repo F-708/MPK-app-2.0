@@ -65,6 +65,7 @@ import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.TextStylePageTitle
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
@@ -504,7 +505,7 @@ fun StudentCardScreen(
                 border = BorderStroke(1.dp, ADMIN_ACCENT),
                 color = ColorBgMain,
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(Tokens.IconHit)
                     .bouncyClickable { loadSchedule() },
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -845,21 +846,29 @@ fun StudentCardScreen(
                         ) {
                             items(availableDates) { date ->
                                 val selected = date == calendarDate
-                                Surface(
-                                    shape = RoundedCornerShape(2.dp),
-                                    color = if (selected) ADMIN_ACCENT else ColorBgMain,
-                                    border = BorderStroke(1.dp, ADMIN_ACCENT),
-                                    modifier = Modifier.bouncyClickable { calendarDate = date },
+                                // N7(44dp): тап-зона чипа ≥44dp (heightIn), сам чип
+                                // визуально компактный (~32dp) — палец не промахивается.
+                                Box(
+                                    modifier = Modifier
+                                        .heightIn(min = 44.dp)
+                                        .bouncyClickable { calendarDate = date },
+                                    contentAlignment = Alignment.Center,
                                 ) {
-                                    Text(
-                                        text = date,
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            color = if (selected) Color.White else ColorTextBody,
-                                        ),
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(2.dp),
+                                        color = if (selected) ADMIN_ACCENT else ColorBgMain,
+                                        border = BorderStroke(1.dp, ADMIN_ACCENT),
+                                    ) {
+                                        Text(
+                                            text = date,
+                                            style = androidx.compose.ui.text.TextStyle(
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                color = if (selected) Color.White else ColorTextBody,
+                                            ),
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -942,7 +951,7 @@ private fun BackButton(onBack: () -> Unit) {
         color = ColorBgMain,
         border = BorderStroke(1.dp, ColorBorderLight),
         modifier = Modifier
-            .size(36.dp)
+            .size(Tokens.IconHit)
             .bouncyClickable(onClick = onBack),
     ) {
         Box(contentAlignment = Alignment.Center) {

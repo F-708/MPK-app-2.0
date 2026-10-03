@@ -12,9 +12,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material3.Surface
@@ -43,6 +47,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -91,6 +96,7 @@ fun MaterialImageViewer(
     item: MaterialItemEntity,
     dao: MaterialDao,
     onBack: () -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -100,11 +106,33 @@ fun MaterialImageViewer(
         Column(modifier = modifier.fillMaxSize().background(ColorSurfaceHighlight)) {
             MaterialViewerTopBar(title = item.title, testTag = "image_top_bar", onBack = onBack)
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "Изображения не найдены: файлы материала удалены с диска.",
-                    style = TextStyle(fontSize = 13.sp, color = ColorTextMuted),
+                // N12: не тупик — выходы «Назад» и «Удалить запись» (запись есть, файлы пропали)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(24.dp),
-                )
+                ) {
+                    Text(
+                        text = "Изображения не найдены: файлы материала удалены с диска.",
+                        style = TextStyle(fontSize = 13.sp, color = ColorTextMuted),
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    BrandActionButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        label = "Назад",
+                        testTag = "image_deleted_back",
+                        filled = false,
+                        onClick = onBack,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    BrandActionButton(
+                        icon = Icons.Default.Delete,
+                        label = "Удалить запись",
+                        testTag = "image_deleted_delete",
+                        filled = true,
+                        onClick = onDelete,
+                    )
+                }
             }
         }
         return

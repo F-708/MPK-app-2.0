@@ -1,5 +1,6 @@
 package com.politex
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -77,6 +78,25 @@ class WidgetLayoutsTest {
         assertTrue(
             "чип должен иметь отступ 8dp от времени",
             text.contains("android:layout_marginStart=\"8dp\""),
+        )
+    }
+
+    // N10: контраст прошедших уроков на белом. 0xFF6B7280 ≈ 4.8:1 (≥4.5);
+    // прежний 0xFF9AA3AF ≈ 2.5:1 — не читался. pastColor определён ОДИН раз в
+    // WidgetStyle.LIGHT — все провайдеры (Today/Bells/NowNext) берут style.pastColor.
+    @Test
+    fun `N10 pastColor LIGHT соответствует контрасту на белом`() {
+        assertEquals(0xFF6B7280.toInt(), com.politex.widget.WidgetStyle.LIGHT.pastColor)
+    }
+
+    // N10: иерархия «когда» первой — время (tv_*_details) тяжелее предмета по весу
+    // (sans-serif-medium = medium), предмет при этом обычный (не bold).
+    @Test
+    fun `N10 время в now-next тяжелее предмета по весу`() {
+        val text = File(layoutsDir, "widget_now_next.xml").readText()
+        assertTrue(
+            "время должно быть medium (sans-serif-medium)",
+            text.contains("android:fontFamily=\"sans-serif-medium\""),
         )
     }
 }

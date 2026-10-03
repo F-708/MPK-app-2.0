@@ -455,7 +455,7 @@ enum class WidgetStyle(
         0xFF111827.toInt(),
         0xFF6B7280.toInt(),
         0xFFE8F0FA.toInt(),
-        0xFF9AA3AF.toInt(),
+        0xFF6B7280.toInt(),
         "Белый",
     ),
     DARK(

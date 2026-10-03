@@ -64,6 +64,7 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStyleCalendarMonth
 import com.politex.ui.theme.TextStyleCalendarWeekdays
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import java.util.Calendar
 import java.util.Locale
@@ -241,7 +242,7 @@ fun CalendarArchiveDialog(
                         border = BorderStroke(1.dp, ColorBorderLight),
                         modifier =
                         Modifier
-                            .size(32.dp)
+                            .size(Tokens.IconHit)
                             .bouncyClickable(onClick = onDismiss)
                             .testTag("close_archive_dialog_button"),
                     ) {
@@ -281,12 +282,13 @@ fun CalendarArchiveDialog(
                         if (searchQuery.isNotEmpty()) {
                             IconButton(
                                 onClick = { searchQuery = "" },
-                                modifier = Modifier.size(24.dp),
+                                modifier = Modifier.size(Tokens.IconHit),
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Clear,
                                     contentDescription = "Очистить",
                                     tint = ColorTextMuted,
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                         }
