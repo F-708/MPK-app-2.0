@@ -88,6 +88,7 @@ import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
+import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
@@ -105,6 +106,77 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
+
+/**
+ * Ф5: PdfRenderer не смог открыть файл. Это НЕ «формат не поддерживается» — встроенный
+ * просмотрщик читает PDF; значит файл повреждён или защищён паролем. Честный текст + «Назад».
+ */
+@Composable
+private fun CorruptedPdfPlaque(
+    fileName: String,
+    onBack: () -> Unit,
+) {
+    Box(
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(2.dp),
+            border = BorderStroke(1.dp, ColorBorderLight),
+            color = ColorBgMain,
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag("corrupted_pdf_plaque"),
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Файл не открывается",
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp, color = ColorTextTitle),
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text =
+                    "Документ повреждён или защищён паролем. Встроенный просмотрщик читает PDF — " +
+                        "попробуйте скачать файл заново или открыть его в другом приложении.",
+                    style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = fileName,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = ColorTextBody),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBrandFill,
+                    modifier =
+                    Modifier
+                        .heightIn(min = 44.dp)
+                        .bouncyClickable(onClick = onBack)
+                        .testTag("corrupted_pdf_back"),
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    ) {
+                        Text(
+                            text = "НАЗАД",
+                            softWrap = false,
+                            maxLines = 1,
+                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.White),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 /**
  * M2: просмотрщик PDF на `android.graphics.pdf.PdfRenderer` (платформа, ноль новых зависимостей).
@@ -173,7 +245,12 @@ fun MaterialPdfViewer(
                 onBookmarks = {},
                 onDrawToggle = {},
             )
-            UnsupportedFormatPlaque(ext = "pdf", fileName = item.fileName.ifBlank { file.name })
+            // Ф5: PdfRenderer не открыл файл — это НЕ «формат не поддерживается» (PDF читается),
+            // а повреждённый/защищённый паролем документ. Честная плашка + «Назад».
+            CorruptedPdfPlaque(
+                fileName = item.fileName.ifBlank { file.name },
+                onBack = onBack,
+            )
         }
         return
     }

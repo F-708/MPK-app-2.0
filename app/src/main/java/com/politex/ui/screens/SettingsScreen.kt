@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
@@ -47,6 +48,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +75,8 @@ import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorBrandFill
+import com.politex.ui.theme.ColorError
+import com.politex.ui.theme.ColorSuccess
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
@@ -89,11 +93,16 @@ import com.politex.widget.WidgetUpdateHelper
 import com.politex.worker.MpkWorkManagerHelper
 import kotlinx.coroutines.launch
 
+/** Ф4: исход «Проверить соединение» — живёт в теле экрана, а не в item{} LazyColumn. */
+private enum class ConnState { IDLE, RUNNING, OK, FAIL }
+
 @Composable
 fun SettingsScreen(
     groupInfo: GroupInfo,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit = {},
+    isSyncing: Boolean = false,
+    hasSyncError: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -123,7 +132,21 @@ fun SettingsScreen(
     }
 
     var backupMessage by remember { mutableStateOf("") }
+    // Ф4: успех/ошибка бэкапа красятся по-разному — флаг живёт рядом с сообщением
+    var backupIsError by remember { mutableStateOf(false) }
     val backupScope = rememberCoroutineScope()
+
+    // Ф4: «Проверить соединение» = viewModel.syncSchedule() (асинхронно). Результат ловим
+    // по переходу isSyncing true→false: hasSyncError определяет ✓/✗. Состояние в теле экрана
+    // (не в item{}) — иначе терялось при скролле и «Запущено…» висело вечно.
+    var connectionState by remember { mutableStateOf(ConnState.IDLE) }
+    var wasSyncing by remember { mutableStateOf(false) }
+    LaunchedEffect(isSyncing) {
+        if (wasSyncing && !isSyncing && connectionState == ConnState.RUNNING) {
+            connectionState = if (hasSyncError) ConnState.FAIL else ConnState.OK
+        }
+        wasSyncing = isSyncing
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json"),
@@ -135,8 +158,10 @@ fun SettingsScreen(
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     out.write(json.toByteArray(Charsets.UTF_8))
                 }
+                backupIsError = false
                 "Копия сохранена"
             } catch (e: Exception) {
+                backupIsError = true
                 "Не удалось сохранить: ${e.message}"
             }
         }
@@ -151,19 +176,30 @@ fun SettingsScreen(
                 val json = context.contentResolver.openInputStream(uri)
                     ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
                 if (json.isNullOrBlank()) {
+                    backupIsError = true
                     "Файл пустой"
                 } else {
                     com.politex.util.BackupManager.restoreBackup(context, json).fold(
                         onSuccess = { result ->
+                            backupIsError = false
+                            // QA#9(а): prefs уже перезаписаны в restoreBackup — дёргаем
+                            // onGroupChanged, чтобы живой AppViewModel подхватил группу
+                            result.groupRestored?.let { onGroupChanged(it) }
                             val parts = mutableListOf("Восстановлено заданий: ${result.tasksRestored}")
+                            if (result.gradesRestored > 0) parts += "оценок: ${result.gradesRestored}"
+                            if (result.remindersRestored > 0) parts += "напоминаний: ${result.remindersRestored}"
                             result.groupRestored?.let { parts += "группа $it" }
                             if (result.warnings.isNotEmpty()) parts += result.warnings.joinToString("; ")
                             parts.joinToString(". ")
                         },
-                        onFailure = { "Не удалось прочитать файл: ${it.message}" },
+                        onFailure = {
+                            backupIsError = true
+                            "Не удалось прочитать файл: ${it.message}"
+                        },
                     )
                 }
             } catch (e: Exception) {
+                backupIsError = true
                 "Не удалось прочитать файл: ${e.message}"
             }
         }
@@ -359,9 +395,8 @@ fun SettingsScreen(
 
             // X27: «Проверить соединение» — подключён мёртвый параметр onRunConnectionTest
             // (MainScreen передаёт viewModel.syncSchedule()): кнопка запускает проверку,
-            // статус показываем текстом под заголовком строки.
+            // Ф4: состояние (connectionState) поднято в тело экрана, спиннер — по isSyncing из VM.
             item {
-                var connectionResult by remember { mutableStateOf("") }
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
@@ -384,14 +419,23 @@ fun SettingsScreen(
                                     color = ColorTextTitle,
                                 ),
                             )
-                            if (connectionResult.isNotBlank()) {
-                                Text(
-                                    text = connectionResult,
+                            // Ф4: успех/ошибка различимы — ✓ зелёный, ✗ красный
+                            when (connectionState) {
+                                ConnState.OK -> Text(
+                                    text = "✓ Соединение есть, расписание обновилось",
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontSize = 11.sp,
-                                        color = ColorTextMuted,
+                                        color = ColorSuccess,
                                     ),
                                 )
+                                ConnState.FAIL -> Text(
+                                    text = "✗ Не удалось связаться с сайтом",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 11.sp,
+                                        color = ColorError,
+                                    ),
+                                )
+                                else -> {}
                             }
                         }
                         Spacer(modifier = Modifier.width(8.dp))
@@ -401,25 +445,35 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .heightIn(min = com.politex.ui.theme.Tokens.ButtonHeight)
                                 .testTag("connection_test_button")
-                                .bouncyClickable {
+                                // Ф4: на время синхронизации кнопка заблокирована —
+                                // повторные клики не запускают syncSchedule снова
+                                .bouncyClickable(enabled = !isSyncing) {
+                                    connectionState = ConnState.RUNNING
                                     onRunConnectionTest()
-                                    connectionResult = "Запущено — расписание обновляется"
                                 },
                         ) {
                             Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier.padding(horizontal = 12.dp),
                             ) {
-                                Text(
-                                    text = "ЗАПУСТИТЬ",
-                                    softWrap = false,
-                                    maxLines = 1,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
+                                if (isSyncing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
                                         color = Color.White,
-                                    ),
-                                )
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    Text(
+                                        text = "ЗАПУСТИТЬ",
+                                        softWrap = false,
+                                        maxLines = 1,
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = Color.White,
+                                        ),
+                                    )
+                                }
                             }
                         }
                     }
@@ -650,7 +704,11 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = backupMessage,
-                                style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorBrandBlue),
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 12.sp,
+                                    // Ф4: успех зелёный, ошибка красная — не одним синим
+                                    color = if (backupIsError) ColorError else ColorSuccess,
+                                ),
                             )
                         }
                     }

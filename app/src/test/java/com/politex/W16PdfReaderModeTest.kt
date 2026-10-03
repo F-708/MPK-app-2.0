@@ -99,10 +99,11 @@ class W16PdfReaderModeTest {
         composeRule.waitForIdle()
 
         // W16: синяя строка читалки на месте (вместо баннера), режим включён.
-        // Битый файл → аварийный путь: та же синяя строка (с заголовком вместо номера) + плашка
+        // Битый файл → аварийный путь: та же синяя строка (с заголовком вместо номера) + плашка.
+        // Ф5: для повреждённого/защищённого PDF — СВОЯ плашка (не «формат не поддерживается»).
         waitForNode("pdf_top_bar")
         composeRule.onNodeWithTag("pdf_top_bar_back").assertExists()
-        composeRule.onNodeWithTag("unsupported_plaque").assertExists()
+        composeRule.onNodeWithTag("corrupted_pdf_plaque").assertExists()
         assertTrue("W16: ViewerMode должен включаться на PDF-просмотрщике", ViewerMode.active)
 
         // Стрелка «назад» в синей строке возвращает к списку и СБРАСЫВАЕТ режим.

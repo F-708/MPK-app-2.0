@@ -451,23 +451,22 @@ fun GroupScheduleScreen(
                             ),
                             maxLines = 1,
                         )
+                        // Ф14: ярлык «ваша/не ваша группа» убран — осталась только специальность
                         val spec = foreignInfo?.let { MpkCurriculum.getSpecialty(it.specialtyCode) }
-                        val isOwn = selectedGroupName.equals(ownGroupName, ignoreCase = true)
-                        Text(
-                            text =
-                            listOf(
-                                spec?.shortName ?: "",
-                                if (isOwn) "ваша группа" else "не ваша группа",
-                            ).filter { it.isNotBlank() }.joinToString(" • "),
-                            style =
-                            androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 11.sp,
-                                color = Color.White.copy(alpha = 0.7f),
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        val specText = spec?.shortName.orEmpty()
+                        if (specText.isNotBlank()) {
+                            Text(
+                                text = specText,
+                                style =
+                                androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 11.sp,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(

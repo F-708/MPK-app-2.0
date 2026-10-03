@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.model.GroupInfo
@@ -71,6 +72,7 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStylePageTitle
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.MpkCurriculum
 import java.util.Calendar
@@ -198,6 +200,9 @@ internal fun SettingsRoute(
     groupInfo: GroupInfo,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit,
+    // Ф4: состояние синхронизации из VM uiState — для спиннера и ✓/✗ «Проверить соединение»
+    isSyncing: Boolean,
+    hasSyncError: Boolean,
     onBack: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
@@ -205,6 +210,8 @@ internal fun SettingsRoute(
             groupInfo = groupInfo,
             onGroupChanged = onGroupChanged,
             onRunConnectionTest = onRunConnectionTest,
+            isSyncing = isSyncing,
+            hasSyncError = hasSyncError,
             onBack = onBack,
         )
     }
@@ -468,6 +475,8 @@ private fun SettingsPage(
     groupInfo: GroupInfo,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit,
+    isSyncing: Boolean,
+    hasSyncError: Boolean,
     onBack: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -510,6 +519,8 @@ private fun SettingsPage(
             groupInfo = groupInfo,
             onGroupChanged = onGroupChanged,
             onRunConnectionTest = onRunConnectionTest,
+            isSyncing = isSyncing,
+            hasSyncError = hasSyncError,
         )
     }
 }
@@ -912,12 +923,39 @@ private fun TeachersPage(
                     .padding(24.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = "Ничего не найдено по запросу «$searchQuery»",
-                    style =
-                    androidx.compose.ui.text
-                        .TextStyle(fontSize = 14.sp, color = ColorTextMuted),
-                )
+                // Ф12: честное пустое состояние + сброс поиска (как в StudentsScreens)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Ничего не найдено по запросу «$searchQuery»",
+                        style =
+                        androidx.compose.ui.text
+                            .TextStyle(fontSize = 14.sp, color = ColorTextMuted),
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorBrandFill,
+                        modifier =
+                        Modifier
+                            .heightIn(min = Tokens.ButtonHeight)
+                            .bouncyClickable { searchQuery = "" }
+                            .testTag("teachers_reset_btn"),
+                    ) {
+                        Text(
+                            text = "СБРОСИТЬ",
+                            softWrap = false,
+                            maxLines = 1,
+                            style =
+                            androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = Color.White,
+                            ),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        )
+                    }
+                }
             }
         } else {
             LazyColumn(
@@ -1006,6 +1044,7 @@ private fun TeacherCard(
                         color = ColorTextTitle,
                     ),
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
 
                 val details =
@@ -1021,6 +1060,7 @@ private fun TeacherCard(
                             color = ColorTextMuted,
                         ),
                         maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
 
@@ -1039,6 +1079,7 @@ private fun TeacherCard(
                             color = ColorBrandBlue,
                         ),
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -1256,6 +1297,7 @@ private fun TeacherCardPage(
                         color = ColorTextTitle,
                     ),
                     maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 if (teacher.position.isNotBlank()) {
                     Text(
@@ -1266,6 +1308,7 @@ private fun TeacherCardPage(
                             color = ColorBrandBlue,
                         ),
                         maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 // X41: переключаемый шильдик «Ведёт у вас» (тап = снять/вернуть/пометить)
@@ -1985,7 +2028,8 @@ private fun SubPageBackButton(onBack: () -> Unit) {
         border = BorderStroke(1.dp, ColorBorderLight),
         modifier =
         Modifier
-            .size(36.dp)
+            // Ф7: хитбокс «назад» — Tokens.IconHit (44), иконка 20 (было 36/18)
+            .size(Tokens.IconHit)
             .bouncyClickable(onClick = onBack),
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -1993,7 +2037,7 @@ private fun SubPageBackButton(onBack: () -> Unit) {
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Назад",
                 tint = ColorBrandBlue,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(20.dp),
             )
         }
     }

@@ -480,6 +480,9 @@ fun MainScreen(
                         groupInfo = currentGroupInfo,
                         onGroupChanged = { newGroup -> viewModel.setGroup(newGroup) },
                         onRunConnectionTest = { viewModel.syncSchedule() },
+                        // Ф4: «Проверить соединение» показывает спиннер и ✓/✗ по состоянию VM
+                        isSyncing = uiState.isSyncing,
+                        hasSyncError = uiState.hasSyncError,
                         onBack = { navController.popBackStack() },
                     )
                 }

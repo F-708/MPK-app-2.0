@@ -61,14 +61,20 @@ class WidgetConfigActivity : ComponentActivity() {
         }
 
         val kind = WidgetKind.of(this, appWidgetId)
+        // Ф13: перенастройка = для этого id уже есть сохранённый конфиг. getAppWidgetInfo
+        // не годится как сигнал: он non-null и при первичном добавлении (на нём же держится
+        // WidgetKind.of). Флаг «show_room» пишется при КАЖДОМ сохранении → надёжный маркер.
+        val isReconfigure = WidgetOptions.isConfigured(this, appWidgetId)
 
         setContent {
             MyApplicationTheme {
                 Surface(color = ColorBgMain, modifier = Modifier.fillMaxSize()) {
-                    var style by remember { mutableStateOf(WidgetStyle.LIGHT) }
-                    var countdownMode by remember { mutableStateOf(CountdownMode.GROUP_LESSONS) }
-                    var showRoom by remember { mutableStateOf(true) }
-                    var showSeconds by remember { mutableStateOf(false) }
+                    // Ф13: стартуем с СОХРАНЁННЫХ значений — дефолты затирали настройку
+                    // существующего виджета при перенастройке
+                    var style by remember { mutableStateOf(WidgetStyle.load(this@WidgetConfigActivity, appWidgetId)) }
+                    var countdownMode by remember { mutableStateOf(CountdownMode.load(this@WidgetConfigActivity, appWidgetId)) }
+                    var showRoom by remember { mutableStateOf(WidgetOptions.showRoom(this@WidgetConfigActivity, appWidgetId)) }
+                    var showSeconds by remember { mutableStateOf(WidgetOptions.seconds(this@WidgetConfigActivity, appWidgetId)) }
 
                     Column(
                         modifier =
@@ -218,7 +224,8 @@ class WidgetConfigActivity : ComponentActivity() {
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    text = "ДОБАВИТЬ ВИДЖЕТ",
+                                    // Ф13: при перенастройке сохранение, а не «добавление»
+                                    text = if (isReconfigure) "СОХРАНИТЬ" else "ДОБАВИТЬ ВИДЖЕТ",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
@@ -284,6 +291,12 @@ object WidgetOptions {
         context: android.content.Context,
         appWidgetId: Int,
     ): Boolean = WidgetUpdateHelper.getPrefs(context).getBoolean(PREF_SHOW_ROOM + appWidgetId, true)
+
+    /** Ф13: был ли виджет уже настроен (конфиг сохранён) — отличает перенастройку от добавления. */
+    fun isConfigured(
+        context: android.content.Context,
+        appWidgetId: Int,
+    ): Boolean = WidgetUpdateHelper.getPrefs(context).contains(PREF_SHOW_ROOM + appWidgetId)
 
     fun setShowRoom(
         context: android.content.Context,
