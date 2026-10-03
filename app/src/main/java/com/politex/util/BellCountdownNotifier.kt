@@ -416,6 +416,13 @@ object BellCountdownNotifier {
      * Заглушка для скрытого состояния: служба foreground обязана держать уведомление,
      * поэтому «исчезновение» строки = замена на минимальную тихую (Т10.2).
      */
+    /**
+     * X2: «нечего показать» (выходной / уроков нет / тихое окно при живом foreground-сервисе).
+     * Раньше была заглушка «Мой Политех» в две строки — заказчик: лучше вообще не показывать
+     * или показать ОСМЫСЛЕННО крупным шрифтом. Сервис foreground обязан держать уведомление,
+     * поэтому рисуем кастомный вид с крупной строкой «Уроков нет» (тот же шрифт, что отсчёт).
+     * Когда сервис НЕ запущен — show() отзывает уведомление совсем (cancel).
+     */
     private fun buildHiddenNotification(context: Context): android.app.Notification {
         val openIntent =
             PendingIntent.getActivity(
@@ -424,12 +431,22 @@ object BellCountdownNotifier {
                 Intent(context, MainActivity::class.java),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
+        val views =
+            android.widget.RemoteViews(context.packageName, R.layout.notification_bell_countdown).apply {
+                setTextViewText(R.id.nbell_value, "Уроков нет")
+                setTextViewText(R.id.nbell_unit, "")
+                setTextViewText(R.id.nbell_label, "")
+                setViewVisibility(R.id.nbell_app, android.view.View.GONE)
+                setViewVisibility(R.id.nbell_progress, android.view.View.GONE)
+            }
         return NotificationCompat
             .Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_mpk_emblem)
             .setContentIntent(openIntent)
-            .setContentTitle("Мой Политех")
-            .setOngoing(true)
+            .setContentTitle("Уроков нет")
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .setCustomContentView(views)
+            .setOngoing(isPinned(context))
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
