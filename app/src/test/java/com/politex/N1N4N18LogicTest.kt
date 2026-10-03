@@ -78,6 +78,27 @@ class N1N4N18LogicTest {
         assertFalse(r.found)
     }
 
+    @Test
+    fun `V6a HEAD 200, но Content-Type text-html — НЕ документ (event-страница, soft-404)`() {
+        val r = probeUrlOutcome(headCode = 200, rangeGetCode = 0, headIsHtml = true)
+        assertFalse(r.found)
+        assertFalse(r.networkError)
+        assertEquals(200, r.code)
+    }
+
+    @Test
+    fun `V6a HEAD 405, GET-Range 200 html — тоже НЕ документ`() {
+        val r = probeUrlOutcome(headCode = 405, rangeGetCode = 200, rangeIsHtml = true)
+        assertFalse(r.found)
+        assertEquals(200, r.code)
+    }
+
+    @Test
+    fun `V6a HEAD 405, GET-Range 200 не-html — документ найден`() {
+        val r = probeUrlOutcome(headCode = 405, rangeGetCode = 200, rangeIsHtml = false)
+        assertTrue(r.found)
+    }
+
     // ---------- N18: TaskType → цвет бейджа ----------
 
     @Test

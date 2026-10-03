@@ -253,8 +253,10 @@ fun GroupScheduleScreen(
         foreignInfo?.hasSaturdayClasses == true ||
             allForeignLessons?.any { it.dayOfWeek == 6 } == true
 
+    // V2: правый слот — «завтра» с фолбэком суббота→понедельник (как в ScheduleScreen):
+    // на неучебную субботу есть расписание → суббота; нет, а понедельник опубликован → понедельник.
     val daySlots =
-        remember(selectedGroupName, saturdayIsSchoolDay, realNow) {
+        remember(selectedGroupName, saturdayIsSchoolDay, realNow, allForeignLessons) {
             val left =
                 (realNow.clone() as Calendar).apply {
                     when (realDayOfWeek) {
@@ -262,7 +264,14 @@ fun GroupScheduleScreen(
                         7 -> add(Calendar.DAY_OF_YEAR, 1)
                     }
                 }
-            left to groupScheduleNextSchoolDay(left, saturdayIsSchoolDay)
+            val foreign = allForeignLessons ?: emptyList()
+            val target =
+                com.politex.data.repository.nextSchoolDayWithFallback(left, saturdayIsSchoolDay) { cal ->
+                    val ds = groupScheduleDbDate(cal)
+                    val dow = groupScheduleDayOfWeek(cal)
+                    foreign.any { it.dateString == ds || (it.dateString.isBlank() && it.dayOfWeek == dow) }
+                }
+            left to (target.date ?: groupScheduleNextSchoolDay(left, saturdayIsSchoolDay))
         }
     val leftCal = daySlots.first
     val rightCal = daySlots.second
@@ -306,18 +315,8 @@ fun GroupScheduleScreen(
             lessonsForDay(allForeignLessons ?: emptyList(), activeDateString, activeDayOfWeek)
         }
 
-    // R2: старт маршрута — кабинет текущей/предыдущей пары (см. RouteStartResolver).
-    // "" = ничего не началось → маршрут от главного входа (непустой fromRoom — маркер
-    // «запрос из расписания, с маршрутом»); не сегодня → null (без маршрута).
-    val fromRoom =
-        remember(lessons, nowMinutes, selectedSlot, leftIsToday) {
-            if (selectedSlot == 0 && leftIsToday) {
-                com.politex.ui.util.RouteStartResolver
-                    .previousRoomNow(lessons, nowMinutes) ?: ""
-            } else {
-                null
-            }
-        }
+    // R2/V21: «сегодня» для старта маршрута — только левый слот и он действительно сегодня
+    val todaySlot = selectedSlot == 0 && leftIsToday
 
     Column(
         modifier =
@@ -709,7 +708,15 @@ fun GroupScheduleScreen(
                                 isCurrent = lesson.lessonNumber == currentLessonNumber,
                                 onTeacherClick = onTeacherClick,
                                 isTeacherKnown = isTeacherKnown,
-                                onRoomClick = { room -> onRoomClick(room, fromRoom) },
+                                // V21: маршрут ВСЕГДА — старт по тапнутому уроку (см. RouteStartResolver).
+                                // "" = от главного входа; непустой fromRoom — маркер «из расписания».
+                                onRoomClick = { room ->
+                                    onRoomClick(
+                                        room,
+                                        com.politex.ui.util.RouteStartResolver
+                                            .startForLesson(lessons, lesson, todaySlot, nowMinutes),
+                                    )
+                                },
                             )
                         } else {
                             GroupNoLessonCard(number)

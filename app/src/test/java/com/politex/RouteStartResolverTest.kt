@@ -73,4 +73,37 @@ class RouteStartResolverTest {
         val noRoom = listOf(lesson(1, "08:30", " "))
         assertNull(RouteStartResolver.previousRoomNow(noRoom, at(9, 0)))
     }
+
+    // ---------- V21: startForLesson — маршрут всегда, для любого дня ----------
+
+    @Test
+    fun `V21 сегодня, ничего не началось — пустая строка (от главного входа)`() {
+        assertEquals("", RouteStartResolver.startForLesson(lessons, lessons[0], isToday = true, nowMinutes = at(8, 0)))
+    }
+
+    @Test
+    fun `V21 сегодня, во время второго урока — старт как previousRoomNow`() {
+        assertEquals("223", RouteStartResolver.startForLesson(lessons, lessons[2], isToday = true, nowMinutes = at(10, 30)))
+    }
+
+    @Test
+    fun `V21 не сегодня — кабинет ближайшего предыдущего урока`() {
+        assertEquals("223", RouteStartResolver.startForLesson(lessons, lessons[2], isToday = false, nowMinutes = 0))
+    }
+
+    @Test
+    fun `V21 не сегодня, первый урок — пустая строка (от главного входа)`() {
+        assertEquals("", RouteStartResolver.startForLesson(lessons, lessons[0], isToday = false, nowMinutes = 0))
+    }
+
+    @Test
+    fun `V21 не сегодня, у предыдущих уроков нет roomFirst — пустая строка`() {
+        val onlySecond = listOf(lesson(1, "08:30", "", "118"), lesson(2, "09:25", "", "223"))
+        assertEquals("", RouteStartResolver.startForLesson(onlySecond, onlySecond[1], isToday = false, nowMinutes = 0))
+    }
+
+    @Test
+    fun `V21 не сегодня, пустой день — пустая строка`() {
+        assertEquals("", RouteStartResolver.startForLesson(emptyList(), lessons[0], isToday = false, nowMinutes = 0))
+    }
 }

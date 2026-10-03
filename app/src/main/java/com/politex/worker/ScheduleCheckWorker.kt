@@ -3,6 +3,8 @@ package com.politex.worker
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.politex.data.network.ProbeResult
+import com.politex.data.repository.nextDayCandidates
 import com.politex.util.GroupParser
 import com.politex.util.NotificationHelper
 import com.politex.widget.WidgetUpdateHelper
@@ -34,27 +36,31 @@ class ScheduleCheckWorker(
         val groupInfo = GroupParser.parse(groupName)
         val isFirstCourse = groupInfo?.course == 1
 
-        val currentDayOfWeek =
-            when (calendar.get(Calendar.DAY_OF_WEEK)) {
-                Calendar.MONDAY -> 1
-                Calendar.TUESDAY -> 2
-                Calendar.WEDNESDAY -> 3
-                Calendar.THURSDAY -> 4
-                Calendar.FRIDAY -> 5
-                Calendar.SATURDAY -> 6
-                Calendar.SUNDAY -> 7
-                else -> 1
+        // V2: вместо хардкода daysToAdd — кандидаты «завтра» (завтра → сб → пн) из
+        // nextDayCandidates; цель = первый кандидат, документ которого probe нашёл на сайте.
+        // Не нашёл ничего — последний кандидат (понедельник): syncScheduleForDate ищет
+        // полным водопадом. Уже отмеченные (notified/checked) кандидаты не probe'ятся вовсе.
+        // ponytail: в пятницу (сб+пн живые) probe — пара HEAD-запросов раз в 15 минут;
+        // если станет дорого, кэшировать NotFound в prefs до конца дня.
+        val repository = com.politex.AppGraph.scheduleRepository
+        val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+        val prefs = WidgetUpdateHelper.getPrefs(applicationContext)
+        fun marked(cal: Calendar): Boolean {
+            val ds = dateFormat.format(cal.time)
+            return prefs.getBoolean("notified_${groupName}_$ds", false) ||
+                prefs.getBoolean("checked_${groupName}_$ds", false)
+        }
+        val live = nextDayCandidates(calendar, saturdayIsSchoolDay = isFirstCourse).filterNot { marked(it) }
+        if (live.isEmpty()) {
+            return@withContext Result.success()
+        }
+        var targetCalendar = live.last()
+        for (candidate in live) {
+            if (repository.probeDate(candidate) is ProbeResult.Found) {
+                targetCalendar = candidate
+                break
             }
-
-        val targetCalendar = Calendar.getInstance()
-        val daysToAdd =
-            when (currentDayOfWeek) {
-                5 -> if (isFirstCourse) 1 else 3
-                6 -> 2
-                7 -> 1
-                else -> 1
-            }
-        targetCalendar.add(Calendar.DAY_OF_YEAR, daysToAdd)
+        }
 
         val targetDayOfWeek =
             when (targetCalendar.get(Calendar.DAY_OF_WEEK)) {
@@ -68,7 +74,6 @@ class ScheduleCheckWorker(
                 else -> 1
             }
 
-        val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
         val targetDateString = dateFormat.format(targetCalendar.time)
 
         val prefKey = "notified_${groupName}_$targetDateString"
@@ -76,14 +81,9 @@ class ScheduleCheckWorker(
         // (суббота/праздник/пустой день). Без этой отметки воркер качал и разбирал бы
         // весь документ по всем группам каждые 15 минут до 21:00 без всякого эффекта.
         val checkedKey = "checked_${groupName}_$targetDateString"
-        val prefs = WidgetUpdateHelper.getPrefs(applicationContext)
-        if (prefs.getBoolean(prefKey, false) || prefs.getBoolean(checkedKey, false)) {
-            return@withContext Result.success()
-        }
 
         // E1/Б3: шаренный репозиторий из AppGraph — документ разбирается по всем группам
         // каталога, кэш и teacherLessonDao те же, что у UI
-        val repository = com.politex.AppGraph.scheduleRepository
         val result = repository.syncScheduleForDate(groupName, targetCalendar)
 
         result.fold(

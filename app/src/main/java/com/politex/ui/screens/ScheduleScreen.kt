@@ -181,11 +181,12 @@ fun ScheduleScreen(
     // SUI-05: calendarDayOfWeek был локальным близнецом groupScheduleDayOfWeek — используем общий
     fun calendarDayOfWeek(cal: Calendar): Int = groupScheduleDayOfWeek(cal)
 
-    fun isSchoolDay(dow: Int): Boolean = dow in 1..5 || (dow == 6 && saturdayIsSchoolDay)
-
     // SUI-01: ключ realNow — слоты пересчитываются после полуночи/возврата из фона
+    // V2: правый слот — «завтра» с фолбэком суббота→понедельник: неучебная суббота, но
+    // расписание на неё есть → показываем субботу; на субботу ничего нет, а понедельник
+    // уже опубликован → сразу понедельник (как syncScheduleFromWeb считает цель синка).
     val daySlots =
-        remember(groupInfo.canonicalName, saturdayIsSchoolDay, realNow) {
+        remember(groupInfo.canonicalName, saturdayIsSchoolDay, realNow, allGroupLessons) {
             val left =
                 (realNow.clone() as Calendar).apply {
                     when (realDayOfWeek) {
@@ -193,12 +194,13 @@ fun ScheduleScreen(
                         7 -> add(Calendar.DAY_OF_YEAR, 1)
                     }
                 }
-            val right =
-                (left.clone() as Calendar).apply {
-                    do {
-                        add(Calendar.DAY_OF_YEAR, 1)
-                    } while (!isSchoolDay(calendarDayOfWeek(this)))
+            val target =
+                com.politex.data.repository.nextSchoolDayWithFallback(left, saturdayIsSchoolDay) { cal ->
+                    val ds = groupScheduleDbDate(cal)
+                    val dow = calendarDayOfWeek(cal)
+                    allGroupLessons.any { it.dateString == ds || (it.dateString.isBlank() && it.dayOfWeek == dow) }
                 }
+            val right = target.date ?: com.politex.data.repository.nextSchoolDay(left, saturdayIsSchoolDay)
             left to right
         }
     val leftCal = daySlots.first
@@ -715,7 +717,7 @@ fun ScheduleScreen(
                                 hasSyncError -> "Проверьте подключение к интернету и попробуйте ещё раз."
                                 selectedDateString.isNotBlank() ->
                                     "Нет данных за $selectedDateString. Расписание за прошедшие дни хранится в архиве только после синхронизации."
-                                else -> "Для группы ${groupInfo.canonicalName} на этот день пар пока нет в базе колледжа."
+                                else -> "Для группы ${groupInfo.canonicalName} на этот день уроков пока нет в базе колледжа."
                             },
                             style =
                             androidx.compose.ui.text.TextStyle(
@@ -774,20 +776,6 @@ fun ScheduleScreen(
                     }
                 }
             } else {
-                // R2: старт маршрута — кабинет текущей/предыдущей пары (наибольший lessonNumber
-                // среди начавшихся сегодня). "" (НЕ null) = ничего не началось → маршрут от
-                // главного входа: непустой fromRoom — маркер «запрос из расписания, с маршрутом».
-                // Не сегодня (завтра/архив) → null: физическая позиция неизвестна, без маршрута.
-                val fromRoom =
-                    remember(lessons, nowMinutes, isViewingToday) {
-                        if (isViewingToday) {
-                            com.politex.ui.util.RouteStartResolver
-                                .previousRoomNow(lessons, nowMinutes) ?: ""
-                        } else {
-                            null
-                        }
-                    }
-
                 val slots =
                     remember(lessons) {
                         if (lessons.isEmpty()) {
@@ -819,7 +807,17 @@ fun ScheduleScreen(
                                 onHomeworkClick = onOpenTasks,
                                 onTeacherClick = onTeacherClick,
                                 isTeacherKnown = isTeacherKnown,
-                                onRoomClick = { room -> onRoomClick(room, fromRoom) },
+                                // V21: маршрут ВСЕГДА — старт считает startForLesson по тапнутому
+                                // уроку (сегодня: где пользователь сейчас; другой день: кабинет
+                                // предыдущего урока). "" = от главного входа; непустой fromRoom —
+                                // маркер «запрос из расписания, с маршрутом».
+                                onRoomClick = { room ->
+                                    onRoomClick(
+                                        room,
+                                        com.politex.ui.util.RouteStartResolver
+                                            .startForLesson(lessons, lesson, isViewingToday, nowMinutes),
+                                    )
+                                },
                                 // Б8: волна-подсветка «вы здесь» — только при входе с виджета
                                 focusAlpha =
                                 if (highlightLesson == lesson.lessonNumber) {

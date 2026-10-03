@@ -2,6 +2,7 @@ package com.politex.data.network
 
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.SyncDiagnosticInfo
+import com.politex.util.lessonsWord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,15 +41,22 @@ internal data class UrlProbe(val found: Boolean, val code: Int, val networkError
  * N1: решение по одному URL. headCode/rangeGetCode — HTTP-коды; [PROBE_NET_FAIL] (-1) —
  * запрос упал с IOException; 0 — запрос не выполнялся.
  *
- * Логика: HEAD 2xx → файл есть. HEAD не 2xx (сайт часто отвечает 405/404 на HEAD при
- * живом GET) → доверяем GET-Range: 2xx → файл есть. IOException на любом шаге → сеть
- * недоступна. Иначе → файла нет (запоминаем последний код для диагностики).
+ * Логика: HEAD 2xx И это не HTML → файл есть. HEAD не 2xx (сайт часто отвечает 405/404
+ * на HEAD при живом GET) → доверяем GET-Range: 2xx и не HTML → файл есть. V6a: сайт отдаёт
+ * HTML-страницы (event-страница, soft-404) с кодом 200 — Content-Type text/html НЕ считается
+ * найденным документом. IOException на любом шаге → сеть недоступна. Иначе → файла нет
+ * (запоминаем последний код для диагностики).
  */
-internal fun probeUrlOutcome(headCode: Int, rangeGetCode: Int): UrlProbe = when {
+internal fun probeUrlOutcome(
+    headCode: Int,
+    rangeGetCode: Int,
+    headIsHtml: Boolean = false,
+    rangeIsHtml: Boolean = false,
+): UrlProbe = when {
     headCode == PROBE_NET_FAIL -> UrlProbe(found = false, code = PROBE_NET_FAIL, networkError = true)
-    headCode in 200..299 -> UrlProbe(found = true, code = headCode)
+    headCode in 200..299 && !headIsHtml -> UrlProbe(found = true, code = headCode)
     rangeGetCode == PROBE_NET_FAIL -> UrlProbe(found = false, code = PROBE_NET_FAIL, networkError = true)
-    rangeGetCode in 200..299 -> UrlProbe(found = true, code = rangeGetCode)
+    rangeGetCode in 200..299 && !rangeIsHtml -> UrlProbe(found = true, code = rangeGetCode)
     else -> UrlProbe(found = false, code = if (rangeGetCode > 0) rangeGetCode else headCode)
 }
 
@@ -310,7 +318,7 @@ class MpkNetworkClient {
                     lessonsFound = distinctLessons.size,
                     statusMessage = when {
                         distinctLessons.isNotEmpty() ->
-                            "Успешно: загружено ${distinctLessons.size} уроков" +
+                            "Успешно: загружено ${distinctLessons.size} ${lessonsWord(distinctLessons.size)}" +
                                 (if (lastParseError.isNotBlank()) " (с ошибкой разбора: $lastParseError)" else "")
 
                         totalBytesReceived > 0L && lastParseError.isNotBlank() ->
@@ -458,39 +466,44 @@ class MpkNetworkClient {
             .build(),
     ).execute()
 
-    /** N1: HTTP-код запроса; [PROBE_NET_FAIL] при IOException (сайт недоступен). */
-    private fun safeCode(block: () -> Response): Int = try {
-        block().use { it.code }
+    /** N1/V6a: (HTTP-код, Content-Type) запроса; [PROBE_NET_FAIL] и пустой тип при IOException. */
+    private fun safeHeadInfo(block: () -> Response): Pair<Int, String> = try {
+        block().use { it.code to (it.header("Content-Type") ?: "") }
     } catch (_: IOException) {
-        PROBE_NET_FAIL
+        PROBE_NET_FAIL to ""
     }
 
     /**
      * N1: «рукопожатие» — есть ли вообще файл расписания, БЕЗ полной загрузки.
-     * Быстрый HEAD-проход по БЫСТРОМУ пути резолвера: предсказуемые прямые URL
-     * (generateCandidateDirectUrls — покрывают и документ внутри iframe event-страницы,
-     * т.к. его src тоже прямой) плюс сами event-страницы даты (generateCandidateEventUrls).
+     * Быстрый HEAD-проход ТОЛЬКО по предсказуемым прямым URL (generateCandidateDirectUrls).
+     * V6a: event-страницы убраны из кандидатов — сайт отвечает на них 200 text/html всегда,
+     * это был false-positive «документ найден»; event-страницы остались в полном водопаде
+     * forEachDocumentUrl как фолбэк. Валидация по Content-Type: 2xx c text/html — НЕ документ.
      * Для каждого URL — HEAD; если сайт не отвечает на HEAD внятно (не 2xx), фолбэк —
-     * GET Range первого байта. Первый 2xx → [ProbeResult.Found]; IOException → ранний
-     * [ProbeResult.NetworkError] (сайт недоступен); все 404/405 → [ProbeResult.NotFound].
+     * GET Range первого байта. Первый 2xx-не-HTML → [ProbeResult.Found]; IOException → ранний
+     * [ProbeResult.NetworkError] (сайт недоступен); все 404/405/HTML → [ProbeResult.NotFound].
      *
-     * ponytail: probe НЕ ходит на портал (тяжело и это уже полный резолвер). Документ,
-     * доступный ЛИШЬ по нестандартной прямой ссылке с портала, даст NotFound → по ТЗ это
-     * «не опубликовано» и полный резолвер не запускается. Если такой кейс станет частым —
-     * добавить сюда URL портала; сейчас быстрый путь покрывает доказанные сценарии (SCH-01).
+     * ponytail: probe НЕ ходит на портал (тяжело и это уже полный резолвер). Документ только
+     * с нестандартной ссылкой с портала даст NotFound — но V6a убрал ранний выход по NotFound,
+     * поэтому полный водопад (event+портал) всё равно отрабатывает.
      */
     suspend fun probeDocument(
         calendar: Calendar,
         nameBase: String = "raspisanie-uchashhihsya",
     ): ProbeResult = withContext(Dispatchers.IO) {
-        val candidates = generateCandidateDirectUrls(calendar, nameBase).map { it.first } +
-            generateCandidateEventUrls(calendar, nameBase).map { it.first }
+        val candidates = generateCandidateDirectUrls(calendar, nameBase).map { it.first }
         var lastCode = 0
         for (url in candidates) {
-            val head = safeCode { executeHead(url) }
-            // HEAD 2xx — файл/страница есть; HEAD упал (-1) — сеть; иначе — дешёвый GET Range
-            val range = if (head == PROBE_NET_FAIL || head in 200..299) 0 else safeCode { executeRangeGet(url) }
-            val outcome = probeUrlOutcome(head, range)
+            val (head, headType) = safeHeadInfo { executeHead(url) }
+            // HEAD 2xx — файл есть; HEAD упал (-1) — сеть; иначе — дешёвый GET Range
+            val (range, rangeType) =
+                if (head == PROBE_NET_FAIL || head in 200..299) 0 to "" else safeHeadInfo { executeRangeGet(url) }
+            val outcome = probeUrlOutcome(
+                headCode = head,
+                rangeGetCode = range,
+                headIsHtml = headType.startsWith("text/html", ignoreCase = true),
+                rangeIsHtml = rangeType.startsWith("text/html", ignoreCase = true),
+            )
             when {
                 outcome.networkError -> return@withContext ProbeResult.NetworkError
                 outcome.found -> return@withContext ProbeResult.Found(url, outcome.code)

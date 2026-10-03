@@ -6,9 +6,9 @@ enum class BellScheduleType(
     val title: String,
     val subtitle: String,
 ) {
-    STANDARD("Основное (Пн-Ср, Пт)", "12 уроков / 6 пар"),
+    STANDARD("Основное (Пн-Ср, Пт)", "12 уроков"),
     THURSDAY("Четверг (Инфочас)", "С информационным часом"),
-    SATURDAY("Суббота", "8 уроков / 4 пары"),
+    SATURDAY("Суббота", "8 уроков"),
 }
 
 data class BellItem(

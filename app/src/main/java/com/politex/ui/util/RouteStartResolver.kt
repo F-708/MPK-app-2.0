@@ -23,4 +23,28 @@ object RouteStartResolver {
         }.maxByOrNull { it.lessonNumber }
         // ponytail: подгруппу split-пары не определяем — roomFirst, как в findGroupRoomNow
         ?.let { it.roomFirst.ifBlank { it.roomSecond }.trim() }
+
+    /**
+     * V21: старт маршрута для тапа по КОНКРЕТНОМУ уроку — маршрут теперь всегда.
+     * Сегодня: кабинет, где пользователь физически находится (previousRoomNow), иначе ""
+     * (от главного входа). Другой день (завтра/архив): кабинет ближайшего предыдущего
+     * урока — логичная точка «откуда пойдём», иначе "".
+     *
+     * ponytail: для не-сегодня только roomFirst (split-подгруппу на будущем дне не угадать).
+     */
+    fun startForLesson(
+        lessons: List<LessonEntity>,
+        lesson: LessonEntity,
+        isToday: Boolean,
+        nowMinutes: Int,
+    ): String =
+        if (isToday) {
+            previousRoomNow(lessons, nowMinutes) ?: ""
+        } else {
+            lessons
+                .filter { it.lessonNumber < lesson.lessonNumber && it.roomFirst.isNotBlank() }
+                .maxByOrNull { it.lessonNumber }
+                ?.roomFirst
+                ?.trim() ?: ""
+        }
 }

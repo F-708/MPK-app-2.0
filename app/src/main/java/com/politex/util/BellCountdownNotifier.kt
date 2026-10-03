@@ -36,7 +36,7 @@ object BellCountdownNotifier {
         val title: String,
         val description: String,
     ) {
-        MY_LESSONS("my_lessons", "Мои уроки", "Счётчик заканчивается с последней парой вашей группы"),
+        MY_LESSONS("my_lessons", "Мои уроки", "Счётчик заканчивается с последним уроком вашей группы"),
         COLLEGE("college", "Уроки колледжа", "Счётчик работает до последнего звонка колледжа"),
         ;
 

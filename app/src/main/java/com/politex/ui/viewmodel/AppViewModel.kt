@@ -171,7 +171,7 @@ class AppViewModel(
                 onSuccess = { count ->
                     _uiState.update { it.copy(isSyncing = false, hasSyncError = false) }
                     if (count > 0) {
-                        _toastEvent.emit("Расписание группы $targetGroup обновлено ($count уроков)")
+                        _toastEvent.emit("Расписание группы $targetGroup обновлено ($count ${com.politex.util.lessonsWord(count)})")
                     } else {
                         if (!isAutoSync) {
                             _toastEvent.emit("Расписание группы $targetGroup: новых данных на сайте пока нет")

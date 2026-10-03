@@ -7,7 +7,9 @@ import com.politex.data.local.entity.TeacherLessonEntity
 import com.politex.data.network.MpkNetworkClient
 import com.politex.data.network.MpkScheduleParser
 import com.politex.data.network.ProbeResult
+import com.politex.util.Dow
 import com.politex.util.GroupParser
+import com.politex.util.lessonsWord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -101,6 +103,60 @@ internal fun saturdayIsSchoolDayFor(
     groupName: String,
     existingSaturdayLessons: Boolean,
 ): Boolean = GroupParser.parse(groupName)?.hasSaturdayClasses == true || existingSaturdayLessons
+
+/** V2: цель «завтра» — дата (null, если показывать пока нечего) и подпись слота. */
+data class NextDayTarget(val date: Calendar?, val label: String)
+
+/**
+ * V2: единая логика «завтра» с фолбэком суббота→понедельник:
+ * 1) завтра — учебный день (пн-пт, либо учебная суббота) → завтра, «Завтра»;
+ * 2) завтра — НЕучебная суббота, но на неё ЕСТЬ расписание (группа реально учится,
+ *    правило курса не сработало) → тоже суббота, «Завтра»;
+ * 3) иначе ближайший понедельник: расписание на него уже есть → понедельник, «Понедельник»;
+ * 4) ничего нет → null (UI подставит обычный nextSchoolDay), «Понедельник».
+ */
+internal fun nextSchoolDayWithFallback(
+    today: Calendar,
+    saturdayIsSchoolDay: Boolean,
+    hasSchedule: (Calendar) -> Boolean,
+): NextDayTarget {
+    val tomorrow = (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
+    val tomorrowDow = Dow.of(tomorrow)
+    if (tomorrowDow in 1..5 || (tomorrowDow == 6 && saturdayIsSchoolDay)) return NextDayTarget(tomorrow, "Завтра")
+    if (tomorrowDow == 6 && hasSchedule(tomorrow)) return NextDayTarget(tomorrow, "Завтра")
+    val monday = (today.clone() as Calendar).apply { do { add(Calendar.DAY_OF_YEAR, 1) } while (Dow.of(this) != 1) }
+    return if (hasSchedule(monday)) NextDayTarget(monday, "Понедельник") else NextDayTarget(null, "Понедельник")
+}
+
+/**
+ * V2: кандидаты «завтра» в порядке перебора (первый найденный на сайте — цель):
+ * учебное завтра → [завтра]; неучебная суббота → [сб, пн]; воскресенье → [пн].
+ */
+internal fun nextDayCandidates(
+    today: Calendar,
+    saturdayIsSchoolDay: Boolean,
+): List<Calendar> {
+    val tomorrow = (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
+    val monday = (today.clone() as Calendar).apply { do { add(Calendar.DAY_OF_YEAR, 1) } while (Dow.of(this) != 1) }
+    val dow = Dow.of(tomorrow)
+    return when {
+        dow in 1..5 || (dow == 6 && saturdayIsSchoolDay) -> listOf(tomorrow)
+        dow == 6 -> listOf(tomorrow, monday)
+        else -> listOf(monday)
+    }
+}
+
+/**
+ * V6a: байты — реальный документ (docx = zip PK\x03\x04, doc = OLE2 D0 CF 11 E0)?
+ * Сайт отдаёт HTML-страницы (event-страница, soft-404) с кодом 200 — без проверки магии
+ * они считались бы «документ найден» и глушили фолбэк-водопад.
+ */
+internal fun looksLikeDocument(bytes: ByteArray): Boolean {
+    if (bytes.size < 4) return false
+    val docx = bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte() && bytes[2] == 0x03.toByte() && bytes[3] == 0x04.toByte()
+    val doc = bytes[0] == 0xD0.toByte() && bytes[1] == 0xCF.toByte() && bytes[2] == 0x11.toByte() && bytes[3] == 0xE0.toByte()
+    return docx || doc
+}
 
 class ScheduleRepository(
     private val lessonDao: LessonDao,
@@ -198,25 +254,55 @@ class ScheduleRepository(
         force: Boolean = false,
     ): Result<Int> = withContext(Dispatchers.IO) {
         val today = Calendar.getInstance()
-        // W1: «завтра» = следующий УЧЕБНЫЙ день группы (суббота только для 1 курса),
-        // ровно как считает UI. Иначе в пятницу для 41О синк качал субботу 03.10,
-        // а вкладка «Завтра» показывала пустой понедельник 05.10.
+        // W1/V2: «завтра» = первый кандидат (завтра → суббота → понедельник), который либо
+        // уже лежит в кэше, либо документ которого probe нашёл на сайте. Не нашёл ничего —
+        // последний кандидат (понедельник): водопад fetchAllGroupsForDate (V6a) поищет там
+        // документ полностью, включая event-страницы и портал.
         val saturdaySchool = saturdayIsSchoolDayFor(
             groupName,
             lessonDao.getAllLessonsForGroup(groupName).first().any { it.dayOfWeek == 6 },
         )
-        val tomorrow = nextSchoolDay(today, saturdaySchool)
+        val candidates = nextDayCandidates(today, saturdaySchool)
         val todayStr = formatDate(today)
-        val tomorrowStr = formatDate(tomorrow)
 
+        // N1/V6a: «рукопожатие» ДО полной загрузки. Probe NotFound больше НЕ причина раннего
+        // выхода: предсказуемые URL — лишь быстрый путь, документ под нестандартным именем
+        // (корень бага 2026-10-02) находит полный водопад ниже.
+        networkClient.publishStatus(statusMessage = "Проверяю расписание…", isSyncing = true)
         val todayCached = lessonDao.getLessonCountForDate(groupName, todayStr)
+        val needToday = force || todayCached == 0
+        var probed: Calendar? = candidates.firstOrNull {
+            !force && lessonDao.getLessonCountForDate(groupName, formatDate(it)) > 0
+        }
+        var probeNetworkError = false
+        // W1a: URL, который probe уже нашёл, — синк скачает его ПЕРВЫМ, без водопада
+        val probeFoundUrl = mutableMapOf<String, String>()
+        if (probed == null) {
+            for (candidate in candidates) {
+                when (val probe = networkClient.probeDocument(candidate)) {
+                    is ProbeResult.Found -> {
+                        probed = candidate
+                        probeFoundUrl[formatDate(candidate)] = probe.url
+                        break
+                    }
+                    ProbeResult.NetworkError -> probeNetworkError = true
+                    is ProbeResult.NotFound -> Unit
+                }
+            }
+        }
+        val tomorrow: Calendar = probed ?: candidates.last()
+        val tomorrowStr = formatDate(tomorrow)
         val tomorrowCached = lessonDao.getLessonCountForDate(groupName, tomorrowStr)
 
-        val needToday = force || todayCached == 0
         val needTomorrow = force || tomorrowCached == 0
 
         if (!needToday && !needTomorrow) {
             return@withContext Result.success(todayCached + tomorrowCached)
+        }
+        when {
+            probeFoundUrl.isNotEmpty() -> networkClient.publishStatus(statusMessage = "Найдено, скачиваю…")
+            // V6a: probe ничего не нашёл — впереди полный водопад (event-страницы + портал)
+            !probeNetworkError -> networkClient.publishStatus(statusMessage = "Ищу на портале…")
         }
 
         val fetched = mutableListOf<LessonEntity>()
@@ -231,35 +317,6 @@ class ScheduleRepository(
         val allGroups = (catalog() + groupName).distinct()
         val useCatalog = catalog().isNotEmpty()
         val days = listOf(tomorrow to needTomorrow, today to needToday).filter { it.second }
-
-        // N1: «рукопожатие» ДО полной загрузки — дешёвый HEAD/Range-проход, «есть ли
-        // вообще файл?». Даёт честный фидбэк на экране («Проверяю сайт…» → «Файл найден,
-        // загружаю…») и разделяет «не опубликовано» (успех, 0 — НЕ ошибка сети) и сетевой
-        // сбой. NOT_FOUND по всем нужным дням → даже не пробуем качать.
-        networkClient.publishStatus(statusMessage = "Проверяю сайт…", isSyncing = true)
-        var probeFound = false
-        var probeNetworkError = false
-        // W1a: URL, который probe уже нашёл, — синк скачает его ПЕРВЫМ, без водопада
-        val probeFoundUrl = mutableMapOf<String, String>()
-        for ((calendar, _) in days) {
-            when (val probe = networkClient.probeDocument(calendar)) {
-                is ProbeResult.Found -> {
-                    probeFound = true
-                    probeFoundUrl[formatDate(calendar)] = probe.url
-                    break
-                }
-                ProbeResult.NetworkError -> probeNetworkError = true
-                is ProbeResult.NotFound -> Unit
-            }
-        }
-        if (!probeFound && !probeNetworkError) {
-            // Сайт жив, но файла на ближайшие даты нет — «не опубликовано», без скачиваний.
-            networkClient.publishStatus(statusMessage = "Расписание ещё не опубликовано", isSyncing = false)
-            return@withContext Result.success(0)
-        }
-        if (probeFound) {
-            networkClient.publishStatus(statusMessage = "Файл найден, загружаю расписание…")
-        }
 
         if (useCatalog) {
             for ((calendar, _) in days) {
@@ -329,7 +386,7 @@ class ScheduleRepository(
                 // N2: возвращаем число уроков СВОЕЙ группы, а не всех разобранных из документа
                 val synced = syncedCountForGroup(finalLessons, groupName)
                 // N1: финальный статус на экран (catalog-путь сам diagnosticInfo не трогает)
-                networkClient.publishStatus(statusMessage = "Расписание загружено ($synced уроков)", isSyncing = false)
+                networkClient.publishStatus(statusMessage = "Расписание загружено ($synced ${lessonsWord(synced)})", isSyncing = false)
                 Result.success(synced)
             }
             // Сеть отвалилась — честная ошибка (тост «проверьте интернет»).
@@ -340,12 +397,15 @@ class ScheduleRepository(
                 Result.failure(IOException("Не удалось получить расписание"))
             }
             else -> {
-                // N1: файл был (probe FOUND), но по группе ничего не разобралось
+                // V6a: водопад отработал, но по группе ничего не разобралось
                 networkClient.publishStatus(statusMessage = "Расписание ещё не опубликовано", isSyncing = false)
                 Result.success(0)
             }
         }
     }
+
+    /** V2: probe даты для воркера — есть ли на сайте документ этого дня (дёшево, без скачивания). */
+    suspend fun probeDate(calendar: Calendar): ProbeResult = networkClient.probeDocument(calendar)
 
     /**
      * Б3: синк конкретной даты (воркер уведомлений: «вышло расписание на завтра»).
@@ -416,7 +476,10 @@ class ScheduleRepository(
         networkClient.forEachDocumentUrl(calendar, preferredUrl = preferredUrl) { url ->
             val bytes = networkClient.downloadFileBytes(url)
             if (bytes == null || bytes.isEmpty()) return@forEachDocumentUrl false
-            documentFound(true)
+            // V6a: «документ найден» — только если байты реально doc/docx. HTML-страница
+            // (event-страница, soft-404) с кодом 200 документом не считается — иначе она
+            // глушила бы фолбэк-водопад и F5-диагностику.
+            if (looksLikeDocument(bytes)) documentFound(true)
             val parsed = MpkScheduleParser.parseFileAllGroups(bytes, date, candidateGroups)
             if (parsed.isNotEmpty()) {
                 found = parsed
