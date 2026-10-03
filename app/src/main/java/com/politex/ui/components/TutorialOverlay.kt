@@ -5,7 +5,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -35,8 +34,6 @@ import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -51,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.util.bouncyClickable
 import com.politex.util.TutorialFlags
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -302,36 +300,34 @@ fun TutorialOverlay(modifier: Modifier = Modifier) {
             }
         }
 
-        // X12: отдельный слой перехвата. consume — ТОЛЬКО когда жест начался ВНЕ hole
-        // (трактуем как «Пропустить») или по hole во время ДЕМО (просто блокируем).
-        // Жест, начатый внутри hole в фазе REPEAT, не потребляется НИ ОДНИМ событием
-        // (включая последующие move/up) — они уходят вниз целевому виджету под оверлеем
-        // (свайп карточки / тап кабинета / тап преподавателя). awaitFirstDown нельзя:
-        // он всегда consume() и убил бы pass-through.
+        // Y6: оверлей НЕ перехватывает ввод вообще: dim+hole+палец — чисто визуальные
+        // (Canvas без pointerInput), пользователь может работать с приложением сразу,
+        // включая целевую зону и всё остальное. Успех ловят колбэки экранов
+        // (TutorialController.success), «Пропустить» — явная кнопка ниже и системный back.
         Box(
-            modifier =
-            Modifier
-                .fillMaxSize()
-                .pointerInput(hole, phase) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            val down = event.changes.firstOrNull { it.pressed && !it.previousPressed } ?: continue
-                            if (phase == TutorialPhase.REPEAT && hole.contains(down.position)) {
-                                // Pass-through: ждём конец жеста, ничего не потребляя.
-                                // success детектит сам экран через TutorialController.success().
-                                while (awaitPointerEvent(PointerEventPass.Initial).changes.any { it.pressed }) {
-                                    // no-op
-                                }
-                                continue
-                            }
-                            event.changes.forEach { it.consume() }
-                            waitForUpOrCancellation(PointerEventPass.Initial)
-                            if (!hole.contains(down.position)) dismiss(markDone = true)
-                        }
-                    }
-                },
-        )
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.TopEnd,
+        ) {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorTopBar,
+                modifier =
+                Modifier
+                    .padding(12.dp)
+                    .bouncyClickable { dismiss(markDone = true) },
+            ) {
+                Text(
+                    text = "Пропустить",
+                    style =
+                    androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = Color.White,
+                    ),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
+        }
 
         Box(
             modifier = Modifier.fillMaxSize(),

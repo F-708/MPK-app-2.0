@@ -1,5 +1,6 @@
 package com.politex.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -270,6 +271,8 @@ private fun GradeSubjectScreen(
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    // Y5: системный «назад» из экрана предмета — к списку предметов, не выход из приложения
+    BackHandler { onBack() }
     val scope = rememberCoroutineScope()
     val today = rememberToday()
     val entries by dao.entriesForSubject(subject).collectAsState(initial = emptyList())
@@ -343,8 +346,8 @@ private fun GradeSubjectScreen(
             }
         }
 
-        // X10: блок (средний балл + строка весов + панель ввода) — вертикально по центру
-        Spacer(modifier = Modifier.weight(1f))
+        // Y4: средний балл — ближе к вертикальному центру; панель ввода прижата к низу
+        Spacer(modifier = Modifier.weight(0.6f))
 
         // V17/X8: средний балл 40sp в режиме округления предмета
         Box(
@@ -370,23 +373,9 @@ private fun GradeSubjectScreen(
             }
         }
 
-        // X9/X16: строка весов под средней — каждая категория один раз, по убыванию веса;
-        // веса выключены → скрыта. (X6: секции-списки категорий удалены — история оценок
-        // видна в окошке у нампада.)
-        if (weightsEnabled) {
-            Text(
-                text = weightsPreviewLine(ws),
-                textAlign = TextAlign.Center,
-                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-                modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-                    .testTag("grades_weight_line"),
-            )
-        }
+        Spacer(modifier = Modifier.weight(1f))
 
-        // ── Панель ввода (G4, W20/W21, V19/V20) ──
+        // ── Панель ввода (G4, W20/W21, V19/V20) — прижата к низу экрана (Y4) ──
         Surface(
             shape = RoundedCornerShape(2.dp),
             color = ColorBgMain,
@@ -660,6 +649,8 @@ private fun GradeSubjectSettingsScreen(
     globalWeights: Boolean,
     onBack: () -> Unit,
 ) {
+    // Y5: «назад» из настроек предмета — в экран предмета
+    BackHandler { onBack() }
     val scope = rememberCoroutineScope()
     val entries by dao.entriesForSubject(subject).collectAsState(initial = emptyList())
     val byCategory = remember(entries) { entries.groupBy({ it.category }) { it.value } }
