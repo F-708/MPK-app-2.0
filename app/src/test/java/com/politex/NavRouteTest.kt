@@ -96,4 +96,34 @@ class NavRouteTest {
         assertEquals("schedule?scroll={scroll}", scrollRoutePattern("schedule"))
         assertEquals("bells?scroll={scroll}", scrollRoutePattern("bells"))
     }
+
+    // ---- X7: системная «назад» на корнях вкладок ----
+
+    @Test
+    fun `X7 backAction - корень college ведёт на schedule`() {
+        assertEquals(com.politex.ui.screens.BackAction.TO_SCHEDULE, com.politex.ui.screens.backAction("college"))
+    }
+
+    @Test
+    fun `X7 backAction - корни schedule lessons bells - выход из приложения`() {
+        assertEquals(com.politex.ui.screens.BackAction.EXIT, com.politex.ui.screens.backAction("schedule"))
+        assertEquals(com.politex.ui.screens.BackAction.EXIT, com.politex.ui.screens.backAction("lessons"))
+        assertEquals(com.politex.ui.screens.BackAction.EXIT, com.politex.ui.screens.backAction("bells"))
+    }
+
+    @Test
+    fun `X7 backAction - query вкладки отбрасывается (паттерн route)`() {
+        // destination.route вкладки несёт паттерн «schedule?scroll={scroll}» — base = schedule
+        assertEquals(com.politex.ui.screens.BackAction.EXIT, com.politex.ui.screens.backAction("schedule?scroll={scroll}"))
+        assertEquals(com.politex.ui.screens.BackAction.EXIT, com.politex.ui.screens.backAction("bells?scroll=CURRENT_BELL"))
+    }
+
+    @Test
+    fun `X7 backAction - глубокие экраны и null - NONE (системный popBackStack)`() {
+        assertEquals(com.politex.ui.screens.BackAction.NONE, com.politex.ui.screens.backAction("map?room=214"))
+        assertEquals(com.politex.ui.screens.BackAction.NONE, com.politex.ui.screens.backAction("teacher?name=X"))
+        assertEquals(com.politex.ui.screens.BackAction.NONE, com.politex.ui.screens.backAction("group_schedule"))
+        assertEquals(com.politex.ui.screens.BackAction.NONE, com.politex.ui.screens.backAction("settings"))
+        assertEquals(com.politex.ui.screens.BackAction.NONE, com.politex.ui.screens.backAction(null))
+    }
 }

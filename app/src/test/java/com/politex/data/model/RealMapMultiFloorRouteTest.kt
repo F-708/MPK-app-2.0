@@ -163,4 +163,61 @@ class RealMapMultiFloorRouteTest {
         assertNotNull(r107)
         assertNotNull("у 107 должна быть дверь в разметке", r107!!.door)
     }
+
+    // X26: чистая проекция attach не рвёт связность — каждая комната БЕЗ двери (её центр
+    // может оказаться за соседним кабинетом) всё равно достижима от главного входа.
+    // (Полный wall-cross=0 на текущем ассете недостижим: «замурованные» комнаты без двери
+    // + коридоры, размеченные впритирку к углам узких комнат, — это данные плана, а не
+    // логика attach; диагностику см. tools/route-check-report.txt «X26 wall-cross».)
+    @Test
+    fun `X26 - все комнаты без двери достижимы от главного входа`() {
+        val floors = floorsMap()
+        val main = mapData.floor("1").entrances.first { it.kind == "main" }
+        val entrance =
+            MapRoom(
+                id = "entrance", number = "100", title = "", note = "", status = "normal",
+                x = main.x, y = main.y, w = 0.01f, h = 0.01f,
+            )
+        val doorNull =
+            CollegeMap.Floor.entries.flatMap { f ->
+                mapData.floor(f.id).rooms.filter { it.number.isNotBlank() && it.status != "nonexistent" && it.door == null }
+            }
+        assertTrue("в данных должны быть комнаты без двери", doorNull.isNotEmpty())
+        for (r in doorNull) {
+            val route = CollegeRouteFinder.findMultiFloorRoute(r, entrance, floors)
+            assertNotNull("комната ${r.number} (door=null) должна быть достижима от входа", route)
+        }
+    }
+
+    // X23: конец маршрута — В ДВЕРИ, если она размечена (без лишнего колена центр→дверь)
+    @Test
+    fun `X23 - маршрут стартует и финиширует в двери когда она есть`() {
+        val floors = floorsMap()
+        val from = room("101")
+        val to = room("103")
+        assertNotNull("у 101 должна быть дверь", from.door)
+        assertNotNull("у 103 должна быть дверь", to.door)
+        val r = CollegeRouteFinder.findMultiFloorRoute(from, to, floors)
+        assertNotNull("101→103 должен строиться", r)
+        val firstPt = r!!.floorPaths.first().points.first()
+        val lastPt = r.floorPaths.last().points.last()
+        assertEquals(from.door!!.x, firstPt.x, 1e-4f)
+        assertEquals(from.door!!.y, firstPt.y, 1e-4f)
+        assertEquals(to.door!!.x, lastPt.x, 1e-4f)
+        assertEquals(to.door!!.y, lastPt.y, 1e-4f)
+    }
+
+    // X23: без двери (door==null) маршрут стартует в ЦЕНТРЕ кабинета
+    @Test
+    fun `X23 - маршрут стартует в центре когда двери нет`() {
+        val floors = floorsMap()
+        val from = room("107-1")
+        assertTrue("у 107-1 нет двери", from.door == null)
+        val to = room("101")
+        val r = CollegeRouteFinder.findMultiFloorRoute(from, to, floors)
+        assertNotNull("107-1→101 должен строиться", r)
+        val firstPt = r!!.floorPaths.first().points.first()
+        assertEquals("старт в центре (door=null)", from.x, firstPt.x, 1e-4f)
+        assertEquals(from.y, firstPt.y, 1e-4f)
+    }
 }

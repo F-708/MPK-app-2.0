@@ -35,11 +35,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EventNote
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ZoomOutMap
@@ -86,7 +84,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -326,10 +323,14 @@ fun CollegeMapScreen(
     // Состояние живёт в записи backstack'а (rememberSaveable), как target/floorId.
     var builderActive by rememberSaveable { mutableStateOf(false) }
     var waypoints by rememberSaveable(stateSaver = waypointListSaver) { mutableStateOf(listOf<Waypoint>()) }
-    var loopMode by rememberSaveable { mutableStateOf(false) }
     var stageIndex by rememberSaveable { mutableIntStateOf(-1) }
     var ordered by rememberSaveable { mutableStateOf(false) }
     var autoOrdering by remember { mutableStateOf(false) }
+    // 6.2: глобальный режим конструктора — MainScreen прячет нижнюю навигацию, пока активен
+    DisposableEffect(builderActive) {
+        RouteBuilderMode.active = builderActive
+        onDispose { RouteBuilderMode.active = false }
+    }
     // Закоммиченный маршрут («Завершить») — рисуется после закрытия конструктора,
     // пока новый кабинет (тап/поиск) его не заменит
     var manualStages by remember { mutableStateOf<List<RouteStage>?>(null) }
@@ -337,11 +338,11 @@ fun CollegeMapScreen(
     val routeCache = remember { HashMap<Pair<String, String>, CollegeRouteFinder.MultiFloorRoute?>() }
 
     val builderLegs =
-        remember(builderActive, waypoints, loopMode, mapData, floors) {
+        remember(builderActive, waypoints, mapData, floors) {
             if (!builderActive || waypoints.isEmpty()) {
                 emptyList()
             } else {
-                buildLegs(waypoints, loopMode, mapData, floors, routeCache)
+                buildLegs(waypoints, mapData, floors, routeCache)
             }
         }
     val builderStages = remember(builderLegs, mapData) { legsToStages(builderLegs, mapData) }
@@ -370,7 +371,7 @@ fun CollegeMapScreen(
             if (activeStages != null) {
                 activeStages
                     .filter { it.floorId == floorId }
-                    .map { it.points }
+                    .flatMap { it.polylines }
                     .takeIf { it.isNotEmpty() }
             } else {
                 route?.floorPaths
@@ -380,13 +381,17 @@ fun CollegeMapScreen(
                     ?.takeIf { it.isNotEmpty() }
             }
         }
-    // V25: круговой маршрут — сдвиг полилиний текущего этажа в экранных dp (туда +3, обратно −3)
+    // X36: сдвиг полос маршрута текущего этажа в экранных dp — laneOffsetDp по индексу
+    // полилинии (0, +6, −6, +12, …), чтобы смежные/встречные линии не слипались.
     val routeOffsetsDp =
-        remember(activeStages, floorId, loopMode) {
-            if (activeStages == null || !loopMode) {
+        remember(activeStages, floorId) {
+            if (activeStages == null) {
                 emptyList()
             } else {
-                activeStages.filter { it.floorId == floorId }.map { if (it.isReturn) -3f else 3f }
+                activeStages
+                    .filter { it.floorId == floorId }
+                    .flatMap { it.polylines }
+                    .mapIndexed { i, _ -> laneOffsetDp(i) }
             }
         }
     val routeFinishHere =
@@ -429,29 +434,63 @@ fun CollegeMapScreen(
             .fillMaxSize()
             .background(ColorBgMain),
     ) {
-        MapHeader(
-            subtitle =
-            when {
-                targetRoom != null -> "Кабинет ${targetRoom.number}"
-                else -> "Планы этажей"
-            },
-            onBack = onBack,
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-        SearchField(
-            value = query,
-            onValueChange = {
-                query = it
-                searchFailed = false
-            },
-            onFound = { found ->
-                manualStages = null // V25: новый кабинет замещает ручной маршрут
-                target = found
-                searchFailed = found.isNotBlank() && findRoomEverywhere(mapData, found) == null
-            },
-            notFound = searchFailed,
-        )
+        // 6.1: компактная строка «назад + поиск + НАЙТИ» вместо шапки с подзаголовком —
+        // освобождает вертикаль под карту.
+        Row(
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                modifier =
+                Modifier
+                    .size(44.dp)
+                    .bouncyClickable(onClick = onBack),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Назад",
+                    tint = ColorBrandBlue,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            SearchField(
+                value = query,
+                onValueChange = {
+                    query = it
+                    searchFailed = false
+                },
+                notFound = searchFailed,
+                modifier = Modifier.weight(1f),
+            )
+            Surface(
+                shape = RoundedCornerShape(3.dp),
+                color = ColorBrandFill,
+                modifier =
+                Modifier
+                    .height(46.dp)
+                    .bouncyClickable {
+                        val found = query.trim()
+                        if (found.isNotBlank()) {
+                            manualStages = null // V25: новый кабинет замещает ручной маршрут
+                            target = found
+                            searchFailed = findRoomEverywhere(mapData, found) == null
+                        }
+                    },
+            ) {
+                Text(
+                    text = "НАЙТИ",
+                    softWrap = false,
+                    maxLines = 1,
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                )
+            }
+        }
         // W6: поиск по ГРУППЕ убран с карты (для этого есть вкладка «Расписание
         // группы» — заказчик). Освободившееся место отдаётся карте.
 
@@ -469,18 +508,6 @@ fun CollegeMapScreen(
             onSelect = { floorId = it },
             modifier = Modifier.padding(horizontal = 12.dp),
         )
-
-        if (builderActive) {
-            Spacer(modifier = Modifier.height(8.dp))
-            BuilderAddChips(
-                floorId = floorId,
-                mapData = mapData,
-                onAdd = { wp ->
-                    // дубль подряд → пропуск
-                    if (waypoints.lastOrNull()?.key != wp.key) waypoints = waypoints + wp
-                },
-            )
-        }
 
         // V25: этапы маршрута — чипы над картой (тап = переход на этаж этапа)
         if (activeStages != null) {
@@ -505,7 +532,8 @@ fun CollegeMapScreen(
             // V25: в конструкторе тап ДОБАВЛЯЕТ точку маршрута (дубль подряд → пропуск)
             onRoomTap = { room ->
                 if (builderActive) {
-                    if (waypoints.lastOrNull()?.key != room.number) {
+                    // X19: глобальный дедуп — кабинет встречается в маршруте максимум один раз
+                    if (waypoints.none { it.key == room.number }) {
                         waypoints = waypoints + Waypoint(room.number, "каб. ${room.number}")
                     }
                 } else {
@@ -521,8 +549,10 @@ fun CollegeMapScreen(
             routeSegments = routeSegments,
             onSelectRouteSegment = { floorId = it },
             showFinish = builderActive,
+            // 6.5: «Отменить» — закрываем конструктор, точки маршрута сохраняются
+            onCancel = { builderActive = false },
             onFinish = {
-                // «Завершить» — БЕЗ подтверждения: коммитим этапы, цель = последняя точка
+                // «Применить» — БЕЗ подтверждения: коммитим этапы, цель = последняя точка
                 manualStages = builderStages.takeIf { it.isNotEmpty() }
                 builderActive = false
                 builderStages.lastOrNull()?.let { floorId = it.floorId }
@@ -539,7 +569,6 @@ fun CollegeMapScreen(
                 waypoints = waypoints,
                 autoOrdering = autoOrdering,
                 ordered = ordered,
-                loop = loopMode,
                 onRemove = { i ->
                     waypoints = waypoints.filterIndexed { idx, _ -> idx != i }
                     ordered = false
@@ -570,7 +599,6 @@ fun CollegeMapScreen(
                         }
                     }
                 },
-                onToggleLoop = { loopMode = !loopMode },
                 onClear = {
                     waypoints = emptyList()
                     ordered = false
@@ -721,49 +749,6 @@ private fun RoomPanel(
                     modifier = Modifier.padding(12.dp),
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun MapHeader(
-    subtitle: String,
-    onBack: () -> Unit,
-) {
-    Row(
-        modifier =
-        Modifier
-            .fillMaxWidth()
-            .padding(start = 6.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier =
-            Modifier
-                .size(44.dp)
-                .bouncyClickable(onClick = onBack),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Назад",
-                tint = ColorBrandBlue,
-                modifier = Modifier.size(22.dp),
-            )
-        }
-        Spacer(modifier = Modifier.width(4.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Карта колледжа",
-                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp, color = ColorTextTitle),
-                maxLines = 1,
-            )
-            Text(
-                text = subtitle,
-                style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
 }
@@ -932,105 +917,76 @@ fun findGroupRoomNow(
 private fun SearchField(
     value: String,
     onValueChange: (String) -> Unit,
-    onFound: (String) -> Unit,
     notFound: Boolean,
+    modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier =
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    Surface(
+        shape = RoundedCornerShape(3.dp),
+        color = if (notFound) Color(0xFFFDECEC) else ColorSurfaceVariantLight,
+        border =
+        BorderStroke(
+            if (notFound) 2.dp else 1.dp,
+            if (notFound) DEAD_COLOR else ColorBorderLight,
+        ),
+        modifier = modifier.height(46.dp),
     ) {
-        Surface(
-            shape = RoundedCornerShape(3.dp),
-            color = if (notFound) Color(0xFFFDECEC) else ColorSurfaceVariantLight,
-            border =
-            BorderStroke(
-                if (notFound) 2.dp else 1.dp,
-                if (notFound) DEAD_COLOR else ColorBorderLight,
-            ),
-            modifier =
-            Modifier
-                .weight(1f)
-                .height(46.dp),
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = null,
-                    tint = if (notFound) DEAD_COLOR else ColorTextMuted,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    if (value.isBlank()) {
-                        Text(
-                            text = "Номер кабинета, например 214",
-                            style = TextStyle(fontSize = 14.sp, color = ColorTextMuted),
-                            maxLines = 1,
-                        )
-                    } else if (notFound) {
-                        Text(
-                            text = "Кабинета $value нет на плане",
-                            style = TextStyle(fontSize = 14.sp, color = DEAD_COLOR),
-                            maxLines = 1,
-                        )
-                    }
-                    BasicTextField(
-                        value = value,
-                        onValueChange = { input ->
-                            onValueChange(input.filter { it.isDigit() || it.isLetter() }.take(6))
-                        },
-                        singleLine = true,
-                        textStyle =
-                        TextStyle(
-                            fontSize = 15.sp,
-                            color = if (notFound) Color.Transparent else ColorTextTitle,
-                        ),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+                tint = if (notFound) DEAD_COLOR else ColorTextMuted,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (value.isBlank()) {
+                    Text(
+                        text = "Номер кабинета, например 214",
+                        style = TextStyle(fontSize = 14.sp, color = ColorTextMuted),
+                        maxLines = 1,
+                    )
+                } else if (notFound) {
+                    Text(
+                        text = "Кабинета $value нет на плане",
+                        style = TextStyle(fontSize = 14.sp, color = DEAD_COLOR),
+                        maxLines = 1,
                     )
                 }
-                if (value.isNotBlank()) {
-                    // M6: крестик 18dp в зоне 48dp
-                    Box(
-                        modifier =
-                        Modifier
-                            .size(48.dp)
-                            .bouncyClickable { onValueChange("") },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Очистить",
-                            tint = ColorTextMuted,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
+                BasicTextField(
+                    value = value,
+                    onValueChange = { input ->
+                        onValueChange(input.filter { it.isDigit() || it.isLetter() }.take(6))
+                    },
+                    singleLine = true,
+                    textStyle =
+                    TextStyle(
+                        fontSize = 15.sp,
+                        color = if (notFound) Color.Transparent else ColorTextTitle,
+                    ),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (value.isNotBlank()) {
+                // M6: крестик 18dp в зоне 48dp
+                Box(
+                    modifier =
+                    Modifier
+                        .size(48.dp)
+                        .bouncyClickable { onValueChange("") },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Очистить",
+                        tint = ColorTextMuted,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
             }
-        }
-
-        Surface(
-            shape = RoundedCornerShape(3.dp),
-            color = ColorBrandFill,
-            modifier =
-            Modifier
-                .height(46.dp)
-                .bouncyClickable { if (value.isNotBlank()) onFound(value.trim()) },
-        ) {
-            Text(
-                text = "НАЙТИ",
-                softWrap = false,
-                maxLines = 1,
-                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-            )
         }
     }
 }
@@ -1094,10 +1050,11 @@ private fun MapCanvas(
     routeBanner: String? = null,
     routeSegments: List<String> = emptyList(),
     onSelectRouteSegment: (String) -> Unit = {},
-    // V25: сдвиг каждой полилинии в экранных dp (круговой маршрут: туда +3, обратно −3)
-    // и кнопка «Завершить» поверх карты (конструктор маршрута)
+    // X36: сдвиг каждой полилинии в экранных dp (laneOffsetDp — полосы не слипаются)
+    // и кнопки «Отменить»/«Применить» поверх карты (конструктор маршрута, 6.5)
     routeOffsetsDp: List<Float> = emptyList(),
     showFinish: Boolean = false,
+    onCancel: () -> Unit = {},
     onFinish: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -1195,23 +1152,35 @@ private fun MapCanvas(
 
         fun restZoom(): Float = (viewHState.value / imgHState.value * 0.72f).coerceIn(1f, 2.2f)
 
-        LaunchedEffect(floorId, targetRoom?.id, viewW, viewH) {
-            if (viewW <= 0f || viewH <= 0f) return@LaunchedEffect
+        // X19: viewW/viewH НЕ в ключах зума — смена высоты карты (показ RoomPanel/панели
+        // конструктора) больше не перезапускает анимацию «к кабинету». Размеры читаем через State.
+        LaunchedEffect(floorId, targetRoom?.id) {
+            val vw = viewWState.value
+            val vh = viewHState.value
+            if (vw <= 0f || vh <= 0f) return@LaunchedEffect
+            val iw = imgWState.value
+            val ih = imgHState.value
             val rest = restZoom()
             val room = targetRoom
             if (room == null) {
                 scope.launch { scale.animateTo(rest, tween(250)) }
-                scope.launch { offsetX.animateTo(clampX(viewW / 2f - imgW * rest / 2f, rest), tween(250)) }
-                scope.launch { offsetY.animateTo(clampY(viewH / 2f - imgH * rest / 2f, rest), tween(250)) }
+                scope.launch { offsetX.animateTo(clampX(vw / 2f - iw * rest / 2f, rest), tween(250)) }
+                scope.launch { offsetY.animateTo(clampY(vh / 2f - ih * rest / 2f, rest), tween(250)) }
                 return@LaunchedEffect
             }
-            val px = room.x * imgW
-            val py = room.y * imgH
+            val px = room.x * iw
+            val py = room.y * ih
             val zoom = 2.6f
             // N10: тап по кабинету приближает к нему и ОСТАЁТСЯ приближённым (убран отъезд обратно)
             scope.launch { scale.animateTo(zoom, tween(420, easing = LinearOutSlowInEasing)) }
-            scope.launch { offsetX.animateTo(clampX(viewW / 2f - px * zoom, zoom), tween(420, easing = LinearOutSlowInEasing)) }
-            scope.launch { offsetY.animateTo(clampY(viewH / 2f - py * zoom, zoom), tween(420, easing = LinearOutSlowInEasing)) }
+            scope.launch { offsetX.animateTo(clampX(vw / 2f - px * zoom, zoom), tween(420, easing = LinearOutSlowInEasing)) }
+            scope.launch { offsetY.animateTo(clampY(vh / 2f - py * zoom, zoom), tween(420, easing = LinearOutSlowInEasing)) }
+        }
+        // X19: смена ТОЛЬКО размеров (панель показала/скрыла карту) — перезажать смещение,
+        // чтобы край плана не уехал за экран; без анимации (snapTo).
+        LaunchedEffect(viewW, viewH) {
+            offsetX.snapTo(clampX(offsetX.value, scale.value))
+            offsetY.snapTo(clampY(offsetY.value, scale.value))
         }
 
         Box(
@@ -1305,6 +1274,8 @@ private fun MapCanvas(
             }
         }
 
+        // 6.9: «+»/«−» убраны — оставлен только «вписать в вид» (ZoomOutMap): щипок-зум
+        // работает, а кнопки съедали вертикаль у края карты.
         Column(
             modifier =
             Modifier
@@ -1312,25 +1283,6 @@ private fun MapCanvas(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            fun zoomTo(z: Float) {
-                val target = z.coerceIn(restZoom(), 8f)
-                val cx = viewW / 2f
-                val cy = viewH / 2f
-                val bx = (cx - offsetX.value) / scale.value
-                val by = (cy - offsetY.value) / scale.value
-                scope.launch {
-                    scale.animateTo(target, tween(220))
-                }
-                scope.launch {
-                    offsetX.animateTo(clampX(cx - bx * target, target), tween(220))
-                }
-                scope.launch {
-                    offsetY.animateTo(clampY(cy - by * target, target), tween(220))
-                }
-            }
-
-            ZoomButton(Icons.Default.Add) { zoomTo(scale.value * 1.5f) }
-            ZoomButton(Icons.Default.Remove) { zoomTo(scale.value / 1.5f) }
             ZoomButton(Icons.Default.ZoomOutMap) {
                 scope.launch {
                     val z = restZoom()
@@ -1341,32 +1293,29 @@ private fun MapCanvas(
             }
         }
 
-        // V25: «Завершить» — коммит ручного маршрута БЕЗ подтверждения (видимые 32dp,
-        // touch-зона 44dp по M2)
+        // 6.5: «Отменить» (Close) + «Применить» (Check) вместо одной ✓. Отменить закрывает
+        // конструктор (точки сохраняются), Применить коммитит маршрут. Видимые 32dp, зона 44dp (M2).
         if (showFinish) {
-            Box(
+            Row(
                 modifier =
                 Modifier
                     .align(Alignment.TopEnd)
-                    .padding(8.dp)
-                    .size(44.dp)
-                    .bouncyClickable { onFinish() },
-                contentAlignment = Alignment.Center,
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Surface(
-                    shape = RoundedCornerShape(3.dp),
-                    color = ColorBrandFill,
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Завершить маршрут",
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                }
+                MapRoundAction(
+                    icon = Icons.Default.Close,
+                    description = "Отменить маршрут",
+                    filled = false,
+                    onClick = onCancel,
+                )
+                MapRoundAction(
+                    icon = Icons.Default.Check,
+                    description = "Применить маршрут",
+                    filled = true,
+                    onClick = onFinish,
+                )
             }
         }
 
@@ -1457,6 +1406,39 @@ private fun ZoomButton(
                 tint = ColorBrandBlue,
                 modifier = Modifier.size(20.dp),
             )
+        }
+    }
+}
+
+/** 6.5: круглая кнопка действия поверх карты (видимая 32dp в touch-зоне 44dp, M2). */
+@Composable
+private fun MapRoundAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    filled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier =
+        Modifier
+            .size(44.dp)
+            .bouncyClickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(3.dp),
+            color = if (filled) ColorBrandFill else ColorBgMain,
+            border = BorderStroke(1.dp, if (filled) ColorBrandFill else ColorBorderLight),
+            modifier = Modifier.size(32.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = description,
+                    tint = if (filled) Color.White else ColorTextMuted,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }
@@ -1627,20 +1609,21 @@ internal fun mainEntranceRoom(mapData: CollegeMapData): MapRoom? = mapData
         )
     }
 
-/** Шаг стрелок направления вдоль пути, в нормализованных единицах плана. */
-private const val ROUTE_ARROW_STEP_NORM = 0.06f
+/** X24: стрелки направления — шаг и размер в ЭКРАННЫХ dp (постоянны при любом зуме). */
+private const val ROUTE_ARROW_STEP_DP = 40f
+private const val ROUTE_ARROW_SIZE_DP = 6f
 
 /**
  * R1: линия маршрута поверх плана. Всё рисуется внутри graphicsLayer (план масштабирован),
  * поэтому толщины/радиусы умножаются на 1/zoom — на экране они постоянны (~4dp линия).
  * W39c: [polylines] — уже ортогонализованные линии CollegeRouteFinder.orthogonalize
  * (диагонали заменены L-уголками мимо комнат); полилиний несколько, когда сегмент этажа
- * разорван переходом по лестнице. Стрелки-треугольники направления — каждые
- * [ROUTE_ARROW_STEP_NORM] нормализованных единиц; пульсирующая точка — на финише
- * (когда текущий этаж несёт конец маршрута).
+ * разорван переходом по лестнице. X24: стрелки-треугольники направления — каждые
+ * ROUTE_ARROW_STEP_DP экранных dp вдоль screen-точек полилинии; пульсирующая точка — на
+ * финише (когда текущий этаж несёт конец маршрута).
  * V22: [arrowPhase] (0..1) — сетка стрелок течёт вдоль обхода пути (бегущие стрелки).
- * V25: [offsetsDp] — сдвиг каждой полилинии перпендикулярно ходу в ЭКРАННЫХ dp
- * (круговой маршрут: туда +3, обратно −3); сдвиг через offsetPolyline, стрелки — по
+ * X36: [offsetsDp] — сдвиг каждой полилинии перпендикулярно ходу в ЭКРАННЫХ dp
+ * (laneOffsetDp — полосы не слипаются); сдвиг через offsetPolyline, стрелки — по
  * сдвинутым точкам.
  */
 private fun DrawScope.drawRoutePath(
@@ -1679,34 +1662,38 @@ private fun DrawScope.drawRoutePath(
             style = Stroke(width = 4f * pxPerDp * unit, cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
 
-        // Стрелки направления: равномерный шаг в нормализованных единицах, «перенос» остатка
-        // между сегментами, угол — по экранным осям (план анизотропен: imgW != imgH).
-        // V22: вся сетка сдвинута на phase*STEP — за цикл фазы стрелки проходят один шаг,
-        // после Restart сетка совпадает сама с собой → непрерывное течение вдоль пути.
-        val s = 4.5f * pxPerDp * unit
-        val shift = arrowPhase * ROUTE_ARROW_STEP_NORM
+        // X24: стрелки направления — равномерный шаг в ЭКРАННЫХ dp (постоянен при любом зуме),
+        // раскладываются вдоль screen-точек полилинии; «перенос» остатка между сегментами.
+        // V22: вся сетка сдвинута на phase*step — за цикл фазы стрелки проходят один шаг
+        // (непрерывное течение). Сегменты короче двух стрелок пропускаются (carry сбрасывается).
+        val step = ROUTE_ARROW_STEP_DP * pxPerDp * unit
+        val s = ROUTE_ARROW_SIZE_DP * pxPerDp * unit
+        val shift = arrowPhase * step
         var carry = 0f
-        for (i in 1 until points.size) {
-            val a = points[i - 1]
-            val b = points[i]
+        for (i in 1 until screen.size) {
+            val a = screen[i - 1]
+            val b = screen[i]
             val dx = b.x - a.x
             val dy = b.y - a.y
-            val nLen = hypot(dx, dy)
-            if (nLen < 1e-5f) continue
-            val angle = atan2(dy * imgH, dx * imgW)
-            var d = (ROUTE_ARROW_STEP_NORM - carry + shift) % ROUTE_ARROW_STEP_NORM
-            if (d <= 0f) d += ROUTE_ARROW_STEP_NORM
-            while (d <= nLen) {
-                val t = d / nLen
+            val len = hypot(dx, dy)
+            if (len < s * 2f) {
+                carry = 0f
+                continue
+            }
+            val angle = atan2(dy, dx)
+            var d = (step - carry + shift) % step
+            if (d < s * 1.5f) d += step
+            while (d <= len - s * 1.5f) {
+                val t = d / len
                 drawArrowHead(
-                    center = Offset((a.x + dx * t) * imgW, (a.y + dy * t) * imgH),
+                    center = Offset(a.x + dx * t, a.y + dy * t),
                     angle = angle,
                     size = s,
                     color = color,
                 )
-                d += ROUTE_ARROW_STEP_NORM
+                d += step
             }
-            carry = (carry + nLen) % ROUTE_ARROW_STEP_NORM
+            carry = len - (d - step)
         }
     }
 

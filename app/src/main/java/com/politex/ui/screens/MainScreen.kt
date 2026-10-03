@@ -1,6 +1,8 @@
 package com.politex.ui.screens
 
+import android.app.Activity
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -121,6 +123,22 @@ fun buildGroupScheduleRoute(group: String?): String {
     return if (group.isNullOrBlank()) base else "$base?group=${enc(group)}"
 }
 
+/** X7: действие системной «назад» на КОРНЕ вкладки (глубокие экраны — системный popBackStack). */
+enum class BackAction { EXIT, TO_SCHEDULE, NONE }
+
+/**
+ * X7: чистая функция выбора действия системной «назад» по текущему route (см. NavRouteTest).
+ * Корень вкладки (query отбрасывается): «college» → переход на «schedule»; «schedule/lessons/
+ * bells» → выход из приложения. Глубокие экраны (map/teacher/group/settings/…) и null → NONE,
+ * тогда BackHandler не активен и «назад» отрабатывает системным popBackStack.
+ */
+fun backAction(route: String?): BackAction =
+    when (route?.substringBefore("?")) {
+        ROUTE_COLLEGE -> BackAction.TO_SCHEDULE
+        ROUTE_SCHEDULE, ROUTE_LESSONS, ROUTE_BELLS -> BackAction.EXIT
+        else -> BackAction.NONE
+    }
+
 /**
  * W2: тап по вкладке ВСЕГДА открывает КОРЕНЬ вкладки — без saveState/restoreState.
  * Заказчик: «если я перехожу на вкладку — меня должно перекинуть на её обычное состояние,
@@ -185,6 +203,18 @@ fun MainScreen(
         AppTab.entries.firstOrNull { it.route == base }?.let { selectedTab = it }
     }
 
+    // X7: системная «назад» на КОРНЕ вкладки — выход из приложения (schedule/lessons/bells)
+    // или переход на расписание (college). На глубоких экранах (карта/преподаватель/группа/…)
+    // BackHandler не активен → работает системный popBackStack (возврат на предыдущий экран).
+    val backAct = backAction(backStackEntry?.destination?.route)
+    BackHandler(enabled = backAct != BackAction.NONE) {
+        when (backAct) {
+            BackAction.EXIT -> (context as? Activity)?.finishAffinity()
+            BackAction.TO_SCHEDULE -> navController.navigateToTab(ROUTE_SCHEDULE)
+            BackAction.NONE -> {}
+        }
+    }
+
     // V14: корневой Box — хост оверлея интерактивных туториалов поверх всего контента.
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
@@ -196,7 +226,7 @@ fun MainScreen(
                 if (!ViewerMode.active) MainTopBar()
             },
             bottomBar = {
-                if (!ViewerMode.active) Column(modifier = Modifier.fillMaxWidth()) {
+                if (!ViewerMode.active && !RouteBuilderMode.active) Column(modifier = Modifier.fillMaxWidth()) {
                     Box(
                         modifier =
                         Modifier

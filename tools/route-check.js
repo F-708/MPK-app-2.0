@@ -101,32 +101,37 @@ function buildGraphFloor(fd, attach) {
       (onSegment[si] ||= []).push({ t: tOnSegment(q, seg[0], seg[1]), v: qv });
     });
   }
-  // W40a: подключение attach-точек проекцией на ближайший сегмент коридора.
-  // Фолбэк — ближайшая «настоящая» вершина ДО attach (иначе на пустом этаже
-  // две комнаты связались бы напрямую).
+  // W40a/X26: подключение attach-точек ПРОЕКЦИЕЙ на ближайший сегмент коридора, но проекция
+  // НЕ должна пробивать чужую комнату: перебираем ВСЕ проекции по возрастанию расстояния и
+  // берём первую «чистую» (отрезок точка→проекция не пересекает rect другой комнаты; свой
+  // rect — содержащий точку — не в счёт). Чистой нет — фолбэк на ближайшую «настоящую» вершину.
+  const wallRects = fd.rooms
+    .filter(r => r.status !== 'nonexistent' && r.w > 0 && r.h > 0)
+    .map(r => [r.x - r.w / 2, r.y - r.h / 2, r.x + r.w / 2, r.y + r.h / 2]);
   const n0 = vertices.length;
   const attachIdx = attach.map(pt => {
     const rv = addVertex(pt[0], pt[1]);
-    let bestQ = null, bestD = Infinity, bestSi = -1;
+    const cands = [];
     for (let si = 0; si < segments.length; si++) {
       const seg = segments[si];
       const q = projectPointOnSegment(pt, seg[0], seg[1]);
       if (!q) continue;
-      const d = Math.hypot(pt[0] - q.x, pt[1] - q.y);
-      if (d < bestD) { bestD = d; bestQ = q; bestSi = si; }
+      cands.push({ q, si, d: Math.hypot(pt[0] - q.x, pt[1] - q.y) });
     }
-    const nv = nearestVertex(vertices.slice(0, n0), pt[0], pt[1]);
-    const nvD = nv >= 0 ? Math.hypot(vertices[nv].x - pt[0], vertices[nv].y - pt[1]) : Infinity;
-    if (bestQ && bestD <= nvD) {
-      const qi = addVertex(bestQ.x, bestQ.y);
+    cands.sort((a, b) => a.d - b.d);
+    const clean = cands.find(c =>
+      !wallRects.some(r => !rectContains(r, pt[0], pt[1]) && segCrossesRect(pt[0], pt[1], c.q.x, c.q.y, r)));
+    if (clean) {
+      const qi = addVertex(clean.q.x, clean.q.y);
       link(rv, qi);
-      const seg = segments[bestSi];
+      const seg = segments[clean.si];
       const ai = vertices.indexOf(seg[0]), bi = vertices.indexOf(seg[1]);
       if (ai >= 0) link(qi, ai);
       if (bi >= 0) link(qi, bi);
-      (onSegment[bestSi] ||= []).push({ t: tOnSegment(bestQ, seg[0], seg[1]), v: qi });
-    } else if (nv >= 0) {
-      link(rv, nv);
+      (onSegment[clean.si] ||= []).push({ t: tOnSegment(clean.q, seg[0], seg[1]), v: qi });
+    } else {
+      const nv = nearestVertex(vertices.slice(0, n0), pt[0], pt[1]);
+      if (nv >= 0) link(rv, nv);
     }
     return rv;
   });
@@ -170,6 +175,26 @@ function projectOnSegment(p, a, b) {
   const q = { x: a.x + t * dx, y: a.y + t * dy };
   return Math.hypot(p.x - q.x, p.y - q.y) <= PROJECTION_RADIUS ? q : null;
 }
+// X26: зеркало CollegeRouteFinder.rectContains / segCrossesRect (Liang–Barsky).
+function rectContains(r, x, y) { return x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]; }
+function segCrossesRect(ax, ay, bx, by, r, eps) {
+  if (eps == null) eps = 1e-3;
+  const x0 = r[0] + eps, y0 = r[1] + eps, x1 = r[2] - eps, y1 = r[3] - eps;
+  if (x1 <= x0 || y1 <= y0) return false;
+  const dx = bx - ax, dy = by - ay;
+  let t0 = 0, t1 = 1;
+  const p = [-dx, dx, -dy, dy];
+  const q = [ax - x0, x1 - ax, ay - y0, y1 - ay];
+  for (let i = 0; i < 4; i++) {
+    if (Math.abs(p[i]) < 1e-9) { if (q[i] < 0) return false; }
+    else {
+      const t = q[i] / p[i];
+      if (p[i] < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
+      else { if (t < t0) return false; if (t < t1) t1 = t; }
+    }
+  }
+  return t0 <= t1;
+}
 
 // ---- W39b: глобальный граф по ВСЕМ этажам + межэтажные рёбра лестниц ----
 const gVerts = [];   // {floor, x, y}
@@ -196,6 +221,13 @@ FLOOR_ORDER.forEach(fid => {
   // W40a: комнаты — attach-точки (дверь ?: центр) → проекция на ближайший сегмент
   const rooms = fd.rooms.filter(r => r.number && r.status !== 'nonexistent' && floorForRoom(r.number));
   const attach = rooms.map(r => (r.door ? [r.door[0], r.door[1]] : [r.x, r.y]));
+  const attachNumbers = rooms.map(r => r.number.toLowerCase());
+  // X26: главный вход — тоже attach-точка (чистая проекция), зеркалит mainEntranceRoom в
+  // Kotlin. В wallRects НЕ входит (это не комната), поэтому чужие проекции он не блокирует.
+  if (fid === '1') {
+    const main = (fd.entrances || []).find(e => e.kind === 'main');
+    if (main) { attach.push([main.x, main.y]); attachNumbers.push('100'); }
+  }
   const g = buildGraphFloor(fd, attach);
   const base = gVerts.length;
   g.vertices.forEach(v => addV(fid, v.x, v.y));
@@ -217,7 +249,7 @@ FLOOR_ORDER.forEach(fid => {
     stairVById[e.id] = sv;
     stairs.push({ fid, en: e, v: sv });
   });
-  rooms.forEach((r, k) => { roomV[r.number.toLowerCase()] = base + g.attach[k]; });
+  attachNumbers.forEach((num, k) => { roomV[num] = base + g.attach[k]; });
 });
 
 // 1) ЯВНЫЕ links: пары по id (любые этажи, включая совпадение floorId — 3-4 план
@@ -293,18 +325,9 @@ function findMultiFloorRoute(fromNumber, toNumber) {
   return segments;
 }
 
-// Псевдо-комната «главный вход» (как mainEntranceRoom в приложении) — для демо
-for (const e of (floors['1'].entrances || [])) {
-  if (e.kind === 'main') { roomV['100'] = addV('1', e.x, e.y); /* snap ниже не нужен: вход лежит у графа */ }
-}
-// привязка псевдо-комнаты к графу (как snap в findMultiFloorRoute)
-if (roomV['100'] != null) {
-  const g1 = buildGraphFloor(floors['1']);
-  let best = -1, bd = Infinity;
-  const ex = gVerts[roomV['100']].x, ey = gVerts[roomV['100']].y;
-  g1.vertices.forEach((v, i) => { const d = (v.x - ex) ** 2 + (v.y - ey) ** 2; if (d < bd) { bd = d; best = i; } });
-  if (best >= 0) linkV(roomV['100'], gVerts.findIndex(gv => gv.floor === '1' && Math.abs(gv.x - g1.vertices[best].x) < VDUP && Math.abs(gv.y - g1.vertices[best].y) < VDUP));
-}
+// X26: псевдо-комната «главный вход» (roomV['100']) теперь подключается ЧИСТОЙ ПРОЕКЦИЕЙ
+// внутри этажного цикла (attach-точка на 1 этаже) — зеркалит mainEntranceRoom в приложении.
+// Отдельный snap-хак удалён: он давал неконтролируемое ребро, которое могло пробивать комнату.
 
 // ---- Матрица достижимости: union-find по тому же графу (веса ≥0, ребра
 // неориентированные → достижимость = связность; N² пар без N Дейкстр) ----
@@ -411,6 +434,61 @@ for (const [a, b] of w40) {
       r.map(sg => 'эт ' + sg.floorId + ':' + sg.points.length).join(' → ') + ']'
     : 'НЕТ МАРШРУТА'));
 }
+
+// X26: счётчик wall-cross — сколько ног маршрута пробивает ЧУЖИЕ комнаты. Для каждой
+// door-null комнаты маршрут к главному входу: проверяем каждый отрезок floorPath на
+// пересечение rect другой комнаты (своя комната маршрута исключена). Зеркало JVM-теста.
+//
+// ВАЖНО: это ДИАГНОСТИКА, а не воротa. Ненулевое значение на текущей карте дают:
+//  (а) «замурованные» комнаты без двери, стоящие ЗА другой комнатой (напр. 130 за 128,
+//      142-2 за 142) — для них НЕТ чистой проекции, срабатывает фолбэк nearestVertex, и
+//      нога объективно проходит сквозь соседнюю комнату (геометрия плана, не логика X26);
+//  (б) коридоры, размеченные «на глаз» впритирку к углам узких комнат (напр. 132 w=0.013) —
+//      эти ноги общие для многих маршрутов и существовали ДО X26.
+// Логика X26 (чистая проекция attach) устраняет пробои там, где чистая проекция существует.
+function countWallCross(segments, originNumber) {
+  let n = 0;
+  for (const sg of segments) {
+    const fd = floors[sg.floorId];
+    if (!fd) continue;
+    const rects = fd.rooms
+      .filter(r => r.status !== 'nonexistent' && r.w > 0 && r.h > 0 &&
+                   r.number.toLowerCase() !== String(originNumber).toLowerCase())
+      .map(r => ({ num: r.number, r: [r.x - r.w / 2, r.y - r.h / 2, r.x + r.w / 2, r.y + r.h / 2] }));
+    for (let i = 1; i < sg.points.length; i++) {
+      const a = sg.points[i - 1], b = sg.points[i];
+      for (const o of rects) if (segCrossesRect(a[0], a[1], b[0], b[1], o.r)) {
+        n++;
+        if (process.env.WC_DEBUG) console.log('  CROSS ' + originNumber + ' эт' + sg.floorId + ' leg[' +
+          a.map(v => v.toFixed(3)) + '→' + b.map(v => v.toFixed(3)) + '] × каб.' + o.num);
+        break;
+      }
+    }
+  }
+  return n;
+}
+const doorNullRooms = [];
+for (const fid of FLOOR_ORDER) for (const r of floors[fid].rooms)
+  if (r.number && r.status !== 'nonexistent' && floorForRoom(r.number) === fid && !r.door)
+    doorNullRooms.push(r.number);
+let wallCross = 0, wcRoutes = 0;
+const wcRooms = [];
+for (const num of doorNullRooms) {
+  const segs = findMultiFloorRoute(num, '100');
+  if (!segs) continue;
+  wcRoutes++;
+  const c = countWallCross(segs, num);
+  wallCross += c;
+  if (c > 0) wcRooms.push(num + '(' + c + ')');
+}
+say('');
+say('X26 wall-cross (диагностика: ноги маршрутов door-null комнат сквозь чужие комнаты):');
+say('  door-null комнат: ' + doorNullRooms.length + ' | маршрутов к входу: ' + wcRoutes +
+    ' | wall-cross legs: ' + wallCross);
+say('  комнаты с пробоями: ' + (wcRooms.length ? wcRooms.join(' ') : 'нет'));
+say('  Примечание: пробои = «замурованные» комнаты без двери (фолбэк nearestVertex) +');
+say('  коридоры впритирку к углам узких комнат (общие ноги, были до X26). Чистая проекция');
+say('  X26 убирает пробои attach-ног там, где к коридору есть не пересекающая стены линия.');
 
 fs.writeFileSync(REPORT, lines.join('\n') + '\n', 'utf8');
 console.log('\nОтчёт записан: ' + REPORT);

@@ -119,42 +119,41 @@ object CollegeRouteFinder {
             }
         }
 
-        // W40a: подключение attach-точек (старт/финиш) ПРОЕКЦИЕЙ на ближайший сегмент
-        // коридора этажа. Перебираются все сегменты, выбирается минимальный перпендикуляр;
-        // проекция связывается с концами сегмента (механизм как в склейке выше). Если
-        // проекция ДАЛЬШЕ ближайшей вершины графа (комната в крыле без коридора рядом) —
-        // фолбэк на ближайшую вершину, как до W40a. Фолбэк ищется только среди «настоящих»
-        // вершин (до attach): иначе на пустом этаже две комнаты связались бы напрямую.
+        // W40a/X26: подключение attach-точек (старт/финиш) ПРОЕКЦИЕЙ на ближайший сегмент
+        // коридора этажа. X26: проекция НЕ ДОЛНА пробивать чужую комнату — перебираем ВСЕ
+        // проекции по возрастанию расстояния и берём первую «чистую» (отрезок точка→проекция
+        // не пересекает rect другой комнаты; свой rect — тот, что содержит точку, — не в счёт).
+        // Чистой проекции нет (комната в крыле без коридора рядом / всё за стенами) — фолбэк на
+        // ближайшую «настоящую» вершину (до attach), как раньше.
+        val wallRects = floor.rooms
+            .filter { it.status != "nonexistent" && it.w > 0f && it.h > 0f }
+            .map { floatArrayOf(it.x - it.w / 2f, it.y - it.h / 2f, it.x + it.w / 2f, it.y + it.h / 2f) }
         val n0 = vertices.size
         val attachIdx = attach.map { (ax, ay) ->
             val rv = addVertex(ax, ay)
             val p = Vertex(ax, ay)
-            var bestQ: Vertex? = null
-            var bestD = Float.MAX_VALUE
-            var bestSi = -1
+            val candidates = ArrayList<Triple<Vertex, Int, Float>>()
             for ((si, ab) in segments.withIndex()) {
-                val (a, b) = ab
-                val q = projectPointOnSegment(p, a, b) ?: continue
-                val d = dist(p, q)
-                if (d < bestD) {
-                    bestD = d
-                    bestQ = q
-                    bestSi = si
-                }
+                val q = projectPointOnSegment(p, ab.first, ab.second) ?: continue
+                candidates.add(Triple(q, si, dist(p, q)))
             }
-            val nv = nearestVertex(vertices.subList(0, n0), ax, ay)
-            val nvD = if (nv >= 0) dist(p, vertices[nv]) else Float.MAX_VALUE
-            if (bestQ != null && bestD <= nvD) {
-                val qi = addVertex(bestQ.x, bestQ.y)
+            candidates.sortBy { it.third }
+            val clean = candidates.firstOrNull { (q, _, _) ->
+                wallRects.none { r -> !rectContains(r, ax, ay) && segCrossesRect(ax, ay, q.x, q.y, r) }
+            }
+            if (clean != null) {
+                val (q, si, _) = clean
+                val qi = addVertex(q.x, q.y)
                 link(rv, qi)
-                val (a, b) = segments[bestSi]
+                val (a, b) = segments[si]
                 val ai = vertices.indexOf(a)
                 val bi = vertices.indexOf(b)
                 if (ai >= 0) link(qi, ai)
                 if (bi >= 0) link(qi, bi)
-                onSegment.getOrPut(bestSi) { mutableListOf() }.add(tOnSegment(bestQ, a, b) to qi)
-            } else if (nv >= 0) {
-                link(rv, nv)
+                onSegment.getOrPut(si) { mutableListOf() }.add(tOnSegment(q, a, b) to qi)
+            } else {
+                val nv = nearestVertex(vertices.subList(0, n0), ax, ay)
+                if (nv >= 0) link(rv, nv)
             }
             rv
         }
@@ -398,16 +397,23 @@ object CollegeRouteFinder {
             cur.add(MapPoint(v.second, v.third))
         }
         flush()
-        // Начало/конец — центры кабинетов (путь стартует от двери — W40a — центр только
-        // для отрисовки; без двери attach-точка и есть центр)
+        // X23: центр кабинета дописывается к началу/концу ТОЛЬКО если дверь не размечена
+        // (door == null). Иначе путь стартует/финиширует В ДВЕРИ (attach-точка = дверь) — без
+        // лишнего колена центр→дверь. Когда door == null, attach-точка и есть центр, поэтому
+        // дописка — no-op по distP, но оставлена как гарантия (attach-вершина могла не попасть
+        // в результат, если путь вырожден).
         if (result.isNotEmpty()) {
-            val first = result[0]
-            if (first.points.isEmpty() || distP(first.points.first(), MapPoint(from.x, from.y)) > 1e-4f) {
-                result[0] = first.copy(points = listOf(MapPoint(from.x, from.y)) + first.points)
+            if (from.door == null) {
+                val first = result[0]
+                if (first.points.isEmpty() || distP(first.points.first(), MapPoint(from.x, from.y)) > 1e-4f) {
+                    result[0] = first.copy(points = listOf(MapPoint(from.x, from.y)) + first.points)
+                }
             }
-            val last = result[result.size - 1]
-            if (last.points.isEmpty() || distP(last.points.last(), MapPoint(to.x, to.y)) > 1e-4f) {
-                result[result.size - 1] = last.copy(points = last.points + MapPoint(to.x, to.y))
+            if (to.door == null) {
+                val last = result[result.size - 1]
+                if (last.points.isEmpty() || distP(last.points.last(), MapPoint(to.x, to.y)) > 1e-4f) {
+                    result[result.size - 1] = last.copy(points = last.points + MapPoint(to.x, to.y))
+                }
             }
         }
         var total = 0f
@@ -449,6 +455,7 @@ object CollegeRouteFinder {
             }
         }
         fun blocked(a: MapPoint, b: MapPoint, rs: List<FloatArray>): Boolean = rs.any { crosses(a, b, it) }
+        fun countCross(a: MapPoint, b: MapPoint, rs: List<FloatArray>): Int = rs.count { crosses(a, b, it) }
 
         val out = mutableListOf(points.first())
         var lastLegHorizontal = false // ось последнего сегмента (для выбора уголка)
@@ -471,7 +478,14 @@ object CollegeRouteFinder {
                 c1Free && c2Free -> if (lastLegHorizontal) c2 else c1
                 c1Free -> c1
                 c2Free -> c2
-                else -> null
+                // X26: оба уголка blocked — берём тот, чьи ноги пробивают МЕНЬШЕ комнат
+                // (ноги1+ноги2); диагональ остаётся, только если она чище обоих уголков.
+                else -> {
+                    val c1Count = countCross(a, c1, active) + countCross(c1, b, active)
+                    val c2Count = countCross(a, c2, active) + countCross(c2, b, active)
+                    val diagCount = active.count { segCrossesRect(a.x, a.y, b.x, b.y, it, ORTHO_EPS) }
+                    if (diagCount < minOf(c1Count, c2Count)) null else if (c1Count <= c2Count) c1 else c2
+                }
             }
             if (corner == null) {
                 out.add(b)
@@ -622,6 +636,54 @@ object CollegeRouteFinder {
     }
 
     private fun dist(a: Vertex, b: Vertex): Float = Math.hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble()).toFloat()
+
+    /** X26: точка (x,y) внутри rect r=[x0,y0,x1,y1] (граница считается внутри). */
+    private fun rectContains(r: FloatArray, x: Float, y: Float): Boolean =
+        x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]
+
+    /**
+     * X26: пересекает ли отрезок (ax,ay)→(bx,by) прямоугольник r=[x0,y0,x1,y1] — Liang–Barsky.
+     * Прямоугольник сжимается на [eps] с каждой стороны, чтобы касание стены (grazing) не
+     * считалось проходом сквозь комнату. Возвращает true, если непустая часть отрезка лежит
+     * внутри сжатого прямоугольника.
+     */
+    internal fun segCrossesRect(
+        ax: Float,
+        ay: Float,
+        bx: Float,
+        by: Float,
+        r: FloatArray,
+        eps: Float = 1e-3f,
+    ): Boolean {
+        val x0 = r[0] + eps
+        val y0 = r[1] + eps
+        val x1 = r[2] - eps
+        val y1 = r[3] - eps
+        if (x1 <= x0 || y1 <= y0) return false
+        val dx = bx - ax
+        val dy = by - ay
+        var t0 = 0f
+        var t1 = 1f
+        val p = floatArrayOf(-dx, dx, -dy, dy)
+        val q = floatArrayOf(ax - x0, x1 - ax, ay - y0, y1 - ay)
+        for (i in 0..3) {
+            val pi = p[i]
+            val qi = q[i]
+            if (Math.abs(pi) < 1e-9f) {
+                if (qi < 0f) return false // параллельно грани и снаружи полосы
+            } else {
+                val t = qi / pi
+                if (pi < 0f) {
+                    if (t > t1) return false
+                    if (t > t0) t0 = t
+                } else {
+                    if (t < t0) return false
+                    if (t < t1) t1 = t
+                }
+            }
+        }
+        return t0 <= t1
+    }
 
     private fun shortestPath(
         vertices: List<Vertex>,

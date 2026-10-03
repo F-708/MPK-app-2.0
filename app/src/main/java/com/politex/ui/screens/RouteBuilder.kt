@@ -13,10 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,27 +27,33 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.zIndex
 import com.politex.data.model.CollegeMap
 import com.politex.data.model.CollegeMapData
 import com.politex.data.model.CollegeRouteFinder
@@ -73,10 +79,15 @@ data class Waypoint(
     val isEntrance: Boolean = false,
 )
 
-/** Этап отрисовки: одна непрерывная полилиния на одном плане (этаж или площадка 4 эт.). */
+/**
+ * X25: этап отрисовки — ОДИН непрерывный участок на одном плане (этаж или площадка 4 эт.).
+ * [polylines] — несколько полилиний этапа: соседние FloorPath одного floorId+isReturn склеены
+ * в этап, но если конец предыдущей не совпал с началом следующей (<1e-3) — это вторая полилиния
+ * (например, разрыв на лестнице «3-4»: подход у 335 / площадка 4-го этажа).
+ */
 data class RouteStage(
     val floorId: String,
-    val points: List<MapPoint>,
+    val polylines: List<List<MapPoint>>,
     val label: String,
     val isReturn: Boolean = false,
 )
@@ -97,6 +108,16 @@ val waypointListSaver =
         save = { list -> list.flatMap { listOf(it.key, it.label, it.isEntrance) } },
         restore = { flat -> flat.chunked(3).map { Waypoint(it[0] as String, it[1] as String, it[2] as Boolean) } },
     )
+
+/**
+ * 6.2: глобальный режим конструктора маршрута. MainScreen прячет нижнюю навигацию, пока
+ * конструктор активен (как ViewerMode для PDF). Object, а не CompositionLocal: панель рисуется
+ * в MainScreen, конструктор — глубоко в карте. Флаг не rememberSaveable — смерть процесса
+ * обязана его сбрасывать (панель возвращается при холодном старте).
+ */
+object RouteBuilderMode {
+    var active by mutableStateOf(false)
+}
 
 /** Номер ближайшего реального кабинета к точке плана (подпись лестницы, pseudo-room). */
 fun nearestRoomNumber(floor: FloorMap, x: Float, y: Float): String? =
@@ -154,18 +175,18 @@ private fun cacheWaypoint(key: String, mapData: CollegeMapData): MapRoom? {
 }
 
 /**
- * Перегоны мультимаршрута: пары соседних точек + (loop) возврат last→first.
- * Edge: дубль подряд — пропускаем; 1 точка — маршрут от главного входа.
+ * Перегоны мультимаршрута: пары соседних точек. X19: глобальный дедуп — ключ встречается
+ * в пути максимум один раз (последовательный дубль схлопывается, A,B,A не даёт петли).
+ * Edge: 1 точка — маршрут от главного входа.
  */
 fun buildLegs(
     wps: List<Waypoint>,
-    loop: Boolean,
     mapData: CollegeMapData,
     floors: Map<String, FloorMap>,
     cache: MutableMap<Pair<String, String>, CollegeRouteFinder.MultiFloorRoute?>? = null,
 ): List<RouteLeg> {
     val pts = ArrayList<Waypoint>(wps.size + 1)
-    for (wp in wps) if (pts.isEmpty() || pts.last().key != wp.key) pts.add(wp)
+    for (wp in wps) if (pts.none { it.key == wp.key }) pts.add(wp)
     if (pts.size == 1) pts.add(0, Waypoint(MAIN_ENTRANCE_KEY, "Главный вход", isEntrance = true))
     if (pts.size < 2) return emptyList()
 
@@ -179,15 +200,15 @@ fun buildLegs(
 
     val legs = ArrayList<RouteLeg>()
     for (i in 1 until pts.size) legs.add(RouteLeg(pts[i - 1], pts[i], route(pts[i - 1], pts[i])))
-    if (loop && pts.first().key != pts.last().key) {
-        legs.add(RouteLeg(pts.last(), pts.first(), route(pts.last(), pts.first()), isReturn = true))
-    }
     return legs
 }
 
 /**
- * Legs → этапы отрисовки (точки сразу ортогонализованы и упрощены). Подпись этапа:
- * «Этап N: 1 эт → лестница у 131» / последний сегмент перегона — «… → каб. 214».
+ * X25: Legs → этапы отрисовки (точки сразу ортогонализованы и упрощены). Смежные FloorPath
+ * ОДНОГО floorId + isReturn сливаются в ОДИН этап: полилинии склеиваются, если конец
+ * предыдущей совпал с началом следующей (<1e-3), иначе добавляются второй полилинией этапа.
+ * Подпись БЕЗ «Этап N:»: «3-4 эт → лестница у 335 → каб. 401» (floor-префикс один раз,
+ * каждый следующий сегмент дописывает только «→ …»).
  */
 fun legsToStages(legs: List<RouteLeg>, mapData: CollegeMapData): List<RouteStage> {
     val stages = ArrayList<RouteStage>()
@@ -197,22 +218,49 @@ fun legsToStages(legs: List<RouteLeg>, mapData: CollegeMapData): List<RouteStage
             val floor = mapData.floor(fp.floorId)
             val isLegEnd = i == fps.lastIndex
             val near = if (!isLegEnd) fp.points.lastOrNull()?.let { nearestRoomNumber(floor, it.x, it.y) } else null
-            val label = buildString {
-                append("Этап ${stages.size + 1}: ${fp.floorId} эт")
-                if (near != null) append(" → лестница у $near") else if (isLegEnd) append(" → ${leg.to.label}")
+            val suffix = when {
+                near != null -> " → лестница у $near"
+                isLegEnd -> " → ${leg.to.label}"
+                else -> ""
             }
-            stages.add(
-                RouteStage(
-                    floorId = fp.floorId,
-                    points = CollegeRouteFinder.simplifyRoute(CollegeRouteFinder.orthogonalize(fp.points, floor.rooms)),
-                    label = label,
-                    isReturn = leg.isReturn,
-                ),
+            val poly = CollegeRouteFinder.simplifyRoute(
+                CollegeRouteFinder.orthogonalize(fp.points, floor.rooms),
             )
+            val last = stages.lastOrNull()
+            if (last != null && last.floorId == fp.floorId && last.isReturn == leg.isReturn) {
+                stages[stages.lastIndex] = last.copy(
+                    polylines = gluePolylines(last.polylines, poly),
+                    label = last.label + suffix,
+                )
+            } else {
+                stages.add(RouteStage(fp.floorId, listOf(poly), "${fp.floorId} эт$suffix", leg.isReturn))
+            }
         }
     }
     return stages
 }
+
+/** X25: склейка полилиний этапа — конец==начало (<1e-3) объединяем, иначе вторая полилиния. */
+private fun gluePolylines(existing: List<List<MapPoint>>, add: List<MapPoint>): List<List<MapPoint>> {
+    if (existing.isEmpty()) return listOf(add)
+    val out = ArrayList<List<MapPoint>>(existing)
+    val a = out.last().lastOrNull()
+    val b = add.firstOrNull()
+    if (a != null && b != null && hypot(a.x - b.x, a.y - b.y) < 1e-3f) {
+        out[out.lastIndex] = out.last() + add.drop(1)
+    } else {
+        out.add(add)
+    }
+    return out
+}
+
+/**
+ * X36: сдвиг полосы маршрута в экранных dp. Первая линия (i=0) идёт по центру (0), остальные
+ * раскладываются ±6,±12,±18… попарно (нечётные в +, чётные в −), чтобы встречные/параллельные
+ * полилинии одного этажа не слипались в одну линию.
+ */
+internal fun laneOffsetDp(i: Int): Float =
+    if (i == 0) 0f else ((i + 1) / 2) * 6f * if (i % 2 == 1) 1f else -1f
 
 /** Ближайший сосед (жадно) от [start] по всем [rest]; dist — дистанция ключей. */
 fun greedyOrder(start: Waypoint, rest: List<Waypoint>, dist: (String, String) -> Float): List<Waypoint> {
@@ -231,7 +279,7 @@ fun greedyOrder(start: Waypoint, rest: List<Waypoint>, dist: (String, String) ->
 /**
  * Сдвиг полилинии перпендикулярно ходу на [offsetPx] px ПРОСТРАНСТВА ПЛАНА (экран px ×
  * img-коэф): n = normalize(dy·imgH, −dx·imgW); вершина получает усреднённую нормаль
- * соседних сегментов. Круговой маршрут: туда +3dp, обратно −3dp — линии не слипаются.
+ * соседних сегментов.
  */
 fun offsetPolyline(points: List<MapPoint>, imgW: Float, imgH: Float, offsetPx: Float): List<MapPoint> {
     if (points.size < 2 || offsetPx == 0f || imgW <= 0f || imgH <= 0f) return points
@@ -261,53 +309,6 @@ fun offsetPolyline(points: List<MapPoint>, imgW: Float, imgH: Float, offsetPx: F
 }
 
 // ---------- UI конструктора ----------
-
-/** Чипы добавления точек: «+ Главный вход» и пригодные лестницы текущего этажа. */
-@Composable
-fun BuilderAddChips(
-    floorId: String,
-    mapData: CollegeMapData,
-    onAdd: (Waypoint) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val floor = remember(floorId, mapData) { mapData.floor(floorId) }
-    LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
-    ) {
-        item {
-            BuilderChip("+ Главный вход") { onAdd(Waypoint(MAIN_ENTRANCE_KEY, "Главный вход", isEntrance = true)) }
-        }
-        items(
-            count = floor.entrances.count { it.kind == "stairs" && it.usable },
-        ) { idx ->
-            val e = floor.entrances.filter { it.kind == "stairs" && it.usable }[idx]
-            val near = remember(e, floor) { nearestRoomNumber(floor, e.x, e.y) }
-            BuilderChip(if (near != null) "⇅ лестница у $near" else "⇅ лестница") {
-                onAdd(Waypoint(e.id, if (near != null) "лестница у $near" else "лестница", isEntrance = true))
-            }
-        }
-    }
-}
-
-@Composable
-private fun BuilderChip(text: String, onClick: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(3.dp),
-        color = ColorBgMain,
-        border = androidx.compose.foundation.BorderStroke(1.dp, ColorBorderLight),
-        modifier = Modifier.bouncyClickable(onClick = onClick),
-    ) {
-        Text(
-            text = text,
-            maxLines = 1,
-            softWrap = false,
-            style = TextStyle(fontSize = 12.sp, color = ColorTextBody),
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-        )
-    }
-}
 
 /** Чипы этапов над картой; тап — переход на этаж этапа; возвратные этапы — пунктир. */
 @Composable
@@ -369,25 +370,28 @@ private fun DrawScope.drawStageBorder(selected: Boolean, isReturn: Boolean, stro
     )
 }
 
+private const val ROW_H_DP = 44
+
 /**
- * Панель списка точек (вместо RoomPanel): строки «≡ [n] каб. 214 ✕». Drag-reorder за ≡
- * (позиция 0 закреплена — это старт), кнопки «Автонавигация» / «Круговой» / «Очистить».
+ * Панель списка точек (вместо RoomPanel): строки «≡ [n] каб. 214 ✕». X18: список — LazyColumn
+ * с ключами по waypoint (перестановка анимируется animateItem), drag-reorder за ≡ (позиция 0
+ * закреплена — это старт): перетаскиваемая строка поднимается (zIndex+тень) и визуально следует
+ * за пальцем (translationY=accum), при переходе за половину строки — swap и accum корректируется.
+ * 6.7: «Автонавигация» видна только при >4 точках. 6.8: панель минимум 180dp высотой.
  */
 @Composable
 fun RouteWaypointsPanel(
     waypoints: List<Waypoint>,
     autoOrdering: Boolean,
     ordered: Boolean,
-    loop: Boolean,
     onRemove: (Int) -> Unit,
     onSwap: (Int, Int) -> Unit,
     onAutoOrder: () -> Unit,
-    onToggleLoop: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
-    var dragging by remember { mutableIntStateOf(-1) }
+    var draggingIndex by remember { mutableIntStateOf(-1) }
     var accum by remember { mutableFloatStateOf(0f) }
     val rowPx = with(density) { ROW_H_DP.dp.toPx() }
 
@@ -395,16 +399,18 @@ fun RouteWaypointsPanel(
         shape = RoundedCornerShape(3.dp),
         color = ColorBgMain,
         border = androidx.compose.foundation.BorderStroke(1.dp, ColorBorderLight),
-        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 180.dp).padding(horizontal = 12.dp),
     ) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                PanelButton(
-                    text = if (ordered) "АВТОНАВИГАЦИЯ ✓" else "АВТОНАВИГАЦИЯ",
-                    filled = true,
-                    enabled = !autoOrdering && waypoints.size > 2,
-                    modifier = Modifier.weight(1f),
-                ) { onAutoOrder() }
+                if (waypoints.size > 4) {
+                    PanelButton(
+                        text = if (ordered) "АВТОНАВИГАЦИЯ ✓" else "АВТОНАВИГАЦИЯ",
+                        filled = true,
+                        enabled = !autoOrdering,
+                        modifier = Modifier.weight(1f),
+                    ) { onAutoOrder() }
+                }
                 if (autoOrdering) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
@@ -412,7 +418,6 @@ fun RouteWaypointsPanel(
                         color = ColorBrandFill,
                     )
                 }
-                PanelButton(text = "КРУГОВОЙ", filled = loop, modifier = Modifier.weight(1f)) { onToggleLoop() }
                 PanelButton(text = "ОЧИСТИТЬ", filled = false, modifier = Modifier.weight(1f)) { onClear() }
             }
             if (waypoints.isEmpty()) {
@@ -421,12 +426,25 @@ fun RouteWaypointsPanel(
                     style = TextStyle(fontSize = 13.sp, color = ColorTextMuted),
                 )
             } else {
-                Column(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = (ROW_H_DP * 4).dp).verticalScroll(rememberScrollState()),
-                ) {
-                    waypoints.forEachIndexed { i, wp ->
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = (ROW_H_DP * 4).dp)) {
+                    itemsIndexed(waypoints, key = { _, wp -> wp.key }) { i, wp ->
+                        val isDragging = draggingIndex == i
+                        val currentIndex by rememberUpdatedState(i)
                         Row(
-                            modifier = Modifier.fillMaxWidth().height(ROW_H_DP.dp),
+                            modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(ROW_H_DP.dp)
+                                .zIndex(if (isDragging) 1f else 0f)
+                                .graphicsLayer { if (isDragging) translationY = accum }
+                                .then(
+                                    if (isDragging) {
+                                        Modifier.shadow(6.dp, RoundedCornerShape(3.dp)).background(ColorBgMain)
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .animateItem(),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             // ≡ — ручка перетаскивания; позиция 0 закреплена (старт)
@@ -438,18 +456,18 @@ fun RouteWaypointsPanel(
                                         if (i > 0) {
                                             Modifier.pointerInput(Unit) {
                                                 detectDragGesturesAfterLongPress(
-                                                    onDragStart = { dragging = i; accum = 0f },
-                                                    onDragEnd = { dragging = -1 },
-                                                    onDragCancel = { dragging = -1 },
+                                                    onDragStart = { draggingIndex = currentIndex; accum = 0f },
+                                                    onDragEnd = { draggingIndex = -1 },
+                                                    onDragCancel = { draggingIndex = -1 },
                                                     onDrag = { change, amount ->
                                                         change.consume()
                                                         accum += amount.y
-                                                        val cur = dragging
+                                                        val cur = draggingIndex
                                                         if (cur < 1) return@detectDragGesturesAfterLongPress
                                                         if (accum > rowPx / 2f && cur < waypoints.lastIndex) {
-                                                            onSwap(cur, cur + 1); dragging = cur + 1; accum -= rowPx
+                                                            onSwap(cur, cur + 1); draggingIndex = cur + 1; accum -= rowPx
                                                         } else if (accum < -rowPx / 2f && cur > 1) {
-                                                            onSwap(cur, cur - 1); dragging = cur - 1; accum += rowPx
+                                                            onSwap(cur, cur - 1); draggingIndex = cur - 1; accum += rowPx
                                                         }
                                                     },
                                                 )
@@ -496,8 +514,6 @@ fun RouteWaypointsPanel(
     }
 }
 
-private const val ROW_H_DP = 44
-
 @Composable
 private fun PanelButton(
     text: String,
@@ -516,7 +532,7 @@ private fun PanelButton(
             text = text,
             maxLines = 1,
             softWrap = false,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            textAlign = TextAlign.Center,
             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 10.sp, color = if (filled) Color.White else ColorTextBody),
             modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
         )
