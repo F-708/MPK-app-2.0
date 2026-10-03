@@ -22,5 +22,13 @@ object TutorialFlags {
         prefs(ctx).edit().putBoolean(key(feature), true).apply()
     }
 
+    /** X37: админ-сброс — снять все флаги пройденности, туториалы покажутся заново. */
+    fun resetAll(ctx: Context) {
+        val p = prefs(ctx)
+        val editor = p.edit()
+        p.all.keys.filter { it.startsWith("tutorial_done_") }.forEach { editor.remove(it) }
+        editor.apply()
+    }
+
     private fun key(feature: String) = "tutorial_done_$feature"
 }

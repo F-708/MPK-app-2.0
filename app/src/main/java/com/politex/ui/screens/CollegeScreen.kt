@@ -29,13 +29,10 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -60,6 +57,7 @@ import com.politex.data.repository.ScheduleRepository
 import com.politex.data.repository.Student
 import com.politex.data.repository.Teacher
 import com.politex.data.repository.TeacherInsights
+import com.politex.ui.components.SearchBar
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
@@ -895,27 +893,15 @@ private fun TeachersPage(
                 .background(ColorDividerLight),
         )
 
-        OutlinedTextField(
+        // X14: единый SearchBar дизайн-системы вместо локального OutlinedTextField
+        SearchBar(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("Поиск: ФИО, дисциплина...") },
-            leadingIcon = {
-                Icon(Icons.Default.Search, contentDescription = null, tint = ColorBrandBlue, modifier = Modifier.size(18.dp))
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(2.dp),
-            colors =
-            TextFieldDefaults.colors(
-                focusedContainerColor = ColorSurfaceVariantLight,
-                unfocusedContainerColor = ColorSurfaceVariantLight,
-                focusedIndicatorColor = ColorBrandBlue,
-                unfocusedIndicatorColor = ColorBorderLight,
-            ),
+            placeholder = "Поиск: ФИО, дисциплина...",
+            testTag = "teachers_search_input",
             modifier =
             Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .testTag("teachers_search_input"),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
         )
 
         if (rows.isEmpty()) {

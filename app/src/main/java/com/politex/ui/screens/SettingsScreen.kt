@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -56,7 +57,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -65,6 +65,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.politex.BuildConfig
 import com.politex.data.model.GroupInfo
 import com.politex.ui.components.GroupSelectionDialog
 import com.politex.ui.theme.ColorActiveBlue
@@ -80,7 +81,9 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorWarning
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.AppThemeStore
+import com.politex.util.GradeSettings
 import com.politex.util.MpkCurriculum
+import com.politex.util.TutorialFlags
 import com.politex.util.defaultBackupFileName
 import com.politex.widget.WidgetUpdateHelper
 import com.politex.worker.MpkWorkManagerHelper
@@ -263,8 +266,8 @@ fun SettingsScreen(
                 }
             }
 
-            // N13: порядок секций — уведомления сверху, тема компактно, резервная копия внизу
-            item { SectionHeader("УВЕДОМЛЕНИЯ") }
+            // X28: порядок секций — расписание/синхронизация сверху, тема компактно, данные внизу
+            item { SectionHeader("РАСПИСАНИЕ И СИНХРОНИЗАЦИЯ") }
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -354,12 +357,193 @@ fun SettingsScreen(
                 }
             }
 
+            // X27: «Проверить соединение» — подключён мёртвый параметр onRunConnectionTest
+            // (MainScreen передаёт viewModel.syncSchedule()): кнопка запускает проверку,
+            // статус показываем текстом под заголовком строки.
+            item {
+                var connectionResult by remember { mutableStateOf("") }
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Проверить соединение",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = ColorTextTitle,
+                                ),
+                            )
+                            if (connectionResult.isNotBlank()) {
+                                Text(
+                                    text = connectionResult,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 11.sp,
+                                        color = ColorTextMuted,
+                                    ),
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            color = ColorBrandFill,
+                            modifier = Modifier
+                                .heightIn(min = com.politex.ui.theme.Tokens.ButtonHeight)
+                                .testTag("connection_test_button")
+                                .bouncyClickable {
+                                    onRunConnectionTest()
+                                    connectionResult = "Запущено — расписание обновляется"
+                                },
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                            ) {
+                                Text(
+                                    text = "ЗАПУСТИТЬ",
+                                    softWrap = false,
+                                    maxLines = 1,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = Color.White,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item { SectionHeader("КАРТА") }
+
+            // W36/X28: тогл «Маршруты по карте» — вынесен из «Обратной связи» в свою секцию
+            item {
+                var routesEnabled by remember {
+                    mutableStateOf(
+                        com.politex.widget.WidgetUpdateHelper.getPrefs(context)
+                            .getBoolean("map_routes_enabled", true),
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("map_routes_toggle"),
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Маршруты по карте",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = ColorTextTitle,
+                                ),
+                            )
+                            Switch(
+                                checked = routesEnabled,
+                                onCheckedChange = { on ->
+                                    routesEnabled = on
+                                    com.politex.widget.WidgetUpdateHelper.getPrefs(context)
+                                        .edit()
+                                        .putBoolean("map_routes_enabled", on)
+                                        .apply()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = ColorBrandBlue,
+                                ),
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Когда выключено, кнопки кабинетов открывают карту без построения пути.",
+                            style = androidx.compose.ui.text.TextStyle(
+                                color = ColorTextMuted,
+                                fontSize = 11.sp,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            item { SectionHeader("ЗВОНКИ И СТРОКА ДО ЗВОНКА") }
             item {
                 BellCountdownNotificationCard()
             }
 
+            item { SectionHeader("ОЦЕНКИ") }
+            // X9: глобальный тогл весов — пишет GradeSettings, GradesScreen читает тот же ключ
             item {
-                SectionHeader("ТЕМА ПРИЛОЖЕНИЯ")
+                var weightsEnabled by remember {
+                    mutableStateOf(GradeSettings.getGlobalWeightsEnabled(context))
+                }
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("grades_weights_toggle"),
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Учитывать веса категорий",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = ColorTextTitle,
+                                ),
+                            )
+                            Switch(
+                                checked = weightsEnabled,
+                                onCheckedChange = { on ->
+                                    weightsEnabled = on
+                                    GradeSettings.setGlobalWeightsEnabled(context, on)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = ColorBrandBlue,
+                                ),
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Когда выключено, средний балл считается без весов во всех предметах.",
+                            style = androidx.compose.ui.text.TextStyle(
+                                color = ColorTextMuted,
+                                fontSize = 11.sp,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            item {
+                SectionHeader("ВНЕШНИЙ ВИД")
             }
             item {
                 // N13: компактная тема — горизонтальная лента свотчей в одну строку
@@ -421,57 +605,94 @@ fun SettingsScreen(
                 }
             }
 
-            item { SectionHeader("ОБРАТНАЯ СВЯЗЬ") }
-
-            // W36: тогл «Маршруты по карте» — выкл = кнопки кабинетов открывают
-            // карту без построения пути
+            item { SectionHeader("ДАННЫЕ") }
             item {
-                var routesEnabled by remember {
-                    mutableStateOf(
-                        com.politex.widget.WidgetUpdateHelper.getPrefs(context)
-                            .getBoolean("map_routes_enabled", true),
-                    )
-                }
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
                     border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .testTag("map_routes_toggle"),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Row(
-                        modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            text = "Маршруты по карте",
-                            style =
-                            androidx.compose.ui.text.TextStyle(
+                            text = "Резервная копия",
+                            style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = ColorTextTitle,
                             ),
                         )
-                        Switch(
-                            checked = routesEnabled,
-                            onCheckedChange = { on ->
-                                routesEnabled = on
-                                com.politex.widget.WidgetUpdateHelper.getPrefs(context)
-                                    .edit()
-                                    .putBoolean("map_routes_enabled", on)
-                                    .apply()
-                            },
+                        Spacer(modifier = Modifier.height(4.dp))
+                        // X28: описание сокращено по заказчику — одна строка вместо трёх
+                        Text(
+                            text = "Настройки и всё остальное сохраняются в файл.",
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                         )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            ActionChip(
+                                text = "СОХРАНИТЬ В ФАЙЛ",
+                                filled = true,
+                                modifier = Modifier.weight(1f),
+                                onClick = { exportLauncher.launch(defaultBackupFileName(context)) },
+                            )
+                            ActionChip(
+                                text = "ВОССТАНОВИТЬ",
+                                filled = false,
+                                modifier = Modifier.weight(1f),
+                                onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                            )
+                        }
+                        if (backupMessage.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = backupMessage,
+                                style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorBrandBlue),
+                            )
+                        }
                     }
                 }
             }
 
+            // X37: админ-сброс пройденных туториалов; в standard-сборке строки нет
+            if (BuildConfig.FLAVOR == "admin") {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorBgMain,
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = com.politex.ui.theme.Tokens.HitTarget)
+                            .testTag("reset_tutorials_button")
+                            .bouncyClickable {
+                                TutorialFlags.resetAll(context)
+                                Toast
+                                    .makeText(context, "Обучения будут показаны заново", Toast.LENGTH_SHORT)
+                                    .show()
+                            },
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Text(
+                                text = "Сбросить обучения",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = ColorTextTitle,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+
+            item { SectionHeader("О ПРИЛОЖЕНИИ") }
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -558,8 +779,7 @@ fun SettingsScreen(
                 }
             }
 
-            // N13: резервная копия — в самом низу настроек
-            item { SectionHeader("РЕЗЕРВНАЯ КОПИЯ") }
+            // X28: строка версии — последняя в «О приложении»
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -567,47 +787,28 @@ fun SettingsScreen(
                     border = BorderStroke(1.dp, ColorBorderLight),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            text = "Резервная копия",
+                            text = "Версия",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = ColorTextTitle,
                             ),
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Настройки и все учебные задания сохраняются в файл. " +
-                                "Файл можно перекинуть на другой телефон " +
-                                "или использовать как запасную копию.",
-                            style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted),
+                            text = BuildConfig.VERSION_NAME,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 14.sp,
+                                color = ColorTextMuted,
+                            ),
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            ActionChip(
-                                text = "СОХРАНИТЬ В ФАЙЛ",
-                                filled = true,
-                                modifier = Modifier.weight(1f),
-                                onClick = { exportLauncher.launch(defaultBackupFileName(context)) },
-                            )
-                            ActionChip(
-                                text = "ВОССТАНОВИТЬ",
-                                filled = false,
-                                modifier = Modifier.weight(1f),
-                                onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
-                            )
-                        }
-                        if (backupMessage.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = backupMessage,
-                                style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorBrandBlue),
-                            )
-                        }
                     }
                 }
             }
@@ -622,38 +823,6 @@ fun SettingsScreen(
                 showGroupDialog = false
                 onGroupChanged(newGroup)
             },
-        )
-    }
-}
-
-@Composable
-private fun DiagnosticRow(
-    label: String,
-    value: String,
-    isMonospace: Boolean = false,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            style = androidx.compose.ui.text.TextStyle(
-                fontSize = 11.sp,
-                color = ColorTextMuted,
-            ),
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = value,
-            style = androidx.compose.ui.text.TextStyle(
-                fontWeight = FontWeight.Medium,
-                color = ColorTextBody,
-                fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
-                fontSize = if (isMonospace) 10.sp else 11.sp,
-            ),
-            modifier = Modifier.weight(1.3f),
         )
     }
 }
