@@ -4,6 +4,9 @@
 // (узлы+коридоры+проекционная склейка), тот же глобальный граф по всем этажам,
 // лестницы сопрягаются по ЯВНЫМ entrance.links (фолбэк — близость ≤0.06 только
 // для лестниц БЕЗ links на соседних этажах), один Дейкстра.
+// Y7: attach-цепочки (дверь ?: контур ?: центр) с чистым ортогональным Г-подходом,
+// чистая проекционная склейка и чистый snap лестниц; отрисованные полилинии
+// (simplify→orthogonalize в plan-px→avoidRooms) проверяются на wall-cross=0 и диагонали=0.
 //
 // Запуск: node tools/route-check.js
 // Отчёт: консоль + tools/route-check-report.txt
@@ -16,6 +19,9 @@ const FLOOR_ORDER = ['1', '2', '3-4']; // CollegeMap.Floor.entries
 
 const JOIN_RADIUS = 0.05, PROJECTION_RADIUS = 0.05, VDUP = 1e-4;
 const STAIR_PAIR_RADIUS = 0.06, STAIR_COST = 0.25;
+// Y7: план-аспект (все планы 1376×768) — ортогональность в plan-px; «почти осевой» = <0.2
+// (замер по данным: дрожание разметки ≤0.16, реальные диагональные переходы ≥0.24)
+const PLAN_ASPECT = 1376 / 768, SNAP_RATIO = 0.2;
 
 const raw = JSON.parse(fs.readFileSync(MAP, 'utf8'));
 const floors = {};
@@ -86,6 +92,10 @@ function buildGraphFloor(fd, attach) {
   });
   // Проекционная склейка (снимок вершин до цикла, как в приложении).
   // W40b: проекции одного сегмента записываются для цепочки по t.
+  // Y7: склейка, пробивающая комнату, НЕ создаётся (зеркало CollegeRouteFinder.buildGraph).
+  const wallRects = fd.rooms
+    .filter(r => r.status !== 'nonexistent' && r.status !== 'passage' && r.w > 0 && r.h > 0)
+    .map(r => [r.x - r.w / 2, r.y - r.h / 2, r.x + r.w / 2, r.y + r.h / 2]);
   const onSegment = {}; // si -> [{t, v}]
   const snapshot = vertices.slice();
   for (const v of snapshot) {
@@ -93,6 +103,8 @@ function buildGraphFloor(fd, attach) {
       const q = projectOnSegment(v, seg[0], seg[1]);
       if (!q) return;
       if (Math.hypot(v.x - q.x, v.y - q.y) < VDUP) return;
+      if (wallRects.some(r => !rectContains(r, v.x, v.y) && !rectContains(r, q.x, q.y) &&
+          segCrossesRect(v.x, v.y, q.x, q.y, r))) return;
       const qv = addVertex(q.x, q.y);
       link(vertices.indexOf(v), qv);
       const ai = vertices.indexOf(seg[0]), bi = vertices.indexOf(seg[1]);
@@ -101,37 +113,62 @@ function buildGraphFloor(fd, attach) {
       (onSegment[si] ||= []).push({ t: tOnSegment(q, seg[0], seg[1]), v: qv });
     });
   }
-  // W40a/X26: подключение attach-точек ПРОЕКЦИЕЙ на ближайший сегмент коридора, но проекция
-  // НЕ должна пробивать чужую комнату: перебираем ВСЕ проекции по возрастанию расстояния и
-  // берём первую «чистую» (отрезок точка→проекция не пересекает rect другой комнаты; свой
-  // rect — содержащий точку — не в счёт). Чистой нет — фолбэк на ближайшую «настоящую» вершину.
-  const wallRects = fd.rooms
-    .filter(r => r.status !== 'nonexistent' && r.w > 0 && r.h > 0)
-    .map(r => [r.x - r.w / 2, r.y - r.h / 2, r.x + r.w / 2, r.y + r.h / 2]);
+  // W40a/X26/Y7: attach-ЦЕПОЧКИ (дверь ?: контур ?: центр). 1) чистый ортогональный Г-подход
+  // (уголок c: обе ноги не пробивают чужие комнаты; q скользит вдоль коридора); 2) прямая чистая
+  // проекция первой точки цепочки (X26); 3) фолбэк — ближайшая «настоящая» вершина.
   const n0 = vertices.length;
-  const attachIdx = attach.map(pt => {
-    const rv = addVertex(pt[0], pt[1]);
-    const cands = [];
-    for (let si = 0; si < segments.length; si++) {
+  const attachIdx = attach.map(chain => {
+    const legClean = (ax, ay, x0, y0, x1, y1) =>
+      !wallRects.some(r => !rectContains(r, ax, ay) && segCrossesRect(x0, y0, x1, y1, r));
+    const projections = (ax, ay) => {
+      const cands = [];
+      for (let si = 0; si < segments.length; si++) {
+        const q = projectPointOnSegment([ax, ay], segments[si][0], segments[si][1]);
+        if (q) cands.push({ q, si, d: Math.hypot(ax - q.x, ay - q.y) });
+      }
+      cands.sort((a, b) => a.d - b.d);
+      return cands;
+    };
+    const wireCorner = (ax, ay, corner, q, si) => {
+      const rv = addVertex(ax, ay);
+      const ci = addVertex(corner[0], corner[1]);
+      if (ci !== rv) link(rv, ci);
+      const qi = addVertex(q.x, q.y);
+      if (qi !== ci) link(ci, qi);
       const seg = segments[si];
-      const q = projectPointOnSegment(pt, seg[0], seg[1]);
-      if (!q) continue;
-      cands.push({ q, si, d: Math.hypot(pt[0] - q.x, pt[1] - q.y) });
-    }
-    cands.sort((a, b) => a.d - b.d);
-    const clean = cands.find(c =>
-      !wallRects.some(r => !rectContains(r, pt[0], pt[1]) && segCrossesRect(pt[0], pt[1], c.q.x, c.q.y, r)));
-    if (clean) {
-      const qi = addVertex(clean.q.x, clean.q.y);
-      link(rv, qi);
-      const seg = segments[clean.si];
       const ai = vertices.indexOf(seg[0]), bi = vertices.indexOf(seg[1]);
       if (ai >= 0) link(qi, ai);
       if (bi >= 0) link(qi, bi);
-      (onSegment[clean.si] ||= []).push({ t: tOnSegment(clean.q, seg[0], seg[1]), v: qi });
-    } else {
-      const nv = nearestVertex(vertices.slice(0, n0), pt[0], pt[1]);
-      if (nv >= 0) link(rv, nv);
+      (onSegment[si] ||= []).push({ t: tOnSegment(q, seg[0], seg[1]), v: qi });
+      return rv;
+    };
+    let rv = -1;
+    for (const [ax, ay] of chain) {
+      let hit = null;
+      for (const { q, si } of projections(ax, ay)) {
+        const corner = [[ax, q.y], [q.x, ay]].find(c =>
+          (Math.hypot(ax - c[0], ay - c[1]) < 1e-4 || legClean(ax, ay, ax, ay, c[0], c[1])) &&
+          (Math.hypot(c[0] - q.x, c[1] - q.y) < 1e-4 || legClean(ax, ay, c[0], c[1], q.x, q.y)));
+        if (corner) { hit = { corner, q, si }; break; }
+      }
+      if (hit) { rv = wireCorner(ax, ay, hit.corner, hit.q, hit.si); break; }
+    }
+    if (rv < 0) {
+      const [ax, ay] = chain[0];
+      const clean = projections(ax, ay).find(c => legClean(ax, ay, ax, ay, c.q.x, c.q.y));
+      rv = addVertex(ax, ay);
+      if (clean) {
+        const qi = addVertex(clean.q.x, clean.q.y);
+        link(rv, qi);
+        const seg = segments[clean.si];
+        const ai = vertices.indexOf(seg[0]), bi = vertices.indexOf(seg[1]);
+        if (ai >= 0) link(qi, ai);
+        if (bi >= 0) link(qi, bi);
+        (onSegment[clean.si] ||= []).push({ t: tOnSegment(clean.q, seg[0], seg[1]), v: qi });
+      } else {
+        const nv = nearestVertex(vertices.slice(0, n0), ax, ay);
+        if (nv >= 0) link(rv, nv);
+      }
     }
     return rv;
   });
@@ -215,31 +252,65 @@ const stairVById = {};    // id лестницы -> вершина глобал�
 const stairs = [];        // {fid, en, v}
 const roomV = {};         // 'номер' -> вершина (только usable + status!=nonexistent)
 
+// Y7: цепочка attach-кандидатов комнаты: дверь ?: (контур к коридору, центр) — зеркало
+// CollegeRouteFinder.attachCandidates/nearestContourPoint.
+function nearestContourPoint(r, fd) {
+  const x0 = r.x - r.w / 2, x1 = r.x + r.w / 2, y0 = r.y - r.h / 2, y1 = r.y + r.h / 2;
+  const contour = [];
+  for (let i = 0; i <= 8; i++) {
+    const t = i / 8;
+    contour.push([x0 + (x1 - x0) * t, y0], [x0 + (x1 - x0) * t, y1], [x0, y0 + (y1 - y0) * t], [x1, y0 + (y1 - y0) * t]);
+  }
+  let best = null, bestD = Infinity;
+  for (const c of fd.corridors) for (let i = 1; i < c.points.length; i++) {
+    const a = { x: c.points[i - 1][0], y: c.points[i - 1][1] }, b = { x: c.points[i][0], y: c.points[i][1] };
+    for (const p of contour) {
+      const q = projectPointOnSegment(p, a, b);
+      if (!q) continue;
+      const d = Math.hypot(p[0] - q.x, p[1] - q.y);
+      if (d < bestD) { bestD = d; best = p; }
+    }
+  }
+  return best;
+}
+function attachChain(r, fd) {
+  if (r.door) return [[r.door[0], r.door[1]]];
+  const c = nearestContourPoint(r, fd);
+  return c ? [c, [r.x, r.y]] : [[r.x, r.y]];
+}
+
 FLOOR_ORDER.forEach(fid => {
   const fd = floors[fid];
   if (!fd) return;
-  // W40a: комнаты — attach-точки (дверь ?: центр) → проекция на ближайший сегмент
+  // W40a/Y7: комнаты — attach-ЦЕПОЧКИ (дверь ?: контур+центр) → чистый Г/проекция/фолбэк
   const rooms = fd.rooms.filter(r => r.number && r.status !== 'nonexistent' && floorForRoom(r.number));
-  const attach = rooms.map(r => (r.door ? [r.door[0], r.door[1]] : [r.x, r.y]));
+  const attach = rooms.map(r => attachChain(r, fd));
   const attachNumbers = rooms.map(r => r.number.toLowerCase());
-  // X26: главный вход — тоже attach-точка (чистая проекция), зеркалит mainEntranceRoom в
-  // Kotlin. В wallRects НЕ входит (это не комната), поэтому чужие проекции он не блокирует.
+  // X26: главный вход — тоже attach-цепочка (одна точка), зеркалит mainEntranceRoom в Kotlin.
   if (fid === '1') {
     const main = (fd.entrances || []).find(e => e.kind === 'main');
-    if (main) { attach.push([main.x, main.y]); attachNumbers.push('100'); }
+    if (main) { attach.push([[main.x, main.y]]); attachNumbers.push('100'); }
   }
   const g = buildGraphFloor(fd, attach);
   const base = gVerts.length;
   g.vertices.forEach(v => addV(fid, v.x, v.y));
   g.adjacency.forEach((edges, i) => edges.forEach(ed => { if (ed[0] > i) linkV(base + i, base + ed[0], ed[1]); }));
 
-  function snap(x, y) { // ближайшая вершина этажного подграфа (как в приложении, без радиуса)
-    let best = -1, bd = Infinity;
+  // Y7: snap — ближайшая ЧИСТАЯ вершина (ребро не пробивает кабинеты), фолбэк — ближайшая
+  const roomRects = fd.rooms
+    .filter(r => r.status !== 'nonexistent' && r.status !== 'passage' && r.w > 0 && r.h > 0)
+    .map(r => [r.x - r.w / 2, r.y - r.h / 2, r.x + r.w / 2, r.y + r.h / 2]);
+  function snap(x, y) {
+    let best = -1, bd = Infinity, bestClean = -1, bdClean = Infinity;
     g.vertices.forEach((v, i) => {
       const d = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y);
       if (d < bd) { bd = d; best = i; }
+      if (d < bdClean && !roomRects.some(r => !rectContains(r, x, y) && segCrossesRect(x, y, v.x, v.y, r))) {
+        bdClean = d; bestClean = i;
+      }
     });
-    return best < 0 ? -1 : base + best;
+    const pick = bestClean >= 0 ? bestClean : best;
+    return pick < 0 ? -1 : base + pick;
   }
 
   fd.entrances.filter(e => e.kind === 'stairs' && e.usable).forEach(e => {
@@ -328,6 +399,124 @@ function findMultiFloorRoute(fromNumber, toNumber) {
 // X26: псевдо-комната «главный вход» (roomV['100']) теперь подключается ЧИСТОЙ ПРОЕКЦИЕЙ
 // внутри этажного цикла (attach-точка на 1 этаже) — зеркалит mainEntranceRoom в приложении.
 // Отдельный snap-хак удалён: он давал неконтролируемое ребро, которое могло пробивать комнату.
+
+/* ===== Y7: порт orthogonalize/avoidRooms (plan-px, без диагоналей) — зеркало CollegeRouteFinder ===== */
+const ORTHO_EPS = 1e-4;
+function roomRectsOf(fd) {
+  return fd.rooms.filter(r => r.status !== 'nonexistent' && r.status !== 'passage' && r.w > 0 && r.h > 0)
+    .map(r => [r.x - r.w / 2, r.y - r.h / 2, r.x + r.w / 2, r.y + r.h / 2]);
+}
+function orthogonalize(points, rooms) {
+  if (!points || points.length < 2) return points || [];
+  const rects = rooms.filter(r => r.status !== 'nonexistent' && r.status !== 'passage' && r.w > 0 && r.h > 0)
+    .map(r => [r.x - r.w / 2, r.y - r.h / 2, r.x + r.w / 2, r.y + r.h / 2]);
+  const contains = (r, p) => p[0] >= r[0] && p[0] <= r[2] && p[1] >= r[1] && p[1] <= r[3];
+  const crosses = (a, b, r) => {
+    const minY = Math.min(a[1], b[1]), maxY = Math.max(a[1], b[1]);
+    const minX = Math.min(a[0], b[0]), maxX = Math.max(a[0], b[0]);
+    return Math.abs(a[1] - b[1]) < ORTHO_EPS
+      ? (a[1] > r[1] && a[1] < r[3] && maxX > r[0] && minX < r[2])
+      : (a[0] > r[0] && a[0] < r[2] && maxY > r[1] && minY < r[3]);
+  };
+  const blocked = (a, b, rs) => rs.some(r => crosses(a, b, r));
+  const countCross = (a, b, rs) => rs.filter(r => crosses(a, b, r)).length;
+  const out = [points[0].slice()];
+  let lastLegHorizontal = false;
+  for (let i = 1; i < points.length; i++) {
+    const a = out[out.length - 1];
+    let b = points[i].slice();
+    const dx = Math.abs(b[0] - a[0]) * PLAN_ASPECT, dy = Math.abs(b[1] - a[1]);
+    if (dx < ORTHO_EPS && dy < ORTHO_EPS) continue;
+    if (Math.min(dx, dy) < ORTHO_EPS) { out.push(b); lastLegHorizontal = dy < ORTHO_EPS; continue; }
+    if (Math.min(dx, dy) / Math.max(dx, dy) < SNAP_RATIO) { // дрожание разметки — защёлка на ось
+      b = dx > dy ? [b[0], a[1]] : [a[0], b[1]];
+      out.push(b); lastLegHorizontal = dx > dy; continue;
+    }
+    const active = rects.filter(r => !contains(r, a) && !contains(r, b));
+    const c1 = [a[0], b[1]], c2 = [b[0], a[1]];
+    const c1Free = !blocked(a, c1, active) && !blocked(c1, b, active);
+    const c2Free = !blocked(a, c2, active) && !blocked(c2, b, active);
+    let corner;
+    if (c1Free && c2Free) corner = lastLegHorizontal ? c2 : c1;
+    else if (c1Free) corner = c1;
+    else if (c2Free) corner = c2;
+    else { // оба пробивают — с меньшим числом пробоев; диагональ НЕ оставляем
+      const c1Count = countCross(a, c1, active) + countCross(c1, b, active);
+      const c2Count = countCross(a, c2, active) + countCross(c2, b, active);
+      corner = c1Count <= c2Count ? c1 : c2;
+    }
+    out.push(corner.slice()); out.push(b);
+    lastLegHorizontal = corner === c1;
+  }
+  return out;
+}
+function avoidRooms(points, fd) {
+  if (!points || points.length < 2) return points || [];
+  const rects = roomRectsOf(fd);
+  const contains = (r, p) => p[0] >= r[0] && p[0] <= r[2] && p[1] >= r[1] && p[1] <= r[3];
+  const clean = (a, b, rs) => !rs.some(r => segCrossesRect(a[0], a[1], b[0], b[1], r));
+  const hAxes = [], vAxes = [];
+  for (const c of fd.corridors) for (let i = 1; i < c.points.length; i++) {
+    const p = c.points[i - 1], q = c.points[i];
+    const dx = Math.abs(q[0] - p[0]) * PLAN_ASPECT, dy = Math.abs(q[1] - p[1]);
+    if (dx > 0 && dy > 0 && Math.min(dx, dy) / Math.max(dx, dy) >= SNAP_RATIO) continue;
+    if (dx > dy) hAxes.push((p[1] + q[1]) / 2); else vAxes.push((p[0] + q[0]) / 2);
+  }
+  const out = [points[0].slice()];
+  for (let i = 1; i < points.length; i++) {
+    const a = out[out.length - 1], b = points[i].slice();
+    const active = rects.filter(r => !contains(r, a) && !contains(r, b));
+    if (clean(a, b, active)) { out.push(b); continue; }
+    const horizontal = Math.abs(b[1] - a[1]) <= Math.abs(b[0] - a[0]) * PLAN_ASPECT;
+    const axes = [...new Set(horizontal ? hAxes : vAxes)]
+      .sort((u, v) => Math.abs(u - (horizontal ? a[1] : a[0])) - Math.abs(v - (horizontal ? a[1] : a[0])));
+    let detour = null;
+    for (const v of axes) {
+      const c1 = horizontal ? [a[0], v] : [v, a[1]];
+      const c2 = horizontal ? [b[0], v] : [v, b[1]];
+      if (clean(a, c1, active) && clean(c1, c2, active) && clean(c2, b, active)) { detour = [c1, c2]; break; }
+    }
+    if (detour) { out.push(detour[0].slice()); out.push(detour[1].slice()); }
+    out.push(b);
+  }
+  return out;
+}
+// Полилиния ОТРИСОВКИ сегмента этажа (зеркало CollegeRouteFinder.routePolyline:
+// simplify → orthogonalize → avoidRooms; порядок важен, см. комментарий в Kotlin)
+function simplifyPass(pts, eps) {
+  const d = [];
+  for (const p of pts) if (!d.length || Math.hypot(d[d.length - 1][0] - p[0], d[d.length - 1][1] - p[1]) >= 1e-4) d.push(p);
+  const out = [];
+  for (const p of d) {
+    out.push(p);
+    while (out.length >= 3) {
+      const a = out[out.length - 3], b = out[out.length - 2], c = out[out.length - 1];
+      const abx = b[0] - a[0], aby = b[1] - a[1];
+      const cross = abx * (c[1] - b[1]) - aby * (c[0] - b[0]);
+      const dot = abx * (c[0] - b[0]) + aby * (c[1] - b[1]);
+      const collinear = Math.abs(cross) < eps && dot >= 0;
+      const abLen = Math.hypot(abx, aby);
+      const perp = abLen < 1e-6 ? Math.hypot(a[0] - c[0], a[1] - c[1]) : Math.abs(abx * (c[1] - a[1]) - aby * (c[0] - a[0])) / abLen;
+      const spike = Math.hypot(a[0] - c[0], a[1] - c[1]) < abLen && perp < eps;
+      if (collinear || spike) out.splice(out.length - 2, 1); else break;
+    }
+  }
+  return out;
+}
+function simplifyRoute(pts) {
+  let cur = pts;
+  while (true) {
+    // eps 1e-4, как в CollegeRouteFinder.routePolyline: дефолтный 1e-3 съедал короткие повороты
+    const next = simplifyPass(cur, 1e-4);
+    if (next.length === cur.length) return next;
+    cur = next;
+  }
+}
+function drawnPolyline(seg) {
+  const fd = floors[seg.floorId];
+  if (!fd) return seg.points;
+  return avoidRooms(orthogonalize(simplifyRoute(seg.points), fd.rooms), fd);
+}
 
 // ---- Матрица достижимости: union-find по тому же графу (веса ≥0, ребра
 // неориентированные → достижимость = связность; N² пар без N Дейкстр) ----
@@ -446,17 +635,21 @@ for (const [a, b] of w40) {
 //  (б) коридоры, размеченные «на глаз» впритирку к углам узких комнат (напр. 132 w=0.013) —
 //      эти ноги общие для многих маршрутов и существовали ДО X26.
 // Логика X26 (чистая проекция attach) устраняет пробои там, где чистая проекция существует.
+// Y7: счётчик wall-cross — ноги ОТРИСОВАННОЙ полилинии (ортогонализация+обход) сквозь ЧУЖИЕ
+// кабинеты. Для каждой door-null комнаты маршрут к главному входy; rect'ы статуса passage
+// (сквозные залы) стенами не считаются. Зеркало JVM-теста.
 function countWallCross(segments, originNumber) {
   let n = 0;
   for (const sg of segments) {
     const fd = floors[sg.floorId];
     if (!fd) continue;
+    const poly = drawnPolyline(sg);
     const rects = fd.rooms
-      .filter(r => r.status !== 'nonexistent' && r.w > 0 && r.h > 0 &&
+      .filter(r => r.status !== 'nonexistent' && r.status !== 'passage' && r.w > 0 && r.h > 0 &&
                    r.number.toLowerCase() !== String(originNumber).toLowerCase())
       .map(r => ({ num: r.number, r: [r.x - r.w / 2, r.y - r.h / 2, r.x + r.w / 2, r.y + r.h / 2] }));
-    for (let i = 1; i < sg.points.length; i++) {
-      const a = sg.points[i - 1], b = sg.points[i];
+    for (let i = 1; i < poly.length; i++) {
+      const a = poly[i - 1], b = poly[i];
       for (const o of rects) if (segCrossesRect(a[0], a[1], b[0], b[1], o.r)) {
         n++;
         if (process.env.WC_DEBUG) console.log('  CROSS ' + originNumber + ' эт' + sg.floorId + ' leg[' +
@@ -467,11 +660,24 @@ function countWallCross(segments, originNumber) {
   }
   return n;
 }
+// Y7: диагонали в итоговых полилиниях (plan-px): сегмент не осевой, если обе стороны ≥ eps.
+function countDiagonals(segments) {
+  let n = 0;
+  for (const sg of segments) {
+    const poly = drawnPolyline(sg);
+    for (let i = 1; i < poly.length; i++) {
+      const dx = Math.abs(poly[i][0] - poly[i - 1][0]) * PLAN_ASPECT;
+      const dy = Math.abs(poly[i][1] - poly[i - 1][1]);
+      if (dx >= ORTHO_EPS && dy >= ORTHO_EPS) n++;
+    }
+  }
+  return n;
+}
 const doorNullRooms = [];
 for (const fid of FLOOR_ORDER) for (const r of floors[fid].rooms)
   if (r.number && r.status !== 'nonexistent' && floorForRoom(r.number) === fid && !r.door)
     doorNullRooms.push(r.number);
-let wallCross = 0, wcRoutes = 0;
+let wallCross = 0, wcRoutes = 0, diag = 0;
 const wcRooms = [];
 for (const num of doorNullRooms) {
   const segs = findMultiFloorRoute(num, '100');
@@ -479,16 +685,20 @@ for (const num of doorNullRooms) {
   wcRoutes++;
   const c = countWallCross(segs, num);
   wallCross += c;
+  diag += countDiagonals(segs);
   if (c > 0) wcRooms.push(num + '(' + c + ')');
 }
+for (const [a, b] of demos.concat(w40)) {
+  const r = findMultiFloorRoute(a, b);
+  if (r) diag += countDiagonals(r);
+}
 say('');
-say('X26 wall-cross (диагностика: ноги маршрутов door-null комнат сквозь чужие комнаты):');
+say('Y7 wall-cross (ноги ОТРИСОВАННЫХ полилиний door-null маршрутов сквозь чужие кабинеты):');
 say('  door-null комнат: ' + doorNullRooms.length + ' | маршрутов к входу: ' + wcRoutes +
-    ' | wall-cross legs: ' + wallCross);
+    ' | wall-cross legs: ' + wallCross + ' | диагоналей в итоговых полилиниях: ' + diag);
 say('  комнаты с пробоями: ' + (wcRooms.length ? wcRooms.join(' ') : 'нет'));
-say('  Примечание: пробои = «замурованные» комнаты без двери (фолбэк nearestVertex) +');
-say('  коридоры впритирку к углам узких комнат (общие ноги, были до X26). Чистая проекция');
-say('  X26 убирает пробои attach-ног там, где к коридору есть не пересекающая стены линия.');
+say('  Целевые значения: wall-cross=0, диагонали=0 (маршруты строго параллельно-перпендикулярные,');
+say('  кабинеты-стены не пробиваются; статус passage = сквозной зал, стеной не считается).');
 
 fs.writeFileSync(REPORT, lines.join('\n') + '\n', 'utf8');
 console.log('\nОтчёт записан: ' + REPORT);

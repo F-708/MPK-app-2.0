@@ -198,8 +198,9 @@ class CollegeRouteFinderTest {
     }
 
     @Test
-    fun `ортогонализация - оба уголка через комнаты, остаётся диагональ`() {
-        // две комнаты блокируют обе пары ног
+    fun `ортогонализация - оба уголка через комнаты, диагональ НЕ остаётся (меньший пробой)`() {
+        // две комнаты блокируют обе пары ног: Y7 запрещает диагональ вовсе —
+        // берётся уголок с МЕНЬШИМ числом пробоев (здесь равны → c1)
         val blockers =
             listOf(
                 MapRoom(id = "r1", number = "301", title = "", note = "", status = "normal", x = 0.1f, y = 0.25f, w = 0.1f, h = 0.1f), // нога c1
@@ -209,7 +210,96 @@ class CollegeRouteFinderTest {
             listOf(MapPoint(0.1f, 0.1f), MapPoint(0.5f, 0.4f)),
             blockers,
         )
-        assertEquals("оба зла — диагональ остаётся", 2, out.size)
+        assertEquals("диагонали нет — уголок с меньшим пробоем", 3, out.size)
+        assertEquals(MapPoint(0.1f, 0.4f), out[1])
+    }
+
+    // Y7: дрожание разметки (уклон < ~19° в plan-px) защёлкивается на ось — итог строго осевой
+    @Test
+    fun `Y7 ортогонализация - все сегменты осевые в plan-px (снап дрожания)`() {
+        val pts =
+            listOf(
+                MapPoint(0.1f, 0.5f),
+                MapPoint(0.5f, 0.502f), // уклон 0.002*768=1.5px на 550px — дрожание
+                MapPoint(0.52f, 0.2f), // уклон по x: 27px на 232px — почти вертикаль
+            )
+        val out = CollegeRouteFinder.orthogonalize(pts, emptyList())
+        assertEquals(3, out.size)
+        for (i in 1 until out.size) {
+            val dx = Math.abs(out[i].x - out[i - 1].x) * CollegeRouteFinder.PLAN_ASPECT
+            val dy = Math.abs(out[i].y - out[i - 1].y)
+            assertTrue("сегмент $i (${out[i - 1]}→${out[i]}) должен быть осевым в plan-px", dx < 1e-3f || dy < 1e-3f)
+        }
+        assertEquals("горизонталь защёлкнута на y старта", 0.5f, out[1].y, 1e-6f)
+        assertEquals("вертикаль защёлкнута на x предыдущей", 0.5f, out[2].x, 1e-6f)
+    }
+
+    // Y7: avoidRooms — осевой сегмент сквозь кабинет сдвигается на ближайшую свободную ось коридора
+    @Test
+    fun `Y7 avoidRooms - пробитый осевой сегмент обходится по оси соседнего коридора`() {
+        val blocker =
+            MapRoom(id = "B", number = "999", title = "", note = "", status = "normal", x = 0.5f, y = 0.5f, w = 0.2f, h = 0.1f)
+        val corridors =
+            listOf(
+                MapCorridor("c1", listOf(MapPoint(0.1f, 0.5f), MapPoint(0.9f, 0.5f)), 0.012f), // пробит блокером
+                MapCorridor("c2", listOf(MapPoint(0.1f, 0.7f), MapPoint(0.9f, 0.7f)), 0.012f), // свободная ось
+            )
+        val out =
+            CollegeRouteFinder.avoidRooms(
+                listOf(MapPoint(0.2f, 0.5f), MapPoint(0.8f, 0.5f)),
+                listOf(blocker),
+                corridors,
+            )
+        assertEquals("обход: a, c1, c2, b", 4, out.size)
+        assertEquals(MapPoint(0.2f, 0.7f), out[1])
+        assertEquals(MapPoint(0.8f, 0.7f), out[2])
+        val bRect = floatArrayOf(0.4f, 0.45f, 0.6f, 0.55f)
+        for (i in 1 until out.size) {
+            assertFalse(
+                "нога $i не должна пробивать блокер",
+                CollegeRouteFinder.segCrossesRect(out[i - 1].x, out[i - 1].y, out[i].x, out[i].y, bRect),
+            )
+        }
+    }
+
+    // Y7: коннект к двери — первая/последняя точка мультиэтажного маршрута = дверь комнаты
+    @Test
+    fun `Y7 коннект - маршрут стартует и финиширует ровно в двери`() {
+        val f = floorWithCorridor()
+        val a = room("101", 0.2f, 0.3f).copy(door = MapPoint(0.2f, 0.46f))
+        val b = room("105", 0.8f, 0.3f).copy(door = MapPoint(0.8f, 0.46f))
+        val floors = mapOf("1" to f)
+        val r = CollegeRouteFinder.findMultiFloorRoute(a, b, floors)
+        assertNotNull(r)
+        val first = r!!.floorPaths.first().points.first()
+        val last = r.floorPaths.last().points.last()
+        assertEquals(a.door!!.x, first.x, 1e-4f)
+        assertEquals(a.door!!.y, first.y, 1e-4f)
+        assertEquals(b.door!!.x, last.x, 1e-4f)
+        assertEquals(b.door!!.y, last.y, 1e-4f)
+    }
+
+    // Y7: гарантия «не сквозь кабинеты» — ни одна нога итоговой полилинии не пробивает чужую комнату
+    @Test
+    fun `Y7 обход - полилиния маршрута не пробивает чужие кабинеты (синтетика)`() {
+        // коридор y=0.5; кабинет-блокер нависает над коридором между дверями:
+        // прямой проход вдоль коридора чист, но диагональ старт→финиш пробила бы блокер
+        val corridor = MapCorridor("c", listOf(MapPoint(0.1f, 0.5f), MapPoint(0.9f, 0.5f)), 0.012f)
+        val blocker =
+            MapRoom(id = "B", number = "999", title = "", note = "", status = "normal", x = 0.5f, y = 0.35f, w = 0.3f, h = 0.2f)
+        val a = MapRoom(id = "A", number = "101", title = "", note = "", status = "normal", x = 0.3f, y = 0.2f, w = 0.04f, h = 0.04f, door = MapPoint(0.3f, 0.46f))
+        val b = MapRoom(id = "C", number = "105", title = "", note = "", status = "normal", x = 0.7f, y = 0.2f, w = 0.04f, h = 0.04f, door = MapPoint(0.7f, 0.46f))
+        val floor = FloorMap(rooms = listOf(blocker, a, b), corridors = listOf(corridor))
+        val r = CollegeRouteFinder.findMultiFloorRoute(a, b, mapOf("1" to floor))
+        assertNotNull(r)
+        val poly = CollegeRouteFinder.routePolyline(r!!.floorPaths[0].points, floor)
+        val bRect = floatArrayOf(0.35f, 0.25f, 0.65f, 0.45f)
+        for (i in 1 until poly.size) {
+            assertFalse(
+                "нога $i (${poly[i - 1]}→${poly[i]}) не должна пробивать блокер B",
+                CollegeRouteFinder.segCrossesRect(poly[i - 1].x, poly[i - 1].y, poly[i].x, poly[i].y, bRect),
+            )
+        }
     }
 
     @Test

@@ -35,7 +35,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.School
@@ -111,10 +110,8 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.Dow
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.Calendar
 import kotlin.math.PI
 import kotlin.math.atan2
@@ -171,7 +168,6 @@ fun CollegeMapScreen(
         }
 
     var query by rememberSaveable { mutableStateOf(initialRoom?.trim().orEmpty()) }
-    val scope = rememberCoroutineScope()
 
     var searchFailed by rememberSaveable { mutableStateOf(false) }
     // MAP-01: target — ЕДИНСТВЕННЫЙ источник истины на экране. initialRoom читаем только
@@ -297,14 +293,16 @@ fun CollegeMapScreen(
             com.politex.widget.WidgetUpdateHelper.getPrefs(context)
                 .getBoolean("map_routes_enabled", true)
         }
-    val routeActive = routesEnabled && (showRoute || fromRoom != null)
+    // Y10: «Отменить маршрут» гасит АВТО-запрос (расписание/виджет) до переоткрытия экрана
+    var autoCancelled by rememberSaveable { mutableStateOf(false) }
+    val autoActive = routesEnabled && !autoCancelled && (showRoute || fromRoom != null)
 
     // R1: мультиэтажный маршрут (CollegeRouteFinder на реальных данных). Ключи — только
     // входы маршрута: пан/зум пересчёта не вызывают.
     val floors = remember(mapData) { CollegeMap.Floor.entries.associate { it.id to mapData.floor(it.id) } }
     val route =
-        remember(routeActive, target, fromRoom, mapData, floors) {
-            if (!routeActive || target.isBlank()) {
+        remember(autoActive, target, fromRoom, mapData, floors) {
+            if (!autoActive || target.isBlank()) {
                 null
             } else {
                 run {
@@ -319,114 +317,58 @@ fun CollegeMapScreen(
                 }
             }
         }
-    // V25: ручной мультимаршрут (RouteBuilder) — НЕ гейтится map_routes_enabled.
-    // Состояние живёт в записи backstack'а (rememberSaveable), как target/floorId.
+    // V25/Y8: конструктор маршрута = ТОЛЬКО две точки (А и Б): панель builderActive, поля
+    // pairA/pairB, построенная пара — manualA/manualB (rememberSaveable записи backstack'а).
     var builderActive by rememberSaveable { mutableStateOf(false) }
-    var waypoints by rememberSaveable(stateSaver = waypointListSaver) { mutableStateOf(listOf<Waypoint>()) }
-    var stageIndex by rememberSaveable { mutableIntStateOf(-1) }
-    var ordered by rememberSaveable { mutableStateOf(false) }
-    var autoOrdering by remember { mutableStateOf(false) }
+    var pairA by rememberSaveable { mutableStateOf("") }
+    var pairB by rememberSaveable { mutableStateOf("") }
+    var manualA by rememberSaveable { mutableStateOf<String?>(null) }
+    var manualB by rememberSaveable { mutableStateOf<String?>(null) }
     // 6.2: глобальный режим конструктора — MainScreen прячет нижнюю навигацию, пока активен
     DisposableEffect(builderActive) {
         RouteBuilderMode.active = builderActive
         onDispose { RouteBuilderMode.active = false }
     }
-    // Закоммиченный маршрут («Завершить») — рисуется после закрытия конструктора,
-    // пока новый кабинет (тап/поиск) его не заменит
-    var manualStages by remember { mutableStateOf<List<RouteStage>?>(null) }
-    // Кэш маршрутов пар: Дейкстра на пару считается один раз (его же ест автонавигация)
+    // Кэш маршрутов пар: Дейкстра на пару считается один раз
     val routeCache = remember { HashMap<Pair<String, String>, CollegeRouteFinder.MultiFloorRoute?>() }
 
-    val builderLegs =
-        remember(builderActive, waypoints, mapData, floors) {
-            if (!builderActive || waypoints.isEmpty()) {
-                emptyList()
-            } else {
-                buildLegs(waypoints, mapData, floors, routeCache)
-            }
+    // Y8: ручной маршрут А→Б через тот же кэш; null — пара не задана
+    val manualRoute =
+        remember(manualA, manualB, mapData, floors, routeCache) {
+            if (manualA == null || manualB == null) null else cachedRoute(manualA!!, manualB!!, mapData, floors, routeCache)
         }
-    val builderStages = remember(builderLegs, mapData) { legsToStages(builderLegs, mapData) }
+    // Y10: маршрут активен — авто (расписание/виджет) ИЛИ построен в конструкторе
+    val routeActive = autoActive || manualA != null
+    // Единый активный маршрут: ручной замещает авто
+    val activeRoute = manualRoute ?: route
 
-    // V25: недостижимая пара → тост «X недоступен из Y», точка уходит в конец списка
-    LaunchedEffect(builderLegs) {
-        if (!builderActive) return@LaunchedEffect
-        val bad = builderLegs.firstOrNull { it.route == null } ?: return@LaunchedEffect
-        Toast.makeText(context, "${bad.to.label} недоступен из ${bad.from.label}", Toast.LENGTH_SHORT).show()
-        if (bad.isReturn) return@LaunchedEffect // возврат в старт — старт закреплён, не двигаем
-        val idx = waypoints.indexOfFirst { it.key == bad.to.key }
-        if (idx >= 0 && idx != waypoints.lastIndex) {
-            waypoints = waypoints.toMutableList().also { it.add(it.removeAt(idx)) }
-        }
-    }
-
-    // Этапы ручного маршрута замещают авто-маршрут (при правке и после «Завершить»)
-    val activeStages: List<RouteStage>? =
-        if (builderActive) builderStages.takeIf { it.isNotEmpty() } else manualStages
-
-    // W39c: полилинии маршрута на ТЕКУЩЕМ этаже, ортогонализованные (диагонали → L-уголки
-    // мимо комнат). Полилиний может быть несколько: сегмент «3-4» рвётся на переходе
-    // по лестнице (подход у 335 / площадка 4-го этажа).
+    // W39c/Y7: полилинии маршрута на ТЕКУЩЕМ этаже — ЕДИНЫЙ конвейер routePolyline
+    // (ортогонализация в plan-px без диагоналей → обход кабинетов → чистка крюков).
+    // Полилиний может быть несколько: сегмент «3-4» рвётся на переходе по лестнице.
     val routePoints =
-        remember(activeStages, route, floorId, floor) {
-            if (activeStages != null) {
-                activeStages
-                    .filter { it.floorId == floorId }
-                    .flatMap { it.polylines }
-                    .takeIf { it.isNotEmpty() }
-            } else {
-                route?.floorPaths
-                    ?.filter { it.floorId == floorId }
-                    // V23: ЕДИНСТВЕННОЕ применение simplifyRoute — чистит крюки после orthogonalize
-                    ?.map { CollegeRouteFinder.simplifyRoute(CollegeRouteFinder.orthogonalize(it.points, floor.rooms)) }
-                    ?.takeIf { it.isNotEmpty() }
-            }
+        remember(activeRoute, floorId, floor) {
+            activeRoute
+                ?.floorPaths
+                ?.filter { it.floorId == floorId }
+                ?.map { CollegeRouteFinder.routePolyline(it.points, floor) }
+                ?.takeIf { it.isNotEmpty() }
         }
     // X36: сдвиг полос маршрута текущего этажа в экранных dp — laneOffsetDp по индексу
     // полилинии (0, +6, −6, +12, …), чтобы смежные/встречные линии не слипались.
     val routeOffsetsDp =
-        remember(activeStages, floorId) {
-            if (activeStages == null) {
-                emptyList()
-            } else {
-                activeStages
-                    .filter { it.floorId == floorId }
-                    .flatMap { it.polylines }
-                    .mapIndexed { i, _ -> laneOffsetDp(i) }
-            }
-        }
+        remember(routePoints) { routePoints?.mapIndexed { i, _ -> laneOffsetDp(i) } ?: emptyList() }
     val routeFinishHere =
-        remember(activeStages, route, floorId) {
-            if (activeStages != null) activeStages.last().floorId == floorId else route?.floorPaths?.lastOrNull()?.floorId == floorId
-        }
-    // Плашка «Этаж N: подъем по лестнице у каб. X» — про подъём с ТЕКУЩЕГО этажа
+        remember(activeRoute, floorId) { activeRoute?.floorPaths?.lastOrNull()?.floorId == floorId }
+    // Y8: межэтажный маршрут — ОДНА строка «через этажи …» поверх карты (этапы-чипы удалены)
     val routeBanner =
-        remember(activeStages, route, floorId, mapData) {
-            if (activeStages != null) return@remember null // конструктор: подписи живут в чипах этапов
-            val fps = route?.takeIf { it.crossesFloors }?.floorPaths ?: return@remember null
-            val i = fps.indexOfFirst { it.floorId == floorId }
-            if (i < 0 || i >= fps.size - 1) return@remember null
-            val stair = fps[i].points.lastOrNull() ?: return@remember null
-            // V25: логика «ближайший кабинет» вынесена в nearestRoomNumber (общая с этапами)
-            val near = nearestRoomNumber(mapData.floor(fps[i].floorId), stair.x, stair.y)
-            val where = near?.let { " у каб. $it" } ?: ""
-            "${CollegeMap.Floor.from(fps[i].floorId).title}: подъем по лестнице$where"
+        remember(activeRoute) {
+            val fps = activeRoute?.takeIf { it.crossesFloors }?.floorPaths ?: return@remember null
+            val via = fps.map { CollegeMap.Floor.from(it.floorId).title }.distinct().drop(1)
+            if (via.isEmpty()) null else "через ${via.joinToString(", ")}"
         }
     // Сегменты маршрута по этажам (точки-кнопки переключения)
     val routeSegments =
-        remember(activeStages, route) {
-            if (activeStages != null) return@remember emptyList() // конструктор: чипы этапов вместо точек
-            route?.takeIf { it.crossesFloors }?.floorPaths?.map { it.floorId } ?: emptyList()
-        }
-    // V25: выбранный чип этапа. На одном плане бывает несколько этапов («3-4»), поэтому
-    // индекс; если этаж сменили кнопками — подсвечиваем первый этап этого этажа.
-    val selectedStage =
-        if (activeStages == null) {
-            -1
-        } else if (stageIndex in activeStages.indices && activeStages[stageIndex].floorId == floorId) {
-            stageIndex
-        } else {
-            activeStages.indexOfFirst { it.floorId == floorId }
-        }
+        remember(activeRoute) { activeRoute?.takeIf { it.crossesFloors }?.floorPaths?.map { it.floorId } ?: emptyList() }
 
     Column(
         modifier =
@@ -476,7 +418,8 @@ fun CollegeMapScreen(
                     .bouncyClickable {
                         val found = query.trim()
                         if (found.isNotBlank()) {
-                            manualStages = null // V25: новый кабинет замещает ручной маршрут
+                            manualA = null // Y8: новый кабинет замещает ручной маршрут
+                            manualB = null
                             target = found
                             searchFailed = findRoomEverywhere(mapData, found) == null
                         }
@@ -494,11 +437,20 @@ fun CollegeMapScreen(
         // W6: поиск по ГРУППЕ убран с карты (для этого есть вкладка «Расписание
         // группы» — заказчик). Освободившееся место отдаётся карте.
 
-        // V25: вход в конструктор ручного маршрута — всегда виден, тогл маршрутов не проверяет
+        // Y10: маршрут активен → «ОТМЕНИТЬ МАРШРУТ» (нейтральная); иначе «ПРОЛОЖИТЬ МАРШРУТ»
+        // (открывает 2-точечный конструктор, Y8)
         Spacer(modifier = Modifier.height(6.dp))
-        RouteBuilderEntry(active = builderActive) {
-            builderActive = !builderActive
-            if (builderActive) manualStages = null // возврат к правке — коммит убираем
+        RouteActionButton(active = routeActive) {
+            if (routeActive) {
+                manualA = null
+                manualB = null
+                autoCancelled = true
+                builderActive = false
+                pairA = ""
+                pairB = ""
+            } else {
+                builderActive = !builderActive
+            }
         }
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -509,38 +461,19 @@ fun CollegeMapScreen(
             modifier = Modifier.padding(horizontal = 12.dp),
         )
 
-        // V25: этапы маршрута — чипы над картой (тап = переход на этаж этапа)
-        if (activeStages != null) {
-            Spacer(modifier = Modifier.height(8.dp))
-            StageChipsRow(
-                stages = activeStages,
-                selectedIndex = selectedStage,
-                onSelect = { i ->
-                    stageIndex = i
-                    floorId = activeStages[i].floorId
-                },
-            )
-        }
-
         Spacer(modifier = Modifier.height(8.dp))
 
         MapCanvas(
             floorId = floorId,
             floor = floor,
             targetRoom = targetRoom,
-            // O3-d: тап по кабинету — тот же путь, что ввод номера в поиск;
-            // V25: в конструкторе тап ДОБАВЛЯЕТ точку маршрута (дубль подряд → пропуск)
+            // O3-d/Y8: тап по кабинету — тот же путь, что ввод номера в поиск;
+            // в конструкторе тапы точки НЕ добавляют (конструктор = два поля ввода)
             onRoomTap = { room ->
-                if (builderActive) {
-                    // X19: глобальный дедуп — кабинет встречается в маршруте максимум один раз
-                    if (waypoints.none { it.key == room.number }) {
-                        waypoints = waypoints + Waypoint(room.number, "каб. ${room.number}")
-                    }
-                } else {
-                    manualStages = null // V25: новый кабинет замещает ручной маршрут
-                    searchFailed = false
-                    target = room.number
-                }
+                manualA = null // Y8: новый кабинет замещает ручной маршрут
+                manualB = null
+                searchFailed = false
+                target = room.number
             },
             routePoints = routePoints,
             routeOffsetsDp = routeOffsetsDp,
@@ -548,16 +481,9 @@ fun CollegeMapScreen(
             routeBanner = routeBanner,
             routeSegments = routeSegments,
             onSelectRouteSegment = { floorId = it },
-            showFinish = builderActive,
-            // 6.5: «Отменить» — закрываем конструктор, точки маршрута сохраняются
+            // Y8: «Применить» убран — построил пара = маршрут активен; крестик закрывает конструктор
+            showCancel = builderActive,
             onCancel = { builderActive = false },
-            onFinish = {
-                // «Применить» — БЕЗ подтверждения: коммитим этапы, цель = последняя точка
-                manualStages = builderStages.takeIf { it.isNotEmpty() }
-                builderActive = false
-                builderStages.lastOrNull()?.let { floorId = it.floorId }
-                waypoints.lastOrNull()?.takeIf { !it.isEntrance }?.let { target = it.key }
-            },
             modifier =
             Modifier
                 .fillMaxWidth()
@@ -565,44 +491,35 @@ fun CollegeMapScreen(
         )
 
         if (builderActive) {
-            RouteWaypointsPanel(
-                waypoints = waypoints,
-                autoOrdering = autoOrdering,
-                ordered = ordered,
-                onRemove = { i ->
-                    waypoints = waypoints.filterIndexed { idx, _ -> idx != i }
-                    ordered = false
-                },
-                onSwap = { a, b ->
-                    waypoints =
-                        waypoints.toMutableList().also {
-                            val t = it[a]
-                            it[a] = it[b]
-                            it[b] = t
-                        }
-                },
-                onAutoOrder = {
-                    if (waypoints.size > 2 && !autoOrdering) {
-                        autoOrdering = true
-                        val wps = waypoints
-                        scope.launch {
-                            // greedy по кэшу дистанций; Дейкстра тяжёлая — вне main
-                            val rest =
-                                withContext(Dispatchers.Default) {
-                                    greedyOrder(wps[0], wps.drop(1)) { a, b ->
-                                        cachedRoute(a, b, mapData, floors, routeCache)?.distance ?: Float.MAX_VALUE
-                                    }
-                                }
-                            waypoints = listOf(wps[0]) + rest
-                            ordered = true
-                            autoOrdering = false
+            RoutePairPanel(
+                valueA = pairA,
+                onValueA = { pairA = it },
+                valueB = pairB,
+                onValueB = { pairB = it },
+                onBuild = {
+                    val a = pairA.trim()
+                    val b = pairB.trim()
+                    val ra = if (a.isEmpty()) mainEntranceRoom(mapData) else findRoomEverywhere(mapData, a)
+                    val rb = findRoomEverywhere(mapData, b)
+                    val keyA = if (a.isEmpty()) MAIN_ENTRANCE_KEY else ra?.number
+                    when {
+                        b.isEmpty() || rb == null ->
+                            Toast.makeText(context, "Кабинет «${b.ifBlank { "…" }}» не найден на плане", Toast.LENGTH_SHORT).show()
+                        ra == null || keyA == null ->
+                            Toast.makeText(context, "Кабинет «$a» не найден на плане", Toast.LENGTH_SHORT).show()
+                        else -> {
+                            val r = cachedRoute(keyA, rb.number, mapData, floors, routeCache)
+                            if (r == null) {
+                                Toast.makeText(context, "${rb.number} недоступен из ${if (a.isEmpty()) "главного входа" else a}", Toast.LENGTH_SHORT).show()
+                            } else {
+                                // Y8: построил — маршрут активен сразу, без «Завершить»
+                                manualA = keyA
+                                manualB = rb.number
+                                builderActive = false
+                                target = rb.number
+                            }
                         }
                     }
-                },
-                onClear = {
-                    waypoints = emptyList()
-                    ordered = false
-                    manualStages = null
                 },
                 modifier = Modifier.padding(bottom = 8.dp),
             )
@@ -758,9 +675,10 @@ internal fun findRoomEverywhere(
     number: String,
 ): MapRoom? = listOf("1", "2", "3-4").firstNotNullOfOrNull { mapData.floor(it).room(number) }
 
-// V25: кнопка-вход в конструктор ручного маршрута (под SearchField, всегда видна)
+// Y10: кнопка под поиском. Маршрут активен (авто ИЛИ построен) — «ОТМЕНИТЬ МАРШРУТ»
+// (нейтральная); не активен — «ПРОЛОЖИТЬ МАРШРУТ» (открывает 2-точечный конструктор, Y8).
 @Composable
-private fun RouteBuilderEntry(
+private fun RouteActionButton(
     active: Boolean,
     onClick: () -> Unit,
 ) {
@@ -775,7 +693,7 @@ private fun RouteBuilderEntry(
             .bouncyClickable(onClick = onClick),
     ) {
         Text(
-            text = if (active) "ЗАКРЫТЬ КОНСТРУКТОР МАРШРУТА" else "ПРОЛОЖИТЬ МАРШРУТ",
+            text = if (active) "ОТМЕНИТЬ МАРШРУТ" else "ПРОЛОЖИТЬ МАРШРУТ",
             textAlign = TextAlign.Center,
             maxLines = 1,
             softWrap = false,
@@ -1050,12 +968,11 @@ private fun MapCanvas(
     routeBanner: String? = null,
     routeSegments: List<String> = emptyList(),
     onSelectRouteSegment: (String) -> Unit = {},
-    // X36: сдвиг каждой полилинии в экранных dp (laneOffsetDp — полосы не слипаются)
-    // и кнопки «Отменить»/«Применить» поверх карты (конструктор маршрута, 6.5)
+    // X36: сдвиг каждой полилинии в экранных dp (laneOffsetDp — полосы не слипаются);
+    // Y8: крестик поверх карты закрывает конструктор («Применить» убран — построил = активен)
     routeOffsetsDp: List<Float> = emptyList(),
-    showFinish: Boolean = false,
+    showCancel: Boolean = false,
     onCancel: () -> Unit = {},
-    onFinish: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -1078,11 +995,16 @@ private fun MapCanvas(
         label = "пульс",
     )
 
-    // V22: фаза «бегущих» стрелок — сетка стрелок течёт вдоль маршрута (цикл 1400 мс)
+    // Y9: фаза «бегущих» стрелок: за цикл (STEP_PX / SPEED = 2 с) сетка сдвигается ровно на
+    // один шаг — постоянная СКОРОСТЬ в экранных px/сек по всей полилинии (одно общее смещение).
     val arrowPhase by rememberInfiniteTransition(label = "стрелки").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Restart),
+        animationSpec =
+        infiniteRepeatable(
+            tween((ROUTE_ARROW_STEP_PX / ROUTE_ARROW_SPEED_PX_PER_SEC * 1000f).toInt(), easing = LinearEasing),
+            RepeatMode.Restart,
+        ),
         label = "arrowPhase",
     )
 
@@ -1293,28 +1215,21 @@ private fun MapCanvas(
             }
         }
 
-        // 6.5: «Отменить» (Close) + «Применить» (Check) вместо одной ✓. Отменить закрывает
-        // конструктор (точки сохраняются), Применить коммитит маршрут. Видимые 32dp, зона 44dp (M2).
-        if (showFinish) {
+        // Y8: только «Отменить» (Close) — закрывает конструктор; «Применить» убран:
+        // построенная пара сразу делает маршрут активным. Видимые 32dp, зона 44dp (M2).
+        if (showCancel) {
             Row(
                 modifier =
                 Modifier
                     .align(Alignment.TopEnd)
                     .padding(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 MapRoundAction(
                     icon = Icons.Default.Close,
-                    description = "Отменить маршрут",
+                    description = "Закрыть конструктор маршрута",
                     filled = false,
                     onClick = onCancel,
-                )
-                MapRoundAction(
-                    icon = Icons.Default.Check,
-                    description = "Применить маршрут",
-                    filled = true,
-                    onClick = onFinish,
                 )
             }
         }
@@ -1609,9 +1524,14 @@ internal fun mainEntranceRoom(mapData: CollegeMapData): MapRoom? = mapData
         )
     }
 
-/** X24: стрелки направления — шаг и размер в ЭКРАННЫХ dp (постоянны при любом зуме). */
-private const val ROUTE_ARROW_STEP_DP = 40f
-private const val ROUTE_ARROW_SIZE_DP = 6f
+/**
+ * Y9: стрелки направления — сетка каждые [ROUTE_ARROW_STEP_PX] ЭКРАННЫХ px вдоль ВСЕГО пути
+ * (одно общее смещение, без переноса между сегментами); течение — [ROUTE_ARROW_SPEED_PX_PER_SEC]
+ * px/сек постоянно на всей полилинии (фаза 0..1 за STEP/SPEED сек). Размер стрелки — dp (Y9: 6→9).
+ */
+private const val ROUTE_ARROW_STEP_PX = 48f
+private const val ROUTE_ARROW_SPEED_PX_PER_SEC = 24f
+private const val ROUTE_ARROW_SIZE_DP = 9f
 
 /**
  * R1: линия маршрута поверх плана. Всё рисуется внутри graphicsLayer (план масштабирован),
@@ -1641,6 +1561,11 @@ private fun DrawScope.drawRoutePath(
     val unit = 1f / zoom
     val color = ColorBrandBlue
     var finish: MapPoint? = null
+    // Y9: ОДНО общее смещение сетки стрелок на весь путь (все полилинии): абсолютная
+    // позиция очередной стрелки в px вдоль суммарной длины; carry не нужен.
+    val step = ROUTE_ARROW_STEP_PX * unit
+    val s = ROUTE_ARROW_SIZE_DP * pxPerDp * unit
+    var arrowPos = arrowPhase * step
 
     for ((pi, raw) in polylines.withIndex()) {
         if (raw.size < 2) continue
@@ -1662,38 +1587,32 @@ private fun DrawScope.drawRoutePath(
             style = Stroke(width = 4f * pxPerDp * unit, cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
 
-        // X24: стрелки направления — равномерный шаг в ЭКРАННЫХ dp (постоянен при любом зуме),
-        // раскладываются вдоль screen-точек полилинии; «перенос» остатка между сегментами.
-        // V22: вся сетка сдвинута на phase*step — за цикл фазы стрелки проходят один шаг
-        // (непрерывное течение). Сегменты короче двух стрелок пропускаются (carry сбрасывается).
-        val step = ROUTE_ARROW_STEP_DP * pxPerDp * unit
-        val s = ROUTE_ARROW_SIZE_DP * pxPerDp * unit
-        val shift = arrowPhase * step
-        var carry = 0f
+        // Y9: стрелки текут с постоянной СКОРОСТЬЮ: arrowPos — абсолют вдоль всего пути,
+        // шаг фиксированный в экранных px; у краёв сегментов (±1.5s) стрелку не рисуем.
+        var acc = 0f
         for (i in 1 until screen.size) {
             val a = screen[i - 1]
             val b = screen[i]
             val dx = b.x - a.x
             val dy = b.y - a.y
             val len = hypot(dx, dy)
-            if (len < s * 2f) {
-                carry = 0f
-                continue
+            if (len >= s * 2f) {
+                val angle = atan2(dy, dx)
+                while (arrowPos < acc + len) {
+                    val d = arrowPos - acc
+                    if (d >= s * 1.5f && d <= len - s * 1.5f) {
+                        val t = d / len
+                        drawArrowHead(
+                            center = Offset(a.x + dx * t, a.y + dy * t),
+                            angle = angle,
+                            size = s,
+                            color = color,
+                        )
+                    }
+                    arrowPos += step
+                }
             }
-            val angle = atan2(dy, dx)
-            var d = (step - carry + shift) % step
-            if (d < s * 1.5f) d += step
-            while (d <= len - s * 1.5f) {
-                val t = d / len
-                drawArrowHead(
-                    center = Offset(a.x + dx * t, a.y + dy * t),
-                    angle = angle,
-                    size = s,
-                    color = color,
-                )
-                d += step
-            }
-            carry = len - (d - step)
+            acc += len
         }
     }
 

@@ -1,7 +1,5 @@
 package com.politex.data.model
 
-import com.politex.ui.screens.Waypoint
-import com.politex.ui.screens.greedyOrder
 import com.politex.ui.screens.offsetPolyline
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -64,34 +62,8 @@ class SimplifyRouteTest {
     }
 }
 
-/** V25: чистые функции RouteBuilder — greedyOrder и offsetPolyline (минимальные проверки). */
+/** V25/Y8: чистые функции RouteBuilder — offsetPolyline (greedyOrder удалён вместе с autonav). */
 class RouteBuilderPureTest {
-    @Test
-    fun `greedyOrder ведёт через ближайших соседей`() {
-        val table =
-            mapOf(
-                "A" to "B" to 10f, "A" to "C" to 1f, "A" to "D" to 5f,
-                "C" to "B" to 1f, "C" to "D" to 5f,
-                "B" to "D" to 1f,
-            )
-        fun d(a: String, b: String): Float = table[a to b] ?: table[b to a] ?: Float.MAX_VALUE
-        val start = Waypoint("A", "A")
-        val rest = listOf(Waypoint("B", "B"), Waypoint("C", "C"), Waypoint("D", "D"))
-        val ordered = greedyOrder(start, rest, ::d)
-        assertEquals(listOf("C", "B", "D"), ordered.map { it.key })
-    }
-
-    @Test
-    fun `greedyOrder недостижимые точки опускает в конец`() {
-        val start = Waypoint("A", "A")
-        val rest = listOf(Waypoint("X", "X"), Waypoint("B", "B"))
-        val ordered =
-            greedyOrder(start, rest) { a, b ->
-                if (a == "A" && b == "B") 1f else if (a == "B" && b == "X") 2f else Float.MAX_VALUE
-            }
-        assertEquals(listOf("B", "X"), ordered.map { it.key })
-    }
-
     @Test
     fun `offsetPolyline сдвигает горизонталь вдоль перпендикуляра`() {
         val line = listOf(MapPoint(0f, 0f), MapPoint(1f, 0f))

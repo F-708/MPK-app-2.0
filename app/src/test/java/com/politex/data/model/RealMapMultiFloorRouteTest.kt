@@ -220,4 +220,50 @@ class RealMapMultiFloorRouteTest {
         assertEquals("старт в центре (door=null)", from.x, firstPt.x, 1e-4f)
         assertEquals(from.y, firstPt.y, 1e-4f)
     }
+
+    // Y7: ОТРИСОВАННЫЕ полилинии на реальных данных — строго ортогональны в plan-px
+    // (|dx|<eps ИЛИ |dy|<eps) и не пробивают чужие кабинеты (passage = сквозной зал).
+    @Test
+    fun `Y7 - полилинии маршрутов ортогональны в plan-px и не пробивают кабинеты`() {
+        val floors = floorsMap()
+        val main = mapData.floor("1").entrances.first { it.kind == "main" }
+        val entrance =
+            MapRoom(
+                id = "entrance", number = "100", title = "", note = "", status = "normal",
+                x = main.x, y = main.y, w = 0.01f, h = 0.01f,
+            )
+        val pairs = listOf("107" to "123", "131" to "241", "309" to "405", "331" to "301")
+        for ((a, b) in pairs) {
+            val from = room(a)
+            val r = CollegeRouteFinder.findMultiFloorRoute(from, room(b), floors)
+            assertNotNull("маршрут $a→$b должен строиться", r)
+            for (fp in r!!.floorPaths) {
+                val floor = floors.getValue(fp.floorId)
+                val poly = CollegeRouteFinder.routePolyline(fp.points, floor)
+                for (i in 1 until poly.size) {
+                    val dx = Math.abs(poly[i].x - poly[i - 1].x) * CollegeRouteFinder.PLAN_ASPECT
+                    val dy = Math.abs(poly[i].y - poly[i - 1].y)
+                    assertTrue(
+                        "$a→$b эт ${fp.floorId}: сегмент $i (${poly[i - 1]}→${poly[i]}) не ортогонален в plan-px",
+                        dx < 1e-4f || dy < 1e-4f,
+                    )
+                }
+                val walls =
+                    floor.rooms
+                        .filter {
+                            it.status != "nonexistent" && it.status != "passage" && it.w > 0f && it.h > 0f &&
+                                it.number != a && it.number != b
+                        }.map { floatArrayOf(it.x - it.w / 2f, it.y - it.h / 2f, it.x + it.w / 2f, it.y + it.h / 2f) }
+                for (i in 1 until poly.size) {
+                    for (w in walls) {
+                        assertFalse(
+                            "$a→$b эт ${fp.floorId}: нога $i пробивает кабинет",
+                            CollegeRouteFinder.segCrossesRect(poly[i - 1].x, poly[i - 1].y, poly[i].x, poly[i].y, w),
+                        )
+                    }
+                }
+            }
+        }
+        assertNotNull(entrance)
+    }
 }
