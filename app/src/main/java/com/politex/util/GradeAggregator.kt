@@ -59,6 +59,51 @@ object GradeAggregator {
     }
 
     /**
+     * V18: средневзвешенное по весам категорий (проценты из grade_config.weightsJson).
+     * Σ(avg(категория) · w) / Σw по НЕпустым категориям с w > 0; LAB не участвует.
+     * null, если нет ни одной непустой категории с положительным весом.
+     */
+    fun weightedAverage(
+        byCategory: Map<String, List<Int>>,
+        weights: Map<String, Int>,
+    ): Double? {
+        var acc = 0.0
+        var total = 0
+        for ((name, values) in byCategory) {
+            if (name == GradeCategory.LAB.name || values.isEmpty()) continue
+            val w = weights[name] ?: 0
+            if (w <= 0) continue
+            acc += values.average() * w
+            total += w
+        }
+        return if (total == 0) null else acc / total
+    }
+
+    /**
+     * V18: округление среднего по настройке предмета.
+     * Умножение на число шагов в единице (а не деление на 0.1) — иначе
+     * 8.25/0.1 = 82.4999… в double и half-up ломается.
+     *
+     * @param mode шаг: "0.1" | "0.5" | "1" (битый/неизвестный = "0.1")
+     * @param roundUp true = всегда вверх («в пользу студента»), иначе математически
+     */
+    fun roundAvg(
+        v: Double,
+        mode: String,
+        roundUp: Boolean,
+    ): Double {
+        val perUnit =
+            when (mode) {
+                "0.5" -> 2
+                "1" -> 1
+                else -> 10
+            }
+        val scaled = v * perUnit
+        val r = if (roundUp) Math.ceil(scaled) else Math.round(scaled).toDouble()
+        return r / perUnit
+    }
+
+    /**
      * W22: дерево агрегации для отрисовки формулы (уровни СНИЗУ ВВЕРХ).
      * Уровень 0 — листья (категории priority в порядке сложения; пустые и LAB
      * выпадают — ровно как в [average]); каждый следующий уровень склеивает

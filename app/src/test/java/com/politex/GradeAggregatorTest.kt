@@ -182,4 +182,96 @@ class GradeAggregatorTest {
             delta,
         )
     }
+
+    // ── V18: weightedAverage + roundAvg ─────────────────────────────────────
+
+    @Test
+    fun `weightedAverage — равные веса это обычное среднее`() {
+        val avg =
+            GradeAggregator.weightedAverage(
+                mapOf("REGULAR" to listOf(8), "EXAM" to listOf(10)),
+                mapOf("REGULAR" to 50, "EXAM" to 50),
+            )
+        assertEquals(9.0, avg!!, delta)
+    }
+
+    @Test
+    fun `weightedAverage — неравные веса тянут балл`() {
+        // 8 * 0.7 + 6 * 0.3 = 7.4
+        val avg =
+            GradeAggregator.weightedAverage(
+                mapOf("REGULAR" to listOf(8), "EXAM" to listOf(6)),
+                mapOf("REGULAR" to 70, "EXAM" to 30),
+            )
+        assertEquals(7.4, avg!!, delta)
+    }
+
+    @Test
+    fun `weightedAverage — пустые категории и нулевые веса не входят в знаменатель`() {
+        // CONTROL пуст (w=40 пропадает), PRACTICAL w=0 с оценками — тоже пропускается:
+        // (8*50 + 10*50) / 100 = 9.0, а не деление на 130
+        val avg =
+            GradeAggregator.weightedAverage(
+                mapOf(
+                    "REGULAR" to listOf(8),
+                    "PRACTICAL" to listOf(2),
+                    "CONTROL" to emptyList(),
+                    "EXAM" to listOf(10),
+                ),
+                mapOf("REGULAR" to 50, "PRACTICAL" to 0, "CONTROL" to 40, "EXAM" to 50),
+            )
+        assertEquals(9.0, avg!!, delta)
+        // категории нет в weights — вес 0
+        assertEquals(
+            8.0,
+            GradeAggregator.weightedAverage(mapOf("REGULAR" to listOf(8), "EXAM" to listOf(10)), mapOf("REGULAR" to 1))!!,
+            delta,
+        )
+    }
+
+    @Test
+    fun `weightedAverage — все веса нулевые или нет оценок = null`() {
+        assertNull(GradeAggregator.weightedAverage(mapOf("REGULAR" to listOf(8)), mapOf("REGULAR" to 0)))
+        assertNull(GradeAggregator.weightedAverage(mapOf("REGULAR" to listOf(8)), emptyMap()))
+        assertNull(GradeAggregator.weightedAverage(emptyMap(), mapOf("REGULAR" to 50)))
+    }
+
+    @Test
+    fun `weightedAverage — LAB не участвует никогда`() {
+        assertNull(GradeAggregator.weightedAverage(mapOf("LAB" to listOf(1)), mapOf("LAB" to 100)))
+        assertEquals(
+            8.0,
+            GradeAggregator.weightedAverage(
+                mapOf("REGULAR" to listOf(8), "LAB" to listOf(0)),
+                mapOf("REGULAR" to 50, "LAB" to 50),
+            )!!,
+            delta,
+        )
+    }
+
+    @Test
+    fun `roundAvg — шаг 0_1 математически`() {
+        assertEquals(8.3, GradeAggregator.roundAvg(8.25, "0.1", false), delta)
+        assertEquals(8.2, GradeAggregator.roundAvg(8.24, "0.1", false), delta)
+        assertEquals(7.0, GradeAggregator.roundAvg(7.0, "0.1", false), delta)
+    }
+
+    @Test
+    fun `roundAvg — шаги 0_5 и целое`() {
+        assertEquals(8.5, GradeAggregator.roundAvg(8.3, "0.5", false), delta)
+        assertEquals(8.0, GradeAggregator.roundAvg(8.2, "0.5", false), delta)
+        assertEquals(8.0, GradeAggregator.roundAvg(8.4, "1", false), delta)
+        assertEquals(9.0, GradeAggregator.roundAvg(8.5, "1", false), delta)
+        // битый/неизвестный mode = "0.1"
+        assertEquals(8.3, GradeAggregator.roundAvg(8.25, "garbage", false), delta)
+    }
+
+    @Test
+    fun `roundAvg — roundUp всегда вверх (в пользу студента)`() {
+        assertEquals(8.2, GradeAggregator.roundAvg(8.11, "0.1", true), delta)
+        assertEquals(8.5, GradeAggregator.roundAvg(8.01, "0.5", true), delta)
+        assertEquals(9.0, GradeAggregator.roundAvg(8.01, "1", true), delta)
+        // точное значение не поднимается
+        assertEquals(8.0, GradeAggregator.roundAvg(8.0, "1", true), delta)
+    }
 }
