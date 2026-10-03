@@ -5,14 +5,14 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.politex.util.BellCountdownNotifier
 import com.politex.util.BellTimerService
-import com.politex.widget.BellCountdownWidgetProvider
+import com.politex.widget.WidgetUpdateHelper
 
 /**
  * WID-02/BEL-03: страховка от убийства BellTimerService агрессивными OEM (Xiaomi/Samsung
  * battery saver убивают даже foreground specialUse-сервис). START_STICKY перезапуска не
  * гарантирует, точный будильник на Android 14+ по умолчанию не выдан — поэтому раз в ~15 мин
- * воркер проверяет: строка отсчёта включена, а сервис мёртв → поднять его. Заодно обновляет
- * минутные виджеты, чтобы они не «залипали» на старом времени.
+ * воркер проверяет: строка отсчёта включена, а сервис мёртв → поднять его. Заодно каждые
+ * ~15 мин освежает ВСЕ виджеты (X29), чтобы они не «залипали» на старом времени/дне.
  */
 class BellServiceWatchdogWorker(
     context: Context,
@@ -23,8 +23,10 @@ class BellServiceWatchdogWorker(
         if (BellCountdownNotifier.isEnabled(ctx) && !BellTimerService.isRunning) {
             BellTimerService.start(ctx)
         }
-        // Даже если сервис жив, виджеты могли пропустить тик при doze — дёргаем минутные.
-        BellCountdownWidgetProvider.updateAll(ctx)
+        // X29(в): каждые ~15 мин гарантированно освежаем ВСЕ четыре виджета независимо от
+        // того, жив сервис или мёртв. Раньше дёргали только countdown — Today/Bells ждали
+        // свой onUpdate (30 мин) и залипали на старом времени/дне, если он не приходил.
+        WidgetUpdateHelper.updateAllWidgets(ctx)
         return Result.success()
     }
 

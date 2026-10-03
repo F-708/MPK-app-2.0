@@ -13,6 +13,13 @@ object WidgetUpdateHelper {
     private const val KEY_SELECTED_GROUP = "selected_group"
     private const val KEY_NOTIFY_NEXT_DAY = "notify_next_day_schedule"
 
+    // X29: отметка последнего ПОЛНОГО update всех четырёх виджетов. Минутный тик
+    // обновляет только countdown/NowNext, а Today/Bells живут на onUpdate (30 мин) и
+    // воркере (15 мин). Если onUpdate не пришёл (doze/OEM), минутный тик по этой метке
+    // понимает, что виджеты протухли, и форсирует полную пересборку.
+    private const val KEY_LAST_FULL_UPDATE = "last_full_update_ms"
+    private const val STALE_AFTER_MS = 10 * 60_000L
+
     private val widgetScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** Секунды в виджетах: кэш 60 с — проверка зовётся из цикла BellTimerService. */
@@ -74,6 +81,18 @@ object WidgetUpdateHelper {
         NowNextWidgetProvider.updateAll(context)
         TodayScheduleWidgetProvider.updateAll(context)
         BellsWidgetProvider.updateAll(context)
+        // X29: полный update состоялся — сбросить отметку протухания
+        getPrefs(context).edit().putLong(KEY_LAST_FULL_UPDATE, System.currentTimeMillis()).apply()
+    }
+
+    /**
+     * X29: последний ПОЛНЫЙ update всех виджетов был старше [STALE_AFTER_MS] (или его вовсе
+     * не было). Значит Today/Bells могли пропустить свой onUpdate — минутный тик форсирует
+     * полную пересборку. Чистое чтение prefs, без IPC.
+     */
+    fun isFullUpdateStale(context: Context): Boolean {
+        val last = getPrefs(context).getLong(KEY_LAST_FULL_UPDATE, 0L)
+        return System.currentTimeMillis() - last > STALE_AFTER_MS
     }
 
     /**

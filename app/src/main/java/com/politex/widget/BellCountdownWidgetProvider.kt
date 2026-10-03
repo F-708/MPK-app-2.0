@@ -547,15 +547,24 @@ object WidgetAlarm {
         val triggerAt = if (minutes in SCHOOL_START until SCHOOL_END) {
             System.currentTimeMillis() + 60_000L
         } else {
+            // X29: следующий тик — 07:00. Раньше ВСЕГДА брали «завтра», из-за чего ночью
+            // (00:00–07:00) будильник уезжал на +28 ч и countdown залипал до утра, если
+            // BellTimerService был убит OEM. Берём 07:00 сегодня и сдвигаем на день, только
+            // если это время уже прошло (вечер после SCHOOL_END) — ночь получает 07:00 сегодня.
             (cal.clone() as Calendar).apply {
-                add(Calendar.DAY_OF_YEAR, 1)
                 set(Calendar.HOUR_OF_DAY, 7)
                 set(Calendar.MINUTE, 0)
                 set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
             }.timeInMillis
         }
 
         val pi = pendingIntent(context)
+        // X29(б): точный будильник — setExactAndAllowWhileIdle (минутный тик переживает doze).
+        // Когда SCHEDULE_EXACT_ALARM не выдан (Android 12+/14+ по умолчанию) — деградируем до
+        // setAndAllowWhileIdle, а не setWindow: while-idle вариант тоже стреляет в doze, тогда
+        // как setWindow ждал бы ближайшего maintenance-окна. Точность ниже — но тик не пропадает.
         val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
         try {
             if (canExact) {
@@ -578,17 +587,24 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             ACTION_TICK -> {
-                // O1: если BellTimerService ЖИВ, он уже пересобрал BellCountdown на этой же
-                // границе минуты — повторно не делаем, обновляем только NowNext (сервис его не трогает).
-                // WID-02: но сервис убивается OEM (battery saver на Xiaomi/Samsung) даже как FGS —
-                // тогда countdown встал бы до следующего неточного будильника. Поэтому если сервис
-                // НЕ запущен, пересобираем ОБА минутных виджета сами (будильник = страховка).
-                val serviceAlive = com.politex.util.BellCountdownNotifier.isEnabled(context) &&
-                    com.politex.util.BellTimerService.isRunning
-                if (serviceAlive) {
-                    NowNextWidgetProvider.updateAll(context)
+                // X29(а): если полный update всех виджетов давно не происходил (onUpdate не
+                // пришёл, doze/OEM сдвинули будильник, Today/Bells пропустили границу урока) —
+                // принудительно пересобираем ВСЕ четыре, а не только минутные.
+                if (WidgetUpdateHelper.isFullUpdateStale(context)) {
+                    WidgetUpdateHelper.updateAllWidgets(context)
                 } else {
-                    WidgetUpdateHelper.updateMinuteWidgets(context)
+                    // O1: если BellTimerService ЖИВ, он уже пересобрал BellCountdown на этой же
+                    // границе минуты — повторно не делаем, обновляем только NowNext (сервис его не трогает).
+                    // WID-02: но сервис убивается OEM (battery saver на Xiaomi/Samsung) даже как FGS —
+                    // тогда countdown встал бы до следующего неточного будильника. Поэтому если сервис
+                    // НЕ запущен, пересобираем ОБА минутных виджета сами (будильник = страховка).
+                    val serviceAlive = com.politex.util.BellCountdownNotifier.isEnabled(context) &&
+                        com.politex.util.BellTimerService.isRunning
+                    if (serviceAlive) {
+                        NowNextWidgetProvider.updateAll(context)
+                    } else {
+                        WidgetUpdateHelper.updateMinuteWidgets(context)
+                    }
                 }
                 WidgetAlarm.scheduleNext(context)
             }

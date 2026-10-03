@@ -117,6 +117,20 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <!-- X43: смена даты/времени/часового пояса системы — перепланировать виджеты,
+             будильник и воркеры (иначе они залипают в старом состоянии). Эти системные
+             broadcasts в списке исключений фонового ограничения, манифест-ресивер их
+             получает даже на API 26+. exported=false: их шлёт только система. -->
+        <receiver
+            android:name=".widget.TimeChangedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

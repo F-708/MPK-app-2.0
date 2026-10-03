@@ -18,7 +18,8 @@
             android:textSize="10sp"
             android:textStyle="bold"
             android:textColor="#0B3564"
-            android:maxLines="1" />
+            android:maxLines="1"
+            android:ellipsize="end" />
 
         <TextView
             android:layout_width="match_parent"

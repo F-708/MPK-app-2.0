@@ -140,10 +140,13 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             val room = lesson.roomFirst.takeIf { it.isNotBlank() } ?: lesson.roomSecond
             if (showRoom && room.isNotBlank()) {
                 row.setTextViewText(R.id.row_room, "каб. $room")
-                // W27: текст чипа — КОНТРАСТ к фону (style.mainColor = белый на светлых
-                // стилях LIGHT/SKY → белое на белом). Фон чипа = highlightColor,
-                // текст = тёмно-синий, читаемо во всех 4 стилях.
-                row.setTextColor(R.id.row_room, 0xFF0B3564.toInt())
+                // X31: чип кабинета — ТОТ ЖЕ паттерн, что в NowNext (applyRoomChip):
+                // фон = highlightColor, текст = mainColor. Пара даёт контраст во всех
+                // 4 стилях: LIGHT (тёмный mainColor по светло-голубому highlight) и
+                // DARK/BLUE/SKY (белый mainColor по тёмно-синему highlight). Было: жёстко
+                // тёмно-синий текст 0xFF0B3564 по highlightColor — в DARK/SKY (highlight
+                // = 0xFF0B3564) и BLUE (0xFF16457F) цифра сливалась с фоном и не читалась.
+                row.setTextColor(R.id.row_room, style.mainColor)
                 row.setInt(R.id.row_room, "setBackgroundColor", style.highlightColor)
                 val d = context.resources.displayMetrics.density
                 val ph = (7 * d + 0.5f).toInt()
