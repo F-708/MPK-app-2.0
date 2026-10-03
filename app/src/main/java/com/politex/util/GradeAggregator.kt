@@ -1,6 +1,9 @@
 package com.politex.util
 
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Ф4.2: категории оценок. `title` — подпись в UI, `name` — значение колонки category.
@@ -37,6 +40,9 @@ object GradeAggregator {
             GradeCategory.CONTROL.name,
             GradeCategory.EXAM.name,
         )
+
+    /** X9: веса по умолчанию (пустой weightsJson) — Обычн 25, Практ 25, Контр 50, Экз 100. Позиционно к [DEFAULT_PRIORITY]. */
+    val DEFAULT_WEIGHTS: List<Int> = listOf(25, 25, 50, 100)
 
     /**
      * @param byCategory значения оценок по именам категорий (category -> список value)
@@ -80,28 +86,37 @@ object GradeAggregator {
     }
 
     /**
-     * V18: округление среднего по настройке предмета.
-     * Умножение на число шагов в единице (а не деление на 0.1) — иначе
-     * 8.25/0.1 = 82.4999… в double и half-up ломается.
+     * X9: веса отключены — все оценки всех категорий считаются как одна группа:
+     * одно среднее арифметическое. LAB не участвует; нет оценок = null.
+     */
+    fun plainAverage(byCategory: Map<String, List<Int>>): Double? {
+        val all = byCategory.filterKeys { it != GradeCategory.LAB.name }.values.flatten()
+        return if (all.isEmpty()) null else all.average()
+    }
+
+    /**
+     * X8: стандартное школьное округление HALF_UP (0.4 → вниз, 0.5 → вверх).
+     * BigDecimal.valueOf (через Double.toString), а не арифметика double —
+     * иначе 8.25 в двоичной форме « slightly less» и half-up ломается.
      *
-     * @param mode шаг: "0.1" | "0.5" | "1" (битый/неизвестный = "0.1")
-     * @param roundUp true = всегда вверх («в пользу студента»), иначе математически
+     * @param mode ".0" = 1 знак | ".00" = 2 знака | "целое" = 0 знаков.
+     *             Legacy "0.1"/"0.5"/"1"/битый = 1 знак.
      */
     fun roundAvg(
         v: Double,
         mode: String,
-        roundUp: Boolean,
     ): Double {
-        val perUnit =
+        val scale =
             when (mode) {
-                "0.5" -> 2
-                "1" -> 1
-                else -> 10
+                ".00" -> 2
+                "целое" -> 0
+                else -> 1
             }
-        val scaled = v * perUnit
-        val r = if (roundUp) Math.ceil(scaled) else Math.round(scaled).toDouble()
-        return r / perUnit
+        return BigDecimal.valueOf(v).setScale(scale, RoundingMode.HALF_UP).toDouble()
     }
+
+    /** X9: позиция слайдера (0..1) → вес с шагом 25: 0/25/50/75/100. */
+    fun snapWeight(fraction: Float): Int = (fraction * 4).roundToInt().coerceIn(0, 4) * 25
 
     /**
      * W22: дерево агрегации для отрисовки формулы (уровни СНИЗУ ВВЕРХ).
@@ -133,10 +148,20 @@ object GradeAggregator {
     /** Округление для показа: 1 знак (спека Ф4.2). */
     fun round1(x: Double): Double = Math.round(x * 10) / 10.0
 
-    /** Показ: целые без «.0» («7»), дробные с одним знаком («8.3»), нет оценок — «—». */
-    fun format(x: Double?): String = when {
-        x == null -> "—"
-        round1(x) % 1.0 == 0.0 -> round1(x).toInt().toString()
-        else -> String.format(Locale.ROOT, "%.1f", round1(x))
-    }
+    /**
+     * Показ: целые без «.0» («7»), дробные с одним знаком («8.3»), нет оценок — «—».
+     * X8: mode ".00" — всегда 2 знака, "целое" — всегда без дробной части
+     * (иначе настройка округления не видна глазу: 8.00 vs 8).
+     */
+    fun format(
+        x: Double?,
+        mode: String = ".0",
+    ): String =
+        when {
+            x == null -> "—"
+            mode == ".00" -> String.format(Locale.ROOT, "%.2f", roundAvg(x, mode))
+            mode == "целое" -> roundAvg(x, mode).toInt().toString()
+            round1(x) % 1.0 == 0.0 -> round1(x).toInt().toString()
+            else -> String.format(Locale.ROOT, "%.1f", round1(x))
+        }
 }

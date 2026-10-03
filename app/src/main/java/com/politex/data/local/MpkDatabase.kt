@@ -36,7 +36,7 @@ import com.politex.data.local.entity.TeacherLessonEntity
         GradeEntryEntity::class,
         GradeConfigEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class MpkDatabase : RoomDatabase() {
@@ -296,6 +296,19 @@ abstract class MpkDatabase : RoomDatabase() {
                 }
             }
 
+        /**
+         * X9: v8 → v9 — grade_config.weightsEnabled (веса предмета вкл/выкл).
+         * DEFAULT 1: у существующих предметов веса остаются включёнными.
+         * DEFAULT-выражение побайтово как @ColumnInfo, иначе Room упадёт на валидации
+         * (см. MigrationV8ToV9Test).
+         */
+        private val migration8To9 =
+            object : Migration(8, 9) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `grade_config` ADD COLUMN `weightsEnabled` INTEGER NOT NULL DEFAULT 1")
+                }
+            }
+
         fun getInstance(context: Context): MpkDatabase = instance ?: synchronized(this) {
             val built =
                 Room
@@ -303,7 +316,7 @@ abstract class MpkDatabase : RoomDatabase() {
                         context.applicationContext,
                         MpkDatabase::class.java,
                         DATABASE_NAME,
-                    ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8)
+                    ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8, migration8To9)
                     // ponytail: оставлено как страховка от будущих незапланированных схем —
                     // для объявленных версий выше путь всегда идёт через migration1To2
                     .fallbackToDestructiveMigration()

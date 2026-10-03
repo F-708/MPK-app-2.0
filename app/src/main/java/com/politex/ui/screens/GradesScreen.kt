@@ -3,7 +3,8 @@ package com.politex.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,13 +29,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,15 +48,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.local.MpkDatabase
@@ -87,6 +82,7 @@ import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberToday
 import com.politex.util.GradeAggregator
 import com.politex.util.GradeCategory
+import com.politex.util.GradeSettings
 import com.politex.util.MpkCurriculum
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -105,6 +101,12 @@ import kotlin.math.roundToInt
  * V19: LAB убран из UI (enum и данные не тронуты): 4 сегмента категорий, без «Зачёт/Незачёт».
  * V20: окошко введённых оценок активной категории между чипами и нампадом (тап = удалить),
  *      счётчик у чипа категории, ЭКЗАМЕН без лимита (всегда insert).
+ * Волна X: X6 — секции-списки категорий и мини-дерево убраны с экрана предмета (история
+ *      оценок живёт в окошке у нампада); X8 — округление ".0"/".00"/"целое" (HALF_UP),
+ *      «в пользу студента» удалено; X9 — дефолт весов 25/25/50/100, шаг слайдера 25,
+ *      кастомный Canvas-слайдер, weightsEnabled per-subject + глобально (GradeSettings),
+ *      превью-строка весов под средней (по убыванию веса); X10 — блок (средняя+панель)
+ *      вертикально центрирован; X16 — категория отображается только один раз.
  *
  * G1: «страницы» без nav-графа (rememberSaveable-строки).
  * Данные — напрямую из GradeDao (паттерн MaterialBaseScreen), без ViewModel.
@@ -130,6 +132,9 @@ fun GradesScreen(
 ) {
     val context = LocalContext.current
     val dao = remember { MpkDatabase.getInstance(context).gradeDao() }
+    // X9: глобальное отключение весов (prefs «mpk_prefs», пишет экран Настроек через GradeSettings).
+    // ponytail: чтение в композиции без Flow — обновление при рекомпозиции после возврата с Настроек.
+    val globalWeights = GradeSettings.getGlobalWeightsEnabled(context)
 
     var openSubject by rememberSaveable { mutableStateOf<String?>(null) }
     var settingsSubject by rememberSaveable { mutableStateOf<String?>(null) }
@@ -152,12 +157,14 @@ fun GradesScreen(
                 GradeSubjectSettingsScreen(
                     subject = settingsSubject!!,
                     dao = dao,
+                    globalWeights = globalWeights,
                     onBack = { settingsSubject = null },
                 )
             openSubject != null ->
                 GradeSubjectScreen(
                     subject = openSubject!!,
                     dao = dao,
+                    globalWeights = globalWeights,
                     onBack = { openSubject = null },
                     onOpenSettings = { settingsSubject = openSubject },
                 )
@@ -165,6 +172,7 @@ fun GradesScreen(
                 GradeSubjectList(
                     groupInfo = groupInfo,
                     dao = dao,
+                    globalWeights = globalWeights,
                     onOpenSubject = { openSubject = it },
                 )
         }
@@ -177,6 +185,7 @@ fun GradesScreen(
 private fun GradeSubjectList(
     groupInfo: GroupInfo,
     dao: GradeDao,
+    globalWeights: Boolean,
     onOpenSubject: (String) -> Unit,
 ) {
     val entries by dao.allEntries().collectAsState(initial = emptyList())
@@ -195,16 +204,19 @@ private fun GradeSubjectList(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(subjects) { subject ->
-            // G2/G3 + V18: веса из grade_config, если заданы; иначе legacy-сворачивание по priority
+            // G2/G3 + X9: веса из grade_config (пусто = DEFAULT_WEIGHTS); weightsEnabled
+            // (глобально и per-subject) = false → plainAverage
             // (ponytail: format в списке всегда 1 знак, округление из config — только детальный экран)
             val avg =
-                remember(entries, configs, subject) {
+                remember(entries, configs, subject, globalWeights) {
+                    val config = configs.firstOrNull { it.subjectName == subject }
                     subjectAverage(
                         byCategory =
                         entries
                             .filter { it.subjectName == subject }
                             .groupBy({ it.category }) { it.value },
-                        config = configs.firstOrNull { it.subjectName == subject },
+                        config = config,
+                        weightsEnabled = globalWeights && (config?.weightsEnabled ?: true),
                     )
                 }
             Surface(
@@ -257,6 +269,7 @@ private fun GradeSubjectList(
 private fun GradeSubjectScreen(
     subject: String,
     dao: GradeDao,
+    globalWeights: Boolean,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -278,12 +291,15 @@ private fun GradeSubjectScreen(
 
     val byCategory = remember(entries) { entries.groupBy({ it.category }) { it.value } }
     val config = remember(configs, subject) { configs.firstOrNull { it.subjectName == subject } }
-    val priority = remember(config) { config?.let { parsePriority(it.priorityJson) } ?: GradeAggregator.DEFAULT_PRIORITY }
-    val rawAvg = remember(byCategory, config) { subjectAverage(byCategory, config) }
-    // V18: детальный экран применяет настройку округления предмета (список — всегда 1 знак)
+    // X9: веса действуют, если включены глобально И у предмета
+    val weightsEnabled = globalWeights && (config?.weightsEnabled ?: true)
+    val ws = remember(config) { parseWeightsList(config?.weightsJson) ?: GradeAggregator.DEFAULT_WEIGHTS }
+    val mode = config?.roundingMode ?: ".0"
+    val rawAvg = remember(byCategory, config, weightsEnabled) { subjectAverage(byCategory, config, weightsEnabled) }
+    // V18/X8: детальный экран применяет настройку округления предмета (список — всегда 1 знак)
     val avg =
-        remember(rawAvg, config) {
-            rawAvg?.let { GradeAggregator.roundAvg(it, config?.roundingMode ?: "0.1", config?.roundUp == true) }
+        remember(rawAvg, mode) {
+            rawAvg?.let { GradeAggregator.roundAvg(it, mode) }
         }
 
     var activeCategory by rememberSaveable(subject) { mutableStateOf(GradeCategory.REGULAR.name) }
@@ -343,7 +359,10 @@ private fun GradeSubjectScreen(
             }
         }
 
-        // V17: средний балл 40sp, честная вертикальная центровка + отступ от названия
+        // X10: блок (средний балл + строка весов + панель ввода) — вертикально по центру
+        Spacer(modifier = Modifier.weight(1f))
+
+        // V17/X8: средний балл 40sp в режиме округления предмета
         Box(
             modifier =
             Modifier
@@ -355,7 +374,7 @@ private fun GradeSubjectScreen(
                 EmptyDots(modifier = Modifier.testTag("grades_current_avg"))
             } else {
                 Text(
-                    text = GradeAggregator.format(avg),
+                    text = GradeAggregator.format(avg, mode),
                     style =
                     TextStyle(
                         fontSize = 40.sp,
@@ -367,46 +386,20 @@ private fun GradeSubjectScreen(
             }
         }
 
-        // W22: мини-дерево формулы — листья-категории снизу, итог сверху (legacy priority)
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center,
-        ) {
-            AggregationTree(priority = priority, byCategory = byCategory)
-        }
-
-        // Секции категорий (V17: пустые не рендерятся вовсе; V19: без LAB)
-        LazyColumn(
-            modifier =
-            Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .testTag("grades_entries_list"),
-            contentPadding = PaddingValues(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            UI_CATEGORIES.forEach { category ->
-                val categoryEntries = entries.filter { it.category == category.name }
-                if (categoryEntries.isEmpty()) return@forEach
-                item(key = "header_${category.name}") {
-                    Text(
-                        text = "${category.title} · ${categoryEntries.size}",
-                        style =
-                        TextStyle(
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ColorTextMuted,
-                        ),
-                        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
-                    )
-                }
-                items(categoryEntries, key = { it.id }) { entry ->
-                    GradeEntryRow(
-                        entry = entry,
-                        onDelete = { scope.launch { dao.deleteById(entry.id) } },
-                    )
-                }
-            }
+        // X9/X16: строка весов под средней — каждая категория один раз, по убыванию веса;
+        // веса выключены → скрыта. (X6: секции-списки категорий удалены — история оценок
+        // видна в окошке у нампада.)
+        if (weightsEnabled) {
+            Text(
+                text = weightsPreviewLine(ws),
+                textAlign = TextAlign.Center,
+                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .testTag("grades_weight_line"),
+            )
         }
 
         // ── Панель ввода (G4, W20/W21, V19/V20) ──
@@ -513,63 +506,9 @@ private fun GradeSubjectScreen(
                 }
             }
         }
-    }
-}
 
-/** W19: строка оценки — только значение-бейдж + ✕ удаления (44dp). */
-@Composable
-private fun GradeEntryRow(
-    entry: GradeEntryEntity,
-    onDelete: () -> Unit,
-) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorBgMain,
-        border = BorderStroke(1.dp, ColorBorderLight),
-        modifier =
-        Modifier
-            .fillMaxWidth()
-            .testTag("grades_entry_${entry.id}"),
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // W19: бейдж значения — без бейджа категории и даты
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorBgMain,
-                border = BorderStroke(1.dp, ColorBorderLight),
-            ) {
-                Text(
-                    text = entry.value.toString(),
-                    maxLines = 1,
-                    style =
-                    TextStyle(
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = gradeColor(entry.value.toDouble()),
-                    ),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                )
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            Box(
-                modifier =
-                Modifier
-                    .size(44.dp)
-                    .bouncyClickable(onClick = onDelete)
-                    .testTag("grades_delete_${entry.id}"),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Удалить оценку",
-                    tint = ColorTextMuted,
-                    modifier = Modifier.size(14.dp),
-                )
-            }
-        }
+        // X10: нижняя половина центровки блока
+        Spacer(modifier = Modifier.weight(1f))
     }
 }
 
@@ -634,177 +573,54 @@ private fun RowScope.CategorySegment(
     }
 }
 
-// ── Дерево агрегации (W22, legacy priority) ─────────────────────────────────
-
-/** W22: параметры раскладки дерева — после V18 осталось только мини-дерево на экране предмета. */
-private data class TreeSpec(
-    val cardW: Dp,
-    val cardH: Dp,
-    val gap: Dp,
-    val vGap: Dp,
-)
-
-private val MiniTreeSpec = TreeSpec(cardW = 64.dp, cardH = 34.dp, gap = 8.dp, vGap = 14.dp)
-
-/** Раскладка уровней дерева в координаты (dp): уровень 0 — листья снизу. */
-private data class TreeLayout(
-    val levels: List<List<String>>,
-    val centers: List<List<Float>>, // центры узлов по уровням, dp
-    val widthDp: Float,
-    val heightDp: Float,
-)
-
-private fun treeLayout(
-    levels: List<List<String>>,
-    spec: TreeSpec,
-): TreeLayout {
-    val step = spec.cardW.value + spec.gap.value
-    val centers = ArrayList<List<Float>>(levels.size)
-    // листья: узел i стоит на слоте i
-    var prev: List<Float> = List(levels[0].size) { it * step + spec.cardW.value / 2f }
-    centers += prev
-    for (k in 1 until levels.size) {
-        val cur = ArrayList<Float>(levels[k].size)
-        cur += (prev[0] + prev[1]) / 2f // родитель = середина пары детей
-        for (j in 1 until levels[k].size) cur += prev[j + 1] // остальные узлы проходят насквозь
-        centers += cur
-        prev = cur
-    }
-    val width = levels[0].size * step - spec.gap.value
-    val height = levels.size * spec.cardH.value + (levels.size - 1) * spec.vGap.value
-    return TreeLayout(levels, centers, width, height)
-}
+// ── Слайдер веса (X9) ─────────────────────────────────────────────────────────
 
 /**
- * W22: мини-дерево агрегации — лестница пар снизу вверх (листья → итог),
- * линии = «(левый + правый) ÷ 2». Рисует только непустые категории
- * (честная текущая формула). V18: полное дерево с drag&drop удалено вместе
- * с кнопкой «НАСТРОИТЬ ВЕС» — его заменил экран настроек предмета.
+ * X9: кастомный Canvas-слайдер весов — линия-трек 4dp + thumb-круг 16dp, 5 позиций
+ * (0..100 с шагом 25, [GradeAggregator.snapWeight]). Material3 Slider анимирует
+ * увеличение thumb/track при касании — здесь фидбек drag ТОЛЬКО движение thumb.
+ * enabled=false → серый, жесты отключены.
  */
 @Composable
-private fun AggregationTree(
-    priority: List<String>,
-    byCategory: Map<String, List<Int>>,
+private fun WeightSlider(
+    value: Int,
+    enabled: Boolean,
+    onValueChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val levels =
-        remember(priority, byCategory) {
-            GradeAggregator.buildTreeLevels(priority, byCategory.filterValues { it.isNotEmpty() }.keys)
-        }
-    if (levels.isEmpty()) return
-    val layout = remember(levels) { treeLayout(levels, MiniTreeSpec) }
-
-    Box(modifier = Modifier.size(layout.widthDp.dp, layout.heightDp.dp)) {
-        // W22: линии сложения — узел 0 уровня k сходится с узлами 0/1 уровня k-1
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val cardHpx = MiniTreeSpec.cardH.toPx()
-            val vGapPx = MiniTreeSpec.vGap.toPx()
-            val stroke = 1.5.dp.toPx()
-            for (k in 1 until levels.size) {
-                val parentBottom = size.height - k * (cardHpx + vGapPx)
-                val childTop = size.height - cardHpx - (k - 1) * (cardHpx + vGapPx)
-                val px = layout.centers[k][0].dp.toPx()
-                for (c in 0..1) {
-                    drawLine(
-                        color = ColorBorderLight,
-                        start = Offset(px, parentBottom),
-                        end = Offset(layout.centers[k - 1][c].dp.toPx(), childTop),
-                        strokeWidth = stroke,
-                    )
-                }
-            }
-        }
-
-        levels.forEachIndexed { k, rowNodes ->
-            rowNodes.forEachIndexed { j, node ->
-                val x = (layout.centers[k][j] - MiniTreeSpec.cardW.value / 2f).dp
-                val y = (layout.heightDp - MiniTreeSpec.cardH.value - k * (MiniTreeSpec.cardH.value + MiniTreeSpec.vGap.value)).dp
-                Box(
-                    modifier =
-                    Modifier
-                        .offset { IntOffset(x.roundToPx(), y.roundToPx()) }
-                        .size(MiniTreeSpec.cardW, MiniTreeSpec.cardH),
-                ) {
-                    TreeCard(
-                        node = node,
-                        isTop = k == levels.lastIndex,
-                        byCategory = byCategory,
-                    )
-                }
-            }
-        }
+    // доля по полной ширине: snap в ближайшую из 5 позиций прощает неточность insets
+    val snap: (Float, Float) -> Int = { x, w ->
+        GradeAggregator.snapWeight((x / w).coerceIn(0f, 1f))
     }
-}
-
-/** W22: узел дерева: лист (имя + средний), внутренний (значение + ÷2), итог (заливка ColorTopBar). */
-@Composable
-private fun TreeCard(
-    node: String,
-    isTop: Boolean,
-    byCategory: Map<String, List<Int>>,
-) {
-    val leaves = node.split("+")
-    val isLeaf = leaves.size == 1
-    val value = remember(node, byCategory) { GradeAggregator.average(byCategory, leaves) }
-    val leafAvg = if (isLeaf) byCategory[leaves[0]]?.average() else null
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = if (isTop) ColorTopBar else ColorBgMain,
-        border = BorderStroke(1.dp, if (isTop) ColorTopBar else ColorBorderLight),
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        Column(
-            modifier =
-            Modifier
-                .fillMaxSize()
-                .padding(horizontal = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            when {
-                isTop -> {
-                    Text(
-                        text = "ИТОГ",
-                        style = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White),
-                    )
-                    if (value == null) {
-                        EmptyDots()
-                    } else {
-                        Text(
-                            text = GradeAggregator.format(value),
-                            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White),
-                        )
-                    }
-                }
-                isLeaf -> {
-                    Text(
-                        text = CATEGORY_SHORT[leaves[0]] ?: leaves[0],
-                        maxLines = 1,
-                        style = TextStyle(fontSize = 10.sp, color = ColorTextMuted),
-                    )
-                    if (leafAvg == null) {
-                        EmptyDots()
-                    } else {
-                        Text(
-                            text = GradeAggregator.format(leafAvg),
-                            maxLines = 1,
-                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = gradeColor(leafAvg)),
-                        )
-                    }
-                }
-                else -> {
-                    if (value == null) {
-                        EmptyDots()
-                    } else {
-                        Text(
-                            text = GradeAggregator.format(value),
-                            maxLines = 1,
-                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = gradeColor(value)),
-                        )
-                    }
-                    Text("÷2", style = TextStyle(fontSize = 9.sp, color = ColorTextMuted))
-                }
+    Canvas(
+        modifier =
+        modifier
+            .height(32.dp)
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectTapGestures { onValueChange(snap(it.x, size.width.toFloat())) }
             }
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragStart = { onValueChange(snap(it.x, size.width.toFloat())) },
+                    onHorizontalDrag = { change, _ ->
+                        onValueChange(snap(change.position.x, size.width.toFloat()))
+                        change.consume()
+                    },
+                )
+            },
+    ) {
+        val pad = 8.dp.toPx() // радиус thumb — трек не вылезает за границы
+        val y = size.height / 2f
+        val trackW = size.width - pad * 2
+        val thumbX = pad + trackW * (value / 100f)
+        val stroke = 4.dp.toPx()
+        drawLine(ColorBorderLight, Offset(pad, y), Offset(pad + trackW, y), stroke, cap = StrokeCap.Round)
+        if (enabled) {
+            drawLine(ColorActiveBlue, Offset(pad, y), Offset(thumbX, y), stroke, cap = StrokeCap.Round)
         }
+        drawCircle(if (enabled) ColorBrandFill else ColorTextMuted, 8.dp.toPx(), Offset(thumbX, y))
     }
 }
 
@@ -834,21 +650,32 @@ private fun EmptyDots(modifier: Modifier = Modifier) {
     }
 }
 
-// ── Экран настроек предмета (V18) ────────────────────────────────────────────
+// ── Экран настроек предмета (V18, X8/X9) ─────────────────────────────────────
 
-private val ROUNDING_MODES = listOf("0.1" to "0.1", "0.5" to "0.5", "1" to "Целое")
+/** X8: «.0» = 1 знак, «.00» = 2 знака, «целое» = 0 знаков (HALF_UP, без «в пользу студента»). */
+private val ROUNDING_MODES = listOf(".0" to ".0", ".00" to ".00", "целое" to "целое")
+
+/** X8: нормализация legacy-режимов v8 ("0.1"/"0.5"/"1") к новым строкам roundAvg. */
+private fun normalizeMode(mode: String?): String =
+    when (mode) {
+        ".00" -> ".00"
+        "целое", "1" -> "целое"
+        else -> ".0"
+    }
 
 /**
- * V18: «Настройки предмета» — принцип счёта (шаг округления + «в пользу студента»)
- * и веса категорий (слайдеры 0..100 с шагом 5). Живое превью среднего балла.
+ * V18: «Настройки предмета» — принцип счёта (округление) и веса категорий.
+ * X9: тумблер весов per-subject (выключены → слайдеры серые, средний = plainAverage),
+ * дефолт весов 25/25/50/100, шаг слайдера 25 (кастомный [WeightSlider]).
+ * X8: roundUp удалён из UI — при сохранении пишется false (колонка не используется).
  * СОХРАНИТЬ пишет grade_config целиком (upsertConfig = REPLACE), поэтому
  * legacy priorityJson сохраняется как есть.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GradeSubjectSettingsScreen(
     subject: String,
     dao: GradeDao,
+    globalWeights: Boolean,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -857,15 +684,15 @@ private fun GradeSubjectSettingsScreen(
 
     var weights by remember { mutableStateOf<List<Int>?>(null) } // null = загрузка
     var priorityJson by remember { mutableStateOf("[]") }
-    var roundingMode by remember { mutableStateOf("0.1") }
-    var roundUp by remember { mutableStateOf(false) }
+    var roundingMode by remember { mutableStateOf(".0") }
+    var weightsEnabled by remember { mutableStateOf(true) }
 
     LaunchedEffect(subject) {
         val cfg = dao.getConfig(subject)
         priorityJson = cfg?.priorityJson?.ifBlank { "[]" } ?: "[]"
-        weights = parseWeightsList(cfg?.weightsJson) ?: List(UI_CATEGORIES.size) { 25 }
-        roundingMode = cfg?.roundingMode ?: "0.1"
-        roundUp = cfg?.roundUp == true
+        weights = parseWeightsList(cfg?.weightsJson) ?: GradeAggregator.DEFAULT_WEIGHTS
+        roundingMode = normalizeMode(cfg?.roundingMode)
+        weightsEnabled = cfg?.weightsEnabled ?: true
     }
 
     Column(
@@ -928,28 +755,29 @@ private fun GradeSubjectSettingsScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
+                // X9: тумблер весов предмета (стиль прежнего roundUp-ряда)
                 Surface(
                     shape = RoundedCornerShape(2.dp),
-                    color = if (roundUp) ColorSurfaceHighlight else ColorBgMain,
-                    border = BorderStroke(1.dp, if (roundUp) ColorBrandBlue else ColorBorderLight),
+                    color = if (weightsEnabled) ColorSurfaceHighlight else ColorBgMain,
+                    border = BorderStroke(1.dp, if (weightsEnabled) ColorBrandBlue else ColorBorderLight),
                     modifier =
                     Modifier
                         .fillMaxWidth()
                         .heightIn(min = 44.dp)
-                        .testTag("grades_roundup_toggle")
-                        .bouncyClickable { roundUp = !roundUp },
+                        .testTag("grades_weights_toggle")
+                        .bouncyClickable { weightsEnabled = !weightsEnabled },
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Округлять в пользу студента",
+                            text = "Веса категорий",
                             style =
                             TextStyle(
                                 fontSize = 13.sp,
-                                fontWeight = if (roundUp) FontWeight.Bold else FontWeight.Normal,
-                                color = if (roundUp) ColorTextTitle else ColorTextBody,
+                                fontWeight = if (weightsEnabled) FontWeight.Bold else FontWeight.Normal,
+                                color = if (weightsEnabled) ColorTextTitle else ColorTextBody,
                             ),
                             modifier = Modifier.weight(1f),
                         )
@@ -959,11 +787,17 @@ private fun GradeSubjectSettingsScreen(
                 // ── Группа 2: ВЕСА ──
                 Spacer(modifier = Modifier.height(16.dp))
                 SectionCaption("ВЕСА")
+                // X9: глобальное отключение гасит веса всех предметов
+                val weightsOn = globalWeights && weightsEnabled
                 val avg =
-                    remember(byCategory, ws, roundingMode, roundUp) {
-                        GradeAggregator
-                            .weightedAverage(byCategory, weightsMap(ws))
-                            ?.let { GradeAggregator.roundAvg(it, roundingMode, roundUp) }
+                    remember(byCategory, ws, roundingMode, weightsOn) {
+                        val raw =
+                            if (weightsOn) {
+                                GradeAggregator.weightedAverage(byCategory, weightsMap(ws))
+                            } else {
+                                GradeAggregator.plainAverage(byCategory)
+                            }
+                        raw?.let { GradeAggregator.roundAvg(it, roundingMode) }
                     }
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -986,37 +820,22 @@ private fun GradeSubjectSettingsScreen(
                             EmptyDots()
                         } else {
                             Text(
-                                text = GradeAggregator.format(avg),
+                                text = GradeAggregator.format(avg, roundingMode),
                                 style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold, color = gradeColor(avg)),
                             )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        // Нормализованные доли: «35% Обычн + 25% Практи + …»
-                        val total = ws.sum()
-                        Text(
-                            text =
-                            if (total == 0) {
-                                "—"
-                            } else {
-                                UI_CATEGORIES
-                                    .mapIndexed { i, c ->
-                                        "${(ws[i] * 100.0 / total).roundToInt()}% ${CATEGORY_SHORT[c.name] ?: c.title}"
-                                    }.joinToString(" + ")
-                            },
-                            textAlign = TextAlign.Center,
-                            style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-                        )
+                        // X9: строка долей — только при включённых весах; X16: каждая категория один раз
+                        if (weightsOn) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = weightsPreviewLine(ws),
+                                textAlign = TextAlign.Center,
+                                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                            )
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                val sliderColors =
-                    SliderDefaults.colors(
-                        thumbColor = ColorBrandFill,
-                        activeTrackColor = ColorActiveBlue,
-                        inactiveTrackColor = ColorBorderLight,
-                        activeTickColor = Color.Transparent,
-                        inactiveTickColor = Color.Transparent,
-                    )
                 UI_CATEGORIES.forEachIndexed { i, category ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1025,44 +844,31 @@ private fun GradeSubjectSettingsScreen(
                         Text(
                             text = CATEGORY_SHORT[category.name] ?: category.title,
                             maxLines = 1,
-                            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
+                            style =
+                            TextStyle(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (weightsOn) ColorTextTitle else ColorTextMuted,
+                            ),
                             modifier = Modifier.width(60.dp),
                         )
-                        // V18: material3 1.3.0 — thumb 16dp и трек 4dp только через slot-overload
-                        val interactionSource = remember { MutableInteractionSource() }
-                        Slider(
-                            value = ws[i].toFloat(),
-                            onValueChange = { v -> weights = ws.toMutableList().apply { set(i, v.roundToInt()) } },
-                            colors = sliderColors,
-                            interactionSource = interactionSource,
-                            steps = 19, // шаг 5
-                            thumb = {
-                                SliderDefaults.Thumb(
-                                    interactionSource = interactionSource,
-                                    colors = sliderColors,
-                                    thumbSize = DpSize(16.dp, 16.dp),
-                                )
-                            },
-                            track = { state ->
-                                SliderDefaults.Track(
-                                    sliderState = state,
-                                    modifier = Modifier.height(4.dp),
-                                    colors = sliderColors,
-                                    drawStopIndicator = null,
-                                    drawTick = { _, _ -> },
-                                )
-                            },
-                            valueRange = 0f..100f,
-                            modifier =
-                            Modifier
-                                .weight(1f)
-                                .testTag("grades_weight_slider_${category.name}"),
+                        // X9: кастомный Canvas-слайдер, шаг 25; веса выключены → серый и неактивный
+                        WeightSlider(
+                            value = ws[i],
+                            enabled = weightsOn,
+                            onValueChange = { v -> weights = ws.toMutableList().apply { set(i, v) } },
+                            modifier = Modifier.weight(1f).testTag("grades_weight_slider_${category.name}"),
                         )
                         Text(
                             text = "${ws[i]}%",
                             maxLines = 1,
                             textAlign = TextAlign.End,
-                            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorBrandBlue),
+                            style =
+                            TextStyle(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (weightsOn) ColorBrandBlue else ColorTextMuted,
+                            ),
                             modifier = Modifier.width(44.dp),
                         )
                     }
@@ -1089,7 +895,8 @@ private fun GradeSubjectSettingsScreen(
                                     priorityJson = priorityJson,
                                     weightsJson = JSONArray(ws).toString(),
                                     roundingMode = roundingMode,
-                                    roundUp = roundUp,
+                                    roundUp = false, // X8: колонка оставлена, но не используется
+                                    weightsEnabled = weightsEnabled, // X9
                                 ),
                             )
                             onBack()
@@ -1162,25 +969,24 @@ private fun gradeColor(avg: Double?): Color = when {
 }
 
 /**
- * V18: средний балл предмета — weightedAverage по weightsJson, если веса заданы;
- * иначе legacy-сворачивание пар по priorityJson (обратная совместимость).
- * ponytail: мини-дерево на экране предмета по-прежнему рисует priority-формулу —
- * при заданных весах оно иллюстративно, честное число показывает превью настроек.
+ * X9: средний балл предмета. Веса включены → weightedAverage (пустой weightsJson =
+ * DEFAULT_WEIGHTS 25/25/50/100); выключены (глобально или у предмета) → plainAverage:
+ * все оценки всех категорий как одна группа. Legacy priorityJson больше не участвует
+ * (хранится только для обратной совместимости схемы).
  */
 private fun subjectAverage(
     byCategory: Map<String, List<Int>>,
     config: GradeConfigEntity?,
-): Double? {
-    val weights = parseWeightsList(config?.weightsJson)
-    return if (weights != null) {
-        GradeAggregator.weightedAverage(byCategory, weightsMap(weights))
-    } else {
-        GradeAggregator.average(
+    weightsEnabled: Boolean,
+): Double? =
+    if (weightsEnabled) {
+        GradeAggregator.weightedAverage(
             byCategory,
-            config?.let { parsePriority(it.priorityJson) } ?: GradeAggregator.DEFAULT_PRIORITY,
+            weightsMap(parseWeightsList(config?.weightsJson) ?: GradeAggregator.DEFAULT_WEIGHTS),
         )
+    } else {
+        GradeAggregator.plainAverage(byCategory)
     }
-}
 
 /** V18: weightsJson — позиционный JSON-массив по [UI_CATEGORIES]; пусто/бито/не той длины = null. */
 private fun parseWeightsList(json: String?): List<Int>? =
@@ -1201,18 +1007,20 @@ private fun parseWeightsList(json: String?): List<Int>? =
 
 private fun weightsMap(weights: List<Int>): Map<String, Int> = UI_CATEGORIES.map { it.name }.zip(weights).toMap()
 
-private fun parsePriority(json: String): List<String> =
-    try {
-        val arr = JSONArray(json)
-        (0 until arr.length())
-            .map { arr.getString(it) }
-            .filter { name -> name != GradeCategory.LAB.name && GradeCategory.values().any { it.name == name } }
-            .ifEmpty { GradeAggregator.DEFAULT_PRIORITY }
-    } catch (_: Exception) {
-        GradeAggregator.DEFAULT_PRIORITY
-    }
+/**
+ * X9/X16: «50% Контр + 25% Обычн + …» — нормализованные доли, сортировка по весу
+ * УБЫВАНИЮ (позиция отражает величину), каждая категория ровно один раз.
+ */
+private fun weightsPreviewLine(ws: List<Int>): String {
+    val total = ws.sum()
+    if (total == 0) return "—"
+    return UI_CATEGORIES
+        .mapIndexed { i, c -> ws[i] to "${(ws[i] * 100.0 / total).roundToInt()}% ${CATEGORY_SHORT[c.name] ?: c.title}" }
+        .sortedByDescending { it.first }
+        .joinToString(" + ") { it.second }
+}
 
-/** W21: компактные подписи для сегментов ввода, мини-дерева и превью весов. */
+/** W21: компактные подписи для сегментов ввода и превью весов. */
 private val CATEGORY_SHORT =
     mapOf(
         GradeCategory.REGULAR.name to "Обычн",

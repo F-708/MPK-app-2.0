@@ -17,14 +17,17 @@ data class GradeConfigEntity(
     val priorityJson: String,
     /**
      * V18: веса категорий в процентах — JSON-массив [обычн, практ, контр, экз]
-     * (LAB не хранится). Пусто = дефолт все по 25. Слайдеры настроек предмета.
+     * (LAB не хранится). X9: пусто = GradeAggregator.DEFAULT_WEIGHTS (25/25/50/100).
      */
     @ColumnInfo(defaultValue = "''")
     val weightsJson: String = "",
-    /** V18: шаг округления среднего: "0.1" | "0.5" | "1". */
+    /** X8: режим округления среднего: ".0" (1 знак) | ".00" (2 знака) | "целое". Legacy "0.1"/"0.5"/"1" = ".0". */
     @ColumnInfo(defaultValue = "'0.1'")
     val roundingMode: String = "0.1",
-    /** V18: 1 = округлять всегда вверх («в пользу студента»). */
+    /** X8: НЕ используется (standard HALF_UP), колонка оставлена во избежание лишней миграции. */
     @ColumnInfo(defaultValue = "0")
     val roundUp: Boolean = false,
+    /** X9: 0 = веса предмета отключены (средний = plainAverage), 1 = включены. */
+    @ColumnInfo(defaultValue = "1")
+    val weightsEnabled: Boolean = true,
 )

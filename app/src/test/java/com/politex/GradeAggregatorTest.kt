@@ -249,29 +249,80 @@ class GradeAggregatorTest {
         )
     }
 
+    // ── X8: roundAvg HALF_UP (.0 / .00 / целое) ─────────────────────────────
+
     @Test
-    fun `roundAvg — шаг 0_1 математически`() {
-        assertEquals(8.3, GradeAggregator.roundAvg(8.25, "0.1", false), delta)
-        assertEquals(8.2, GradeAggregator.roundAvg(8.24, "0.1", false), delta)
-        assertEquals(7.0, GradeAggregator.roundAvg(7.0, "0.1", false), delta)
+    fun `roundAvg — _0 стандартное школьное HALF_UP`() {
+        assertEquals(8.3, GradeAggregator.roundAvg(8.25, ".0"), delta) // 0.05 → вверх
+        assertEquals(8.2, GradeAggregator.roundAvg(8.24, ".0"), delta) // 0.04 → вниз
+        assertEquals(7.0, GradeAggregator.roundAvg(7.0, ".0"), delta)
+        assertEquals(8.0, GradeAggregator.roundAvg(8.04, ".0"), delta)
+        assertEquals(8.1, GradeAggregator.roundAvg(8.05, ".0"), delta)
     }
 
     @Test
-    fun `roundAvg — шаги 0_5 и целое`() {
-        assertEquals(8.5, GradeAggregator.roundAvg(8.3, "0.5", false), delta)
-        assertEquals(8.0, GradeAggregator.roundAvg(8.2, "0.5", false), delta)
-        assertEquals(8.0, GradeAggregator.roundAvg(8.4, "1", false), delta)
-        assertEquals(9.0, GradeAggregator.roundAvg(8.5, "1", false), delta)
-        // битый/неизвестный mode = "0.1"
-        assertEquals(8.3, GradeAggregator.roundAvg(8.25, "garbage", false), delta)
+    fun `roundAvg — _00 два знака и целое`() {
+        assertEquals(8.26, GradeAggregator.roundAvg(8.255, ".00"), delta)
+        assertEquals(8.25, GradeAggregator.roundAvg(8.254, ".00"), delta)
+        assertEquals(8.0, GradeAggregator.roundAvg(8.4, "целое"), delta)
+        assertEquals(9.0, GradeAggregator.roundAvg(8.5, "целое"), delta)
     }
 
     @Test
-    fun `roundAvg — roundUp всегда вверх (в пользу студента)`() {
-        assertEquals(8.2, GradeAggregator.roundAvg(8.11, "0.1", true), delta)
-        assertEquals(8.5, GradeAggregator.roundAvg(8.01, "0.5", true), delta)
-        assertEquals(9.0, GradeAggregator.roundAvg(8.01, "1", true), delta)
-        // точное значение не поднимается
-        assertEquals(8.0, GradeAggregator.roundAvg(8.0, "1", true), delta)
+    fun `roundAvg — неизвестный и legacy mode = 1 знак`() {
+        assertEquals(8.3, GradeAggregator.roundAvg(8.25, "garbage"), delta)
+        assertEquals(8.3, GradeAggregator.roundAvg(8.25, "0.1"), delta) // legacy v8
+    }
+
+    // ── X9: plainAverage, дефолт весов, шаг слайдера 25 ─────────────────────
+
+    @Test
+    fun `plainAverage — все оценки всех категорий одним средним`() {
+        // границы категорий не важны: (8 + 6 + 9 + 10) / 4 = 8.25
+        assertEquals(
+            8.25,
+            GradeAggregator.plainAverage(mapOf("REGULAR" to listOf(8, 6), "EXAM" to listOf(9, 10)))!!,
+            delta,
+        )
+    }
+
+    @Test
+    fun `plainAverage — LAB не участвует, нет оценок = null`() {
+        assertEquals(8.0, GradeAggregator.plainAverage(mapOf("REGULAR" to listOf(8), "LAB" to listOf(0, 1)))!!, delta)
+        assertNull(GradeAggregator.plainAverage(emptyMap()))
+        assertNull(GradeAggregator.plainAverage(mapOf("REGULAR" to emptyList())))
+    }
+
+    @Test
+    fun `X9 — дефолт весов Обычн 25 Практ 25 Контр 50 Экз 100`() {
+        assertEquals(listOf(25, 25, 50, 100), GradeAggregator.DEFAULT_WEIGHTS)
+        // (8*25 + 7*25 + 9*50 + 10*100) / 200 = 9.125
+        val avg =
+            GradeAggregator.weightedAverage(
+                mapOf("REGULAR" to listOf(8), "PRACTICAL" to listOf(7), "CONTROL" to listOf(9), "EXAM" to listOf(10)),
+                GradeAggregator.DEFAULT_PRIORITY.zip(GradeAggregator.DEFAULT_WEIGHTS).toMap(),
+            )
+        assertEquals(9.125, avg!!, delta)
+    }
+
+    @Test
+    fun `X9 — snapWeight шаг 25, пять позиций, края clamp`() {
+        assertEquals(0, GradeAggregator.snapWeight(0f))
+        assertEquals(0, GradeAggregator.snapWeight(0.1f)) // 0.4 слота → 0
+        assertEquals(25, GradeAggregator.snapWeight(0.15f)) // 0.6 слота → 1
+        assertEquals(50, GradeAggregator.snapWeight(0.5f))
+        assertEquals(100, GradeAggregator.snapWeight(1f))
+        assertEquals(100, GradeAggregator.snapWeight(3f)) // за пределами → clamp
+        assertEquals(0, GradeAggregator.snapWeight(-1f))
+    }
+
+    @Test
+    fun `X8 — format учитывает режим округления`() {
+        assertEquals("8.25", GradeAggregator.format(8.25, ".00"))
+        assertEquals("7.00", GradeAggregator.format(7.0, ".00"))
+        assertEquals("9", GradeAggregator.format(8.6, "целое"))
+        assertEquals("8.3", GradeAggregator.format(8.25, ".0"))
+        assertEquals("8.3", GradeAggregator.format(8.25)) // legacy-вызов = 1 знак
+        assertEquals("—", GradeAggregator.format(null, ".00"))
     }
 }
