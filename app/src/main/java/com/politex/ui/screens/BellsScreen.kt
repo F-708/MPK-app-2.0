@@ -82,6 +82,27 @@ private val RAIL_BLUE_SOFT: Color get() = ColorActiveBlue.copy(alpha = 0.30f)
 private val RAIL_GRAY: Color get() = ColorTextMuted.copy(alpha = 0.55f)
 private val RAIL_GRAY_SOFT: Color get() = ColorTextDisabled
 
+/**
+ * X17: цвет рельса (линии и чёрточки-границы) в минуту [minute] — цвет сегмента урока,
+ * которому эта минута принадлежит: прошедший урок/не-сегодня → ColorTextDisabled,
+ * будущее до [blueEndMinutes] → ColorActiveBlue, после → ColorTextMuted 55%.
+ * Старт идущего урока при этом синий (линия в этой точке синяя), а не серый.
+ */
+internal fun railColorForMinute(
+    minute: Int,
+    bells: List<BellItem>,
+    currentTimeMinutes: Int,
+    blueEndMinutes: Int?,
+    isTodaySelected: Boolean,
+): Color =
+    when {
+        !isTodaySelected -> RAIL_GRAY_SOFT
+        bells.any { minute in it.startMinutes..it.endMinutes && it.endMinutes <= currentTimeMinutes } ->
+            RAIL_GRAY_SOFT
+        blueEndMinutes != null && minute <= blueEndMinutes -> RAIL_BLUE
+        else -> RAIL_GRAY
+    }
+
 private sealed interface BellRow {
     data class Lesson(
         val item: BellItem,
@@ -414,42 +435,63 @@ fun BellsScreen(
                     bells.forEach { bell ->
                         val y0 = yForMinute(bell.startMinutes) ?: return@forEach
                         val y1 = yForMinute(bell.endMinutes) ?: return@forEach
-                        val color =
-                            when {
-                                !isTodaySelected -> RAIL_GRAY_SOFT
-                                bell.endMinutes <= currentTimeMinutes -> RAIL_GRAY_SOFT
-                                blueEndMinutes != null && bell.startMinutes <= blueEndMinutes -> RAIL_BLUE
-                                else -> RAIL_GRAY
-                            }
                         drawLine(
-                            color = color,
+                            color =
+                            railColorForMinute(
+                                bell.startMinutes,
+                                bells,
+                                currentTimeMinutes,
+                                blueEndMinutes,
+                                isTodaySelected,
+                            ),
                             start = Offset(cx, y0),
                             end = Offset(cx, y1),
-                            strokeWidth = 2.dp.toPx(),
-                            cap = StrokeCap.Round,
+                            // ДОП: 1.5dp + Butt — скругления Round выступали за крайние чёрточки
+                            strokeWidth = 1.5.dp.toPx(),
+                            cap = StrokeCap.Butt,
                         )
                     }
 
                     // 2) чёрточки-границы уроков поверх линии
+                    // X17: цвет чёрточки = цвет ЛИНИИ в этой минуте, а не «всегда синий до blueEnd»
                     bells.forEach { bell ->
                         listOf(bell.startMinutes, bell.endMinutes).forEach { m ->
                             val y = yForMinute(m) ?: return@forEach
-                            val color =
-                                if (isTodaySelected && blueEndMinutes != null && m <= blueEndMinutes) {
-                                    RAIL_BLUE
-                                } else {
-                                    RAIL_GRAY_SOFT
-                                }
                             drawLine(
-                                color = color,
+                                color = railColorForMinute(m, bells, currentTimeMinutes, blueEndMinutes, isTodaySelected),
                                 start = Offset(cx - tickLen, y),
                                 end = Offset(cx + tickLen, y),
                                 strokeWidth = 1.5.dp.toPx(),
+                                cap = StrokeCap.Butt,
                             )
                         }
                     }
 
-                    // 3) точка «сейчас»: ядро + пульс-ореол
+                    // 3) X40: перемены — серый сегмент-подложка (ColorTextDisabled всегда,
+                    // перемена не «урок») + серые деления 1dp по границам строки перемены
+                    rows.forEachIndexed { i, row ->
+                        if (row !is BellRow.Break) return@forEachIndexed
+                        val top = rowTops[i] ?: return@forEachIndexed
+                        val bottom = top + (rowHeights[i] ?: return@forEachIndexed)
+                        drawLine(
+                            color = RAIL_GRAY_SOFT,
+                            start = Offset(cx, top),
+                            end = Offset(cx, bottom),
+                            strokeWidth = 1.5.dp.toPx(),
+                            cap = StrokeCap.Butt,
+                        )
+                        listOf(top, bottom).forEach { y ->
+                            drawLine(
+                                color = RAIL_GRAY_SOFT,
+                                start = Offset(cx - tickLen, y),
+                                end = Offset(cx + tickLen, y),
+                                strokeWidth = 1.dp.toPx(),
+                                cap = StrokeCap.Butt,
+                            )
+                        }
+                    }
+
+                    // 4) точка «сейчас»: ядро + пульс-ореол
                     if (showNowDot) {
                         val y = yForMinute(currentTimeMinutes)
                         if (y != null) {
