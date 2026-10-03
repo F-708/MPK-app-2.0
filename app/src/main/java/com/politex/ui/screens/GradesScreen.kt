@@ -63,9 +63,6 @@ import com.politex.data.local.dao.GradeDao
 import com.politex.data.local.entity.GradeConfigEntity
 import com.politex.data.local.entity.GradeEntryEntity
 import com.politex.data.model.GroupInfo
-import com.politex.ui.components.TutorialController
-import com.politex.ui.components.TutorialFeature
-import com.politex.ui.components.tutorialAnchor
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
@@ -275,17 +272,6 @@ private fun GradeSubjectScreen(
 ) {
     val scope = rememberCoroutineScope()
     val today = rememberToday()
-    val context = LocalContext.current
-    // V14: туториал «Быстрый ввод оценки» — панель ввода живёт на детальном экране предмета,
-    // поэтому запрос при первом входе в предмет (цель есть всегда — нампад не пустует).
-    LaunchedEffect(Unit) {
-        TutorialController.request(context, TutorialFeature.GRADES_NUMPAD)
-    }
-    DisposableEffect(Unit) {
-        onDispose {
-            if (TutorialController.active == TutorialFeature.GRADES_NUMPAD) TutorialController.clear()
-        }
-    }
     val entries by dao.entriesForSubject(subject).collectAsState(initial = emptyList())
     val configs by dao.allConfigs().collectAsState(initial = emptyList())
 
@@ -315,8 +301,6 @@ private fun GradeSubjectScreen(
                 dateIso = isoOf(today),
             )
         scope.launch { dao.insert(entry) }
-        // V14: оценка добавилась = успех туториала grades_numpad
-        TutorialController.success(TutorialFeature.GRADES_NUMPAD)
     }
 
     Column(
@@ -410,9 +394,7 @@ private fun GradeSubjectScreen(
             modifier =
             Modifier
                 .fillMaxWidth()
-                .testTag("grades_input_panel")
-                // V14: цель туториала «Быстрый ввод оценки»
-                .tutorialAnchor("grades_input_panel"),
+                .testTag("grades_input_panel"),
         ) {
             Column(modifier = Modifier.padding(8.dp)) {
                 // W21/V19: 4 сегмента (без LAB), V20: счётчик оценок у чипа

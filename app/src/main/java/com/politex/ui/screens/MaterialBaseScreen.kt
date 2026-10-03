@@ -67,9 +67,6 @@ import com.politex.data.local.MpkDatabase
 import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.data.local.entity.MaterialKind
 import com.politex.data.model.GroupInfo
-import com.politex.ui.components.TutorialController
-import com.politex.ui.components.TutorialFeature
-import com.politex.ui.components.tutorialAnchor
 import com.politex.ui.screens.materials.BrandActionButton
 import com.politex.ui.screens.materials.MaterialCard
 import com.politex.ui.screens.materials.MaterialDeleteDialog
@@ -189,17 +186,6 @@ fun MaterialBaseScreen(
     val context = LocalContext.current
     val dao = remember { MpkDatabase.getInstance(context).materialDao() }
     val scope = rememberCoroutineScope()
-
-    // V14: туториал «Добавление материала» — по первому входу в раздел.
-    LaunchedEffect(Unit) {
-        TutorialController.request(context, TutorialFeature.MATERIAL_ADD)
-    }
-    // Уход с раздела при живом туториале — снимаем его БЕЗ флага (покажем при следующем входе).
-    DisposableEffect(Unit) {
-        onDispose {
-            if (TutorialController.active == TutorialFeature.MATERIAL_ADD) TutorialController.clear()
-        }
-    }
 
     val items by dao.getAllItems().collectAsState(initial = emptyList())
 
@@ -383,10 +369,8 @@ fun MaterialBaseScreen(
                 MaterialHeader(
                     query = query,
                     onQueryChange = { query = it },
-                    // V14: открытый диалог импорта = успех туториала material_add
                     onAdd = {
                         showImportType = true
-                        TutorialController.success(TutorialFeature.MATERIAL_ADD)
                     },
                 )
 
@@ -616,16 +600,12 @@ private fun MaterialHeader(
                 .heightIn(min = 44.dp)
                 .testTag("material_search_field"),
         )
-        // V14: якорь туториала material_add (BrandActionButton не принимает modifier —
-        // поэтому якорь на обёртке-Box, границы кнопки он передаёт точно).
-        Box(modifier = Modifier.tutorialAnchor("add_material_btn")) {
-            BrandActionButton(
-                icon = Icons.Default.Add,
-                label = "ДОБАВИТЬ",
-                testTag = "material_add_btn",
-                onClick = onAdd,
-            )
-        }
+        BrandActionButton(
+            icon = Icons.Default.Add,
+            label = "ДОБАВИТЬ",
+            testTag = "material_add_btn",
+            onClick = onAdd,
+        )
     }
 }
 

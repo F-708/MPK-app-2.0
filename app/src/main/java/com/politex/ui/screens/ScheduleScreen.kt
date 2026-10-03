@@ -47,6 +47,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -73,6 +74,9 @@ import com.politex.data.model.GroupInfo
 import com.politex.data.model.TaskType
 import com.politex.data.repository.ScheduleRepository
 import com.politex.ui.components.CalendarArchiveDialog
+import com.politex.ui.components.TutorialController
+import com.politex.ui.components.TutorialFeature
+import com.politex.ui.components.tutorialAnchor
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBadgeCourse
 import com.politex.ui.theme.ColorBadgeDiploma
@@ -306,6 +310,38 @@ fun ScheduleScreen(
             lessonsForDay(allGroupLessons, activeDateString, activeDayOfWeek)
         }
 
+    // X39: туториал «Расписание» — цель: кнопка кабинета (приоритет) ИЛИ чип преподавателя
+    // первого урока, у которого преподаватель есть в базе teachers; если ни одного такого
+    // урока нет — первый урок с кабинетом. Сплит-уроки пропускаем: их карточка состоит из
+    // двух SubgroupPane, якоря вешаются на обычную карточку.
+    // ponytail: сплит-уроки без якоря — добавить параметр в SubgroupPane, если первый урок часто сплит.
+    val tutorialLessonNumber =
+        remember(lessons, isTeacherKnown) {
+            lessons
+                .firstOrNull { !it.isSplit && it.teacherFirst.isNotBlank() && isTeacherKnown(it.teacherFirst) }
+                ?.lessonNumber
+                ?: lessons.firstOrNull { !it.isSplit && it.roomFirst.isNotBlank() }?.lessonNumber
+        }
+    LaunchedEffect(tutorialLessonNumber) {
+        if (tutorialLessonNumber != null) TutorialController.request(context, TutorialFeature.SCHEDULE_TAP)
+    }
+    // Уход с вкладки при живом туториале — снимаем БЕЗ флага (покажем при следующем входе).
+    DisposableEffect(Unit) {
+        onDispose {
+            if (TutorialController.active == TutorialFeature.SCHEDULE_TAP) TutorialController.clear()
+        }
+    }
+    // X39: переход на карту ИЛИ в карточку преподавателя = успех туториала
+    // (TutorialController.success засчитывает сигнал только пока фича активна).
+    val roomClick: (String, String?) -> Unit = { room, fromRoom ->
+        TutorialController.success(TutorialFeature.SCHEDULE_TAP)
+        onRoomClick(room, fromRoom)
+    }
+    val teacherClick: (String) -> Unit = { name ->
+        TutorialController.success(TutorialFeature.SCHEDULE_TAP)
+        onTeacherClick(name)
+    }
+
     // C3: как и allGroupLessons — подписка внутри экрана умирает со сменой вкладки.
     // Если VM передала значение, берём его; иначе (тесты) — старый путь через репозиторий.
     // Репозиторий создаётся лениво: в проде эта ветка не исполняется.
@@ -483,11 +519,11 @@ fun ScheduleScreen(
             // карточка. Диалог закрываем до навигации, чтобы не висел поверх нового экрана.
             onOpenRoom = { room ->
                 showArchiveDialog = false
-                onRoomClick(room, null)
+                roomClick(room, null)
             },
             onOpenTeacher = { name ->
                 showArchiveDialog = false
-                onTeacherClick(name)
+                teacherClick(name)
             },
             isTeacherKnown = isTeacherKnown,
         )
@@ -817,14 +853,16 @@ fun ScheduleScreen(
                                 // N18: типы заданий урока → цветные бейджи; тап → вкладка заданий
                                 homeworkTypes = homeworkByLesson[lesson.lessonNumber] ?: emptyList(),
                                 onHomeworkClick = onOpenTasks,
-                                onTeacherClick = onTeacherClick,
+                                onTeacherClick = teacherClick,
                                 isTeacherKnown = isTeacherKnown,
+                                // X39: цель туториала «Расписание» — кабинет/преподаватель этого урока
+                                tutorialTarget = lesson.lessonNumber == tutorialLessonNumber,
                                 // V21: маршрут ВСЕГДА — старт считает startForLesson по тапнутому
                                 // уроку (сегодня: где пользователь сейчас; другой день: кабинет
                                 // предыдущего урока). "" = от главного входа; непустой fromRoom —
                                 // маркер «запрос из расписания, с маршрутом».
                                 onRoomClick = { room ->
-                                    onRoomClick(
+                                    roomClick(
                                         room,
                                         com.politex.ui.util.RouteStartResolver
                                             .startForLesson(lessons, lesson, isViewingToday, nowMinutes),
@@ -909,6 +947,8 @@ fun LessonCard(
     onTeacherClick: (String) -> Unit = {},
     isTeacherKnown: (String) -> Boolean = { true },
     onRoomClick: (String) -> Unit = {},
+    // X39: этот урок — цель туториала «Расписание» (якорь на кабинете или преподавателе)
+    tutorialTarget: Boolean = false,
     // Б8: 0..1 — одноразовая «волна» подсветки при входе с виджета (не активна в обычном открытии)
     focusAlpha: Float = 0f,
     modifier: Modifier = Modifier,
@@ -1046,6 +1086,14 @@ fun LessonCard(
                             } else {
                                 null
                             },
+                            // X39: якорь-преподаватель — только когда нет кнопки кабинета
+                            // (кабинет — приоритетная цель туториала).
+                            modifier =
+                            if (tutorialTarget && lesson.roomFirst.isBlank()) {
+                                Modifier.tutorialAnchor("schedule_teacher_target")
+                            } else {
+                                Modifier
+                            },
                         )
                     }
 
@@ -1055,7 +1103,9 @@ fun LessonCard(
                             modifier =
                             Modifier
                                 .heightIn(min = 44.dp)
-                                .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) },
+                                .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) }
+                                // X39: якорь-кабинет туториала «Расписание»
+                                .then(if (tutorialTarget) Modifier.tutorialAnchor("schedule_room_target") else Modifier),
                             contentAlignment = Alignment.Center,
                         ) {
                             Surface(

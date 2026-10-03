@@ -81,7 +81,8 @@ enum class TutorialGesture { SWIPE, TAP }
 
 /**
  * Активные фичи и их тексты. [key] — стабильный идентификатор флага пройденности
- * (имя enum), переживает обновление приложения.
+ * (имя enum), переживает обновление приложения. [altAnchorId] — запасная цель, если
+ * основной якорь на экране отсутствует (X39: кабинет ИЛИ преподаватель).
  */
 enum class TutorialFeature(
     val anchorId: String,
@@ -89,6 +90,7 @@ enum class TutorialFeature(
     val demoCaption: String,
     val repeatCaption: String,
     val gesture: TutorialGesture,
+    val altAnchorId: String? = null,
 ) {
     TASK_SWIPE(
         anchorId = "task_card_first",
@@ -97,18 +99,12 @@ enum class TutorialFeature(
         repeatCaption = "Повторите свайп",
         gesture = TutorialGesture.SWIPE,
     ),
-    MATERIAL_ADD(
-        anchorId = "add_material_btn",
-        title = "Добавление материала",
-        demoCaption = "Нажмите, чтобы добавить файл или ссылку для группы.",
-        repeatCaption = "Нажмите кнопку",
-        gesture = TutorialGesture.TAP,
-    ),
-    GRADES_NUMPAD(
-        anchorId = "grades_input_panel",
-        title = "Быстрый ввод оценки",
-        demoCaption = "Выберите категорию сверху и нажмите оценку — она сохранится сразу.",
-        repeatCaption = "Нажмите любую цифру",
+    SCHEDULE_TAP(
+        anchorId = "schedule_room_target",
+        altAnchorId = "schedule_teacher_target",
+        title = "Кабинет и преподаватель",
+        demoCaption = "Нажмите кабинет или преподавателя — откроется карта или карточка.",
+        repeatCaption = "Нажмите кабинет или преподавателя",
         gesture = TutorialGesture.TAP,
     ),
     ;
@@ -164,6 +160,13 @@ fun trajectorySwipe(rect: Rect): List<Offset> {
 /** Траектория демо-тапа: одна точка в центре [rect] (палец пульсирует на месте). */
 fun trajectoryTap(rect: Rect): List<Offset> = listOf(rect.center)
 
+// X38: демо проигрывается ПОЛНЫМ циклом (2 жеста «вперёд-назад» с паузами), и только
+// потом подпись меняется на «повторите» — отдельным таймером на TOTAL_DEMO_MS.
+private const val DEMO_TWEEN_MS = 1100
+private const val DEMO_PAUSE_MS = 600L
+private const val DEMO_CYCLES = 2
+private const val TOTAL_DEMO_MS = DEMO_CYCLES * 2 * (DEMO_TWEEN_MS + DEMO_PAUSE_MS)
+
 private enum class TutorialPhase { DEMO, REPEAT }
 
 /**
@@ -176,7 +179,9 @@ fun TutorialOverlay(modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     val feature = TutorialController.active ?: return
 
-    val anchor = TutorialAnchors.bounds[feature.anchorId]
+    val anchor =
+        TutorialAnchors.bounds[feature.anchorId]
+            ?: feature.altAnchorId?.let { TutorialAnchors.bounds[it] }
     // Ждём первый замер цели: без rect рисовать нечего, а «пустой» оверлей перехватил бы весь экран.
     if (anchor == null || anchor.width <= 0f || anchor.height <= 0f) return
 
@@ -208,25 +213,31 @@ fun TutorialOverlay(modifier: Modifier = Modifier) {
     // Системное «назад» = «Пропустить».
     BackHandler { dismiss(markDone = true) }
 
-    // Демо-фаза: палец по траектории, 2 повтора с паузой 400 мс, затем «Повторите».
-    LaunchedEffect(feature, phase, hole) {
-        if (phase != TutorialPhase.DEMO) return@LaunchedEffect
+    // Демо-фаза: палец по траектории — полный цикл (2 жеста «вперёд-назад» с паузами).
+    // Ключ ТОЛЬКО feature: прежний ключ hole перезапускал эффект при каждом перезамере якоря.
+    LaunchedEffect(feature) {
         when (feature.gesture) {
             TutorialGesture.SWIPE ->
-                repeat(2) {
-                    demoT.animateTo(1f, tween(800))
-                    delay(400)
-                    demoT.animateTo(0f, tween(800))
-                    delay(400)
+                repeat(DEMO_CYCLES) {
+                    demoT.animateTo(1f, tween(DEMO_TWEEN_MS))
+                    delay(DEMO_PAUSE_MS)
+                    demoT.animateTo(0f, tween(DEMO_TWEEN_MS))
+                    delay(DEMO_PAUSE_MS)
                 }
             TutorialGesture.TAP ->
-                repeat(2) {
-                    fingerScale.animateTo(0.85f, tween(800))
-                    delay(400)
-                    fingerScale.animateTo(1f, tween(800))
-                    delay(400)
+                repeat(DEMO_CYCLES) {
+                    fingerScale.animateTo(0.85f, tween(DEMO_TWEEN_MS))
+                    delay(DEMO_PAUSE_MS)
+                    fingerScale.animateTo(1f, tween(DEMO_TWEEN_MS))
+                    delay(DEMO_PAUSE_MS)
                 }
         }
+    }
+
+    // X38: подпись «повторите» — ТОЛЬКО после полного демо (delay(TOTAL_DEMO_MS));
+    // до этого показан demo-текст.
+    LaunchedEffect(feature) {
+        delay(TOTAL_DEMO_MS)
         phase = TutorialPhase.REPEAT
     }
 
@@ -253,28 +264,8 @@ fun TutorialOverlay(modifier: Modifier = Modifier) {
             .onSizeChanged { containerH = it.height.toFloat() }
             .graphicsLayer { alpha = fade.value },
     ) {
-        Canvas(
-            modifier =
-            Modifier
-                .fillMaxSize()
-                .pointerInput(hole, phase) {
-                    // Ждём «настоящий» повтор жеста ТОЛЬКО в фазе REPEAT и ТОЛЬКО внутри hole:
-                    // там мы НЕ потребляем событие, и оно уходит целевому виджету под оверлеем
-                    // (свайп карточки / тап кнопки / тап цифры). Всё прочее (тап по затемнению
-                    // в любой фазе, тап по hole во время ДЕМО) — блокируем и трактуем как «Пропустить».
-                    // awaitFirstDown здесь нельзя: он всегда consume() и убил бы pass-through.
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            val down = event.changes.firstOrNull { it.pressed && !it.previousPressed } ?: continue
-                            if (phase == TutorialPhase.REPEAT && hole.contains(down.position)) continue
-                            event.changes.forEach { it.consume() }
-                            waitForUpOrCancellation(PointerEventPass.Initial)
-                            if (!hole.contains(down.position)) dismiss(markDone = true)
-                        }
-                    }
-                },
-        ) {
+        // X12: Canvas ТОЛЬКО рисует dim+hole+палец — без pointerInput, ничего не перехватывает.
+        Canvas(modifier = Modifier.fillMaxSize()) {
             val corner = 4.dp.toPx()
             val full = Path().apply { addRect(Rect(0f, 0f, size.width, size.height)) }
             val holePath =
@@ -310,6 +301,37 @@ fun TutorialOverlay(modifier: Modifier = Modifier) {
                 )
             }
         }
+
+        // X12: отдельный слой перехвата. consume — ТОЛЬКО когда жест начался ВНЕ hole
+        // (трактуем как «Пропустить») или по hole во время ДЕМО (просто блокируем).
+        // Жест, начатый внутри hole в фазе REPEAT, не потребляется НИ ОДНИМ событием
+        // (включая последующие move/up) — они уходят вниз целевому виджету под оверлеем
+        // (свайп карточки / тап кабинета / тап преподавателя). awaitFirstDown нельзя:
+        // он всегда consume() и убил бы pass-through.
+        Box(
+            modifier =
+            Modifier
+                .fillMaxSize()
+                .pointerInput(hole, phase) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val down = event.changes.firstOrNull { it.pressed && !it.previousPressed } ?: continue
+                            if (phase == TutorialPhase.REPEAT && hole.contains(down.position)) {
+                                // Pass-through: ждём конец жеста, ничего не потребляя.
+                                // success детектит сам экран через TutorialController.success().
+                                while (awaitPointerEvent(PointerEventPass.Initial).changes.any { it.pressed }) {
+                                    // no-op
+                                }
+                                continue
+                            }
+                            event.changes.forEach { it.consume() }
+                            waitForUpOrCancellation(PointerEventPass.Initial)
+                            if (!hole.contains(down.position)) dismiss(markDone = true)
+                        }
+                    }
+                },
+        )
 
         Box(
             modifier = Modifier.fillMaxSize(),

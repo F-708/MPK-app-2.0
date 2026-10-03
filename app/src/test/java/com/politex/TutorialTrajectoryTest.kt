@@ -2,24 +2,66 @@ package com.politex
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import com.politex.ui.components.TutorialController
+import com.politex.ui.components.TutorialFeature
+import com.politex.ui.components.TutorialGesture
 import com.politex.ui.components.trajectorySwipe
 import com.politex.ui.components.trajectoryTap
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * V14: траектории демо-жеста — чистые функции (Rect/Offset из compose-ui-geometry, Android не нужен).
- * Стенд: hole 100×50px в (0,0).
+ * X39: осталось два туториала — TASK_SWIPE (свайп) и SCHEDULE_TAP (тап по кабинету ИЛИ
+ * преподавателю). Траектории демо-жеста — чистые функции (Rect/Offset из compose-ui-geometry,
+ * Android не нужен). Стенд: hole 100×50px в (0,0).
  */
 class TutorialTrajectoryTest {
     private val rect = Rect(0f, 0f, 100f, 50f)
 
     @Test
-    fun `tap is a single point at the center`() {
+    fun `only two features remain`() {
+        assertEquals(
+            listOf("TASK_SWIPE", "SCHEDULE_TAP"),
+            TutorialFeature.values().map { it.name },
+        )
+    }
+
+    @Test
+    fun `schedule tap is a TAP gesture with room and teacher anchors`() {
+        val f = TutorialFeature.SCHEDULE_TAP
+        assertEquals(TutorialGesture.TAP, f.gesture)
+        assertEquals("schedule_room_target", f.anchorId)
+        assertEquals("schedule_teacher_target", f.altAnchorId)
+    }
+
+    @Test
+    fun `schedule trajectory is a tap on the anchor`() {
         val pts = trajectoryTap(rect)
         assertEquals(1, pts.size)
         assertEquals(rect.center, pts[0])
+    }
+
+    @Test
+    fun `success by any of two anchors closes only the active feature`() {
+        TutorialController.clear()
+        // Фича не активна — сигнал с экрана расписания игнорируется.
+        TutorialController.success(TutorialFeature.SCHEDULE_TAP)
+        assertEquals(0, TutorialController.successSignal)
+
+        TutorialController.active = TutorialFeature.SCHEDULE_TAP
+        // Чужой успех (задания) расписание не закрывает.
+        TutorialController.success(TutorialFeature.TASK_SWIPE)
+        assertEquals(0, TutorialController.successSignal)
+        // Успех активной фичи засчитывается с любого якоря: и room-кнопка, и чип
+        // преподавателя зовут success(SCHEDULE_TAP) — сигнал один на обоих.
+        TutorialController.success(TutorialFeature.SCHEDULE_TAP)
+        assertEquals(1, TutorialController.successSignal)
+
+        TutorialController.clear()
+        assertEquals(0, TutorialController.successSignal)
+        assertNull(TutorialController.active)
     }
 
     @Test
