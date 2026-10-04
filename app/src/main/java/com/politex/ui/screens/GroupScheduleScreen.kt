@@ -110,6 +110,12 @@ internal fun pickForeignGroupLessons(
     return rows.filter { it.dateString.isBlank() }
 }
 
+// Сеть только при пустом кэше или явном действии пользователя
+internal fun needsFetch(
+    hasCachedLessons: Boolean,
+    userForced: Boolean,
+): Boolean = userForced || !hasCachedLessons
+
 @Composable
 fun GroupScheduleRoute(
     group: String,
@@ -187,11 +193,6 @@ fun GroupScheduleScreen(
         }
     }
 
-    LaunchedEffect(selectedGroupName) {
-
-        if (selectedGroupName.isNotBlank()) syncForeignSchedule(force = false)
-    }
-
     val isTeacherKnown: (String) -> Boolean =
         remember(context) {
             val known =
@@ -248,6 +249,19 @@ fun GroupScheduleScreen(
 
     val leftIsToday = sameDay(leftCal, realNow)
     val rightIsTomorrow = sameDay(rightCal, tomorrow)
+
+    // Кэш-первым: уроки выбранной группы уже лежат в БД (файл разобран на вкладке расписания) —
+    // авто-синк не дёргает сеть/probe; сеть только при пустом результате или явном нажатии кнопки
+    var autoCheckDone by remember(selectedGroupName) { mutableStateOf(false) }
+    LaunchedEffect(selectedGroupName, allForeignLessons) {
+        if (selectedGroupName.isBlank() || autoCheckDone) return@LaunchedEffect
+        val rows = allForeignLessons ?: return@LaunchedEffect
+        autoCheckDone = true
+        val hasCached = listOf(leftCal, rightCal).any { cal ->
+            lessonsForDay(rows, groupScheduleDbDate(cal), groupScheduleDayOfWeek(cal)).isNotEmpty()
+        }
+        if (needsFetch(hasCachedLessons = hasCached, userForced = false)) syncForeignSchedule(force = false)
+    }
 
     val activeCal = if (selectedSlot == 0) leftCal else rightCal
     val activeDayOfWeek = groupScheduleDayOfWeek(activeCal)
@@ -571,7 +585,7 @@ fun GroupScheduleScreen(
                             text =
                             when {
 
-                                isSyncing -> diagnosticInfo.statusMessage.ifBlank { "Загружаем расписание…" }
+                                isSyncing -> diagnosticInfo.statusMessage.ifBlank { "Проверяю расписание…" }
                                 syncError != null -> syncError ?: ""
                                 syncEmptyNotice != null -> syncEmptyNotice ?: ""
                                 else -> "Нет данных — расписание ещё не синхронизировано"

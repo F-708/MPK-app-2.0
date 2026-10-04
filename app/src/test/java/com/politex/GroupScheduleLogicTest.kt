@@ -5,6 +5,7 @@ import com.politex.ui.screens.groupScheduleDayOfWeek
 import com.politex.ui.screens.groupScheduleDbDate
 import com.politex.ui.screens.groupScheduleIsSchoolDay
 import com.politex.ui.screens.groupScheduleNextSchoolDay
+import com.politex.ui.screens.needsFetch
 import com.politex.ui.screens.pickForeignGroupLessons
 import com.politex.util.GroupParser
 import com.politex.util.MpkCurriculum
@@ -97,5 +98,13 @@ class GroupScheduleLogicTest {
 
         assertTrue(groups.map { it.course }.distinct().size >= 4)
         assertTrue(groups.map { it.specialtyCode }.distinct().size >= 5)
+    }
+
+    @Test
+    fun `needsFetch - сеть только при пустом кэше или явном действии пользователя`() {
+        assertFalse(needsFetch(hasCachedLessons = true, userForced = false))
+        assertTrue(needsFetch(hasCachedLessons = true, userForced = true))
+        assertTrue(needsFetch(hasCachedLessons = false, userForced = false))
+        assertTrue(needsFetch(hasCachedLessons = false, userForced = true))
     }
 }

@@ -48,9 +48,11 @@ internal fun directUrlHasRequestedDate(url: String, dateDot: String): Boolean {
     return url.contains(dateDot) || url.contains(underscore)
 }
 
-class MpkNetworkClient {
+open class MpkNetworkClient {
 
     companion object {
+        // Единственный честный промежуточный статус на время любой сетевой активности
+        const val STATUS_CHECKING = "Проверяю расписание…"
         const val SCHEDULE_PORTAL_URL = "https://guo-mpk.by/raspisanie/"
         const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         const val BROWSER_USER_AGENT = USER_AGENT
@@ -144,7 +146,7 @@ class MpkNetworkClient {
         .distinct()
         .toList()
 
-    suspend fun forEachDocumentUrl(
+    open suspend fun forEachDocumentUrl(
         calendar: Calendar,
         nameBase: String = "raspisanie-uchashhihsya",
         preferredUrl: String? = null,
@@ -194,7 +196,7 @@ class MpkNetworkClient {
         phaseUrls(portalDocs)
     }
 
-    suspend fun fetchScheduleForGroup(
+    open suspend fun fetchScheduleForGroup(
         targetGroup: String,
         targetCalendar: Calendar = calculateTargetCalendar(),
         maxRetries: Int = 2,
@@ -206,7 +208,7 @@ class MpkNetworkClient {
 
         _diagnosticInfo.value = _diagnosticInfo.value.copy(
             isSyncing = true,
-            statusMessage = "Запрос расписания на $dateDotStr...",
+            statusMessage = STATUS_CHECKING,
         )
 
         var lastCheckedUrl = buildDirectScheduleUrl(targetCalendar)
@@ -335,7 +337,7 @@ class MpkNetworkClient {
         return cal
     }
 
-    suspend fun downloadFileBytes(url: String): ByteArray? = withContext(Dispatchers.IO) {
+    open suspend fun downloadFileBytes(url: String): ByteArray? = withContext(Dispatchers.IO) {
         try {
             val response = executeRequest(url)
             if (response.isSuccessful) {
@@ -345,7 +347,7 @@ class MpkNetworkClient {
         null
     }
 
-    suspend fun fetchTeacherSchedule(
+    open suspend fun fetchTeacherSchedule(
         targetCalendar: Calendar = Calendar.getInstance(),
     ): Result<Map<String, List<TeacherSlot>>> = withContext(Dispatchers.IO) {
         val ddMmYyyy = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(targetCalendar.time)
@@ -423,7 +425,7 @@ class MpkNetworkClient {
         PROBE_NET_FAIL to ""
     }
 
-    suspend fun probeDocument(
+    open suspend fun probeDocument(
         calendar: Calendar,
         nameBase: String = "raspisanie-uchashhihsya",
     ): ProbeResult = withContext(Dispatchers.IO) {
@@ -453,7 +455,7 @@ class MpkNetworkClient {
         ProbeResult.NotFound(lastCode)
     }
 
-    fun publishStatus(statusMessage: String? = null, isSyncing: Boolean? = null) {
+    open fun publishStatus(statusMessage: String? = null, isSyncing: Boolean? = null) {
         val current = _diagnosticInfo.value
         _diagnosticInfo.value = current.copy(
             statusMessage = statusMessage ?: current.statusMessage,

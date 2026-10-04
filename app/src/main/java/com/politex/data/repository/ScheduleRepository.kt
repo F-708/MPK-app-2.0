@@ -33,6 +33,23 @@ internal fun isFullDayDocument(
     catalogSize: Int,
 ): Boolean = catalogSize > 0 && groupCount >= (catalogSize + 1) / 2
 
+internal fun cachedOutcomeForDate(
+    groupLessons: Int,
+    parsedGroups: Int,
+    catalogSize: Int,
+    date: String,
+): SyncOutcome? = when {
+    groupLessons > 0 -> SyncOutcome.Ok(groupLessons)
+    isFullDayDocument(parsedGroups, catalogSize) -> SyncOutcome.FoundNoGroup(date)
+    else -> null
+}
+
+internal fun combineCachedOutcomes(outcomes: List<SyncOutcome?>): SyncOutcome? {
+    if (outcomes.isEmpty() || outcomes.any { it == null }) return null
+    val total = outcomes.filterIsInstance<SyncOutcome.Ok>().sumOf { it.count }
+    return if (total > 0) SyncOutcome.Ok(total) else outcomes.filterIsInstance<SyncOutcome.FoundNoGroup>().first()
+}
+
 internal fun syncedCountForGroup(
     finalLessons: List<LessonEntity>,
     groupName: String,
@@ -224,12 +241,23 @@ class ScheduleRepository(
         val candidates = nextDayCandidates(today, saturdaySchool)
         val todayStr = formatDate(today)
 
-        networkClient.publishStatus(statusMessage = "Проверяю расписание…", isSyncing = true)
-        val todayCached = lessonDao.getLessonCountForDate(groupName, todayStr)
-        val needToday = force || todayCached == 0
-        var probed: Calendar? = candidates.firstOrNull {
-            !force && lessonDao.getLessonCountForDate(groupName, formatDate(it)) > 0
+        // Кэш-первым: данные целевых дат уже разобраны в БД — ответ без сети и без «Проверяю…»
+        if (!force) {
+            val candidateOutcome = candidates.firstNotNullOfOrNull { cachedDateOutcome(groupName, it) }
+            if (candidateOutcome != null) {
+                val todayDow = Dow.of(today)
+                val todayIsSchoolDay = todayDow in 1..5 || (todayDow == 6 && saturdaySchool)
+                val todayOutcome = if (todayIsSchoolDay) cachedDateOutcome(groupName, today) else SyncOutcome.Ok(0)
+                val cached = combineCachedOutcomes(listOf(candidateOutcome, todayOutcome))
+                if (cached != null) {
+                    networkClient.publishStatus(statusMessageFor(cached), isSyncing = false)
+                    return@withContext Result.success(cached)
+                }
+            }
         }
+
+        networkClient.publishStatus(statusMessage = MpkNetworkClient.STATUS_CHECKING, isSyncing = true)
+        var probed: Calendar? = candidates.firstOrNull { !force && cachedDateOutcome(groupName, it) != null }
         var probeNetworkError = false
 
         val probeFoundUrl = mutableMapOf<String, String>()
@@ -248,20 +276,9 @@ class ScheduleRepository(
         }
         val tomorrow: Calendar = probed ?: candidates.last()
         val tomorrowStr = formatDate(tomorrow)
-        val tomorrowCached = lessonDao.getLessonCountForDate(groupName, tomorrowStr)
 
-        val needTomorrow = force || tomorrowCached == 0
-
-        if (!needToday && !needTomorrow) {
-
-            networkClient.publishStatus(statusMessage = "Расписание уже загружено", isSyncing = false)
-            return@withContext Result.success(SyncOutcome.Ok(todayCached + tomorrowCached))
-        }
-
-        if (probeFoundUrl.isEmpty() && !probeNetworkError) {
-
-            networkClient.publishStatus(statusMessage = "Ищу на портале…")
-        }
+        val needToday = force || cachedDateOutcome(groupName, today) == null
+        val needTomorrow = force || cachedDateOutcome(groupName, tomorrow) == null
 
         val fetched = mutableListOf<LessonEntity>()
         var fetchFailed = false
@@ -277,11 +294,7 @@ class ScheduleRepository(
 
                 runCatching {
                     fetchAllGroupsForDate(calendar, date, allGroups, probeFoundUrl[date]) { found ->
-                        if (found) {
-                            documentFound = true
-
-                            networkClient.publishStatus(statusMessage = "Найдено, скачиваю…")
-                        }
+                        if (found) documentFound = true
                     }
                 }
                     .onSuccess { dayLessons ->
@@ -350,6 +363,17 @@ class ScheduleRepository(
     }
 
     suspend fun probeDate(calendar: Calendar): ProbeResult = networkClient.probeDocument(calendar)
+
+    private suspend fun cachedDateOutcome(
+        groupName: String,
+        cal: Calendar,
+    ): SyncOutcome? {
+        val catalogSize = catalog().size
+        val date = formatDate(cal)
+        val parsedGroups =
+            if (catalogSize == 0) 0 else lessonDao.getDistinctGroupsForDateOrDay(date, Dow.of(cal)).size
+        return cachedOutcomeForDate(lessonDao.getLessonCountForDate(groupName, date), parsedGroups, catalogSize, date)
+    }
 
     suspend fun syncScheduleForDate(
         groupName: String,

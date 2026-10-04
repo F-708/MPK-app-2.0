@@ -1,5 +1,6 @@
 package com.politex
 
+import com.politex.data.network.MpkNetworkClient
 import com.politex.data.network.MpkScheduleParser
 import com.politex.data.repository.SyncOutcome
 import com.politex.data.repository.resolveSyncOutcome
@@ -8,6 +9,7 @@ import com.politex.data.repository.toastFor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
+import java.io.File
 
 class SyncOutcomeStatusTest {
     private val date = "06.10.2026"
@@ -88,5 +90,51 @@ class SyncOutcomeStatusTest {
     @Test
     fun `тост NotFound - ещё не опубликовано`() {
         assertEquals("Расписание ещё не опубликовано", toastFor(SyncOutcome.NotFound, group))
+    }
+
+    @Test
+    fun `единственный промежуточный статус - Проверяю расписание`() {
+        assertEquals("Проверяю расписание…", MpkNetworkClient.STATUS_CHECKING)
+    }
+
+    @Test
+    fun `ни один финальный статус или тост не обещает скачивание`() {
+        val messages = listOf(
+            statusMessageFor(SyncOutcome.Ok(5)),
+            statusMessageFor(SyncOutcome.FoundNoGroup(date)),
+            statusMessageFor(SyncOutcome.NotFound),
+            toastFor(SyncOutcome.Ok(5), group),
+            toastFor(SyncOutcome.FoundNoGroup(date), group),
+            toastFor(SyncOutcome.NotFound, group),
+        )
+        messages.forEach {
+            assertFalse(it, it.contains("скачиваю", ignoreCase = true))
+            assertFalse(it, it.contains("ищу", ignoreCase = true))
+            assertFalse(it, it.contains("загружаем", ignoreCase = true))
+            assertFalse(it, it.contains("обновляем", ignoreCase = true))
+        }
+    }
+
+    @Test
+    fun `статусы-обещания удалены из исходников синхронизации`() {
+        listOf(
+            "app/src/main/java/com/politex/data/repository/ScheduleRepository.kt",
+            "app/src/main/java/com/politex/data/network/MpkNetworkClient.kt",
+            "app/src/main/java/com/politex/ui/screens/GroupScheduleScreen.kt",
+            "app/src/main/java/com/politex/ui/screens/ScheduleScreen.kt",
+        ).forEach { rel ->
+            val text = sourceText(rel)
+            assertFalse(rel, text.contains("скачиваю", ignoreCase = true))
+            assertFalse(rel, text.contains("Ищу на портале", ignoreCase = true))
+            assertFalse(rel, text.contains("уже загружено", ignoreCase = true))
+        }
+    }
+
+    private fun sourceText(rel: String): String {
+        var dir = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (!File(dir, rel).exists()) {
+            dir = dir.parentFile ?: error("исходник не найден: $rel")
+        }
+        return File(dir, rel).readText()
     }
 }

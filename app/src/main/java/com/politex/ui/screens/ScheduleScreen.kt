@@ -695,7 +695,7 @@ fun ScheduleScreen(
                         Text(
                             text =
                             when {
-                                isSyncing -> "Обновляем расписание с сайта guo-mpk.by…"
+                                isSyncing -> "Проверяем расписание на сайте guo-mpk.by…"
                                 hasSyncError -> "Проверьте подключение к интернету и попробуйте ещё раз."
                                 selectedDateString.isNotBlank() ->
                                     "Нет данных за $selectedDateString. Расписание за прошедшие дни хранится в архиве только после синхронизации."

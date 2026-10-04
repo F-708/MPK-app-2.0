@@ -1,11 +1,15 @@
 package com.politex
 
 import com.politex.data.local.entity.LessonEntity
+import com.politex.data.repository.SyncOutcome
+import com.politex.data.repository.cachedOutcomeForDate
+import com.politex.data.repository.combineCachedOutcomes
 import com.politex.data.repository.isFullDayDocument
 import com.politex.data.repository.shouldFetchDay
 import com.politex.data.repository.syncedCountForGroup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -94,5 +98,43 @@ class ScheduleCacheGateTest {
         val doc = listOf(lesson("11Э", 1), lesson("31П", 1))
         assertEquals(0, syncedCountForGroup(doc, "41О"))
         assertEquals(0, syncedCountForGroup(emptyList(), "41О"))
+    }
+
+    @Test
+    fun `кэш даты — уроки группы дают Ok без сети`() {
+        assertEquals(
+            SyncOutcome.Ok(4),
+            cachedOutcomeForDate(groupLessons = 4, parsedGroups = 0, catalogSize = catalog, date = "05.10.2026"),
+        )
+    }
+
+    @Test
+    fun `кэш даты — день разобран по каталогу без нашей группы — FoundNoGroup без сети`() {
+        assertEquals(
+            SyncOutcome.FoundNoGroup("05.10.2026"),
+            cachedOutcomeForDate(groupLessons = 0, parsedGroups = 40, catalogSize = catalog, date = "05.10.2026"),
+        )
+    }
+
+    @Test
+    fun `кэш даты — ни уроков ни полного разбора — null, нужна сеть`() {
+        assertNull(cachedOutcomeForDate(groupLessons = 0, parsedGroups = 2, catalogSize = catalog, date = "05.10.2026"))
+        assertNull(cachedOutcomeForDate(groupLessons = 0, parsedGroups = 40, catalogSize = 0, date = "05.10.2026"))
+    }
+
+    @Test
+    fun `комбинация кэшей — сумма Ok, иначе FoundNoGroup первой даты, null тянет в сеть`() {
+        assertEquals(SyncOutcome.Ok(8), combineCachedOutcomes(listOf(SyncOutcome.Ok(5), SyncOutcome.Ok(3))))
+        assertEquals(SyncOutcome.Ok(5), combineCachedOutcomes(listOf(SyncOutcome.Ok(5), SyncOutcome.Ok(0))))
+        assertEquals(
+            SyncOutcome.FoundNoGroup("05.10.2026"),
+            combineCachedOutcomes(listOf(SyncOutcome.FoundNoGroup("05.10.2026"), SyncOutcome.Ok(0))),
+        )
+        assertEquals(
+            SyncOutcome.FoundNoGroup("05.10.2026"),
+            combineCachedOutcomes(listOf(SyncOutcome.FoundNoGroup("05.10.2026"), SyncOutcome.FoundNoGroup("04.10.2026"))),
+        )
+        assertNull(combineCachedOutcomes(listOf(SyncOutcome.Ok(5), null)))
+        assertNull(combineCachedOutcomes(emptyList()))
     }
 }
