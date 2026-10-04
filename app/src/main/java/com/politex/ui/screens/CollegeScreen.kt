@@ -1242,43 +1242,32 @@ private fun TeacherCardPage(
             Spacer(modifier = Modifier.width(10.dp))
             TeacherAvatar(teacher = teacher, size = 52.dp, highlight = isActive)
             Spacer(modifier = Modifier.width(10.dp))
-            // AA4: шильд — в правом нижнем углу блока ФИО, компактный (30dp ≤ 52dp фото).
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
+            // EE5: шильд «Ведёт у вас» перенесён в ряд кнопок-секций ниже —
+            // ФИО занимает всю ширину шапки без перекрытия.
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = teacher.name,
+                    style =
+                    androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = ColorTextTitle,
+                    ),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (teacher.position.isNotBlank()) {
                     Text(
-                        text = teacher.name,
+                        text = teacher.position,
                         style =
                         androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = ColorTextTitle,
+                            fontSize = 11.sp,
+                            color = ColorBrandBlue,
                         ),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (teacher.position.isNotBlank()) {
-                        Text(
-                            text = teacher.position,
-                            style =
-                            androidx.compose.ui.text.TextStyle(
-                                fontSize = 11.sp,
-                                color = ColorBrandBlue,
-                            ),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
                 }
-
-                LeadsChip(
-                    leadsNow = isActive,
-                    autoActive = autoActive,
-                    onClick = onLeadsChipClick,
-                )
             }
         }
 
@@ -1327,6 +1316,13 @@ private fun TeacherCardPage(
                     }
                 }
             }
+            item {
+                LeadsChip(
+                    leadsNow = isActive,
+                    autoActive = autoActive,
+                    onClick = onLeadsChipClick,
+                )
+            }
         }
 
         Box(
@@ -1373,7 +1369,8 @@ private fun LeadsChip(
         border = BorderStroke(1.dp, if (leadsNow) ColorActiveBlue else ColorBorderLight),
         modifier =
         Modifier
-            .height(30.dp)
+            // EE5: в ряду кнопок-секций — та же высота и отступы, что у соседних кнопок.
+            .heightIn(min = 44.dp)
             .then(
                 if (enabled) {
                     Modifier.bouncyClickable(scaleDown = 0.97f, onClick = onClick)
@@ -1385,7 +1382,7 @@ private fun LeadsChip(
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
         ) {
             Text(
                 text = text,
@@ -1393,7 +1390,7 @@ private fun LeadsChip(
                 style =
                 androidx.compose.ui.text.TextStyle(
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = if (leadsNow) Color.White else ColorTextMuted,
                 ),
             )
