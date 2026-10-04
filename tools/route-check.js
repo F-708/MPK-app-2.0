@@ -700,5 +700,83 @@ say('  комнаты с пробоями: ' + (wcRooms.length ? wcRooms.join(' 
 say('  Целевые значения: wall-cross=0, диагонали=0 (маршруты строго параллельно-перпендикулярные,');
 say('  кабинеты-стены не пробиваются; статус passage = сквозной зал, стеной не считается).');
 
+// ---- AA8: маршруты у кабинетов 255-259 — wall-cross + «вплотную»-метрика ----
+// Зазор = мин. расстояние от ноги ОТРИСОВАННОЙ полилинии до чужого rect
+// (комнаты старта/финиша исключены — дверные стабы legitimately стоят на своей стене).
+// Гейт: зазор > HUG_EPS для каждой ноги; у 255→258/259 additionally угол на стыке 257/258.
+const HUG_EPS = 0.004;
+function distPointRect(px, py, r) {
+  const dx = Math.max(r[0] - px, 0, px - r[2]);
+  const dy = Math.max(r[1] - py, 0, py - r[3]);
+  return Math.hypot(dx, dy);
+}
+function distPointSeg(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+  let t = len2 === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+function distSegRect(a, b, r) { // точное для выпуклого rect: концы→rect + углы→сегмент
+  if (segCrossesRect(a[0], a[1], b[0], b[1], r, 0)) return 0;
+  let d = Math.min(distPointRect(a[0], a[1], r), distPointRect(b[0], b[1], r));
+  for (const c of [[r[0], r[1]], [r[2], r[1]], [r[0], r[3]], [r[2], r[3]]])
+    d = Math.min(d, distPointSeg(c[0], c[1], a[0], a[1], b[0], b[1]));
+  return d;
+}
+function checkHugRoute(fromNum, toNum) {
+  const segs = findMultiFloorRoute(fromNum, toNum);
+  if (!segs) return null;
+  const own = new Set([String(fromNum).toLowerCase(), String(toNum).toLowerCase()]);
+  let minD = Infinity, minInfo = '', cross = 0, bendAtJunction = false;
+  for (const sg of segs) {
+    const fd = floors[sg.floorId];
+    if (!fd) continue;
+    const poly = drawnPolyline(sg);
+    const rects = fd.rooms
+      .filter(r => r.status !== 'nonexistent' && r.status !== 'passage' && r.w > 0 && r.h > 0 &&
+                   !own.has(String(r.number).toLowerCase()))
+      .map(r => ({ num: r.number, r: [r.x - r.w / 2, r.y - r.h / 2, r.x + r.w / 2, r.y + r.h / 2] }));
+    for (let i = 1; i < poly.length; i++) {
+      const a = poly[i - 1], b = poly[i];
+      for (const o of rects) {
+        if (segCrossesRect(a[0], a[1], b[0], b[1], o.r)) cross++;
+        const d = distSegRect(a, b, o.r);
+        if (d < minD) {
+          minD = d;
+          minInfo = 'эт' + sg.floorId + ' [' + a.map(v => v.toFixed(4)) + '→' +
+            b.map(v => v.toFixed(4)) + '] каб.' + o.num;
+        }
+      }
+      // угол на стыке 257/258: вертикаль x∈[0.436,0.452], перекрывающая y 0.2888..0.296
+      if (Math.abs(a[0] - b[0]) < 1e-4 && a[0] > 0.436 && a[0] < 0.452 &&
+          Math.min(a[1], b[1]) < 0.2925 && Math.max(a[1], b[1]) > 0.2885) bendAtJunction = true;
+    }
+  }
+  return { minD, minInfo, cross, bendAtJunction, segs };
+}
+say('');
+say('AA8 маршруты у 255-259 (wall-cross=0, зазор до чужих стен > ' + HUG_EPS + ', угол на стыке 257/258):');
+const aa8 = [['255', '259'], ['255', '258'], ['250', '259'], ['251', '258'], ['100', '259'], ['255', '234']];
+let aa8Bad = 0;
+for (const [a, b] of aa8) {
+  const res = checkHugRoute(a, b);
+  if (!res) { say('  ' + a + ' → ' + b + ': НЕТ МАРШРУТА'); aa8Bad++; continue; }
+  const bad = res.cross > 0 || res.minD <= HUG_EPS;
+  const needBend = a === '255' && (b === '259' || b === '258');
+  const noBend = needBend && !res.bendAtJunction;
+  if (bad || noBend) aa8Bad++;
+  say('  ' + a + ' → ' + b + ': wall-cross ' + res.cross + ', мин. зазор ' + res.minD.toFixed(4) +
+      ' (' + res.minInfo + ')' + (needBend ? ', угол на стыке: ' + (res.bendAtJunction ? 'есть' : 'НЕТ') : '') +
+      (bad || noBend ? ' ← НАРУШЕНИЕ' : ''));
+  if (process.env.AA8_DEBUG)
+    for (const sg of res.segs) {
+      say('    эт' + sg.floorId + ' RAW : ' + JSON.stringify(sg.points.map(p => p.map(v => +v.toFixed(4)))));
+      say('    эт' + sg.floorId + ' DRAWN: ' + JSON.stringify(drawnPolyline(sg).map(p => p.map(v => +v.toFixed(4)))));
+    }
+}
+say('  AA8 нарушений: ' + aa8Bad);
+
+if (wallCross > 0 || diag > 0 || aa8Bad > 0) process.exitCode = 1;
+
 fs.writeFileSync(REPORT, lines.join('\n') + '\n', 'utf8');
 console.log('\nОтчёт записан: ' + REPORT);

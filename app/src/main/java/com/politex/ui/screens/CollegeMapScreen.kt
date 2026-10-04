@@ -165,6 +165,9 @@ fun CollegeMapScreen(
         mutableStateOf(CollegeMap.floorForRoom(initialRoom.orEmpty())?.id ?: "1")
     }
 
+    // AA7: инкремент при смене этапа маршрута (тап чипа) → zoom-to-fit этапа
+    var stageFocus by rememberSaveable { mutableIntStateOf(0) }
+
     var roomScheduleFor by remember { mutableStateOf<String?>(null) }
 
     var roomDialogTomorrow by remember { mutableStateOf(false) }
@@ -434,7 +437,14 @@ fun CollegeMapScreen(
             routeFinishHere = routeFinishHere,
             routeBanner = routeBanner,
             routeSegments = routeSegments,
-            onSelectRouteSegment = { floorId = it },
+            onSelectRouteSegment = { fid ->
+                // AA7: тап чипа этапа — zoom-to-fit bbox'а этого этапа (только при смене этажа)
+                if (fid != floorId) {
+                    stageFocus++
+                    floorId = fid
+                }
+            },
+            stageFocus = stageFocus,
 
             showCancel = builderActive,
             onCancel = { builderActive = false },
@@ -897,6 +907,7 @@ private fun MapCanvas(
     routeBanner: String? = null,
     routeSegments: List<String> = emptyList(),
     onSelectRouteSegment: (String) -> Unit = {},
+    stageFocus: Int = 0,
 
     routeOffsetsDp: List<Float> = emptyList(),
     showCancel: Boolean = false,
@@ -995,10 +1006,25 @@ private fun MapCanvas(
 
         fun restZoom(): Float = (viewHState.value / imgHState.value * 0.72f).coerceIn(1f, 2.2f)
 
-        LaunchedEffect(floorId, targetRoom?.id) {
+        // AA7: счётчик смены этапа — zoom-to-fit выполняем только при смене этапа,
+        // ручной зум пользователя после него не трогаем.
+        val handledStage = remember { mutableIntStateOf(0) }
+
+        LaunchedEffect(floorId, targetRoom?.id, stageFocus) {
             val vw = viewWState.value
             val vh = viewHState.value
             if (vw <= 0f || vh <= 0f) return@LaunchedEffect
+            if (stageFocus != handledStage.intValue) {
+                handledStage.intValue = stageFocus
+                val fit = fitStageViewport(routePoints?.flatten().orEmpty(), vw, vh)
+                if (fit != null) {
+                    val (s, ox, oy) = fit
+                    scope.launch { scale.animateTo(s, tween(420, easing = LinearOutSlowInEasing)) }
+                    scope.launch { offsetX.animateTo(clampX(ox, s), tween(420, easing = LinearOutSlowInEasing)) }
+                    scope.launch { offsetY.animateTo(clampY(oy, s), tween(420, easing = LinearOutSlowInEasing)) }
+                    return@LaunchedEffect
+                }
+            }
             val iw = imgWState.value
             val ih = imgHState.value
             val rest = restZoom()
@@ -1432,10 +1458,17 @@ private fun DrawScope.drawRoutePath(
     // дают одинаковый физический размер/шаг/скорость при любом зуме.
     val stepPx = ROUTE_TICK_STEP_PX // шаг между галочками, экранных px
     val offsetPx = tickPhase * stepPx // бегущее смещение, экранных px, [0, stepPx)
+    // AA1: метки не ближе половины габарита к концам пути и не раньше start+step/2 —
+    // плавно «въезжают/выезжают» за границей отступа вместо мигания на старте/финише.
+    val marginPx = maxOf(stepPx, ROUTE_TICK_SIZE_DP * pxPerDp) / 2f
     val lineW = ROUTE_LINE_WIDTH_DP * pxPerDp * unit
     val tickSize = ROUTE_TICK_SIZE_DP * pxPerDp * unit
     val tickStroke = ROUTE_TICK_STROKE_DP * pxPerDp * unit
 
+    // AA1: ОДИН общий контур — накопленная длина всех полилиний этапа с общей базой,
+    // фаза одна на контур: плотность меток не ломается на стыках полилиний.
+    val contour = ArrayList<Triple<Float, List<Offset>, FloatArray>>(polylines.size) // base, screen, cum
+    var totalImg = 0f
     for ((pi, raw) in polylines.withIndex()) {
         if (raw.size < 2) continue
 
@@ -1456,44 +1489,49 @@ private fun DrawScope.drawRoutePath(
             style = Stroke(width = lineW, cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
 
-        // ОДНА параметризация по всей полилинии: накопленная длина в image-px.
         val cum = FloatArray(screen.size)
-        var totalImg = 0f
+        var len = 0f
         for (i in 1 until screen.size) {
-            totalImg += hypot(screen[i].x - screen[i - 1].x, screen[i].y - screen[i - 1].y)
-            cum[i] = totalImg
+            len += hypot(screen[i].x - screen[i - 1].x, screen[i].y - screen[i - 1].y)
+            cum[i] = len
         }
+        contour += Triple(totalImg, screen, cum)
+        totalImg += len
+    }
 
-        // Метки каждые stepPx ЭКРАННЫХ px вдоль всей длины; текут со offsetPx и
-        // не пропадают на коротких сегментах (полуправый интервал на стыках).
-        val positions = routeTickPositions(totalImg * zoom, stepPx, offsetPx)
-
+    // Метки каждые stepPx ЭКРАННЫХ px вдоль общей длины контура (totalImg*zoom);
+    // шаг пересчитывается в долю длины каждый кадр — при зуме метки текут непрерывно.
+    val positions = routeTickPositions(totalImg * zoom, stepPx, offsetPx, marginPx)
+    if (positions.isNotEmpty()) {
         var idx = 0
-        for (i in 1 until screen.size) {
+        for ((base, screen, cum) in contour) {
             if (idx >= positions.size) break
-            val segStart = cum[i - 1]
-            val segEnd = cum[i]
-            val segLen = segEnd - segStart
-            if (segLen <= 0f) continue
-            val a = screen[i - 1]
-            val b = screen[i]
-            val dx = b.x - a.x
-            val dy = b.y - a.y
-            val angle = atan2(dy, dx)
-            while (idx < positions.size) {
-                val pImg = positions[idx] * unit // экранные px -> image-px
-                if (pImg >= segEnd) break // метка следующему сегменту (не дублируем)
-                if (pImg >= segStart) {
-                    val t = (pImg - segStart) / segLen
-                    drawCheckMark(
-                        center = Offset(a.x + dx * t, a.y + dy * t),
-                        angle = angle,
-                        size = tickSize,
-                        stroke = tickStroke,
-                        outline = color,
-                    )
+            for (i in 1 until screen.size) {
+                if (idx >= positions.size) break
+                val segStart = base + cum[i - 1]
+                val segEnd = base + cum[i]
+                val segLen = segEnd - segStart
+                if (segLen <= 0f) continue
+                val a = screen[i - 1]
+                val b = screen[i]
+                val dx = b.x - a.x
+                val dy = b.y - a.y
+                val angle = atan2(dy, dx)
+                while (idx < positions.size) {
+                    val pImg = positions[idx] * unit // экранные px -> image-px
+                    if (pImg >= segEnd) break // метка следующему сегменту (не дублируем)
+                    if (pImg >= segStart) {
+                        val t = (pImg - segStart) / segLen
+                        drawCheckMark(
+                            center = Offset(a.x + dx * t, a.y + dy * t),
+                            angle = angle,
+                            size = tickSize,
+                            stroke = tickStroke,
+                            outline = color,
+                        )
+                    }
+                    idx++
                 }
-                idx++
             }
         }
     }
@@ -1513,25 +1551,69 @@ private fun DrawScope.drawRoutePath(
 
 /**
  * Расстояния (px) для бегущих галочек вдоль пути длиной [totalLenPx]: старт с
- * [offsetPx] (заворачивается в [0, stepPx)) и далее каждые [stepPx]. Чистая
- * функция — скорость/шаг тестируются. Полуинтервал [start, totalLenPx): конец
- * исключён, каждая метка принадлежит ровно одному сегменту.
+ * фазы [offsetPx] (заворачивается в [0, stepPx)) от границы отступа и далее каждые
+ * [stepPx]. Метки не рисуются ближе [marginPx] к концам (первая не раньше
+ * start+step/2, последняя не позже end-step/2 при marginPx = step/2) — на концах
+ * они плавно «въезжают/выезжают», а не мигают. Путь короче 2*marginPx+stepPx меток
+ * не получает. Чистая функция, однородная по масштабированию всех аргументов:
+ * при zoom×2 (все длины в экранных px удвоены) позиции по ДОЛЕ длины те же.
  */
 internal fun routeTickPositions(
     totalLenPx: Float,
     stepPx: Float,
     offsetPx: Float,
+    marginPx: Float = 0f,
 ): List<Float> {
     if (totalLenPx <= 0f || stepPx <= 0f) return emptyList()
-    var start = offsetPx % stepPx
-    if (start < 0f) start += stepPx
+    val lo = marginPx.coerceAtLeast(0f)
+    val hi = totalLenPx - lo
+    if (hi - lo < stepPx) return emptyList()
+    var phase = offsetPx % stepPx
+    if (phase < 0f) phase += stepPx
     val out = ArrayList<Float>()
-    var d = start
-    while (d < totalLenPx) {
+    var d = lo + phase
+    while (d <= hi) {
         out += d
         d += stepPx
     }
     return out
+}
+
+/**
+ * AA7 zoom-to-fit этапа маршрута: [points] — план-координаты (0..1) точек этапа,
+ * [viewW]/[viewH] — экран в px. scale = min(viewW/bw, viewH/bh)*0.85 (clamp в
+ * [restZoom, 8] как у ручного зума), offset — чтобы центр bbox встал в центр экрана.
+ * План занимает imgW=viewW, imgH=viewW/PLAN_ASPECT (все планы 1376×768).
+ * Чистая функция — тестируется без Compose.
+ */
+internal fun fitStageViewport(
+    points: List<MapPoint>,
+    viewW: Float,
+    viewH: Float,
+): Triple<Float, Float, Float>? {
+    if (points.isEmpty() || viewW <= 0f || viewH <= 0f) return null
+    val imgH = viewW / CollegeRouteFinder.PLAN_ASPECT
+    var minX = Float.MAX_VALUE
+    var minY = Float.MAX_VALUE
+    var maxX = -Float.MAX_VALUE
+    var maxY = -Float.MAX_VALUE
+    points.forEach {
+        val px = it.x * viewW
+        val py = it.y * imgH
+        if (px < minX) minX = px
+        if (px > maxX) maxX = px
+        if (py < minY) minY = py
+        if (py > maxY) maxY = py
+    }
+    val bw = (maxX - minX).coerceAtLeast(1f)
+    val bh = (maxY - minY).coerceAtLeast(1f)
+    val rest = (viewH / imgH * 0.72f).coerceIn(1f, 2.2f)
+    val scale = (minOf(viewW / bw, viewH / bh) * 0.85f).coerceIn(rest, 8f)
+    return Triple(
+        scale,
+        viewW / 2f - (minX + maxX) / 2f * scale,
+        viewH / 2f - (minY + maxY) / 2f * scale,
+    )
 }
 
 /**
