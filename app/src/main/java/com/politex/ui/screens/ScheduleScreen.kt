@@ -1,6 +1,7 @@
 package com.politex.ui.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -1097,7 +1098,7 @@ fun LessonCard(
                             } else {
                                 null
                             },
-                            modifier = Modifier.pulseHalo(pulse),
+                            pulse = pulse,
                         )
                     }
 
@@ -1107,7 +1108,6 @@ fun LessonCard(
                             modifier =
                             Modifier
                                 .heightIn(min = 44.dp)
-                                .pulseHalo(pulse)
                                 .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) },
                             contentAlignment = Alignment.Center,
                         ) {
@@ -1117,6 +1117,7 @@ fun LessonCard(
                                 color = ColorSurfaceHighlight,
                                 modifier =
                                 Modifier
+                                    .pulseHalo(pulse)
                                     .wrapContentWidth(),
                             ) {
                                 Row(
@@ -1154,6 +1155,7 @@ private fun TeacherChip(
     name: String,
     onClick: (() -> Unit)?,
     fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
+    pulse: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     if (onClick == null) {
@@ -1166,7 +1168,7 @@ private fun TeacherChip(
             ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = modifier,
+            modifier = modifier.pulseHalo(pulse),
         )
         return
     }
@@ -1185,6 +1187,7 @@ private fun TeacherChip(
             shape = RoundedCornerShape(2.dp),
             border = BorderStroke(1.dp, ColorBrandBlue.copy(alpha = 0.4f)),
             color = ColorSurfaceHighlight,
+            modifier = Modifier.pulseHalo(pulse),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1265,7 +1268,6 @@ private fun SubgroupPane(
                     modifier =
                     Modifier
                         .heightIn(min = 44.dp)
-                        .pulseHalo(pulse)
                         .bouncyClickable(scaleDown = 0.97f) { onRoomClick(room) },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -1273,7 +1275,10 @@ private fun SubgroupPane(
                         shape = RoundedCornerShape(2.dp),
                         border = BorderStroke(1.dp, ColorBorderLight),
                         color = ColorSurfaceHighlight,
-                        modifier = Modifier.wrapContentWidth(),
+                        modifier =
+                        Modifier
+                            .pulseHalo(pulse)
+                            .wrapContentWidth(),
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1326,7 +1331,7 @@ private fun SubgroupPane(
                     null
                 },
                 fontSize = 11.sp,
-                modifier = Modifier.pulseHalo(pulse),
+                pulse = pulse,
             )
         }
     }
@@ -1413,30 +1418,32 @@ internal fun showPulse(
 ): Boolean = !flagDone && isTargetLesson
 
 /**
- * BB15: кольцо-ореол вокруг цели подсказки (как точка в звонках):
- * infiniteRepeatable alpha 0.5→0 + scale 1→1.25, ColorActiveBlue.
- * Только рисует — ввод не блокирует, ничего не затемняет.
+ * CC12: мягкое кольцо по контуру цели (эталон — точка «сейчас» в BellsScreen):
+ * плавная осцилляция RepeatMode.Reverse (tween 1000), alpha 0.15→0.45, scale 1.0→1.05.
+ * Stroke 1.5dp (без заливки) точно по контуру элемента (RoundedCornerShape 2dp),
+ * чуть снаружи границы — без перекрывания фоном. При active=false transition не создаётся.
  */
 @Composable
 internal fun Modifier.pulseHalo(active: Boolean): Modifier {
     if (!active) return this
-    val progress by
+    val t by
         rememberInfiniteTransition(label = "HintPulse").animateFloat(
             initialValue = 0f,
             targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(durationMillis = 1100)),
-            label = "HintPulseProgress",
+            animationSpec = infiniteRepeatable(tween(durationMillis = 1000), RepeatMode.Reverse),
+            label = "HintPulseT",
         )
     return drawBehind {
-        val scale = 1f + 0.25f * progress
-        val w = size.width * scale
-        val h = size.height * scale
+        val stroke = 1.5.dp.toPx()
+        val scale = 1f + 0.05f * t
+        val w = size.width * scale + stroke
+        val h = size.height * scale + stroke
         drawRoundRect(
-            color = ColorActiveBlue.copy(alpha = 0.5f * (1f - progress)),
+            color = ColorActiveBlue.copy(alpha = 0.15f + 0.30f * t),
             topLeft = Offset((size.width - w) / 2f, (size.height - h) / 2f),
             size = Size(w, h),
-            cornerRadius = CornerRadius(6.dp.toPx()),
-            style = Stroke(width = 2.dp.toPx()),
+            cornerRadius = CornerRadius(2.dp.toPx() + stroke / 2f),
+            style = Stroke(width = stroke),
         )
     }
 }
