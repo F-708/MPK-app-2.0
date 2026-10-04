@@ -640,8 +640,7 @@ private fun SubjectRow(
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = subjectName,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                maxLines = 2,
                 modifier = Modifier.weight(1f),
                 style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ColorTextTitle),
             )
@@ -687,8 +686,7 @@ private fun MaterialSubjectContent(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = subjectName ?: "Архив",
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    maxLines = 2,
                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
                 )
                 Text(

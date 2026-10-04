@@ -194,7 +194,8 @@ fun MainScreen(
                     NavigationBar(
                         containerColor = ColorBgMain,
                         tonalElevation = 0.dp,
-                        modifier = Modifier.testTag("main_bottom_nav"),
+                        // BB17: высота −10% (80dp → 72dp) — место под контент
+                        modifier = Modifier.testTag("main_bottom_nav").height(72.dp),
                     ) {
                         val tabs =
                             listOf(
@@ -280,7 +281,7 @@ fun MainScreen(
                         groupLessonsFromVm = groupLessons,
                         pendingTasksFromVm = pendingTasks,
                         scheduleRepository = viewModel.scheduleRepository,
-                        onSyncRequest = { viewModel.syncSchedule() },
+                        onSyncRequest = { date -> viewModel.syncSchedule(targetDate = date) },
 
                         hasSyncError = uiState.hasSyncError,
                         isSyncing = uiState.isSyncing,
