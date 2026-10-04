@@ -90,7 +90,6 @@ class UiRenderSmokeTest {
                 SettingsScreen(
                     groupInfo = group,
                     onGroupChanged = {},
-                    onRunConnectionTest = {},
                 )
             }
         }

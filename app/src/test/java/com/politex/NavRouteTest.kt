@@ -5,6 +5,8 @@ import com.politex.ui.screens.buildMapRoute
 import com.politex.ui.screens.buildScrollRoute
 import com.politex.ui.screens.buildTeacherRoute
 import com.politex.ui.screens.scrollRoutePattern
+import com.politex.ui.screens.tabIndex
+import com.politex.ui.screens.tabSlideDir
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -117,5 +119,33 @@ class NavRouteTest {
         assertEquals(com.politex.ui.screens.BackAction.NONE, com.politex.ui.screens.backAction("group_schedule"))
         assertEquals(com.politex.ui.screens.BackAction.NONE, com.politex.ui.screens.backAction("settings"))
         assertEquals(com.politex.ui.screens.BackAction.NONE, com.politex.ui.screens.backAction(null))
+    }
+
+    @Test
+    fun `CC11 tabIndex - порядок вкладок и отброс query`() {
+        assertEquals(0, tabIndex("schedule"))
+        assertEquals(0, tabIndex("schedule?scroll={scroll}"))
+        assertEquals(1, tabIndex("lessons"))
+        assertEquals(2, tabIndex("bells"))
+        assertEquals(2, tabIndex("bells?scroll=CURRENT_BELL"))
+        assertEquals(3, tabIndex("college"))
+    }
+
+    @Test
+    fun `CC11 tabIndex - не-таб и null дают -1`() {
+        assertEquals(-1, tabIndex("map?room=214"))
+        assertEquals(-1, tabIndex("college/settings"))
+        assertEquals(-1, tabIndex(null))
+    }
+
+    @Test
+    fun `CC11 tabSlideDir - влево-переход +1, вправо -1, не-таб 0`() {
+        assertEquals(1, tabSlideDir(0, 1))
+        assertEquals(1, tabSlideDir(2, 3))
+        assertEquals(-1, tabSlideDir(3, 2))
+        assertEquals(-1, tabSlideDir(1, 0))
+        assertEquals(0, tabSlideDir(1, 1))
+        assertEquals(0, tabSlideDir(-1, 2))
+        assertEquals(0, tabSlideDir(2, -1))
     }
 }

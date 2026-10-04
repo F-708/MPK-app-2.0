@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
@@ -48,7 +47,6 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -94,12 +92,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class ConnState { IDLE, RUNNING, OK, FAIL }
-
 @Composable
 fun SettingsScreen(
     groupInfo: GroupInfo,
     onGroupChanged: (String) -> Unit,
+    // CC11: рудименты удалённой карточки «Проверить соединение» —
+    // цепочка SettingsRoute/SettingsPage живёт в CollegeScreen.kt (запрещён в этой волне),
+    // поэтому параметры остаются, но не используются. Убрать вместе с ней.
     onRunConnectionTest: () -> Unit = {},
     isSyncing: Boolean = false,
     hasSyncError: Boolean = false,
@@ -135,15 +134,6 @@ fun SettingsScreen(
 
     var backupIsError by remember { mutableStateOf(false) }
     val backupScope = rememberCoroutineScope()
-
-    var connectionState by remember { mutableStateOf(ConnState.IDLE) }
-    var wasSyncing by remember { mutableStateOf(false) }
-    LaunchedEffect(isSyncing) {
-        if (wasSyncing && !isSyncing && connectionState == ConnState.RUNNING) {
-            connectionState = if (hasSyncError) ConnState.FAIL else ConnState.OK
-        }
-        wasSyncing = isSyncing
-    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json"),
@@ -216,6 +206,10 @@ fun SettingsScreen(
         MpkCurriculum.getSpecialty(groupInfo.specialtyCode)
     }
 
+    var swipeTabsEnabled by remember {
+        mutableStateOf(WidgetUpdateHelper.getPrefs(context).getBoolean("swipe_tabs_enabled", true))
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -226,7 +220,6 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { SectionHeader("МОЯ ГРУППА") }
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -307,7 +300,33 @@ fun SettingsScreen(
                 }
             }
 
-            item { SectionHeader("РАСПИСАНИЕ И СИНХРОНИЗАЦИЯ") }
+            item { SectionHeader("УПРАВЛЕНИЕ") }
+            item {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+                        SettingsSwitchRow(
+                            title = "Свайп между вкладками",
+                            subtitle = "Переключение вкладок горизонтальным свайпом",
+                            checked = swipeTabsEnabled,
+                            onCheckedChange = { on ->
+                                swipeTabsEnabled = on
+                                WidgetUpdateHelper.getPrefs(context)
+                                    .edit()
+                                    .putBoolean("swipe_tabs_enabled", on)
+                                    .apply()
+                            },
+                            modifier = Modifier.testTag("swipe_tabs_toggle"),
+                        )
+                    }
+                }
+            }
+
+            item { SectionHeader("РАСПИСАНИЕ И УВЕДОМЛЕНИЯ") }
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -397,89 +416,6 @@ fun SettingsScreen(
                 }
             }
 
-            item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Проверить соединение",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = ColorTextTitle,
-                                ),
-                            )
-
-                            when (connectionState) {
-                                ConnState.OK -> Text(
-                                    text = "✓ Соединение есть, расписание обновилось",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 11.sp,
-                                        color = ColorSuccess,
-                                    ),
-                                )
-                                ConnState.FAIL -> Text(
-                                    text = "✗ Не удалось связаться с сайтом",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 11.sp,
-                                        color = ColorError,
-                                    ),
-                                )
-                                else -> {}
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            color = ColorBrandFill,
-                            modifier = Modifier
-                                .heightIn(min = com.politex.ui.theme.Tokens.ButtonHeight)
-                                .testTag("connection_test_button")
-
-                                .bouncyClickable(enabled = !isSyncing) {
-                                    connectionState = ConnState.RUNNING
-                                    onRunConnectionTest()
-                                },
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 12.dp),
-                            ) {
-                                if (isSyncing) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp,
-                                    )
-                                } else {
-                                    Text(
-                                        text = "ЗАПУСТИТЬ",
-                                        softWrap = false,
-                                        maxLines = 1,
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                            color = Color.White,
-                                        ),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             item { SectionHeader("КАРТА") }
 
             item {
@@ -538,12 +474,12 @@ fun SettingsScreen(
                 }
             }
 
-            item { SectionHeader("ЗВОНКИ И СТРОКА ДО ЗВОНКА") }
+            item { SectionHeader("ЗВОНКИ") }
             item {
                 BellCountdownNotificationCard()
             }
 
-            item { SectionHeader("ОЦЕНКИ") }
+            item { SectionHeader("УЧЁБА") }
 
             item {
                 var weightsEnabled by remember {
@@ -771,28 +707,10 @@ fun SettingsScreen(
                     border = BorderStroke(1.dp, ColorBorderLight),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Telegram",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = ColorTextTitle,
-                            ),
-                        )
-                        Text(
-                            text = "@Betterthannothing12",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = ColorBrandBlue,
-                            ),
+                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+                        SettingsValueRow(
+                            title = "Telegram",
+                            value = "@Betterthannothing12",
                         )
                     }
                 }
@@ -842,27 +760,10 @@ fun SettingsScreen(
                     border = BorderStroke(1.dp, ColorBorderLight),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Версия",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = ColorTextTitle,
-                            ),
-                        )
-                        Text(
-                            text = BuildConfig.VERSION_NAME,
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontSize = 14.sp,
-                                color = ColorTextMuted,
-                            ),
+                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+                        SettingsValueRow(
+                            title = "Версия",
+                            value = BuildConfig.VERSION_NAME,
                         )
                     }
                 }
@@ -943,6 +844,9 @@ private fun BellCountdownNotificationCard() {
     }
     var selectedTheme by remember {
         mutableStateOf(com.politex.util.BellCountdownNotifier.getTheme(context))
+    }
+    var isPinned by remember {
+        mutableStateOf(com.politex.util.BellCountdownNotifier.isPinned(context))
     }
 
     var canExactAlarms by remember { mutableStateOf(canScheduleExactAlarms(context)) }
@@ -1101,6 +1005,19 @@ private fun BellCountdownNotificationCard() {
                     }
                 }
             }
+
+            SettingsSwitchRow(
+                title = "Закрепить в шторке",
+                subtitle = "Строку «До звонка» нельзя смахнуть",
+                checked = isPinned,
+                onCheckedChange = { on ->
+                    isPinned = on
+                    com.politex.util.BellCountdownNotifier.setPinned(context, on)
+                },
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .testTag("bell_pinned_switch"),
+            )
 
             if (isOngoingEnabled) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -1333,6 +1250,95 @@ private fun stylePreviewBody(style: com.politex.util.BellCountdownNotifier.Style
         "С полосой прогресса урока"
     com.politex.util.BellCountdownNotifier.Style.WITH_SECONDS ->
         "Посекундный отсчёт — обновляется каждую секунду"
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .bouncyClickable { onCheckedChange(!checked) }
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = ColorTextTitle,
+                ),
+            )
+            Text(
+                text = subtitle,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontSize = 11.sp,
+                    color = ColorTextMuted,
+                ),
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = ColorBrandBlue,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun SettingsValueRow(
+    title: String,
+    value: String,
+    onClick: (() -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .then(if (onClick != null) Modifier.bouncyClickable(onClick = onClick) else Modifier)
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = androidx.compose.ui.text.TextStyle(
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = ColorTextTitle,
+            ),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = value,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontSize = 14.sp,
+                    color = ColorTextMuted,
+                ),
+            )
+            if (onClick != null) {
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = ColorTextMuted,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
 }
 
 @Composable

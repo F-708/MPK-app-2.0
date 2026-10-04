@@ -3,7 +3,14 @@ package com.politex.ui.screens
 import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,7 +45,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,8 +88,10 @@ import com.politex.ui.viewmodel.ROUTE_STUDENTS
 import com.politex.ui.viewmodel.ROUTE_TEACHER
 import com.politex.ui.viewmodel.ROUTE_TEACHERS
 import com.politex.ui.screens.materials.ViewerMode
+import com.politex.widget.WidgetUpdateHelper
 import kotlinx.coroutines.flow.collectLatest
 import java.net.URLEncoder
+import kotlin.math.abs
 
 private fun enc(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
@@ -123,6 +137,57 @@ fun NavController.navigateToTab(route: String) {
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { inclusive = false }
         launchSingleTop = true
+    }
+}
+
+/** Индекс вкладки по маршруту (с отброшенным query), -1 если не таб. */
+fun tabIndex(route: String?): Int {
+    val base = route?.substringBefore("?")
+    return AppTab.entries.indexOfFirst { it.route == base }
+}
+
+/** Направление слайда: +1 влево-переход (вперёд), -1 вправо (назад), 0 не-таб/тот же. */
+fun tabSlideDir(from: Int, to: Int): Int = when {
+    from < 0 || to < 0 || from == to -> 0
+    to > from -> 1
+    else -> -1
+}
+
+private fun Modifier.tabSwipeGesture(
+    onSwipeLeft: () -> Unit,
+    onSwipeRight: () -> Unit,
+): Modifier = composed {
+    val density = LocalDensity.current
+    val slop = LocalViewConfiguration.current.touchSlop
+    val edgePx = with(density) { 24.dp.toPx() }
+    pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            // Зона системного back-жеста — не перехватываем.
+            if (down.position.x < edgePx) return@awaitEachGesture
+            var dx = 0f
+            var dy = 0f
+            var claimed = false
+            var aborted = false
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Main)
+                if (event.changes.any { it.isConsumed }) {
+                    aborted = true
+                    break
+                }
+                if (event.changes.none { it.pressed }) break
+                val change = event.changes.first()
+                dx = change.position.x - down.position.x
+                dy = change.position.y - down.position.y
+                if (!claimed && abs(dx) > slop * 4f && abs(dx) > abs(dy) * 1.5f) {
+                    claimed = true
+                }
+                if (claimed) change.consume()
+            }
+            if (claimed && !aborted) {
+                if (dx < 0) onSwipeLeft() else onSwipeRight()
+            }
+        }
     }
 }
 
@@ -252,14 +317,54 @@ fun MainScreen(
                 }
             },
         ) { innerPadding ->
-            NavHost(
-                navController = navController,
-                startDestination = ROUTE_SCHEDULE,
+            val swipeEnabled = remember(context, backStackEntry) {
+                WidgetUpdateHelper.getPrefs(context).getBoolean("swipe_tabs_enabled", true)
+            }
+            val curIdx = tabIndex(backStackEntry?.destination?.route)
+            val gestureActive = swipeEnabled && curIdx >= 0 && !ViewerMode.active && !RouteBuilderMode.active
+            Box(
                 modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
+                if (gestureActive) {
+                    Modifier.tabSwipeGesture(
+                        onSwipeLeft = {
+                            val i = tabIndex(backStackEntry?.destination?.route)
+                            if (i in 0 until AppTab.entries.size - 1) {
+                                navController.navigateToTab(AppTab.entries[i + 1].route)
+                            }
+                        },
+                        onSwipeRight = {
+                            val i = tabIndex(backStackEntry?.destination?.route)
+                            if (i > 0) navController.navigateToTab(AppTab.entries[i - 1].route)
+                        },
+                    )
+                } else {
+                    Modifier
+                },
             ) {
+                NavHost(
+                    navController = navController,
+                    startDestination = ROUTE_SCHEDULE,
+                    modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    enterTransition = {
+                        val d = tabSlideDir(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route))
+                        if (d == 0) fadeIn(tween(150)) else slideInHorizontally(tween(280)) { if (d > 0) it else -it }
+                    },
+                    exitTransition = {
+                        val d = tabSlideDir(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route))
+                        if (d == 0) fadeOut(tween(150)) else slideOutHorizontally(tween(280)) { if (d > 0) -it else it }
+                    },
+                    popEnterTransition = {
+                        val d = tabSlideDir(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route))
+                        if (d == 0) fadeIn(tween(150)) else slideInHorizontally(tween(280)) { if (d > 0) it else -it }
+                    },
+                    popExitTransition = {
+                        val d = tabSlideDir(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route))
+                        if (d == 0) fadeOut(tween(150)) else slideOutHorizontally(tween(280)) { if (d > 0) -it else it }
+                    },
+                ) {
                 val scrollArg =
                     listOf(
                         navArgument(ARG_SCROLL) {
@@ -445,6 +550,7 @@ fun MainScreen(
                         scheduleRepository = viewModel.scheduleRepository,
                         onBack = { navController.popBackStack() },
                     )
+                }
                 }
             }
         }
