@@ -164,4 +164,30 @@ class WidgetLayoutsTest {
             assertTrue("$name: у iv_idle остался позиционирующий marginBottom", !attrs.contains("layout_marginBottom"))
         }
     }
+
+    @Test
+    fun `EE3 row_room wrap_content и вертикальный паддинг чипа в провайдере не больше 4dp`() {
+        val layout = File(layoutsDir, "widget_row_list.xml").readText()
+        val roomAttrs = layout.substringAfter("android:id=\"@+id/row_room\"").substringBefore("/>")
+        assertTrue(
+            "row_room должен быть wrap_content по высоте, иначе клиппится в строке с weight",
+            roomAttrs.contains("android:layout_height=\"wrap_content\""),
+        )
+
+        val provider = File("src/main/java/com/politex/widget/TodayScheduleWidgetProvider.kt").readText()
+        val pv = Regex("""val pv = \((\d+)""").find(provider)?.groupValues?.get(1)?.toInt()
+        assertTrue("в TodayScheduleWidgetProvider не найден val pv = (N * d", pv != null)
+        assertTrue("pv=$pv dp раздувает чип выше высоты строки (row_root 0dp+weight) — цифры клиппятся", pv!! <= 4)
+    }
+
+    @Test
+    fun `EE2 чип кабинета в now-next отодвинут от предмета marginTop 4-6dp`() {
+        val text = File(layoutsDir, "widget_now_next.xml").readText()
+        listOf("tv_now_room", "tv_next_room").forEach { id ->
+            val attrs = text.substringAfter("android:id=\"@+id/$id\"").substringBefore("/>")
+            val mt = Regex("""android:layout_marginTop="(\d+)dp"""").find(attrs)?.groupValues?.get(1)?.toInt()
+            assertTrue("$id: нет layout_marginTop — чип вплотную к названию предмета", mt != null)
+            assertTrue("$id: marginTop=$mt dp вне диапазона 4-6dp", mt!! in 4..6)
+        }
+    }
 }

@@ -154,7 +154,10 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 val d = context.resources.displayMetrics.density
 
                 val ph = (10 * d + 0.5f).toInt()
-                val pv = (10 * d + 0.5f).toInt()
+                // EE3: pv=10dp раздувал чип (~35dp) выше высоты строки
+                // (row_root = 0dp + weight → строка фиксирована, ~11-20dp при 12
+                // уроках) — цифры клиппились. 2dp keeps chip ≈ высоте текста строки.
+                val pv = (2 * d + 0.5f).toInt()
                 row.setViewPadding(R.id.row_room, ph, pv, ph, pv)
                 val intent =
                     Intent(context, com.politex.MainActivity::class.java)
