@@ -1898,29 +1898,42 @@ private fun TeacherScheduleTab(
                                     )
                                 }
                                 if (slot.room.isNotBlank()) {
-
-                                    Surface(
-                                        shape = RoundedCornerShape(2.dp),
-                                        color = ColorSurfaceHighlight,
-                                        border = BorderStroke(1.dp, ColorBorderLight),
+                                    // CC3: узкий комнат-чип как в LessonCard расписания
+                                    // (Surface 2dp + h6/v2 + 11sp bold + иконка 12dp);
+                                    // hitbox 44dp остаётся на внешнем Box
+                                    Box(
                                         modifier =
                                         Modifier
                                             .heightIn(min = 44.dp)
                                             .bouncyClickable(scaleDown = 0.97f) { onOpenRoom(slot.room) },
+                                        contentAlignment = Alignment.Center,
                                     ) {
-                                        Box(
-                                            contentAlignment = Alignment.Center,
-                                            modifier = Modifier.padding(horizontal = 8.dp),
+                                        Surface(
+                                            shape = RoundedCornerShape(2.dp),
+                                            border = BorderStroke(1.dp, ColorBorderLight),
+                                            color = ColorSurfaceHighlight,
                                         ) {
-                                            Text(
-                                                text = "каб. ${slot.room}",
-                                                style =
-                                                androidx.compose.ui.text.TextStyle(
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 11.sp,
-                                                    color = ColorBrandBlue,
-                                                ),
-                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.LocationOn,
+                                                    contentDescription = null,
+                                                    tint = ColorBrandBlue,
+                                                    modifier = Modifier.size(12.dp),
+                                                )
+                                                Spacer(modifier = Modifier.width(2.dp))
+                                                Text(
+                                                    text = "каб. ${slot.room}",
+                                                    style =
+                                                    androidx.compose.ui.text.TextStyle(
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = ColorBrandBlue,
+                                                        fontSize = 11.sp,
+                                                    ),
+                                                )
+                                            }
                                         }
                                     }
                                 }

@@ -52,6 +52,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             val showRoom = WidgetOptions.showRoom(context, appWidgetId)
 
             views.setInt(R.id.now_next_root, "setBackgroundColor", style.backgroundColor)
+            views.setViewVisibility(R.id.iv_idle, android.view.View.GONE)
             views.setTextColor(R.id.tv_now_label, style.subColor)
             views.setTextColor(R.id.tv_next_label, style.subColor)
             views.setTextColor(R.id.tv_now_subject, style.mainColor)
@@ -96,6 +97,9 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 listOf(R.id.ll_now_block, R.id.ll_next_block, R.id.v_divider).forEach {
                     views.setViewVisibility(it, android.view.View.GONE)
                 }
+                // CC9: idle-анимация в пустом состоянии (AVD автостартует в ImageView, API24+)
+                views.setImageViewResource(R.id.iv_idle, R.drawable.anim_idle)
+                views.setViewVisibility(R.id.iv_idle, android.view.View.VISIBLE)
             } else if (current != null) {
                 views.setTextViewText(R.id.tv_now_label, "СЕЙЧАС")
                 views.setTextViewText(R.id.tv_now_subject, SubjectFormatter.getShortName(current.subjectRaw))

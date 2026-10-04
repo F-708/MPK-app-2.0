@@ -88,4 +88,21 @@ class WidgetLayoutsTest {
             text.contains("android:fontFamily=\"sans-serif-medium\""),
         )
     }
+
+    @Test
+    fun `CC9 iv_idle есть в layout виджетов и по умолчанию скрыт`() {
+        listOf("widget_now_next.xml", "widget_today_schedule.xml", "widget_bell_countdown.xml").forEach { name ->
+            val text = File(layoutsDir, name).readText()
+            assertTrue("$name: нет @+id/iv_idle", text.contains("@+id/iv_idle"))
+            val attrs = text.substringAfter("android:id=\"@+id/iv_idle\"").substringBefore("/>")
+            assertTrue("$name: iv_idle не скрыт по умолчанию", attrs.contains("android:visibility=\"gone\""))
+        }
+    }
+
+    @Test
+    fun `CC9 anim_idle — бесконечный animated-vector`() {
+        val text = File("src/main/res/drawable/anim_idle.xml").readText()
+        assertTrue("anim_idle не animated-vector", text.contains("<animated-vector"))
+        assertTrue("anim_idle не зациклен", text.contains("android:repeatCount=\"infinite\""))
+    }
 }

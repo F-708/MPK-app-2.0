@@ -46,4 +46,14 @@
             android:visibility="gone" />
     </LinearLayout>
 
+    <!-- CC9: idle-анимация (колокольчик) когда на сегодня уроков нет;
+         текст tv_today_empty внизу, колокольчик по центру не перекрывает его -->
+    <ImageView
+        android:id="@+id/iv_idle"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center"
+        android:layout_marginBottom="16dp"
+        android:visibility="gone" />
+
     </FrameLayout>

@@ -743,6 +743,9 @@ internal fun shouldDelete(
 private fun SwipeToDeleteBox(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    // CC8: демо-офсет (доля ширины) применяется только к карточке, красный фон статичен;
+    // лямбда читается в фазе отрисовки — без рекомпозиций на кадр
+    demoFraction: () -> Float = { 0f },
     content: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -815,7 +818,12 @@ private fun SwipeToDeleteBox(
                     .size(20.dp),
             )
         }
-        Box(modifier = Modifier.graphicsLayer { translationX = offsetX.value }) {
+        Box(
+            modifier =
+            Modifier.graphicsLayer {
+                translationX = offsetX.value + demoFraction() * size.width
+            },
+        ) {
             content()
         }
     }
@@ -827,8 +835,9 @@ internal const val DEMO_TASK_ID = -1L
 internal fun isDemoTask(id: Long): Boolean = id == DEMO_TASK_ID
 
 /**
- * BB12: демо-задание периодически «прыгает» влево на 40% ширины и обратно —
- * показывает жест удаления без затемнения. Реальные карточки не прыгают.
+ * BB12/CC8: демо-задание периодически «прыгает» влево на 40% ширины и обратно —
+ * двигается ТОЛЬКО карточка, красный фон с иконкой Delete остаётся статичным
+ * и открывается под ней, подсказывая жест удаления. Реальные карточки не прыгают.
  */
 @Composable
 private fun DemoSwipeHintItem(
@@ -849,7 +858,7 @@ private fun DemoSwipeHintItem(
     }
     SwipeToDeleteBox(
         onDelete = onDelete,
-        modifier = Modifier.graphicsLayer { translationX = demoOffset.value * size.width },
+        demoFraction = { demoOffset.value },
     ) {
         // клики/чекбокс у демо неактивны — иначе saveTask/toggle писали бы id=-1 в БД
         TaskItemCard(

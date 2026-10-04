@@ -108,6 +108,9 @@ fun sundayNoteVisible(
     isTodaySelected: Boolean,
 ): Boolean = todayDow == 7 && isTodaySelected
 
+/** CC2: индикатор «сегодня» под чипом типа — в воскресенье сегодня не относится ни к одному типу. */
+fun indicatorVisible(todayDow: Int): Boolean = todayDow != 7
+
 private fun dotProgressIn(
     bell: BellItem,
     nowMinutes: Int,
@@ -320,7 +323,7 @@ fun BellsScreen(
                             .width(28.dp)
                             .height(3.dp)
                             .background(
-                                if (isToday) ColorActiveBlue else Color.Transparent,
+                                if (isToday && indicatorVisible(todayDow)) ColorActiveBlue else Color.Transparent,
                                 RoundedCornerShape(2.dp),
                             ),
                     )

@@ -70,8 +70,12 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
 
             if (lessons.isEmpty()) {
                 views.setViewVisibility(R.id.tv_today_empty, android.view.View.VISIBLE)
+                // CC9: idle-анимация в пустом состоянии (AVD автостартует в ImageView, API24+)
+                views.setImageViewResource(R.id.iv_idle, R.drawable.anim_idle)
+                views.setViewVisibility(R.id.iv_idle, android.view.View.VISIBLE)
             } else {
                 views.setViewVisibility(R.id.tv_today_empty, android.view.View.GONE)
+                views.setViewVisibility(R.id.iv_idle, android.view.View.GONE)
                 lessons.take(MAX_ROWS).forEach { lesson ->
                     views.addView(
                         R.id.today_rows,

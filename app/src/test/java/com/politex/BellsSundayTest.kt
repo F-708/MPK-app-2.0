@@ -3,6 +3,7 @@ package com.politex
 import com.politex.data.model.BellScheduleType
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.ui.screens.bellsForDisplay
+import com.politex.ui.screens.indicatorVisible
 import com.politex.ui.screens.sundayNoteVisible
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -28,5 +29,11 @@ class BellsSundayTest {
     fun `BB5 other types unchanged`() {
         assertEquals(CollegeBellSchedule.THURSDAY_BELLS, bellsForDisplay(BellScheduleType.THURSDAY))
         assertEquals(CollegeBellSchedule.SATURDAY_BELLS, bellsForDisplay(BellScheduleType.SATURDAY))
+    }
+
+    @Test
+    fun `CC2 today indicator hidden on sunday, visible on other days`() {
+        assertFalse(indicatorVisible(todayDow = 7))
+        (1..6).forEach { dow -> assertTrue("dow=$dow", indicatorVisible(todayDow = dow)) }
     }
 }

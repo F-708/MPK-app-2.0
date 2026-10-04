@@ -24,8 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
@@ -33,6 +31,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -104,6 +104,20 @@ import java.io.File
 
 private const val RESTORED_SUBJECT = "Восстановленные"
 
+/** CC7: фаза списка — чистая функция. Пока Room не выдал первое значение — LOADING
+ *  (нейтральный placeholder), empty-state только когда загружено и реально пусто. */
+enum class MaterialListUi { LOADING, EMPTY, CONTENT }
+
+fun materialListUi(
+    loaded: Boolean,
+    itemCount: Int,
+): MaterialListUi =
+    when {
+        !loaded -> MaterialListUi.LOADING
+        itemCount == 0 -> MaterialListUi.EMPTY
+        else -> MaterialListUi.CONTENT
+    }
+
 private sealed interface MaterialRoute {
 
     data class SubjectScreen(
@@ -154,7 +168,13 @@ fun MaterialBaseScreen(
     val dao = remember { MpkDatabase.getInstance(context).materialDao() }
     val scope = rememberCoroutineScope()
 
-    val items by dao.getAllItems().collectAsState(initial = emptyList())
+    // CC7: initial=null вместо emptyList — первый кадр не выглядит «пустым списком»,
+    // последние полученные данные помнятся, чтобы не мигать при пересборе
+    val itemsOrNull by dao.getAllItems().collectAsState(initial = null as List<MaterialItemEntity>?)
+    var lastItems by remember { mutableStateOf(emptyList<MaterialItemEntity>()) }
+    itemsOrNull?.let { lastItems = it }
+    val items = lastItems
+    val loaded = itemsOrNull != null
 
     val sizesState = remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     LaunchedEffect(items) {
@@ -338,6 +358,7 @@ fun MaterialBaseScreen(
                             subjectName = subjectRoute.subjectName,
                             isArchive = false,
                             items = subjectItems,
+                            loaded = loaded,
                             actions = actions,
                             onBack = pop,
                             modifier = Modifier.weight(1f),
@@ -348,6 +369,7 @@ fun MaterialBaseScreen(
                             subjectName = null,
                             isArchive = true,
                             items = archivedItems,
+                            loaded = loaded,
                             actions = actions,
                             onBack = pop,
                             modifier = Modifier.weight(1f),
@@ -357,6 +379,7 @@ fun MaterialBaseScreen(
                         if (query.isBlank()) {
                             MaterialRootList(
                                 items = items,
+                                loaded = loaded,
                                 onOpenSubject = { subject -> push(MaterialRoute.SubjectScreen(subject)) },
                                 onOpenArchive = { push(MaterialRoute.ArchiveScreen) },
                                 modifier = Modifier.weight(1f),
@@ -557,6 +580,7 @@ private fun MaterialHeader(
 @Composable
 private fun MaterialRootList(
     items: List<MaterialItemEntity>,
+    loaded: Boolean,
     onOpenSubject: (String) -> Unit,
     onOpenArchive: () -> Unit,
     modifier: Modifier = Modifier,
@@ -565,16 +589,24 @@ private fun MaterialRootList(
     val subjects = remember(active) { active.groupBy { it.subjectName }.keys.sorted() }
     val archiveCount = remember(items) { items.count { it.archived } }
 
-    if (active.isEmpty() && archiveCount == 0) {
-        MaterialEmptyState(
-            title = "Материалов пока нет",
-            hint =
-            "Нажмите «ДОБАВИТЬ» и выберите файл, набор изображений или текст. " +
-                "Материал ляжет в предмет — потом его можно переименовать, " +
-                "перенести в Архив и читать прямо в приложении.",
-            modifier = modifier,
-        )
-        return
+    // CC7: placeholder/empty-state только по loaded-флагу — нет мигания «материалов нет»
+    when (materialListUi(loaded, active.size + archiveCount)) {
+        MaterialListUi.LOADING -> {
+            MaterialLoadingPlaceholder(modifier)
+            return
+        }
+        MaterialListUi.EMPTY -> {
+            MaterialEmptyState(
+                title = "Материалов пока нет",
+                hint =
+                "Нажмите «ДОБАВИТЬ» и выберите файл, набор изображений или текст. " +
+                    "Материал ляжет в предмет — потом его можно переименовать, " +
+                    "перенести в Архив и читать прямо в приложении.",
+                modifier = modifier,
+            )
+            return
+        }
+        MaterialListUi.CONTENT -> Unit
     }
 
     LazyColumn(
@@ -659,6 +691,7 @@ private fun MaterialSubjectContent(
     subjectName: String?,
     isArchive: Boolean,
     items: List<MaterialItemEntity>,
+    loaded: Boolean,
     actions: MaterialActions,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -706,38 +739,66 @@ private fun MaterialSubjectContent(
                 .background(ColorDividerLight),
         )
 
-        if (items.isEmpty()) {
-            MaterialEmptyState(
-                title = if (isArchive) "В Архиве пусто" else "Материалов пока нет",
-                hint =
-                if (isArchive) {
-                    "Сюда переносятся материалы кнопкой-архивом: не удаляются, а убираются с глаз."
-                } else {
-                    "Нажмите «ДОБАВИТЬ» на главном экране материалов и выберите этот предмет."
-                },
-                modifier = Modifier.weight(1f),
-            )
-        } else {
-            LazyColumn(
+        // CC7: три фазы — placeholder до загрузки, empty-state только когда реально пусто
+        when (materialListUi(loaded, items.size)) {
+            MaterialListUi.LOADING ->
+                MaterialLoadingPlaceholder(Modifier.weight(1f))
+
+            MaterialListUi.EMPTY ->
+                MaterialEmptyState(
+                    title = if (isArchive) "В Архиве пусто" else "Материалов пока нет",
+                    hint =
+                    if (isArchive) {
+                        "Сюда переносятся материалы кнопкой-архивом: не удаляются, а убираются с глаз."
+                    } else {
+                        "Нажмите «ДОБАВИТЬ» на главном экране материалов и выберите этот предмет."
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+
+            MaterialListUi.CONTENT ->
+                LazyColumn(
+                    modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .testTag(if (isArchive) "material_archive_list" else "material_subject_list"),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(count = items.size, key = { items[it].id }) { index ->
+                        MaterialItemRow(
+                            item = items[index],
+                            actions = actions,
+                            isArchiveRow = isArchive,
+                            canMoveUp = index > 0,
+                            canMoveDown = index < items.size - 1,
+                            siblings = items,
+                        )
+                    }
+                }
+        }
+    }
+}
+
+/** CC7: нейтральный placeholder той же геометрии, что и список (карточки-болванки
+ *  без иконки и текста — не empty-state), пока Room не выдал первое значение. */
+@Composable
+private fun MaterialLoadingPlaceholder(modifier: Modifier = Modifier) {
+    LazyColumn(
+        modifier = modifier.fillMaxWidth().testTag("material_loading_placeholder"),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items(count = 4) {
+            Box(
                 modifier =
                 Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-                    .testTag(if (isArchive) "material_archive_list" else "material_subject_list"),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(count = items.size, key = { items[it].id }) { index ->
-                    MaterialItemRow(
-                        item = items[index],
-                        actions = actions,
-                        isArchiveRow = isArchive,
-                        canMoveUp = index > 0,
-                        canMoveDown = index < items.size - 1,
-                        siblings = items,
-                    )
-                }
-            }
+                    .height(62.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(ColorSurfaceHighlight),
+            )
         }
     }
 }
@@ -903,13 +964,13 @@ private fun MaterialItemRow(
                 if (showReorder) {
 
                     RowIconButton(
-                        icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        icon = Icons.Default.KeyboardArrowUp,
                         description = "Выше",
                         enabled = canMoveUp,
                         testTag = "material_up_${item.id}",
                     ) { actions.onReorder(siblings, item, -1) }
                     RowIconButton(
-                        icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        icon = Icons.Default.KeyboardArrowDown,
                         description = "Ниже",
                         enabled = canMoveDown,
                         testTag = "material_down_${item.id}",

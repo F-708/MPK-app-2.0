@@ -176,4 +176,15 @@
             android:visibility="gone" />
     </LinearLayout>
 
+    <!-- CC9: idle-анимация (колокольчик) для пустого состояния; показывается из
+         провайдера вместе с tv_empty, автостарт AVD на API 24+.
+         marginBottom уводит колокольчик выше центрированного текста tv_empty. -->
+    <ImageView
+        android:id="@+id/iv_idle"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center"
+        android:layout_marginBottom="60dp"
+        android:visibility="gone" />
+
     </FrameLayout>

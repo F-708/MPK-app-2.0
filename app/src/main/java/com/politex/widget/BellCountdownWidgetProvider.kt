@@ -219,11 +219,11 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             return result
         }
 
-        private fun buildViews(context: Context, appWidgetId: Int): RemoteViews {
-            val views = RemoteViews(context.packageName, R.layout.widget_bell_countdown)
+        private fun buildViews(context: Context, appWidgetId: Int): RemoteViews {            val views = RemoteViews(context.packageName, R.layout.widget_bell_countdown)
 
             val style = WidgetStyle.load(context, appWidgetId)
             views.setInt(R.id.widget_countdown_root, "setBackgroundColor", style.backgroundColor)
+            views.setViewVisibility(R.id.iv_idle, android.view.View.GONE)
             views.setTextColor(R.id.tv_countdown_label, style.subColor)
             views.setTextColor(R.id.tv_countdown_value, style.mainColor)
 
@@ -273,10 +273,12 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                         dow in 1..6 && mode == CountdownMode.GROUP_LESSONS && lastGroupLesson == null -> {
                             views.setTextViewText(R.id.tv_countdown_label, "Уроков нет")
                             views.setViewVisibility(R.id.tv_countdown_value, android.view.View.GONE)
+                            showIdleAnimation(views)
                         }
                         dow in 1..6 && mode == CountdownMode.ALL_BELLS && bells.isEmpty() -> {
                             views.setTextViewText(R.id.tv_countdown_label, "Звонков сегодня нет")
                             views.setViewVisibility(R.id.tv_countdown_value, android.view.View.GONE)
+                            showIdleAnimation(views)
                         }
                         else -> {
 
@@ -299,6 +301,12 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_countdown_root, openIntent)
             return views
+        }
+
+        // CC9: idle-анимация в ветках «нет таймера» (AVD автостартует в ImageView, API24+)
+        private fun showIdleAnimation(views: RemoteViews) {
+            views.setImageViewResource(R.id.iv_idle, R.drawable.anim_idle)
+            views.setViewVisibility(R.id.iv_idle, android.view.View.VISIBLE)
         }
 
         fun formatMinutes(totalMinutes: Long): String {
