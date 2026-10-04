@@ -3,6 +3,7 @@ package com.politex
 import androidx.compose.ui.geometry.Offset
 import com.politex.ui.screens.materials.AnnotationAction
 import com.politex.ui.screens.materials.AnnotationUndoSession
+import com.politex.ui.screens.materials.DocZoom
 import com.politex.ui.screens.materials.Stroke
 import com.politex.ui.screens.materials.applyUndo
 import com.politex.ui.screens.materials.clampToBox
@@ -21,13 +22,28 @@ class BBAnnotationModelTest {
     private val s2 = Stroke(0xFFE53935.toInt(), 2f, listOf(Offset(0.3f, 0.3f)))
 
     @Test
-    fun `CC5 компенсация толщины — штрих константен на экране при layerScale 0_5, 2 и 4`() {
-        // Штрих рисуется внутри слоя, масштабированного на layerScale.
-        // Экранная толщина = compensated * layerScale = widthDp * pxPerDp — константа.
+    fun `CC5 ImageViewer — штрих константен НА ЭКРАНЕ при graphicsLayer scale (layerScale = zoom)`() {
+        // ImageViewer рисует внутри слоя, масштабированного graphicsLayer'ом:
+        // экранная толщина = compensated * layerScale = widthDp * pxPerDp — константа.
         val pxPerDp = 3f
         listOf(0.5f, 1f, 2f, 4f).forEach { scale ->
             val drawn = compensatedStrokeWidthPx(4f, pxPerDp, scale)
             assertEquals("screen-const при scale=$scale", 12f, drawn * scale, eps)
+        }
+    }
+
+    @Test
+    fun `DD2 PDF — толщина штриха константна ОТНОСИТЕЛЬНО СТРАНИЦЫ (экранная ~ zoom)`() {
+        // PDF: страница масштабируется layout-шириной (pageW = containerW*zoom), слой
+        // не трансформируется; layerScale = 1/zoom ⇒ экранная толщина = widthDp*pxPerDp*zoom
+        // (тоньше на экране при 0.5, толще при 2 — «нарисовано на бумаге»).
+        val containerW = 1080f
+        val pxPerDp = 3f
+        listOf(0.5f, 1f, 2f, 4f).forEach { zoom ->
+            val drawn = compensatedStrokeWidthPx(4f, pxPerDp, DocZoom.strokeLayerScale(zoom))
+            val pageW = DocZoom.pageWidthPx(containerW, zoom)
+            assertEquals("экранная толщина ~ zoom при $zoom", 12f * zoom, drawn, eps)
+            assertEquals("page-const при $zoom", 12f / containerW, drawn / pageW, eps)
         }
     }
 
@@ -38,21 +54,27 @@ class BBAnnotationModelTest {
     }
 
     @Test
-    fun `CC5 eraser при зуме — PDF в graphicsLayer, box фиксирован, толщину компенсирует layerScale`() {
-        // CC4: страница PDF больше не растёт layout'ом — box фиксирован, scale уходит в layerScale.
-        val normAt1 = eraserThresholdNorm(4f, 8f, 3f, boxWidthPx = 1056f, layerScale = 1f)
-        val normAt2 = eraserThresholdNorm(4f, 8f, 3f, boxWidthPx = 1056f, layerScale = 2f)
-        val normAt4 = eraserThresholdNorm(4f, 8f, 3f, boxWidthPx = 1056f, layerScale = 4f)
-        assertEquals(normAt1, normAt2 * 2f, eps)
-        assertEquals(normAt1, normAt4 * 4f, eps)
+    fun `DD2 PDF eraser — порог в page-координатах, нормализованный не зависит от zoom`() {
+        // PDF: boxWidthPx = containerW*zoom (layout-ширина страницы), layerScale = 1/zoom ⇒
+        // нормализованный порог (widthDp/2+extra)*pxPerDp/containerW — константа «на бумаге».
+        val containerW = 1080f
+        val norm =
+            listOf(0.5f, 1f, 2f, 4f).map { zoom ->
+                eraserThresholdNorm(
+                    4f,
+                    8f,
+                    3f,
+                    boxWidthPx = DocZoom.pageWidthPx(containerW, zoom),
+                    layerScale = DocZoom.strokeLayerScale(zoom),
+                )
+            }
+        norm.forEach { assertEquals(norm.first(), it, eps) }
 
-        // Нормализованные координаты штриха масштабируются вместе со страницей автоматически;
-        // компенсированный порог стирает на любом зуме и не стирает далёкую точку.
         val stroke = Stroke(0, 4f, listOf(Offset(0.2f, 0.5f), Offset(0.8f, 0.5f)))
-        listOf(normAt1, normAt2, normAt4).forEach { th ->
+        norm.forEach { th ->
             assertTrue(eraserHitTest(stroke, Offset(0.5f, 0.5f), th, aspect = 1.4f))
+            assertFalse(eraserHitTest(stroke, Offset(0.5f, 0.9f), th, aspect = 1.4f))
         }
-        assertFalse(eraserHitTest(stroke, Offset(0.5f, 0.9f), normAt4, aspect = 1.4f))
     }
 
     @Test
