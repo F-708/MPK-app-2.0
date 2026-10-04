@@ -69,6 +69,7 @@ import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorBrandFill
+import com.politex.ui.theme.ColorDangerFill
 import com.politex.ui.theme.ColorError
 import com.politex.ui.theme.ColorSuccess
 import com.politex.ui.theme.ColorSurfaceHighlight
@@ -82,6 +83,7 @@ import com.politex.util.GradeAggregator
 import com.politex.util.GradeCategory
 import com.politex.util.GradeSettings
 import com.politex.util.MpkCurriculum
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import java.util.Calendar
@@ -93,6 +95,24 @@ object GradeDetailMode {
 }
 
 private val UI_CATEGORIES = GradeCategory.values().filter { it != GradeCategory.LAB }
+
+// CC1: механика двойного тапа удаления оценки (по образцу корзины PDF).
+// NONE --tap--> ARMED --tap(в окне)--> DELETED; ARMED --expired--> NONE.
+internal enum class DeleteArmState { NONE, ARMED, DELETED }
+
+internal fun gradeDeleteAction(
+    current: DeleteArmState,
+    tapped: Boolean,
+    expired: Boolean,
+): DeleteArmState =
+    when {
+        expired -> DeleteArmState.NONE
+        !tapped -> current
+        current == DeleteArmState.ARMED -> DeleteArmState.DELETED
+        else -> DeleteArmState.ARMED
+    }
+
+private const val DELETE_ARM_TIMEOUT_MS = 500L
 
 @Composable
 fun GradesScreen(
@@ -238,7 +258,10 @@ private fun GradeSubjectScreen(
     BackHandler { onBack() }
     val scope = rememberCoroutineScope()
     val today = rememberToday()
-    val entries by dao.entriesForSubject(subject).collectAsState(initial = emptyList())
+    // CC7: до первой эмиссии Room не показываем empty-состояния, только нейтральный placeholder
+    val entriesState by dao.entriesForSubject(subject).collectAsState(initial = null)
+    val loaded = entriesState != null
+    val entries = entriesState ?: emptyList()
     val configs by dao.allConfigs().collectAsState(initial = emptyList())
 
     val byCategory = remember(entries) { entries.groupBy({ it.category }) { it.value } }
@@ -271,7 +294,7 @@ private fun GradeSubjectScreen(
     var lastDeleted by remember { mutableStateOf<GradeEntryEntity?>(null) }
     LaunchedEffect(lastDeleted) {
         if (lastDeleted != null) {
-            kotlinx.coroutines.delay(5000)
+            delay(5000)
             lastDeleted = null
         }
     }
@@ -282,6 +305,26 @@ private fun GradeSubjectScreen(
     fun restoreGrade(e: GradeEntryEntity) {
         lastDeleted = null
         scope.launch { dao.insert(e) }
+    }
+
+    // CC1: удаление чипа двойным тапом — 1-й тап взводит чип на 0.5с, 2-й в окне удаляет
+    var armedId by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(armedId) {
+        if (armedId != null) {
+            delay(DELETE_ARM_TIMEOUT_MS)
+            armedId = null
+        }
+    }
+    fun onChipTap(e: GradeEntryEntity) {
+        val current = if (armedId == e.id) DeleteArmState.ARMED else DeleteArmState.NONE
+        when (gradeDeleteAction(current, tapped = true, expired = false)) {
+            DeleteArmState.ARMED -> armedId = e.id
+            DeleteArmState.DELETED -> {
+                armedId = null
+                deleteGrade(e)
+            }
+            DeleteArmState.NONE -> armedId = null
+        }
     }
 
     Column(
@@ -332,19 +375,21 @@ private fun GradeSubjectScreen(
                 .height(96.dp),
             contentAlignment = Alignment.Center,
         ) {
-            if (avg == null) {
-                EmptyDots(modifier = Modifier.testTag("grades_current_avg"))
-            } else {
-                Text(
-                    text = GradeAggregator.format(avg, mode),
-                    style =
-                    TextStyle(
-                        fontSize = 40.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = gradeColor(avg),
-                    ),
-                    modifier = Modifier.testTag("grades_current_avg"),
-                )
+            when {
+                // CC7: neutral placeholder — тот же Box96dp, без точек и без цифры
+                !loaded -> Unit
+                avg == null -> EmptyDots(modifier = Modifier.testTag("grades_current_avg"))
+                else ->
+                    Text(
+                        text = GradeAggregator.format(avg, mode),
+                        style =
+                        TextStyle(
+                            fontSize = 40.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = gradeColor(avg),
+                        ),
+                        modifier = Modifier.testTag("grades_current_avg"),
+                    )
             }
         }
 
@@ -362,8 +407,59 @@ private fun GradeSubjectScreen(
         ) {
             Column(modifier = Modifier.padding(8.dp)) {
 
+                // CC1: undo-плашка НАД строкой оценок (панель растёт вверх, средний балл не сдвигает)
+                lastDeleted?.let { deleted ->
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorSurfaceHighlight,
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(32.dp)
+                            .testTag("grades_undo_row"),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(start = 12.dp),
+                        ) {
+                            Text(
+                                text = "Удалена оценка «${deleted.value}»",
+                                maxLines = 1,
+                                style = TextStyle(fontSize = 12.sp, color = ColorTextBody),
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = "ОТМЕНИТЬ",
+                                maxLines = 1,
+                                style =
+                                TextStyle(
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ColorBrandBlue,
+                                ),
+                                modifier =
+                                Modifier
+                                    .testTag("grades_undo_btn")
+                                    .bouncyClickable { restoreGrade(deleted) }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 val activeEntries = remember(entries, activeCategory) { entries.filter { it.category == activeCategory } }
-                if (activeEntries.isEmpty()) {
+                if (!loaded) {
+                    // CC7: placeholder фикс-высоты 28dp без точек
+                    Box(
+                        modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(28.dp)
+                            .testTag("grades_recent_box"),
+                    )
+                } else if (activeEntries.isEmpty()) {
                     Box(
                         modifier =
                         Modifier
@@ -387,19 +483,19 @@ private fun GradeSubjectScreen(
                     ) {
 
                         activeEntries.forEach { e ->
-
+                            val armed = armedId == e.id
                             Box(
                                 modifier =
                                 Modifier
                                     .size(44.dp)
                                     .testTag("grades_recent_${e.id}")
-                                    .bouncyClickable { deleteGrade(e) },
+                                    .bouncyClickable { onChipTap(e) },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Surface(
                                     shape = RoundedCornerShape(2.dp),
-                                    color = ColorBgMain,
-                                    border = BorderStroke(1.dp, ColorBorderLight),
+                                    color = if (armed) ColorDangerFill else ColorBgMain,
+                                    border = BorderStroke(1.dp, if (armed) ColorDangerFill else ColorBorderLight),
                                     modifier = Modifier.size(28.dp),
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
@@ -410,7 +506,7 @@ private fun GradeSubjectScreen(
                                             TextStyle(
                                                 fontSize = 13.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = gradeColor(e.value.toDouble()),
+                                                color = if (armed) Color.White else gradeColor(e.value.toDouble()),
                                             ),
                                         )
                                     }
@@ -451,49 +547,6 @@ private fun GradeSubjectScreen(
                     ) {
                         (6..9).forEach { NumberKey(value = it, onSubmit = ::submit) }
                         NumberKey(value = 10, onSubmit = ::submit)
-                    }
-                }
-
-                lastDeleted?.let { deleted ->
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorSurfaceHighlight,
-                        border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .testTag("grades_undo_row"),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier =
-                            Modifier
-                                .padding(start = 12.dp)
-                                .heightIn(min = 44.dp),
-                        ) {
-                            Text(
-                                text = "Удалено: ${deleted.value}",
-                                maxLines = 1,
-                                style = TextStyle(fontSize = 12.sp, color = ColorTextBody),
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                text = "ОТМЕНИТЬ",
-                                maxLines = 1,
-                                style =
-                                TextStyle(
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = ColorBrandBlue,
-                                ),
-                                modifier =
-                                Modifier
-                                    .testTag("grades_undo_btn")
-                                    .bouncyClickable { restoreGrade(deleted) }
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                            )
-                        }
                     }
                 }
             }
