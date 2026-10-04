@@ -324,13 +324,12 @@ private fun GradeSubjectScreen(
             }
         }
 
-        Spacer(modifier = Modifier.weight(0.6f))
-
+        // Фикс-высота: позиция среднего балла не зависит от содержимого ниже
         Box(
             modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp, bottom = 8.dp),
+                .height(96.dp),
             contentAlignment = Alignment.Center,
         ) {
             if (avg == null) {
@@ -351,6 +350,7 @@ private fun GradeSubjectScreen(
 
         Spacer(modifier = Modifier.weight(1f))
 
+        // Нижняя панель прижата к низу контента (последний элемент Column, без weight)
         Surface(
             shape = RoundedCornerShape(2.dp),
             color = ColorBgMain,
@@ -361,22 +361,6 @@ private fun GradeSubjectScreen(
                 .testTag("grades_input_panel"),
         ) {
             Column(modifier = Modifier.padding(8.dp)) {
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    UI_CATEGORIES.forEach { category ->
-                        CategorySegment(
-                            category = category,
-                            count = entries.count { it.category == category.name },
-                            selected = activeCategory == category.name,
-                            onClick = { activeCategory = category.name },
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
 
                 val activeEntries = remember(entries, activeCategory) { entries.filter { it.category == activeCategory } }
                 if (activeEntries.isEmpty()) {
@@ -433,6 +417,22 @@ private fun GradeSubjectScreen(
                                 }
                             }
                         }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    UI_CATEGORIES.forEach { category ->
+                        CategorySegment(
+                            category = category,
+                            count = entries.count { it.category == category.name },
+                            selected = activeCategory == category.name,
+                            onClick = { activeCategory = category.name },
+                        )
                     }
                 }
 
@@ -498,8 +498,6 @@ private fun GradeSubjectScreen(
                 }
             }
         }
-
-        Spacer(modifier = Modifier.weight(1f))
     }
 }
 
