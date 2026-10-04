@@ -113,7 +113,6 @@ import com.politex.util.Dow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Calendar
-import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -924,15 +923,15 @@ private fun MapCanvas(
         label = "пульс",
     )
 
-    val arrowPhase by rememberInfiniteTransition(label = "стрелки").animateFloat(
+    val tickPhase by rememberInfiniteTransition(label = "галочки").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec =
         infiniteRepeatable(
-            tween((ROUTE_ARROW_STEP_PX / ROUTE_ARROW_SPEED_PX_PER_SEC * 1000f).toInt(), easing = LinearEasing),
+            tween((ROUTE_TICK_STEP_PX / ROUTE_TICK_SPEED_PX_PER_SEC * 1000f).toInt(), easing = LinearEasing),
             RepeatMode.Restart,
         ),
-        label = "arrowPhase",
+        label = "tickPhase",
     )
 
     BoxWithConstraints(
@@ -1102,7 +1101,7 @@ private fun MapCanvas(
                             pxPerDp = with(density) { 1.dp.toPx() },
                             pulse = pulse,
                             drawFinish = routeFinishHere,
-                            arrowPhase = arrowPhase,
+                            tickPhase = tickPhase,
                             offsetsDp = routeOffsetsDp,
                         )
                     }
@@ -1404,9 +1403,14 @@ internal fun mainEntranceRoom(mapData: CollegeMapData): MapRoom? = mapData
         )
     }
 
-private const val ROUTE_ARROW_STEP_PX = 48f
-private const val ROUTE_ARROW_SPEED_PX_PER_SEC = 24f
-private const val ROUTE_ARROW_SIZE_DP = 9f
+// Бегущие галочки «✓». Все величины ЭКРАННЫЕ: при рисовании внутри
+// масштабируемого graphicsLayer домножаются на unit = 1/zoom, поэтому размер,
+// шаг и скорость галочек постоянны на экране при любом зуме (0.8..8).
+private const val ROUTE_TICK_STEP_PX = 56f // шаг между галочками, экранных px
+private const val ROUTE_TICK_SPEED_PX_PER_SEC = 12f // скорость вдоль пути, экранных px/сек
+private const val ROUTE_TICK_SIZE_DP = 10f // половина габарита галочки, dp
+private const val ROUTE_TICK_STROKE_DP = 2f // внутренний (белый) штрих, dp
+private const val ROUTE_LINE_WIDTH_DP = 2.5f // линия маршрута (тоньше прежних 4dp)
 
 private fun DrawScope.drawRoutePath(
     polylines: List<List<MapPoint>>,
@@ -1416,7 +1420,7 @@ private fun DrawScope.drawRoutePath(
     pxPerDp: Float,
     pulse: Float,
     drawFinish: Boolean,
-    arrowPhase: Float = 0f,
+    tickPhase: Float = 0f,
     offsetsDp: List<Float> = emptyList(),
 ) {
     if (imgW <= 0f || imgH <= 0f) return
@@ -1424,9 +1428,13 @@ private fun DrawScope.drawRoutePath(
     val color = ColorBrandBlue
     var finish: MapPoint? = null
 
-    val step = ROUTE_ARROW_STEP_PX * unit
-    val s = ROUTE_ARROW_SIZE_DP * pxPerDp * unit
-    var arrowPos = arrowPhase * step
+    // Экранные константы, компенсированные на unit: после graphicsLayer(scale=zoom)
+    // дают одинаковый физический размер/шаг/скорость при любом зуме.
+    val stepPx = ROUTE_TICK_STEP_PX // шаг между галочками, экранных px
+    val offsetPx = tickPhase * stepPx // бегущее смещение, экранных px, [0, stepPx)
+    val lineW = ROUTE_LINE_WIDTH_DP * pxPerDp * unit
+    val tickSize = ROUTE_TICK_SIZE_DP * pxPerDp * unit
+    val tickStroke = ROUTE_TICK_STROKE_DP * pxPerDp * unit
 
     for ((pi, raw) in polylines.withIndex()) {
         if (raw.size < 2) continue
@@ -1445,33 +1453,48 @@ private fun DrawScope.drawRoutePath(
         drawPath(
             path = line,
             color = color,
-            style = Stroke(width = 4f * pxPerDp * unit, cap = StrokeCap.Round, join = StrokeJoin.Round),
+            style = Stroke(width = lineW, cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
 
-        var acc = 0f
+        // ОДНА параметризация по всей полилинии: накопленная длина в image-px.
+        val cum = FloatArray(screen.size)
+        var totalImg = 0f
         for (i in 1 until screen.size) {
+            totalImg += hypot(screen[i].x - screen[i - 1].x, screen[i].y - screen[i - 1].y)
+            cum[i] = totalImg
+        }
+
+        // Метки каждые stepPx ЭКРАННЫХ px вдоль всей длины; текут со offsetPx и
+        // не пропадают на коротких сегментах (полуправый интервал на стыках).
+        val positions = routeTickPositions(totalImg * zoom, stepPx, offsetPx)
+
+        var idx = 0
+        for (i in 1 until screen.size) {
+            if (idx >= positions.size) break
+            val segStart = cum[i - 1]
+            val segEnd = cum[i]
+            val segLen = segEnd - segStart
+            if (segLen <= 0f) continue
             val a = screen[i - 1]
             val b = screen[i]
             val dx = b.x - a.x
             val dy = b.y - a.y
-            val len = hypot(dx, dy)
-            if (len >= s * 2f) {
-                val angle = atan2(dy, dx)
-                while (arrowPos < acc + len) {
-                    val d = arrowPos - acc
-                    if (d >= s * 1.5f && d <= len - s * 1.5f) {
-                        val t = d / len
-                        drawArrowHead(
-                            center = Offset(a.x + dx * t, a.y + dy * t),
-                            angle = angle,
-                            size = s,
-                            color = color,
-                        )
-                    }
-                    arrowPos += step
+            val angle = atan2(dy, dx)
+            while (idx < positions.size) {
+                val pImg = positions[idx] * unit // экранные px -> image-px
+                if (pImg >= segEnd) break // метка следующему сегменту (не дублируем)
+                if (pImg >= segStart) {
+                    val t = (pImg - segStart) / segLen
+                    drawCheckMark(
+                        center = Offset(a.x + dx * t, a.y + dy * t),
+                        angle = angle,
+                        size = tickSize,
+                        stroke = tickStroke,
+                        outline = color,
+                    )
                 }
+                idx++
             }
-            acc += len
         }
     }
 
@@ -1488,26 +1511,57 @@ private fun DrawScope.drawRoutePath(
     }
 }
 
-private fun DrawScope.drawArrowHead(
+/**
+ * Расстояния (px) для бегущих галочек вдоль пути длиной [totalLenPx]: старт с
+ * [offsetPx] (заворачивается в [0, stepPx)) и далее каждые [stepPx]. Чистая
+ * функция — скорость/шаг тестируются. Полуинтервал [start, totalLenPx): конец
+ * исключён, каждая метка принадлежит ровно одному сегменту.
+ */
+internal fun routeTickPositions(
+    totalLenPx: Float,
+    stepPx: Float,
+    offsetPx: Float,
+): List<Float> {
+    if (totalLenPx <= 0f || stepPx <= 0f) return emptyList()
+    var start = offsetPx % stepPx
+    if (start < 0f) start += stepPx
+    val out = ArrayList<Float>()
+    var d = start
+    while (d < totalLenPx) {
+        out += d
+        d += stepPx
+    }
+    return out
+}
+
+/**
+ * Бегущая «✓» вдоль пути: два штриха под ~90°, длинное плечо смотрит по ходу
+ * движения ([angle] в радианах). Белая заливка + синяя обводка — читается и на
+ * линии маршрута, и на любом фоне карты. Все размеры в image-px (уже компенсированы).
+ */
+private fun DrawScope.drawCheckMark(
     center: Offset,
     angle: Float,
     size: Float,
-    color: Color,
+    stroke: Float,
+    outline: Color,
 ) {
-    val back = angle + PI.toFloat()
-    val tip = Offset(center.x + cos(angle) * size, center.y + sin(angle) * size)
-    val left = Offset(center.x + cos(back + 0.5f) * size, center.y + sin(back + 0.5f) * size)
-    val right = Offset(center.x + cos(back - 0.5f) * size, center.y + sin(back - 0.5f) * size)
-    drawPath(
-        path =
-        Path().apply {
-            moveTo(tip.x, tip.y)
-            lineTo(left.x, left.y)
-            lineTo(right.x, right.y)
-            close()
-        },
-        color = color,
-    )
+    val c = cos(angle)
+    val s = sin(angle)
+
+    fun rot(
+        x: Float,
+        y: Float,
+    ) = Offset(center.x + x * c - y * s, center.y + x * s + y * c)
+
+    val a = rot(-0.42f * size, -0.10f * size) // верх короткого плеча
+    val b = rot(-0.10f * size, 0.34f * size) // нижний излом
+    val d = rot(0.46f * size, -0.34f * size) // кончик длинного плеча (вперёд)
+
+    drawLine(outline, a, b, strokeWidth = stroke * 1.9f, cap = StrokeCap.Round)
+    drawLine(outline, b, d, strokeWidth = stroke * 1.9f, cap = StrokeCap.Round)
+    drawLine(Color.White, a, b, strokeWidth = stroke, cap = StrokeCap.Round)
+    drawLine(Color.White, b, d, strokeWidth = stroke, cap = StrokeCap.Round)
 }
 
 private fun mapRes(floorId: String): Int = when (floorId) {
