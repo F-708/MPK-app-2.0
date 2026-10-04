@@ -1,8 +1,10 @@
 package com.politex.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -145,8 +147,8 @@ fun RoutePairPanel(
     ) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PairField(label = "Откуда (А — пусто = вход)", value = valueA, onValueChange = onValueA, modifier = Modifier.weight(1f))
-                PairField(label = "Куда (Б)", value = valueB, onValueChange = onValueB, modifier = Modifier.weight(1f))
+                PairField(placeholder = "Откуда (пусто = вход)", value = valueA, onValueChange = onValueA, modifier = Modifier.weight(1f))
+                PairField(placeholder = "Куда", value = valueB, onValueChange = onValueB, modifier = Modifier.weight(1f))
             }
             Surface(
                 shape = RoundedCornerShape(3.dp),
@@ -168,7 +170,7 @@ fun RoutePairPanel(
 
 @Composable
 private fun PairField(
-    label: String,
+    placeholder: String,
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -179,16 +181,24 @@ private fun PairField(
         border = androidx.compose.foundation.BorderStroke(1.dp, ColorBorderLight),
         modifier = modifier.height(com.politex.ui.theme.Tokens.SearchHeight),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
-            verticalArrangement = Arrangement.Center,
+        // BB10: без постоянной подписи сверху — полупрозрачный placeholder внутри поля
+        Box(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
+            contentAlignment = Alignment.CenterStart,
         ) {
-            Text(text = label, style = TextStyle(fontSize = 9.sp, color = ColorTextMuted), maxLines = 1)
+            if (value.isEmpty()) {
+                Text(
+                    text = placeholder,
+                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted.copy(alpha = 0.7f)),
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
             BasicTextField(
                 value = value,
                 onValueChange = { input -> onValueChange(input.filter { it.isDigit() || it.isLetter() }.take(6)) },
                 singleLine = true,
-                textStyle = TextStyle(fontSize = 16.sp, color = ColorTextTitle),
+                textStyle = TextStyle(fontSize = 15.sp, color = ColorTextTitle),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
             )

@@ -323,15 +323,11 @@ fun CollegeMapScreen(
     val routeFinishHere =
         remember(activeRoute, floorId) { activeRoute?.floorPaths?.lastOrNull()?.floorId == floorId }
 
-    val routeBanner =
-        remember(activeRoute) {
-            val fps = activeRoute?.takeIf { it.crossesFloors }?.floorPaths ?: return@remember null
-            val via = fps.map { CollegeMap.Floor.from(it.floorId).title }.distinct().drop(1)
-            if (via.isEmpty()) null else "через ${via.joinToString(", ")}"
-        }
-
+    // BB8: шильдик «через N этаж» убран; BB9: соседние одинаковые этажи схлопнуты
     val routeSegments =
-        remember(activeRoute) { activeRoute?.takeIf { it.crossesFloors }?.floorPaths?.map { it.floorId } ?: emptyList() }
+        remember(activeRoute) {
+            dedupeStages(activeRoute?.takeIf { it.crossesFloors }?.floorPaths?.map { it.floorId } ?: emptyList())
+        }
 
     Column(
         modifier =
@@ -398,8 +394,9 @@ fun CollegeMapScreen(
         }
 
         Spacer(modifier = Modifier.height(6.dp))
-        RouteActionButton(active = routeActive) {
-            if (routeActive) {
+        // BB10: «Отменить» показывается и при открытой форме (даже с пустыми полями)
+        RouteActionButton(active = routeActive || builderActive) {
+            if (routeActive || builderActive) {
                 manualA = null
                 manualB = null
                 autoCancelled = true
@@ -407,7 +404,7 @@ fun CollegeMapScreen(
                 pairA = ""
                 pairB = ""
             } else {
-                builderActive = !builderActive
+                builderActive = true
             }
         }
 
@@ -421,39 +418,8 @@ fun CollegeMapScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        MapCanvas(
-            floorId = floorId,
-            floor = floor,
-            targetRoom = targetRoom,
-
-            onRoomTap = { room ->
-                manualA = null
-                manualB = null
-                searchFailed = false
-                target = room.number
-            },
-            routePoints = routePoints,
-            routeOffsetsDp = routeOffsetsDp,
-            routeFinishHere = routeFinishHere,
-            routeBanner = routeBanner,
-            routeSegments = routeSegments,
-            onSelectRouteSegment = { fid ->
-                // AA7: тап чипа этапа — zoom-to-fit bbox'а этого этапа (только при смене этажа)
-                if (fid != floorId) {
-                    stageFocus++
-                    floorId = fid
-                }
-            },
-            stageFocus = stageFocus,
-
-            showCancel = builderActive,
-            onCancel = { builderActive = false },
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .weight(1f),
-        )
-
+        // BB10: форма конструктора — СРАЗУ под чипами этажей. Приложение edge-to-edge
+        // без ime-insets: клавиатура перекрывает только низ экрана, форма вверху видна.
         if (builderActive) {
             RoutePairPanel(
                 valueA = pairA,
@@ -485,9 +451,40 @@ fun CollegeMapScreen(
                         }
                     }
                 },
-                modifier = Modifier.padding(bottom = 8.dp),
             )
-        } else if (targetRoom != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        MapCanvas(
+            floorId = floorId,
+            floor = floor,
+            targetRoom = targetRoom,
+
+            onRoomTap = { room ->
+                manualA = null
+                manualB = null
+                searchFailed = false
+                target = room.number
+            },
+            routePoints = routePoints,
+            routeOffsetsDp = routeOffsetsDp,
+            routeFinishHere = routeFinishHere,
+            routeSegments = routeSegments,
+            onSelectRouteSegment = { fid ->
+                // AA7: тап чипа этапа — zoom-to-fit bbox'а этого этапа (только при смене этажа)
+                if (fid != floorId) {
+                    stageFocus++
+                    floorId = fid
+                }
+            },
+            stageFocus = stageFocus,
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        )
+
+        if (!builderActive && targetRoom != null) {
             RoomPanel(
                 room = targetRoom,
                 onShowSchedule = { roomScheduleFor = targetRoom.number },
@@ -904,14 +901,11 @@ private fun MapCanvas(
 
     routePoints: List<List<MapPoint>>? = null,
     routeFinishHere: Boolean = false,
-    routeBanner: String? = null,
     routeSegments: List<String> = emptyList(),
     onSelectRouteSegment: (String) -> Unit = {},
     stageFocus: Int = 0,
 
     routeOffsetsDp: List<Float> = emptyList(),
-    showCancel: Boolean = false,
-    onCancel: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -1152,78 +1146,42 @@ private fun MapCanvas(
             }
         }
 
-        if (showCancel) {
+        // BB8: без шильдика «через N этаж» — только stage-чипы у самого верха карты
+        if (routeSegments.size > 1) {
             Row(
-                modifier =
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                MapRoundAction(
-                    icon = Icons.Default.Close,
-                    description = "Закрыть конструктор маршрута",
-                    filled = false,
-                    onClick = onCancel,
-                )
-            }
-        }
-
-        if (routeBanner != null || routeSegments.isNotEmpty()) {
-            Column(
                 modifier =
                 Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                routeBanner?.let { text ->
+                routeSegments.forEach { fid ->
+                    val selected = fid == floorId
                     Surface(
-                        shape = RoundedCornerShape(3.dp),
-                        color = ColorBrandFill,
-                        modifier = Modifier.padding(horizontal = 12.dp),
+                        shape = CircleShape,
+                        color = if (selected) ColorBrandFill else ColorBgMain,
+                        border =
+                        BorderStroke(
+                            1.dp,
+                            if (selected) ColorBrandFill else ColorBorderLight,
+                        ),
+                        modifier =
+                        Modifier
+                            .size(32.dp)
+                            .bouncyClickable { onSelectRouteSegment(fid) },
                     ) {
-                        Text(
-                            text = text,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White),
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        )
-                    }
-                }
-                if (routeSegments.size > 1) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        routeSegments.forEach { fid ->
-                            val selected = fid == floorId
-                            Surface(
-                                shape = CircleShape,
-                                color = if (selected) ColorBrandFill else ColorBgMain,
-                                border =
-                                BorderStroke(
-                                    1.dp,
-                                    if (selected) ColorBrandFill else ColorBorderLight,
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = fid,
+                                maxLines = 1,
+                                softWrap = false,
+                                style =
+                                TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    color = if (selected) Color.White else ColorTextBody,
                                 ),
-                                modifier =
-                                Modifier
-                                    .size(32.dp)
-                                    .bouncyClickable { onSelectRouteSegment(fid) },
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = fid,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        style =
-                                        TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                            color = if (selected) Color.White else ColorTextBody,
-                                        ),
-                                    )
-                                }
-                            }
+                            )
                         }
                     }
                 }
@@ -1254,38 +1212,6 @@ private fun ZoomButton(
                 tint = ColorBrandBlue,
                 modifier = Modifier.size(20.dp),
             )
-        }
-    }
-}
-
-@Composable
-private fun MapRoundAction(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    description: String,
-    filled: Boolean,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier =
-        Modifier
-            .size(44.dp)
-            .bouncyClickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Surface(
-            shape = RoundedCornerShape(3.dp),
-            color = if (filled) ColorBrandFill else ColorBgMain,
-            border = BorderStroke(1.dp, if (filled) ColorBrandFill else ColorBorderLight),
-            modifier = Modifier.size(32.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = description,
-                    tint = if (filled) Color.White else ColorTextMuted,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
         }
     }
 }
@@ -1429,7 +1355,7 @@ internal fun mainEntranceRoom(mapData: CollegeMapData): MapRoom? = mapData
         )
     }
 
-// Бегущие галочки «✓». Все величины ЭКРАННЫЕ: при рисовании внутри
+// Бегущие шевроны «^» (BB7). Все величины ЭКРАННЫЕ: при рисовании внутри
 // масштабируемого graphicsLayer домножаются на unit = 1/zoom, поэтому размер,
 // шаг и скорость галочек постоянны на экране при любом зуме (0.8..8).
 private const val ROUTE_TICK_STEP_PX = 56f // шаг между галочками, экранных px
@@ -1522,7 +1448,7 @@ private fun DrawScope.drawRoutePath(
                     if (pImg >= segEnd) break // метка следующему сегменту (не дублируем)
                     if (pImg >= segStart) {
                         val t = (pImg - segStart) / segLen
-                        drawCheckMark(
+                        drawDirectionChevron(
                             center = Offset(a.x + dx * t, a.y + dy * t),
                             angle = angle,
                             size = tickSize,
@@ -1581,8 +1507,9 @@ internal fun routeTickPositions(
 
 /**
  * AA7 zoom-to-fit этапа маршрута: [points] — план-координаты (0..1) точек этапа,
- * [viewW]/[viewH] — экран в px. scale = min(viewW/bw, viewH/bh)*0.85 (clamp в
- * [restZoom, 8] как у ручного зума), offset — чтобы центр bbox встал в центр экрана.
+ * [viewW]/[viewH] — экран в px. scale = min(viewW/bw, viewH/bh)*0.85*0.8 (BB11:
+ * дополнительное отдаление ~20%; clamp в [restZoom, 8] как у ручного зума),
+ * offset — чтобы центр bbox встал в центр экрана.
  * План занимает imgW=viewW, imgH=viewW/PLAN_ASPECT (все планы 1376×768).
  * Чистая функция — тестируется без Compose.
  */
@@ -1608,7 +1535,8 @@ internal fun fitStageViewport(
     val bw = (maxX - minX).coerceAtLeast(1f)
     val bh = (maxY - minY).coerceAtLeast(1f)
     val rest = (viewH / imgH * 0.72f).coerceIn(1f, 2.2f)
-    val scale = (minOf(viewW / bw, viewH / bh) * 0.85f).coerceIn(rest, 8f)
+    // BB11: итоговый scale ещё ×0.8 — отдалить этап, clamp сохранён
+    val scale = (minOf(viewW / bw, viewH / bh) * 0.85f * 0.8f).coerceIn(rest, 8f)
     return Triple(
         scale,
         viewW / 2f - (minX + maxX) / 2f * scale,
@@ -1616,12 +1544,17 @@ internal fun fitStageViewport(
     )
 }
 
+// BB7: плечи шеврона под ±35° от направления движения
+private const val CHEVRON_COS35 = 0.8192f
+private const val CHEVRON_SIN35 = 0.5736f
+
 /**
- * Бегущая «✓» вдоль пути: два штриха под ~90°, длинное плечо смотрит по ходу
- * движения ([angle] в радианах). Белая заливка + синяя обводка — читается и на
+ * BB7: бегущий симметричный шеврон «^» вдоль пути: вершина впереди, два РАВНЫХ
+ * плеча под ±35° к оси сегмента ([angle] в радианах — направление движения),
+ * симметрично относительно оси. Белая заливка + синяя обводка — читается и на
  * линии маршрута, и на любом фоне карты. Все размеры в image-px (уже компенсированы).
  */
-private fun DrawScope.drawCheckMark(
+private fun DrawScope.drawDirectionChevron(
     center: Offset,
     angle: Float,
     size: Float,
@@ -1636,15 +1569,22 @@ private fun DrawScope.drawCheckMark(
         y: Float,
     ) = Offset(center.x + x * c - y * s, center.y + x * s + y * c)
 
-    val a = rot(-0.42f * size, -0.10f * size) // верх короткого плеча
-    val b = rot(-0.10f * size, 0.34f * size) // нижний излом
-    val d = rot(0.46f * size, -0.34f * size) // кончик длинного плеча (вперёд)
+    // локальные координаты: +x — по ходу движения
+    val arm = 0.75f * size
+    val apex = rot(0.30f * size, 0f)
+    val backX = 0.30f * size - arm * CHEVRON_COS35
+    val spread = arm * CHEVRON_SIN35
+    val e1 = rot(backX, spread)
+    val e2 = rot(backX, -spread)
 
-    drawLine(outline, a, b, strokeWidth = stroke * 1.9f, cap = StrokeCap.Round)
-    drawLine(outline, b, d, strokeWidth = stroke * 1.9f, cap = StrokeCap.Round)
-    drawLine(Color.White, a, b, strokeWidth = stroke, cap = StrokeCap.Round)
-    drawLine(Color.White, b, d, strokeWidth = stroke, cap = StrokeCap.Round)
+    drawLine(outline, apex, e1, strokeWidth = stroke * 1.9f, cap = StrokeCap.Round)
+    drawLine(outline, apex, e2, strokeWidth = stroke * 1.9f, cap = StrokeCap.Round)
+    drawLine(Color.White, apex, e1, strokeWidth = stroke, cap = StrokeCap.Round)
+    drawLine(Color.White, apex, e2, strokeWidth = stroke, cap = StrokeCap.Round)
 }
+
+/** BB9: схлопывает ПОДРЯД идущие одинаковые floorId этапов («3-4, 3-4» → «3-4»). Чистая функция. */
+internal fun dedupeStages(list: List<String>): List<String> = list.filterIndexed { i, id -> i == 0 || id != list[i - 1] }
 
 private fun mapRes(floorId: String): Int = when (floorId) {
     "2" -> com.politex.R.drawable.map_floor2

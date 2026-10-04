@@ -2,6 +2,7 @@ package com.politex
 
 import com.politex.data.model.CollegeRouteFinder
 import com.politex.data.model.MapPoint
+import com.politex.ui.screens.dedupeStages
 import com.politex.ui.screens.fitStageViewport
 import com.politex.ui.screens.routeTickPositions
 import org.junit.Assert.assertEquals
@@ -151,7 +152,7 @@ class RouteTickPositionsTest {
         val bw = 0.4f * viewW
         val bh = 0.2f * imgH
         val rest = (viewH / imgH * 0.72f).coerceIn(1f, 2.2f)
-        val expected = (minOf(viewW / bw, viewH / bh) * 0.85f).coerceIn(rest, 8f)
+        val expected = (minOf(viewW / bw, viewH / bh) * 0.85f * 0.8f).coerceIn(rest, 8f)
         assertEquals(expected, s, 1e-3f)
         val cx = 0.4f * viewW
         val cy = 0.4f * imgH
@@ -180,5 +181,16 @@ class RouteTickPositionsTest {
         assertNull(fitStageViewport(emptyList(), 1080f, 600f))
         assertNull(fitStageViewport(listOf(MapPoint(0.5f, 0.5f)), 0f, 600f))
         assertNull(fitStageViewport(listOf(MapPoint(0.5f, 0.5f)), 1080f, 0f))
+    }
+
+    // ---- BB9: дедупликация соседних одинаковых этапов ----
+
+    @Test
+    fun `dedupeStages схлопывает подряд идущие одинаковые этажи`() {
+        assertEquals(listOf("1", "2", "3-4"), dedupeStages(listOf("1", "1", "2", "3-4", "3-4", "3-4")))
+        assertEquals(emptyList<String>(), dedupeStages(emptyList()))
+        assertEquals(listOf("3-4"), dedupeStages(listOf("3-4", "3-4")))
+        // несоседние дубликаты сохраняются (маршрут реально вернулся на этаж)
+        assertEquals(listOf("1", "2", "1"), dedupeStages(listOf("1", "2", "1")))
     }
 }
