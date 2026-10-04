@@ -140,6 +140,13 @@ object BackupManager {
         if (settings?.has("notificationsEnabled") == true) {
             WidgetUpdateHelper.setNotificationEnabled(context, settings.optBoolean("notificationsEnabled"))
         }
+        // СРЕД8: стиль/тема уведомления восстанавливаются симметрично экспорту
+        settings?.optString("notificationsStyle")?.takeIf { it.isNotBlank() }?.let {
+            BellCountdownNotifier.setStyle(context, BellCountdownNotifier.Style.from(it))
+        }
+        settings?.optString("notificationsTheme")?.takeIf { it.isNotBlank() }?.let {
+            BellCountdownNotifier.setTheme(context, BellCountdownNotifier.Theme.from(it))
+        }
 
         val db = MpkDatabase.getInstance(context)
         val dao = db.taskDao()

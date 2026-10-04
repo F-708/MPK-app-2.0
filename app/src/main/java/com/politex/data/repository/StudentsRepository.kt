@@ -1,6 +1,7 @@
 package com.politex.data.repository
 
 import android.content.Context
+import com.politex.util.Csv
 import com.politex.util.GroupCatalog
 import com.politex.util.MpkCurriculum
 
@@ -42,7 +43,7 @@ class StudentsRepository(
         lines: List<String>,
         knownGroups: Set<String>,
     ): List<Student> {
-        val header = lines.firstOrNull()?.let { splitRow(stripBom(it)) } ?: return emptyList()
+        val header = lines.firstOrNull()?.let { Csv.splitRow(Csv.stripBom(it)) } ?: return emptyList()
 
         val idxName = header.indexOfFirst { it.startsWith("ФИО") }
         val idxGroup = header.indexOf("Группа")
@@ -61,7 +62,7 @@ class StudentsRepository(
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .map { line ->
-                val p = splitRow(line)
+                val p = Csv.splitRow(line)
 
                 fun cell(i: Int) = p.getOrElse(i) { "" }.trim()
 
@@ -93,32 +94,4 @@ class StudentsRepository(
                 )
             }.filter { it.fullName.isNotBlank() }
     }
-
-    private fun splitRow(line: String): List<String> {
-        val cells = mutableListOf<String>()
-        val sb = StringBuilder()
-        var inQuotes = false
-        var i = 0
-        while (i < line.length) {
-            val ch = line[i]
-            when {
-
-                ch == '"' && inQuotes && i + 1 < line.length && line[i + 1] == '"' -> {
-                    sb.append('"')
-                    i++
-                }
-                ch == '"' -> inQuotes = !inQuotes
-                ch == ';' && !inQuotes -> {
-                    cells.add(sb.toString())
-                    sb.setLength(0)
-                }
-                else -> sb.append(ch)
-            }
-            i++
-        }
-        cells.add(sb.toString())
-        return cells
-    }
-
-    private fun stripBom(s: String): String = if (s.firstOrNull() == '﻿') s.substring(1) else s
 }

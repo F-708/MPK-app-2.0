@@ -1,6 +1,7 @@
 package com.politex.data.repository
 
 import android.content.Context
+import com.politex.util.Csv
 import java.io.InputStream
 
 data class Teacher(
@@ -20,7 +21,8 @@ class TeachersRepository(
     private val context: Context,
 ) {
 
-    fun loadTeachers(): List<Teacher> = cached ?: parseTeachers().also { cached = it }
+    // СРЕД9: пустой результат не кешируется — временный сбой чтения assets не прибивает список навсегда
+    fun loadTeachers(): List<Teacher> = cached ?: parseTeachers().takeIf { it.isNotEmpty() }?.also { cached = it } ?: emptyList()
 
     private fun parseTeachers(): List<Teacher> = try {
         parseCsv(context.assets.open("teachers.csv"))
@@ -39,7 +41,8 @@ class TeachersRepository(
         .map { it.trim() }
         .filter { it.isNotBlank() && !it.startsWith("#") }
         .map { line ->
-            val p = line.split(';')
+            // М20: общий CSV-сплиттер (кавычки внутри значений больше не рвут строку)
+            val p = Csv.splitRow(line)
             Teacher(
                 name = cell(p, 0),
                 position = cell(p, 1),

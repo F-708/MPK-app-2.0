@@ -219,7 +219,7 @@ object BellCountdownNotifier {
 
     private fun morningInfo(context: Context): Triple<Long, String, Int>? {
         val cal = Calendar.getInstance()
-        val now = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+        val now = com.politex.widget.WidgetData.minuteOfDay(cal)
         if (isQuietWindow(now, lessonsEndedMinuteToday(context))) return null
 
         val first = CollegeBellSchedule.getBellsForDay(modeLessonsDay(cal)).firstOrNull() ?: return null
@@ -232,7 +232,7 @@ object BellCountdownNotifier {
     private fun isQuietWindowNow(context: Context): Boolean {
         val cal = Calendar.getInstance()
         return isQuietWindow(
-            cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE),
+            com.politex.widget.WidgetData.minuteOfDay(cal),
             lessonsEndedMinuteToday(context),
         )
     }
@@ -267,7 +267,7 @@ object BellCountdownNotifier {
 
         val dow = Dow.of(cal)
         if (dow == 7) return null
-        val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+        val minutes = com.politex.widget.WidgetData.minuteOfDay(cal)
         val bells = CollegeBellSchedule.getBellsForDay(dow)
         val lastGroupLesson =
             if (mode == com.politex.widget.CountdownMode.GROUP_LESSONS) {

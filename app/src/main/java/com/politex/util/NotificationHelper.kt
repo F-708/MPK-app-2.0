@@ -23,7 +23,8 @@ object NotificationHelper {
 
     const val REMINDER_CHANNEL_ID = "mpk_reminders"
     const val REMINDER_CHANNEL_NAME = "Напоминания о заданиях"
-    private const val REMINDER_NOTIFICATION_BASE = 3000
+    // SRED11: неймспейс reminder-PendingIntent (3_000_000+), не пересекается с виджет-чипами
+    private const val REMINDER_NOTIFICATION_BASE = 3_000_000
 
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

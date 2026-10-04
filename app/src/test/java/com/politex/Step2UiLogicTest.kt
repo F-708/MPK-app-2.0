@@ -15,19 +15,14 @@ class Step2UiLogicTest {
         assertEquals(12, CollegeBellSchedule.BELLS.size)
         assertTrue(CollegeBellSchedule.DISCLAIMER.contains("расписание звонков колледжа МГПК на 2026 г."))
 
-        val firstLesson = CollegeBellSchedule.getBellForNumber(1)
-        assertNotNull(firstLesson)
-        assertEquals("08:15", firstLesson?.start)
-        assertEquals("09:00", firstLesson?.end)
+        // М25: getBellForNumber/getTimeForNumber удалены как мёртвые — проверяем живой getTimeForLessonNumber
+        val firstLesson = CollegeBellSchedule.getTimeForLessonNumber(1, 1)
+        assertEquals("08:15", firstLesson.first)
+        assertEquals("09:00", firstLesson.second)
 
-        val twelfthLesson = CollegeBellSchedule.getBellForNumber(12)
-        assertNotNull(twelfthLesson)
-        assertEquals("18:50", twelfthLesson?.start)
-        assertEquals("19:35", twelfthLesson?.end)
-
-        val pair1 = CollegeBellSchedule.getTimeForNumber(1, dayOfWeek = 1)
-        assertEquals("08:15", pair1.first)
-        assertEquals("09:55", pair1.second)
+        val twelfthLesson = CollegeBellSchedule.getTimeForLessonNumber(12, 1)
+        assertEquals("18:50", twelfthLesson.first)
+        assertEquals("19:35", twelfthLesson.second)
 
         val slotAt9am = CollegeBellSchedule.getCurrentSlot(9 * 60, dayOfWeek = 2)
         assertNotNull(slotAt9am)

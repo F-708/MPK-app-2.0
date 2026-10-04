@@ -107,30 +107,8 @@ object CollegeBellSchedule {
         return bells.firstOrNull { currentMinutes in it.startMinutes..it.endMinutes }
     }
 
-    fun getTimeForNumber(
-        number: Int,
-        dayOfWeek: Int = 1,
-    ): Pair<String, String> {
-        val bells = getBellsForDay(dayOfWeek)
-
-        if (number in 1..6) {
-            val pairLessons = bells.filter { it.pairNumber == number }
-            if (pairLessons.isNotEmpty()) {
-                val start = pairLessons.first().start
-                val end = pairLessons.last().end
-                return Pair(start, end)
-            }
-        }
-
-        val lesson = bells.find { it.lessonNumber == number }
-        if (lesson != null) {
-            return Pair(lesson.start, lesson.end)
-        }
-        return Pair("08:15", "09:55")
-    }
-
-    fun getBellForNumber(number: Int): BellItem? = STANDARD_BELLS.firstOrNull { it.lessonNumber == number || it.pairNumber == number }
-
+    // М25: getTimeForNumber/getBellForNumber (время «пар») удалены — в проде не использовались,
+    // уроки везде считаются через getTimeForLessonNumber.
     fun getTimeForLessonNumber(
         number: Int,
         dayOfWeek: Int = 1,

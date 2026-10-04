@@ -89,7 +89,6 @@ class TeacherInsights(
             }
         }
 
-        val lastDateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
         return counts.keys.associateWith { full ->
             TeacherFacts(
                 rooms =
@@ -102,7 +101,7 @@ class TeacherInsights(
                     .map { it.key },
                 subjects = subjects[full].orEmpty().distinct().take(6),
                 count = counts[full] ?: 0,
-                lastDate = dateMillis[full]?.let { lastDateFormat.format(java.util.Date(it)) }.orEmpty(),
+                lastDate = dateMillis[full]?.let { com.politex.util.DateFormats.dotDate(java.util.Date(it)) }.orEmpty(),
                 lastMillis = dateMillis[full],
                 activeNow =
                 weekly[full] == true ||

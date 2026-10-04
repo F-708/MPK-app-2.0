@@ -2,12 +2,14 @@ package com.politex.data.network
 
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.SyncDiagnosticInfo
+import com.politex.util.DateFormats
 import com.politex.util.lessonsWord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -74,8 +76,7 @@ open class MpkNetworkClient {
         fun buildDirectScheduleUrl(calendar: Calendar = Calendar.getInstance()): String {
             val yyyy = SimpleDateFormat("yyyy", Locale.ROOT).format(calendar.time)
             val mm = SimpleDateFormat("MM", Locale.ROOT).format(calendar.time)
-            val ddMmYyyy = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(calendar.time)
-            return "https://guo-mpk.by/wp-content/uploads/$yyyy/$mm/$ddMmYyyy-raspisanie-uchashhihsya.doc"
+            return "https://guo-mpk.by/wp-content/uploads/$yyyy/$mm/${DateFormats.dotDate(calendar)}-raspisanie-uchashhihsya.doc"
         }
     }
 
@@ -86,8 +87,8 @@ open class MpkNetworkClient {
         calendar: Calendar,
         nameBase: String = "raspisanie-uchashhihsya",
     ): List<Pair<String, String>> {
-        val ddMmYyyy = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(calendar.time)
-        val dd = SimpleDateFormat("dd", Locale.ROOT).format(calendar.time)
+        val ddMmYyyy = DateFormats.dotDate(calendar)
+        val dd = ddMmYyyy.substring(0, 2)
         val prevMonth = (calendar.clone() as Calendar).apply { add(Calendar.MONTH, -1) }
 
         val folders = listOf(
@@ -103,10 +104,7 @@ open class MpkNetworkClient {
             if (result.none { it.first == url }) result.add(Pair(url, ddMmYyyy))
         }
 
-        val (ty, tm) = folders[0]
-        add(ty, tm, ddMmYyyy, "", "doc")
-        add(ty, tm, ddMmYyyy, "", "docx")
-
+        // М16: прежние два «приоритетных» add() дублировали первую итерацию цикла (тот же порядок)
         for ((yyyy, mm) in folders) {
             for (name in listOf(ddMmYyyy, "${dd}_${mm}_$yyyy")) {
                 for (suffix in listOf("", "-1", "-2")) {
@@ -204,7 +202,7 @@ open class MpkNetworkClient {
     ): Result<List<LessonEntity>> = withContext(Dispatchers.IO) {
         val timeFormat = SimpleDateFormat("HH:mm:ss (dd.MM.yyyy)", Locale.ROOT)
         val nowStr = timeFormat.format(Date())
-        val dateDotStr = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(targetCalendar.time)
+        val dateDotStr = DateFormats.dotDate(targetCalendar)
 
         _diagnosticInfo.value = _diagnosticInfo.value.copy(
             isSyncing = true,
@@ -232,12 +230,14 @@ open class MpkNetworkClient {
         }
 
         fun rememberParseStats() {
-            lastParseFormat = MpkScheduleParser.lastParseStats.format
-            lastParseStrategy = MpkScheduleParser.lastParseStats.strategy
-            lastParseRuns = MpkScheduleParser.lastParseStats.runsExtracted
-            groupWasFound = groupWasFound || MpkScheduleParser.lastParseStats.groupFound
-            lastParseError = MpkScheduleParser.lastParseStats.parseError
-            lastTextPreview = MpkScheduleParser.lastParseStats.textPreview
+            // СРЕД14: один синхронный снапшот вместо 6 отдельных volatile-чтений
+            val stats = MpkScheduleParser.statsSnapshot()
+            lastParseFormat = stats.format
+            lastParseStrategy = stats.strategy
+            lastParseRuns = stats.runsExtracted
+            groupWasFound = groupWasFound || stats.groupFound
+            lastParseError = stats.parseError
+            lastTextPreview = stats.textPreview
         }
 
         for (attempt in 1..maxRetries) {
@@ -339,9 +339,12 @@ open class MpkNetworkClient {
 
     open suspend fun downloadFileBytes(url: String): ByteArray? = withContext(Dispatchers.IO) {
         try {
-            val response = executeRequest(url)
-            if (response.isSuccessful) {
-                return@withContext response.body?.bytes()
+            // КРИТ2: ответ закрывается и на не-2xx — иначе при переборе кандидатов
+            // каждое 404 оставляет соединение OkHttp незакрытым (утечка пула).
+            executeRequest(url).use { response ->
+                if (response.isSuccessful) {
+                    return@withContext response.body?.bytes()
+                }
             }
         } catch (_: Exception) {}
         null
@@ -350,7 +353,7 @@ open class MpkNetworkClient {
     open suspend fun fetchTeacherSchedule(
         targetCalendar: Calendar = Calendar.getInstance(),
     ): Result<Map<String, List<TeacherSlot>>> = withContext(Dispatchers.IO) {
-        val ddMmYyyy = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(targetCalendar.time)
+        val ddMmYyyy = DateFormats.dotDate(targetCalendar)
         var lastUrl = ""
         var lastMismatch: String? = null
 
@@ -429,7 +432,7 @@ open class MpkNetworkClient {
         calendar: Calendar,
         nameBase: String = "raspisanie-uchashhihsya",
     ): ProbeResult = withContext(Dispatchers.IO) {
-        val dateDot = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(calendar.time)
+        val dateDot = DateFormats.dotDate(calendar)
 
         val candidates = generateCandidateDirectUrls(calendar, nameBase)
             .map { it.first }
@@ -456,10 +459,12 @@ open class MpkNetworkClient {
     }
 
     open fun publishStatus(statusMessage: String? = null, isSyncing: Boolean? = null) {
-        val current = _diagnosticInfo.value
-        _diagnosticInfo.value = current.copy(
-            statusMessage = statusMessage ?: current.statusMessage,
-            isSyncing = isSyncing ?: current.isSyncing,
-        )
+        // СРЕД14: атомарный update вместо read-copy-write — параллельные публикаторы не затирают друг друга
+        _diagnosticInfo.update { current ->
+            current.copy(
+                statusMessage = statusMessage ?: current.statusMessage,
+                isSyncing = isSyncing ?: current.isSyncing,
+            )
+        }
     }
 }

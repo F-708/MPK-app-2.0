@@ -65,17 +65,18 @@ class Step6WidgetsAndWorkerTest {
 
     @Test
     fun testBellTimesForDayOfWeek() {
-        val (monStart, monEnd) = CollegeBellSchedule.getTimeForNumber(1, 1)
+        // М25: getTimeForNumber (время «пар») удалён как мёртвый — проверяем живой getTimeForLessonNumber
+        val (monStart, monEnd) = CollegeBellSchedule.getTimeForLessonNumber(1, 1)
         assertEquals("08:15", monStart)
-        assertEquals("09:55", monEnd)
+        assertEquals("09:00", monEnd)
 
-        val (thu4Start, thu4End) = CollegeBellSchedule.getTimeForNumber(4, 4)
-        assertEquals("14:45", thu4Start)
-        assertEquals("16:25", thu4End)
+        val (thu7Start, thu7End) = CollegeBellSchedule.getTimeForLessonNumber(7, 4)
+        assertEquals("14:45", thu7Start)
+        assertEquals("15:30", thu7End)
 
-        val (satStart, satEnd) = CollegeBellSchedule.getTimeForNumber(1, 6)
+        val (satStart, satEnd) = CollegeBellSchedule.getTimeForLessonNumber(1, 6)
         assertEquals("08:15", satStart)
-        assertEquals("09:55", satEnd)
+        assertEquals("09:00", satEnd)
     }
 
     @Test

@@ -2,6 +2,10 @@ package com.politex.data.network
 
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
+import com.politex.util.BinaryTextExtract
+import com.politex.util.DateFormats
+import com.politex.util.Docx
+import com.politex.util.Dow
 import com.politex.util.GroupParser
 import com.politex.util.SubjectFormatter
 import org.xmlpull.v1.XmlPullParser
@@ -11,7 +15,6 @@ import java.io.InputStream
 import java.net.URLDecoder
 import java.nio.charset.Charset
 import java.util.Locale
-import java.util.zip.ZipInputStream
 
 data class SchedulePostLink(
     val url: String,
@@ -45,6 +48,9 @@ object MpkScheduleParser {
     private fun resetStats(format: String) {
         mutateStats { ParseStats(format = format) }
     }
+
+    /** СРЕД14: диагностика читает статистику одним синхронным снапшотом, а не 6 отдельными volatile-чтениями. */
+    internal fun statsSnapshot(): ParseStats = synchronized(statsLock) { lastParseStats }
 
     private val CP1251 = Charset.forName("windows-1251")
 
@@ -93,21 +99,18 @@ object MpkScheduleParser {
         return cal
     }
 
-    fun dowOfCalendar(cal: java.util.Calendar): Int = com.politex.util.Dow.of(cal)
+    fun dowOfCalendar(cal: java.util.Calendar): Int = Dow.of(cal)
 
     internal fun restampByDow(
         lessons: List<LessonEntity>,
         anchorCal: java.util.Calendar,
         anchorDow: Int,
-    ): List<LessonEntity> {
-
-        val dotFormat = java.text.SimpleDateFormat("dd.MM.yyyy", Locale.ROOT)
-        return lessons.map { lesson ->
+    ): List<LessonEntity> =
+        lessons.map { lesson ->
             val cal = (anchorCal.clone() as java.util.Calendar)
             cal.add(java.util.Calendar.DAY_OF_YEAR, (lesson.dayOfWeek - anchorDow).coerceIn(-6, 6))
-            lesson.copy(dateString = dotFormat.format(cal.time))
+            lesson.copy(dateString = DateFormats.dotDate(cal))
         }
-    }
 
     fun findSchedulePostLinks(html: String, baseUrl: String = "https://guo-mpk.by/"): List<SchedulePostLink> {
         val result = mutableListOf<SchedulePostLink>()
@@ -247,7 +250,7 @@ object MpkScheduleParser {
             return emptyList()
         }
 
-        if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte() && bytes[2] == 0x03.toByte() && bytes[3] == 0x04.toByte()) {
+        if (Docx.isZip(bytes)) {
             resetStats("docx")
             val docxLessons = parseDocx(ByteArrayInputStream(bytes), targetGroup, targetDate)
             if (docxLessons.isNotEmpty()) return docxLessons
@@ -297,7 +300,7 @@ object MpkScheduleParser {
         val headerDate = extractHeaderDate(headerText)
         val anchor = parseDotDate(headerDate ?: targetDate) ?: return lessons
         val anchorDow = if (headerDate != null) {
-            dowFromHeader(headerText) ?: dowOfCalendar(anchor)
+            Dow.ofWord(headerText) ?: dowOfCalendar(anchor)
         } else {
             dowOfCalendar(anchor)
         }
@@ -308,28 +311,10 @@ object MpkScheduleParser {
     }
 
     private fun extractHeaderText(bytes: ByteArray): String {
-        val fromZip = if (bytes.size >= 4 &&
-            bytes[0] == 0x50.toByte() &&
-            bytes[1] == 0x4B.toByte() &&
-            bytes[2] == 0x03.toByte() &&
-            bytes[3] == 0x04.toByte()
-        ) {
-            try {
-                val zip = ZipInputStream(ByteArrayInputStream(bytes))
-                var entry = zip.nextEntry
-                var xml: String? = null
-                while (entry != null) {
-                    if (entry.name == "word/document.xml") {
-                        xml = zip.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                        break
-                    }
-                    zip.closeEntry()
-                    entry = zip.nextEntry
-                }
-                xml?.let { Regex("РАСПИСАНИЕ[^<]*", RegexOption.IGNORE_CASE).find(it)?.value }
-            } catch (_: Exception) {
-                null
-            }
+        val fromZip = if (Docx.isZip(bytes)) {
+            runCatching {
+                Docx.readDocumentXml(bytes)?.let { Regex("РАСПИСАНИЕ[^<]*", RegexOption.IGNORE_CASE).find(it)?.value }
+            }.getOrNull()
         } else {
             null
         }
@@ -343,27 +328,9 @@ object MpkScheduleParser {
         return Regex("РАСПИСАНИЕ[^\\n]*", RegexOption.IGNORE_CASE).find(cp1251Text)?.value ?: ""
     }
 
-    private val HEADER_DOW_REGEX = Regex(
-        "ПОНЕДЕЛЬНИК|ВТОРНИК|СРЕД[УА]|ЧЕТВЕРГ|ПЯТНИЦ[УЕ]|СУББОТ",
-        RegexOption.IGNORE_CASE,
-    )
-
     private fun extractHeaderDate(headerText: String): String? {
         val m = DATE_IN_TEXT_REGEX.find(headerText) ?: return null
         return "${m.groupValues[1].padStart(2, '0')}.${m.groupValues[2].padStart(2, '0')}.${m.groupValues[3]}"
-    }
-
-    private fun dowFromHeader(headerText: String): Int? {
-        val word = HEADER_DOW_REGEX.find(headerText)?.value?.uppercase(Locale.ROOT) ?: return null
-        return when {
-            word.startsWith("ПОНЕД") -> 1
-            word.startsWith("ВТОР") -> 2
-            word.startsWith("СРЕД") -> 3
-            word.startsWith("ЧЕТВ") -> 4
-            word.startsWith("ПЯТН") -> 5
-            word.startsWith("СУББ") -> 6
-            else -> null
-        }
     }
 
     fun documentMatchesDate(bytes: ByteArray, dateDot: String): Boolean {
@@ -394,7 +361,7 @@ object MpkScheduleParser {
             if (utf16Lessons.isNotEmpty()) return utf16Lessons
         }
 
-        val utf16Stats = lastParseStats.copy()
+        val utf16Stats = statsSnapshot()
         val cp1251Runs = extractCp1251Runs(bytes)
         mutateStats { it.copy(format = "doc-cp1251", runsExtracted = cp1251Runs.size) }
         val cp1251Text = cp1251Runs.joinToString("\n")
@@ -425,116 +392,23 @@ object MpkScheduleParser {
         return emptyList()
     }
 
-    private fun extractCp1251Runs(bytes: ByteArray): List<String> {
-        val runs = mutableListOf<String>()
-        val buffer = mutableListOf<Byte>()
+    private fun extractCp1251Runs(bytes: ByteArray): List<String> =
+        BinaryTextExtract.cp1251Runs(bytes, bellAsTab = true, minRunBytes = 4) { BinaryTextExtract.hasText(it) }
 
-        for (b in bytes) {
-            val unsigned = b.toInt() and 0xFF
-
-            val isValid = (unsigned in 0x20..0x7E) ||
-                (unsigned in 0xC0..0xFF) ||
-                unsigned == 0xA8 ||
-                unsigned == 0xB8 ||
-                unsigned == 0x09 ||
-                unsigned == 0x0A ||
-                unsigned == 0x0D ||
-                unsigned == 0x07
-
-            if (isValid) {
-                if (unsigned == 0x07) {
-                    buffer.add(0x09.toByte())
-                } else {
-                    buffer.add(b)
-                }
-            } else {
-                if (buffer.size >= 4) {
-                    val decoded = String(buffer.toByteArray(), CP1251)
-                    if (decoded.any { it in 'А'..'я' || it in 'A'..'z' || it in '0'..'9' }) {
-                        runs.add(decoded)
-                    }
-                }
-                buffer.clear()
-            }
+    fun extractUtf16LeRuns(bytes: ByteArray): List<String> =
+        BinaryTextExtract.utf16LeRuns(bytes, bellAsTab = true) { decoded ->
+            BinaryTextExtract.hasText(decoded) || (decoded.length >= 6 && decoded.all { it.isWhitespace() })
         }
-
-        if (buffer.size >= 4) {
-            val decoded = String(buffer.toByteArray(), CP1251)
-            runs.add(decoded)
-        }
-
-        return runs
-    }
-
-    fun extractUtf16LeRuns(bytes: ByteArray): List<String> {
-        val runs = mutableListOf<String>()
-        val buffer = mutableListOf<Byte>()
-
-        var i = 0
-        while (i < bytes.size - 1) {
-            val b0 = bytes[i].toInt() and 0xFF
-            val b1 = bytes[i + 1].toInt() and 0xFF
-
-            val isAscii = b1 == 0 && ((b0 in 0x20..0x7E) || b0 == 0x09 || b0 == 0x0A || b0 == 0x0D || b0 == 0x07)
-            val isCyrillic = (b1 == 4 && b0 in 0x00..0x5F) || (b1 == 4 && (b0 == 0x01 || b0 == 0x51))
-
-            val isBoxDrawing = b1 == 0x25
-
-            if (isAscii || isCyrillic || isBoxDrawing) {
-                if (b1 == 0 && b0 == 0x07) {
-                    buffer.add(0x09.toByte())
-                    buffer.add(0x00.toByte())
-                } else {
-                    buffer.add(bytes[i])
-                    buffer.add(bytes[i + 1])
-                }
-                i += 2
-            } else {
-                if (buffer.size >= 6) {
-                    val decoded = String(buffer.toByteArray(), Charsets.UTF_16LE)
-
-                    if (decoded.any { it in 'А'..'я' || it in 'A'..'z' || it in '0'..'9' } ||
-                        decoded.length >= 6 &&
-                        decoded.all { it.isWhitespace() }
-                    ) {
-                        runs.add(decoded)
-                    }
-                }
-                buffer.clear()
-                i += 2
-            }
-        }
-
-        if (buffer.size >= 6) {
-            val decoded = String(buffer.toByteArray(), Charsets.UTF_16LE)
-            runs.add(decoded)
-        }
-
-        return runs
-    }
 
     fun parseDocx(
         inputStream: InputStream,
         targetGroup: String,
         targetDate: String = "",
     ): List<LessonEntity> {
-        val zip = ZipInputStream(inputStream)
-        var entry = zip.nextEntry
-        var documentXml: String? = null
-
-        while (entry != null) {
-            if (entry.name == "word/document.xml") {
-                documentXml = zip.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                break
-            }
-            zip.closeEntry()
-            entry = zip.nextEntry
-        }
-
+        val documentXml = Docx.readDocumentXml(inputStream)
         if (documentXml.isNullOrBlank()) {
             return emptyList()
         }
-
         return parseDocxXml(documentXml, targetGroup, targetDate)
     }
 
@@ -680,12 +554,19 @@ object MpkScheduleParser {
         return result
     }
 
-    private fun detectLessonNumber(row: List<String>): Int? {
+    // СРЕД6: третья альтернатива заякорена на начало ячейки/строки и не пускает вторую цифру —
+    // номер кабинета («205», «каб. 4») больше не становится номером урока.
+    private val LESSON_NUMBER_IN_TEXT = Regex(
+        "(?:(10|[1-9])\\s*урок|(10|[1-9])\\s*пара|^№?\\s*(10|[1-9])(?![0-9]))",
+        RegexOption.IGNORE_CASE,
+    )
+
+    internal fun detectLessonNumber(row: List<String>): Int? {
         for (cell in row.take(3)) {
             val trimmed = cell.trim()
             val asInt = trimmed.toIntOrNull()
             if (asInt != null && asInt in 1..12) return asInt
-            val match = Regex("(?:(10|[1-9])\\s*урок|(10|[1-9])\\s*пара|№?\\s*(10|[1-9]))", RegexOption.IGNORE_CASE).find(trimmed)
+            val match = LESSON_NUMBER_IN_TEXT.find(trimmed)
             if (match != null) {
                 val numStr = match.groupValues[1].ifEmpty {
                     match.groupValues[2].ifEmpty { match.groupValues[3] }
@@ -717,6 +598,8 @@ object MpkScheduleParser {
             }
         }
 
+        // R1: fallback «дата словом (15 сентября)» удалён как мёртвый — все реальные документы
+        // несут числовую дату, а вызывающие всегда передают targetDate.
         if (detectedDate.isBlank()) {
             val dateMatch = DATE_IN_TEXT_REGEX.find(searchScopeText)
             if (dateMatch != null) {
@@ -724,32 +607,6 @@ object MpkScheduleParser {
                 val m = dateMatch.groupValues[2].padStart(2, '0')
                 val y = dateMatch.groupValues[3]
                 detectedDate = "$d.$m.$y"
-            } else {
-                val textMonthMatch = Regex("([0-3]?[0-9])\\s+(январ[яе]|феврал[яе]|март[ае]|апрел[яе]|ма[яе]|июн[яе]|июл[яе]|август[ае]|сентябр[яе]|октябр[яе]|ноябр[яе]|декабр[яе])(?:\\s*(202[0-9]))?", RegexOption.IGNORE_CASE).find(searchScopeText)
-                if (textMonthMatch != null) {
-                    val d = textMonthMatch.groupValues[1].padStart(2, '0')
-                    val monthWord = textMonthMatch.groupValues[2].lowercase(Locale.ROOT)
-                    val m = when {
-                        monthWord.startsWith("янв") -> "01"
-                        monthWord.startsWith("фев") -> "02"
-                        monthWord.startsWith("мар") -> "03"
-                        monthWord.startsWith("апр") -> "04"
-                        monthWord.startsWith("ма") -> "05"
-                        monthWord.startsWith("июн") -> "06"
-                        monthWord.startsWith("июл") -> "07"
-                        monthWord.startsWith("авг") -> "08"
-                        monthWord.startsWith("сен") -> "09"
-                        monthWord.startsWith("окт") -> "10"
-                        monthWord.startsWith("ноя") -> "11"
-                        monthWord.startsWith("дек") -> "12"
-                        else -> "09"
-                    }
-
-                    val thisYear = java.util.Calendar.getInstance()
-                        .get(java.util.Calendar.YEAR).toString()
-                    val y = textMonthMatch.groupValues.getOrNull(3)?.ifBlank { thisYear } ?: thisYear
-                    detectedDate = "$d.$m.$y"
-                }
             }
         }
 
@@ -1251,7 +1108,8 @@ object MpkScheduleParser {
             val isLineForGroup = !isPureHeader && (GroupParser.matchesGroup(line, targetGroup) || isCurrentGroupActive)
 
             if (isLineForGroup) {
-                val numMatch = Regex("(?:(10|[1-9])\\s*урок|(10|[1-9])\\s*пара|№?\\s*(10|[1-9]))", RegexOption.IGNORE_CASE).find(line)
+                // СРЕД6: общий заякоренный шаблон — цифра кабинета не становится номером урока
+                val numMatch = LESSON_NUMBER_IN_TEXT.find(line)
                 val lessonNum = numMatch?.groupValues?.get(1)?.ifEmpty {
                     numMatch.groupValues.getOrNull(2)?.ifEmpty { numMatch.groupValues.getOrNull(3) }
                 }?.toIntOrNull()

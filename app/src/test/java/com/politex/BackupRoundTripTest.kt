@@ -7,6 +7,7 @@ import com.politex.data.local.entity.GradeEntryEntity
 import com.politex.data.local.entity.StudentTaskEntity
 import com.politex.data.local.entity.TaskReminderEntity
 import com.politex.util.BackupManager
+import com.politex.util.BellCountdownNotifier
 import com.politex.widget.WidgetUpdateHelper
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -89,5 +90,28 @@ class BackupRoundTripTest {
         val result = BackupManager.restoreBackup(context, json).getOrThrow()
         assertEquals("99RT-TEST", result.groupRestored)
         assertEquals("99RT-TEST", WidgetUpdateHelper.getSelectedGroup(context))
+    }
+
+    @Test
+    fun `СРЕД8 - стиль и тема уведомления восстанавливаются симметрично экспорту`() = runBlocking {
+        val json = """{"version":2,"settings":{"notificationsStyle":"progress","notificationsTheme":"dark"},"tasks":[]}"""
+        BackupManager.restoreBackup(context, json).getOrThrow()
+        assertEquals(BellCountdownNotifier.Style.WITH_PROGRESS, BellCountdownNotifier.getStyle(context))
+        assertEquals(BellCountdownNotifier.Theme.DARK, BellCountdownNotifier.getTheme(context))
+    }
+
+    @Test
+    fun `СРЕД8 - round trip экспорт-импорт сохраняет стиль и тему`() = runBlocking {
+        BellCountdownNotifier.setStyle(context, BellCountdownNotifier.Style.WITH_SECONDS)
+        BellCountdownNotifier.setTheme(context, BellCountdownNotifier.Theme.SKY)
+
+        val json = BackupManager.buildBackup(context)
+
+        BellCountdownNotifier.setStyle(context, BellCountdownNotifier.Style.COMPACT)
+        BellCountdownNotifier.setTheme(context, BellCountdownNotifier.Theme.SYSTEM)
+
+        BackupManager.restoreBackup(context, json).getOrThrow()
+        assertEquals(BellCountdownNotifier.Style.WITH_SECONDS, BellCountdownNotifier.getStyle(context))
+        assertEquals(BellCountdownNotifier.Theme.SKY, BellCountdownNotifier.getTheme(context))
     }
 }

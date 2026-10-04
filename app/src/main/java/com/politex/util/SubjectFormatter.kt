@@ -444,12 +444,17 @@ object SubjectFormatter {
         return cleaned
     }
 
+    // М19: fallback-перебор идёт от длинных ключей к коротким — выигрывает самое специфичное
+    // совпадение, а не первое попавшееся в порядке объявления карты.
+    private val shortNameEntries by lazy { PREDEFINED_SHORT_NAMES.entries.sortedByDescending { it.key.length } }
+    private val acronymEntries by lazy { PREDEFINED_ACRONYMS.entries.sortedByDescending { it.key.length } }
+
     fun getShortName(rawTitle: String): String {
         val normalized = normalize(rawTitle)
 
         PREDEFINED_SHORT_NAMES[normalized]?.let { return it }
 
-        for ((key, shortVal) in PREDEFINED_SHORT_NAMES) {
+        for ((key, shortVal) in shortNameEntries) {
             if (normalized.contains(key, ignoreCase = true) || key.contains(normalized, ignoreCase = true)) {
                 return shortVal
             }
@@ -463,7 +468,7 @@ object SubjectFormatter {
 
         PREDEFINED_ACRONYMS[normalized]?.let { return it }
 
-        for ((key, acronym) in PREDEFINED_ACRONYMS) {
+        for ((key, acronym) in acronymEntries) {
             if (normalized.contains(key, ignoreCase = true) || key.contains(normalized, ignoreCase = true)) {
                 return acronym
             }
@@ -514,43 +519,6 @@ object SubjectFormatter {
         text = text.trim(',', '.', '-', ' ', '/', '\\')
 
         return text
-    }
-
-    private fun shortenAlgorithmic(
-        text: String,
-        maxLength: Int,
-    ): String {
-        val words = text.split(" ")
-        if (words.size == 1) {
-            return text.take(maxLength - 1) + "."
-        }
-
-        val result = StringBuilder()
-        for ((index, word) in words.withIndex()) {
-            if (STOP_WORDS.contains(word.lowercase(Locale.ROOT))) {
-                if (result.length + word.length + 1 <= maxLength) {
-                    if (result.isNotEmpty()) result.append(" ")
-                    result.append(word)
-                }
-                continue
-            }
-
-            val shortenedWord =
-                when {
-                    word.length <= 4 -> word
-                    index == 0 -> word.take(4) + "."
-                    else -> word.take(3) + "."
-                }
-
-            val nextPart = if (result.isEmpty()) shortenedWord else " $shortenedWord"
-            if (result.length + nextPart.length <= maxLength) {
-                result.append(nextPart)
-            } else {
-                break
-            }
-        }
-
-        return if (result.isEmpty()) text.take(maxLength) else result.toString()
     }
 
     private fun calculateSimilarity(

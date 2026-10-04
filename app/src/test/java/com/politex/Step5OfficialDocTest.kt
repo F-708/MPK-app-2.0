@@ -73,14 +73,15 @@ class Step5OfficialDocTest {
     }
 
     @Test
-    fun testGetTimeForNumber() {
-        val pair1 = CollegeBellSchedule.getTimeForNumber(1, dayOfWeek = 1)
-        assertEquals("08:15", pair1.first)
-        assertEquals("09:55", pair1.second)
+    fun testGetTimeForLessonNumber() {
+        // М25: getTimeForNumber (время «пар») удалён как мёртвый — проверяем живой getTimeForLessonNumber
+        val lesson1Mon = CollegeBellSchedule.getTimeForLessonNumber(1, dayOfWeek = 1)
+        assertEquals("08:15", lesson1Mon.first)
+        assertEquals("09:00", lesson1Mon.second)
 
-        val pair4Thu = CollegeBellSchedule.getTimeForNumber(4, dayOfWeek = 4)
-        assertEquals("14:45", pair4Thu.first)
-        assertEquals("16:25", pair4Thu.second)
+        val lesson4Thu = CollegeBellSchedule.getTimeForLessonNumber(4, dayOfWeek = 4)
+        assertEquals("11:15", lesson4Thu.first)
+        assertEquals("12:00", lesson4Thu.second)
     }
 
     @Test

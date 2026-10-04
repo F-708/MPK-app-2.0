@@ -1,10 +1,8 @@
 package com.politex.data.network
 
-import java.io.ByteArrayInputStream
-import java.nio.charset.Charset
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.zip.ZipInputStream
+import com.politex.util.BinaryTextExtract
+import com.politex.util.Docx
+import com.politex.util.Dow
 
 data class TeacherSlot(
     val lessonNumber: Int,
@@ -16,8 +14,6 @@ data class TeacherSlot(
 )
 
 object TeacherScheduleParser {
-    private val CP1251 = Charset.forName("windows-1251")
-
     private val GROUP_REGEX = Regex("^([1-4])([1-9])([\\u0410-\\u042F])$")
 
     private val DATE_DOT_REGEX = Regex("\\d{2}\\.\\d{2}\\.\\d{4}")
@@ -26,47 +22,30 @@ object TeacherScheduleParser {
 
     private val ROOM_REGEX = Regex("^([0-9]{1,3}[\\u0430-\\u044Fa-zA-Z]?|СТД)$")
 
-    private val HEADER_DOW_REGEX =
-        Regex(
-            "ПОНЕДЕЛЬНИК|ВТОРНИК|СРЕД[АУЕ]|ЧЕТВЕРГ|ПЯТНИЦ[АУЕ]|СУББОТ",
-            RegexOption.IGNORE_CASE,
-        )
-
     private val WEEK_HEADER_REGEX = Regex("^\\d+\\s*НЕДЕЛЯ", RegexOption.IGNORE_CASE)
 
     private const val MAX_LESSON = 12
 
     // Линейка номеров уроков: ячейки идут строго 1,2,3,… (пустые допускаются).
-    // ponytail: отличает линейку от строки кабинетов тем, что cell[i]==i+1; если появятся кабинеты «1»/«2» подряд — уточнить.
-    private fun isLessonRuler(cells: List<String>): Boolean =
-        cells.isNotEmpty() &&
-            cells[0] == "1" &&
-            cells.withIndex().all { (i, v) -> v.isBlank() || v == (i + 1).toString() }
-
-    fun dowFromHeaderText(text: String): Int? {
-        val word = HEADER_DOW_REGEX.find(text)?.value?.uppercase(Locale.ROOT) ?: return null
-        return when {
-            word.startsWith("ПОНЕД") -> 1
-            word.startsWith("ВТОР") -> 2
-            word.startsWith("СРЕД") -> 3
-            word.startsWith("ЧЕТВ") -> 4
-            word.startsWith("ПЯТН") -> 5
-            word.startsWith("СУББ") -> 6
-            else -> null
-        }
+    // СРЕД12: ведущие пустые ячейки пропускаются — линейка может начинаться не с первой колонки.
+    // ponytail: отличает линейку от строки кабинетов тем, что cell[start+i]==i+1; если появятся кабинеты «1»/«2» подряд — уточнить.
+    private fun isLessonRuler(cells: List<String>): Boolean {
+        val start = cells.indexOfFirst { it.isNotBlank() }
+        if (start < 0 || cells[start] != "1") return false
+        return cells.withIndex().all { (i, v) -> i < start || v.isBlank() || v == (i - start + 1).toString() }
     }
+
+    fun dowFromHeaderText(text: String): Int? = Dow.ofWord(text)
 
     fun findHeaderLine(text: String): String? {
         val lines = text.lines()
         lines.firstOrNull { it.contains("НЕДЕЛЯ", ignoreCase = true) }?.let { return it }
         val head = lines.take(HEADER_SCAN_LINES)
-        head.firstOrNull { HEADER_DOW_REGEX.containsMatchIn(it) }?.let { return it }
+        head.firstOrNull { Dow.ofWord(it) != null }?.let { return it }
         return head.firstOrNull { DATE_DOT_REGEX.containsMatchIn(it) }
     }
 
     fun dateFromHeaderText(text: String): String? = DATE_DOT_REGEX.find(text)?.value
-
-    fun dotDate(cal: java.util.Calendar): String = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(cal.time)
 
     fun matchesRequestedDate(
         text: String,
@@ -88,7 +67,7 @@ object TeacherScheduleParser {
     fun parse(bytes: ByteArray): Map<String, List<TeacherSlot>> {
         if (bytes.isEmpty()) return emptyMap()
 
-        if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()) {
+        if (Docx.isZip(bytes)) {
             parseDocx(bytes)?.let { if (it.isNotEmpty()) return it }
         }
 
@@ -135,7 +114,7 @@ object TeacherScheduleParser {
 
             if (!headerSeen) {
                 if (line.contains("НЕДЕЛЯ", ignoreCase = true) ||
-                    HEADER_DOW_REGEX.containsMatchIn(line) ||
+                    Dow.ofWord(line) != null ||
                     DATE_DOT_REGEX.containsMatchIn(line)
                 ) {
                     headerSeen = true
@@ -164,8 +143,6 @@ object TeacherScheduleParser {
                 when {
                     GROUP_REGEX.matches(value) -> cell.groups.add(value)
                     ROOM_REGEX.matches(value) -> cell.rooms.add(value)
-
-                    value.uppercase(Locale.ROOT).contains("КУРС") -> cell.subject = value
                     else -> cell.subject = value
                 }
             }
@@ -187,7 +164,7 @@ object TeacherScheduleParser {
 
     fun extractText(bytes: ByteArray): String {
         if (bytes.isEmpty()) return ""
-        if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()) {
+        if (Docx.isZip(bytes)) {
             parseDocxText(bytes)?.let { if (it.isNotBlank()) return it }
         }
         val utf16 = extractUtf16(bytes)
@@ -196,95 +173,38 @@ object TeacherScheduleParser {
     }
 
     private fun parseDocxText(bytes: ByteArray): String? = try {
-        val zip = ZipInputStream(ByteArrayInputStream(bytes))
-        var entry = zip.nextEntry
-        var xml: String? = null
-        while (entry != null) {
-            if (entry.name == "word/document.xml") {
-                xml = zip.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                break
-            }
-            zip.closeEntry()
-            entry = zip.nextEntry
-        }
-        xml?.let { xmlToPseudoTable(it) }
+        Docx.readDocumentXml(bytes)?.let { xmlToPseudoTable(it) }
     } catch (_: Exception) {
         null
     }
 
-    private fun extractUtf16(bytes: ByteArray): String {
-        val runs = mutableListOf<String>()
-        val buffer = mutableListOf<Byte>()
-        var i = 0
-        while (i < bytes.size - 1) {
-            val b0 = bytes[i].toInt() and 0xFF
-            val b1 = bytes[i + 1].toInt() and 0xFF
-            val isAscii = b1 == 0 && ((b0 in 0x20..0x7E) || b0 == 0x09 || b0 == 0x0A || b0 == 0x0D)
-            val isCyrillic = b1 == 0x04 && b0 <= 0x5F
-            val isBoxDrawing = b1 == 0x25
-            if (isAscii || isCyrillic || isBoxDrawing) {
-                buffer.add(bytes[i])
-                buffer.add(bytes[i + 1])
-                i += 2
-            } else {
-                if (buffer.size >= 6) {
-                    runs.add(String(buffer.toByteArray(), Charsets.UTF_16LE))
-                }
-                buffer.clear()
-                i += 2
-            }
-        }
-        if (buffer.size >= 6) runs.add(String(buffer.toByteArray(), Charsets.UTF_16LE))
-        return runs.joinToString("\n")
-    }
+    private fun extractUtf16(bytes: ByteArray): String =
+        BinaryTextExtract.utf16LeRuns(bytes, bellAsTab = false).joinToString("\n")
 
-    private fun extractCp1251(bytes: ByteArray): String {
-        val runs = mutableListOf<String>()
-        val buffer = mutableListOf<Byte>()
-        for (b in bytes) {
-            val unsigned = b.toInt() and 0xFF
-            val isValid =
-                (unsigned in 0x20..0x7E) ||
-                    (unsigned >= 0xC0) ||
-                    unsigned == 0xA8 ||
-                    unsigned == 0xB8 ||
-                    unsigned == 0x09 ||
-                    unsigned == 0x0A ||
-                    unsigned == 0x0D
-            if (isValid) {
-                buffer.add(b)
-            } else {
-                if (buffer.size >= 6) {
-                    val decoded = String(buffer.toByteArray(), CP1251)
-                    if (decoded.contains('║') || decoded.count { it in 'А'..'я' } > 3) runs.add(decoded)
-                }
-                buffer.clear()
-            }
-        }
-        if (buffer.size >= 6) runs.add(String(buffer.toByteArray(), CP1251))
-        return runs.joinToString("\n")
-    }
+    private fun extractCp1251(bytes: ByteArray): String =
+        BinaryTextExtract
+            .cp1251Runs(bytes, bellAsTab = false, minRunBytes = 6) {
+                it.contains('║') || it.count { c -> c in 'А'..'я' } > 3
+            }.joinToString("\n")
 
     private fun parseDocx(bytes: ByteArray): Map<String, List<TeacherSlot>>? = parseDocxText(bytes)?.let { parsePlainText(it) }
 
-    private fun xmlToPseudoTable(xml: String): String {
+    // СРЕД7: строка делится по ячейкам <w:tc>, все ранги <w:t> внутри ячейки конкатенируются —
+    // раньше каждый ранг считался отдельной ячейкой и мульти-ран ячейки ломали колонки.
+    internal fun xmlToPseudoTable(xml: String): String {
+        val textRun = Regex("<w:t(?: [^>]*)?>([^<]*)</w:t>")
+        val cellStart = Regex("<w:tc(?: [^>]*)?>")
         val sb = StringBuilder()
-        var cellIndex = 0
         Regex("<w:tr[ >]").findAll(xml).forEach { rowMatch ->
             val rowEnd = xml.indexOf("</w:tr>", rowMatch.range.first)
             if (rowEnd < 0) return@forEach
             val rowXml = xml.substring(rowMatch.range.first, rowEnd)
             sb.append('│')
-            Regex("<w:t[^>]*>([^<]*)</w:t>").findAll(rowXml).forEach { textMatch ->
-                if (cellIndex == 0) {
-                    sb.append(textMatch.groupValues[1]).append('║')
-                } else {
-                    sb.append(textMatch.groupValues[1]).append('│')
-                }
-                cellIndex++
+            cellStart.split(rowXml).drop(1).forEachIndexed { cellIndex, cellXml ->
+                val text = textRun.findAll(cellXml).map { it.groupValues[1] }.joinToString("")
+                sb.append(text).append(if (cellIndex == 0) '║' else '│')
             }
             sb.append('\n')
-            cellIndex = 0
         }
         return sb.toString()
     }

@@ -243,6 +243,12 @@ abstract class MpkDatabase : RoomDatabase() {
                 }
             }
 
+        /**
+         * R1-СРЕД15 (осознанное решение): fallbackToDestructiveMigration СОЗНАТЕЛЬНО оставлен.
+         * Краш из-за пропущенной миграции хуже даунгрейда: БД — только кэш, она пересинхронизируется с сайтом.
+         * Покрытие 1→9 гарантировано списком addMigrations ниже и тестами MigrationV1ToV2Test…MigrationV8ToV9Test.
+         * При bump версии на N+1 ОБЯЗАТЕЛЬНО: добавить migrationNToN+1 в addMigrations и MigrationVNToVN+1Test.
+         */
         fun getInstance(context: Context): MpkDatabase = instance ?: synchronized(this) {
 
             instance ?: run {
