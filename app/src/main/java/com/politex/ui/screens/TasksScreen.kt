@@ -905,62 +905,6 @@ fun TaskEditDialog(
                     }
                 }
 
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Что нужно сделать", fontSize = 12.sp) },
-                    placeholder = { Text("Например: Упр. 4, Отчет по лабе №2", fontSize = 12.sp) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(2.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Text(
-                    text = "Напоминания:",
-                    style =
-                    androidx.compose.ui.text
-                        .TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-                )
-
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-
-                    item {
-                        ReminderQuickChip(text = "+1 день") {
-                            reminderMillisFrom(todayIso(), 18, 0, 1)?.let { m -> reminders = reminders + m }
-                        }
-                    }
-                    item {
-                        ReminderQuickChip(text = "+2 дня") {
-                            reminderMillisFrom(todayIso(), 18, 0, 2)?.let { m -> reminders = reminders + m }
-                        }
-                    }
-                    item {
-                        ReminderQuickChip(text = "+ напоминание", tag = "add_reminder_chip") { showReminderComposer = !showReminderComposer }
-                    }
-                }
-
-                reminders.forEachIndexed { index, millis ->
-                    ReminderChip(
-                        label = formatReminderChip(millis),
-                        onRemove = { reminders = reminders.filterIndexed { i, _ -> i != index } },
-                    )
-                }
-
-                if (showReminderComposer) {
-                    ReminderComposer(
-                        initialDateIso = todayIso(),
-                        currentYear = currentYear,
-                        onDismiss = { showReminderComposer = false },
-                        onAdd = { millis ->
-                            reminders = reminders + millis
-                            showReminderComposer = false
-                        },
-                    )
-                }
-
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -1031,7 +975,7 @@ fun TaskEditDialog(
                             value = selectedSubject,
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Официальный предмет", fontSize = 12.sp) },
+                            label = { Text("Предмет", fontSize = 12.sp) },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = subjectExpanded) },
                             shape = RoundedCornerShape(2.dp),
                             modifier =
@@ -1054,6 +998,62 @@ fun TaskEditDialog(
                             }
                         }
                     }
+                }
+
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Что нужно сделать", fontSize = 12.sp) },
+                    placeholder = { Text("Например: Упр. 4, Отчет по лабе №2", fontSize = 12.sp) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(2.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Text(
+                    text = "Напоминания:",
+                    style =
+                    androidx.compose.ui.text
+                        .TextStyle(fontSize = 12.sp, color = ColorTextMuted),
+                )
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+
+                    item {
+                        ReminderQuickChip(text = "+1 день") {
+                            reminderMillisFrom(todayIso(), 18, 0, 1)?.let { m -> reminders = reminders + m }
+                        }
+                    }
+                    item {
+                        ReminderQuickChip(text = "+2 дня") {
+                            reminderMillisFrom(todayIso(), 18, 0, 2)?.let { m -> reminders = reminders + m }
+                        }
+                    }
+                    item {
+                        ReminderQuickChip(text = "+ напоминание", tag = "add_reminder_chip") { showReminderComposer = !showReminderComposer }
+                    }
+                }
+
+                reminders.forEachIndexed { index, millis ->
+                    ReminderChip(
+                        label = formatReminderChip(millis),
+                        onRemove = { reminders = reminders.filterIndexed { i, _ -> i != index } },
+                    )
+                }
+
+                if (showReminderComposer) {
+                    ReminderComposer(
+                        initialDateIso = todayIso(),
+                        currentYear = currentYear,
+                        onDismiss = { showReminderComposer = false },
+                        onAdd = { millis ->
+                            reminders = reminders + millis
+                            showReminderComposer = false
+                        },
+                    )
                 }
             }
         },

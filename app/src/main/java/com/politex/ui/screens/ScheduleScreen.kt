@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -208,6 +209,9 @@ fun ScheduleScreen(
         }
     }
     var showArchiveDialog by remember { mutableStateOf(false) }
+
+    // AA2: SPLIT-урок — тап по кабинету сначала спрашивает, откуда вести маршрут
+    var pendingSplit by remember { mutableStateOf<Pair<String, LessonEntity>?>(null) }
 
     val activeDayOfWeek = if (selectedSlot == 0) calendarDayOfWeek(leftCal) else calendarDayOfWeek(rightCal)
     val activeCal = if (selectedSlot == 0) leftCal else rightCal
@@ -441,6 +445,42 @@ fun ScheduleScreen(
                 teacherClick(name)
             },
             isTeacherKnown = isTeacherKnown,
+        )
+    }
+
+    pendingSplit?.let { (tappedRoom, splitLesson) ->
+        AlertDialog(
+            onDismissRequest = { pendingSplit = null },
+            shape = RoundedCornerShape(2.dp),
+            containerColor = ColorBgMain,
+            title = {
+                Text(
+                    text = "Откуда вести маршрут?",
+                    style =
+                    androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = ColorTextTitle,
+                    ),
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SplitRouteOption("каб. ${splitLesson.roomFirst} (1 подгруппа)") {
+                        pendingSplit = null
+                        roomClick(tappedRoom, splitLesson.roomFirst)
+                    }
+                    SplitRouteOption("каб. ${splitLesson.roomSecond} (2 подгруппа)") {
+                        pendingSplit = null
+                        roomClick(tappedRoom, splitLesson.roomSecond)
+                    }
+                    SplitRouteOption("Главный вход") {
+                        pendingSplit = null
+                        roomClick(tappedRoom, "")
+                    }
+                }
+            },
+            confirmButton = {},
         )
     }
 
@@ -766,11 +806,15 @@ fun ScheduleScreen(
 
 
                                 onRoomClick = { room ->
-                                    roomClick(
-                                        room,
-                                        com.politex.ui.util.RouteStartResolver
-                                            .startForLesson(lessons, lesson, isViewingToday, nowMinutes),
-                                    )
+                                    if (lesson.isSplit && lesson.roomFirst.isNotBlank() && lesson.roomSecond.isNotBlank()) {
+                                        pendingSplit = room to lesson
+                                    } else {
+                                        roomClick(
+                                            room,
+                                            com.politex.ui.util.RouteStartResolver
+                                                .startForLesson(lessons, lesson, isViewingToday, nowMinutes),
+                                        )
+                                    }
                                 },
 
                                 focusAlpha =
@@ -786,6 +830,40 @@ fun ScheduleScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SplitRouteOption(
+    label: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        border = BorderStroke(1.dp, ColorBorderLight),
+        color = ColorSurfaceHighlight,
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .bouncyClickable(onClick = onClick),
+    ) {
+        Box(
+            contentAlignment = Alignment.CenterStart,
+            modifier = Modifier.padding(horizontal = 12.dp),
+        ) {
+            Text(
+                text = label,
+                style =
+                androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = ColorBrandBlue,
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
