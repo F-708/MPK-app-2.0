@@ -114,9 +114,6 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
-import com.politex.ui.components.TutorialController
-import com.politex.ui.components.TutorialFeature
-import com.politex.ui.components.tutorialAnchor
 import com.politex.util.MpkCurriculum
 import kotlinx.coroutines.launch
 
@@ -172,17 +169,6 @@ fun TasksScreen(
             if (result == SnackbarResult.ActionPerformed) {
                 taskRepository.addTask(task.copy())
             }
-        }
-    }
-
-    val firstTaskId = filteredTasks.firstOrNull()?.id
-    LaunchedEffect(firstTaskId) {
-        if (firstTaskId != null) TutorialController.request(context, TutorialFeature.TASK_SWIPE)
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            if (TutorialController.active == TutorialFeature.TASK_SWIPE) TutorialController.clear()
         }
     }
 
@@ -359,20 +345,12 @@ fun TasksScreen(
                     items(filteredTasks, key = { it.id }) { task ->
 
                         SwipeToDeleteBox(
-                            onDelete = {
-                                deleteWithUndo(task)
-                                TutorialController.success(TutorialFeature.TASK_SWIPE)
-                            },
+                            onDelete = { deleteWithUndo(task) },
                         ) {
                             TaskItemCard(
                                 task = task,
 
-                                modifier =
-                                if (task.id == firstTaskId) {
-                                    Modifier.tutorialAnchor("task_card_first")
-                                } else {
-                                    Modifier
-                                },
+                                modifier = Modifier,
                                 onToggleCompleted = {
                                     coroutineScope.launch {
                                         taskRepository.toggleTaskCompleted(task.id, !task.isCompleted)

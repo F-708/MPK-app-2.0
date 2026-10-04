@@ -74,9 +74,6 @@ import com.politex.data.model.GroupInfo
 import com.politex.data.model.TaskType
 import com.politex.data.repository.ScheduleRepository
 import com.politex.ui.components.CalendarArchiveDialog
-import com.politex.ui.components.TutorialController
-import com.politex.ui.components.TutorialFeature
-import com.politex.ui.components.tutorialAnchor
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBadgeCourse
 import com.politex.ui.theme.ColorBadgeDiploma
@@ -282,31 +279,8 @@ fun ScheduleScreen(
             lessonsForDay(allGroupLessons, activeDateString, activeDayOfWeek)
         }
 
-    val tutorialLessonNumber =
-        remember(lessons, isTeacherKnown) {
-            lessons
-                .firstOrNull { !it.isSplit && it.teacherFirst.isNotBlank() && isTeacherKnown(it.teacherFirst) }
-                ?.lessonNumber
-                ?: lessons.firstOrNull { !it.isSplit && it.roomFirst.isNotBlank() }?.lessonNumber
-        }
-    LaunchedEffect(tutorialLessonNumber) {
-        if (tutorialLessonNumber != null) TutorialController.request(context, TutorialFeature.SCHEDULE_TAP)
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            if (TutorialController.active == TutorialFeature.SCHEDULE_TAP) TutorialController.clear()
-        }
-    }
-
-    val roomClick: (String, String?) -> Unit = { room, fromRoom ->
-        TutorialController.success(TutorialFeature.SCHEDULE_TAP)
-        onRoomClick(room, fromRoom)
-    }
-    val teacherClick: (String) -> Unit = { name ->
-        TutorialController.success(TutorialFeature.SCHEDULE_TAP)
-        onTeacherClick(name)
-    }
+    val roomClick: (String, String?) -> Unit = { room, fromRoom -> onRoomClick(room, fromRoom) }
+    val teacherClick: (String) -> Unit = { name -> onTeacherClick(name) }
 
     val pendingTasks: List<com.politex.data.local.entity.StudentTaskEntity> =
         pendingTasksFromVm ?: remember(context, groupInfo.canonicalName) {
@@ -790,7 +764,6 @@ fun ScheduleScreen(
                                 onTeacherClick = teacherClick,
                                 isTeacherKnown = isTeacherKnown,
 
-                                tutorialTarget = lesson.lessonNumber == tutorialLessonNumber,
 
                                 onRoomClick = { room ->
                                     roomClick(
@@ -878,8 +851,6 @@ fun LessonCard(
     onTeacherClick: (String) -> Unit = {},
     isTeacherKnown: (String) -> Boolean = { true },
     onRoomClick: (String) -> Unit = {},
-
-    tutorialTarget: Boolean = false,
 
     focusAlpha: Float = 0f,
     modifier: Modifier = Modifier,
@@ -1017,12 +988,6 @@ fun LessonCard(
                                 null
                             },
 
-                            modifier =
-                            if (tutorialTarget && lesson.roomFirst.isBlank()) {
-                                Modifier.tutorialAnchor("schedule_teacher_target")
-                            } else {
-                                Modifier
-                            },
                         )
                     }
 
@@ -1032,9 +997,7 @@ fun LessonCard(
                             modifier =
                             Modifier
                                 .heightIn(min = 44.dp)
-                                .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) }
-
-                                .then(if (tutorialTarget) Modifier.tutorialAnchor("schedule_room_target") else Modifier),
+                                .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) },
                             contentAlignment = Alignment.Center,
                         ) {
                             Surface(

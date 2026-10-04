@@ -32,6 +32,17 @@ object TeacherScheduleParser {
             RegexOption.IGNORE_CASE,
         )
 
+    private val WEEK_HEADER_REGEX = Regex("^\\d+\\s*НЕДЕЛЯ", RegexOption.IGNORE_CASE)
+
+    private const val MAX_LESSON = 12
+
+    // Линейка номеров уроков: ячейки идут строго 1,2,3,… (пустые допускаются).
+    // ponytail: отличает линейку от строки кабинетов тем, что cell[i]==i+1; если появятся кабинеты «1»/«2» подряд — уточнить.
+    private fun isLessonRuler(cells: List<String>): Boolean =
+        cells.isNotEmpty() &&
+            cells[0] == "1" &&
+            cells.withIndex().all { (i, v) -> v.isBlank() || v == (i + 1).toString() }
+
     fun dowFromHeaderText(text: String): Int? {
         val word = HEADER_DOW_REGEX.find(text)?.value?.uppercase(Locale.ROOT) ?: return null
         return when {
@@ -133,20 +144,20 @@ object TeacherScheduleParser {
             }
 
             val nameCell = parts[0].replace("│", "").trim()
-            if (nameCell.isNotEmpty() && !nameCell.startsWith("1 НЕДЕЛЯ")) {
+            if (WEEK_HEADER_REGEX.containsMatchIn(nameCell)) return@forEach
+            if (nameCell.isNotEmpty()) {
                 currentTeacher = nameCell
             }
             val teacher = currentTeacher ?: return@forEach
 
             val cells = parts[1].split('│').map { it.trim() }
-
-            val lessonCells = cells.drop(1)
+            if (isLessonRuler(cells)) return@forEach
 
             val teacherCells = result.getOrPut(teacher) { mutableMapOf() }
 
-            lessonCells.forEachIndexed { index, value ->
+            cells.forEachIndexed { index, value ->
                 val lessonNumber = index + 1
-                if (lessonNumber > 10) return@forEachIndexed
+                if (lessonNumber > MAX_LESSON) return@forEachIndexed
                 if (value.isBlank() || value == "—") return@forEachIndexed
 
                 val cell = teacherCells.getOrPut(lessonNumber) { Cell() }

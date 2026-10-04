@@ -87,7 +87,6 @@ import com.politex.ui.util.bouncyClickable
 import com.politex.util.AppThemeStore
 import com.politex.util.GradeSettings
 import com.politex.util.MpkCurriculum
-import com.politex.util.TutorialFlags
 import com.politex.util.defaultBackupFileName
 import com.politex.widget.WidgetUpdateHelper
 import com.politex.worker.MpkWorkManagerHelper
@@ -712,39 +711,6 @@ fun SettingsScreen(
                 }
             }
 
-            if (BuildConfig.FLAVOR == "admin") {
-                item {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBgMain,
-                        border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = com.politex.ui.theme.Tokens.HitTarget)
-                            .testTag("reset_tutorials_button")
-                            .bouncyClickable {
-                                TutorialFlags.resetAll(context)
-                                Toast
-                                    .makeText(context, "Обучения будут показаны заново", Toast.LENGTH_SHORT)
-                                    .show()
-                            },
-                    ) {
-                        Box(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            contentAlignment = Alignment.CenterStart,
-                        ) {
-                            Text(
-                                text = "Сбросить обучения",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = ColorTextTitle,
-                                ),
-                            )
-                        }
-                    }
-                }
-            }
 
             item { SectionHeader("О ПРИЛОЖЕНИИ") }
             item {

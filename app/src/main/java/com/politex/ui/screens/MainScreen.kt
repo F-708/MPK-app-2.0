@@ -55,7 +55,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.politex.data.model.GroupInfo
 import com.politex.ui.components.MainTopBar
-import com.politex.ui.components.TutorialOverlay
 import com.politex.ui.components.UndoSnackbar
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBrandBlue
@@ -449,7 +448,6 @@ fun MainScreen(
             }
         }
 
-        TutorialOverlay()
     }
 }
 
