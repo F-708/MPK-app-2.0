@@ -2,12 +2,14 @@ package com.politex
 
 import com.politex.ui.screens.buildGroupCode
 import com.politex.ui.screens.groupPickerLetters
+import com.politex.ui.screens.groupPickerMaxNumber
 import com.politex.ui.screens.validateAgainstCatalog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class GroupCodePickerTest {
     private val catalog = listOf("11О", "11Д", "21Г", "41О", "41Д", "42Э")
@@ -63,5 +65,39 @@ class GroupCodePickerTest {
         val letters = groupPickerLetters(emptyList(), 4, 1)
         assertTrue(letters.isNotEmpty())
         assertTrue('О' in letters)
+    }
+
+    @Test
+    fun `максимальный номер группы для курса из каталога`() {
+        // catalog: 11О, 11Д, 21Г, 41О, 41Д, 42Э
+        assertEquals(1, groupPickerMaxNumber(catalog, 1))
+        assertEquals(1, groupPickerMaxNumber(catalog, 2))
+        assertEquals(2, groupPickerMaxNumber(catalog, 4))
+        // курс без групп в каталоге / курс не выбран — ограничение снимается (1..9)
+        assertEquals(9, groupPickerMaxNumber(catalog, 3))
+        assertEquals(9, groupPickerMaxNumber(catalog, null))
+        assertEquals(9, groupPickerMaxNumber(emptyList(), 1))
+    }
+
+    @Test
+    fun `курс и номер без групп в каталоге - буквы пустые`() {
+        // UI при пустых буквах скрывает LazyRow, показывает «Группы <код> нет в расписании», ОТКРЫТЬ disabled
+        assertTrue(groupPickerLetters(catalog, 4, 3).isEmpty())
+        assertTrue(groupPickerLetters(catalog, 3, 1).isEmpty())
+    }
+
+    @Test
+    fun `ссылка всё равно открыть удалена`() {
+        val src =
+            sequenceOf(
+                File("src/main/java/com/politex/ui/screens/GroupScheduleScreen.kt"),
+                File("app/src/main/java/com/politex/ui/screens/GroupScheduleScreen.kt"),
+            ).first { it.exists() }
+        val text = src.readText()
+        assertFalse(text.contains("group_picker_open_anyway"))
+        assertFalse(text.contains("Всё равно открыть"))
+        // заглушка вместо букв на месте
+        assertTrue(text.contains("нет в расписании"))
+        assertTrue(text.contains("group_picker_no_groups"))
     }
 }

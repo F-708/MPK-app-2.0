@@ -142,23 +142,37 @@ internal fun validateAgainstCatalog(
     return catalog.any { it == normalized }
 }
 
-// Буквы, реально существующие в каталоге для курса+номера;
-// если каталог пуст/не содержит таких — все буквы специальностей (каталог может отставать)
+// BB6: максимум номеров групп для курса по каталогу («<курс><номер><буква>», номер = средняя цифра).
+// Курс не выбран или в каталоге нет групп этого курса (каталог может отставать) — 9, т.е. без ограничения.
+internal fun groupPickerMaxNumber(
+    catalog: List<String>,
+    course: Int?,
+): Int {
+    if (course == null) return 9
+    return catalog
+        .mapNotNull { GroupCatalog.normalize(it) }
+        .filter { it[0] == course.digitToChar() }
+        .maxOfOrNull { it[1] - '0' } ?: 9
+}
+
+// Буквы, реально существующие в каталоге для курса+номера; нет совпадений — пустой список
+// (UI скрывает буквы и показывает «Группы <код> нет в расписании»).
+// Фолбэк на буквы специальностей — только если каталог вовсе пуст/не читается.
 internal fun groupPickerLetters(
     catalog: List<String>,
     course: Int?,
     number: Int?,
 ): List<Char> {
+    val normalized = catalog.mapNotNull { GroupCatalog.normalize(it) }
+    if (normalized.isEmpty()) {
+        return GroupParser.generateCommonGroups().map { it.specialtyCode }.distinct().sorted()
+    }
     val prefix = if (course != null && number != null) "$course$number" else null
-    val fromCatalog =
-        catalog
-            .mapNotNull { GroupCatalog.normalize(it) }
-            .filter { prefix == null || it.startsWith(prefix) }
-            .map { it[2] }
-            .distinct()
-            .sorted()
-    if (fromCatalog.isNotEmpty()) return fromCatalog
-    return GroupParser.generateCommonGroups().map { it.specialtyCode }.distinct().sorted()
+    return normalized
+        .filter { prefix == null || it.startsWith(prefix) }
+        .map { it[2] }
+        .distinct()
+        .sorted()
 }
 
 @Composable
@@ -766,13 +780,19 @@ private fun GroupSchedulePicker(
     var selectedNumber by rememberSaveable { mutableStateOf<Int?>(null) }
     var selectedLetter by rememberSaveable { mutableStateOf<Char?>(null) }
 
+    // BB6: номер ограничен максимумом из каталога для выбранного курса;
+    // выбранный ранее номер сверх лимита сбрасывается
+    val maxNumber =
+        remember(catalogCodes, selectedCourse) { groupPickerMaxNumber(catalogCodes, selectedCourse) }
+    val number = selectedNumber?.takeIf { it in 1..maxNumber }
+
     val letters =
-        remember(catalogCodes, selectedCourse, selectedNumber) {
-            groupPickerLetters(catalogCodes, selectedCourse, selectedNumber)
+        remember(catalogCodes, selectedCourse, number) {
+            groupPickerLetters(catalogCodes, selectedCourse, number)
         }
     val letter = selectedLetter?.takeIf { it in letters }
 
-    val code = buildGroupCode(selectedCourse, selectedNumber, letter)
+    val code = buildGroupCode(selectedCourse, number, letter)
     val inCatalog = code != null && validateAgainstCatalog(code, catalogCodes)
     val info = remember(code) { code?.let { GroupParser.parse(it) } }
     val specialtyShort = remember(info) { info?.let { MpkCurriculum.getSpecialty(it.specialtyCode)?.shortName }.orEmpty() }
@@ -854,31 +874,45 @@ private fun GroupSchedulePicker(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            (1..9).forEach { number ->
+            (1..maxNumber).forEach { n ->
                 PickerChip(
-                    label = "$number",
-                    selected = selectedNumber == number,
+                    label = "$n",
+                    selected = number == n,
                     modifier = Modifier.weight(1f),
-                    tag = "group_picker_number_$number",
-                    onClick = { selectedNumber = if (selectedNumber == number) null else number },
+                    tag = "group_picker_number_$n",
+                    onClick = { selectedNumber = if (number == n) null else n },
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
         PickerSectionLabel("3 · БУКВА")
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            items(letters) { ch ->
-                PickerChip(
-                    label = "$ch",
-                    selected = letter == ch,
-                    tag = "group_picker_letter_$ch",
-                    onClick = { selectedLetter = if (letter == ch) null else ch },
-                )
+        if (letters.isNotEmpty()) {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(letters) { ch ->
+                    PickerChip(
+                        label = "$ch",
+                        selected = letter == ch,
+                        tag = "group_picker_letter_$ch",
+                        onClick = { selectedLetter = if (letter == ch) null else ch },
+                    )
+                }
             }
+        } else if (number != null) {
+            // BB6: для выбранных курса+номера нет групп в каталоге — букв нет, код не собрать, ОТКРЫТЬ disabled
+            Text(
+                text = "Группы $selectedCourse$number нет в расписании",
+                style =
+                androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    color = ColorTextMuted,
+                ),
+                modifier = Modifier.testTag("group_picker_no_groups"),
+            )
         }
 
         if (info != null) {
@@ -934,26 +968,8 @@ private fun GroupSchedulePicker(
             }
         }
 
-        // Каталог не истина в последней инстанции: некоторым группам разрешаем открыться всё равно
-        if (code != null && !inCatalog) {
-            Text(
-                text = "Всё равно открыть",
-                style =
-                androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 13.sp,
-                    color = ColorTextMuted,
-                ),
-                modifier =
-                Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .bouncyClickable { onGroupSelected(code) }
-                    .testTag("group_picker_open_anyway"),
-            )
-        } else {
-            Spacer(modifier = Modifier.height(12.dp))
-        }
+        // BB6: открытие кода вне каталога убрано заказчиком — кнопка ОТКРЫТЬ disabled без валидного кода
+        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
