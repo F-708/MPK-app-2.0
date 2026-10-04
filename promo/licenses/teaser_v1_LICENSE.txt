@@ -1,0 +1,3 @@
+teaser_v1.wav — оригинальный трек, синтезирован для проекта «Мой Политех» (promo/audio/make_teaser_music.py).
+Лицензия: CC0 1.0 Universal (public domain dedication). Авторских ограничений нет.
+Параметры: 30.00 s, 44.1 kHz stereo, ~100 BPM, структура синхронизирована с SCRIPT_LOCKED_v1.0.md.
