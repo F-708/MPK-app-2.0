@@ -712,6 +712,57 @@ fun SettingsScreen(
             }
 
 
+            // BB12/BB15 (admin): сброс флагов обучающих подсказок —
+            // демо-задание и пульс кабинетов вернутся при следующем входе
+            if (BuildConfig.FLAVOR == "admin") {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        color = ColorBgMain,
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("reset_hints_card"),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Сбросить подсказки",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = ColorTextTitle,
+                                    ),
+                                )
+                                Text(
+                                    text = "Демо-задание в «Заданиях» и пульсация кабинетов в расписании покажутся снова.",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 11.sp,
+                                        color = ColorTextMuted,
+                                    ),
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            ActionChip(
+                                text = "СБРОСИТЬ",
+                                filled = true,
+                                modifier = Modifier.testTag("reset_hints_btn"),
+                                onClick = {
+                                    com.politex.util.HintFlags.resetAll(context)
+                                    Toast.makeText(context, "Подсказки сброшены", Toast.LENGTH_SHORT).show()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
             item { SectionHeader("О ПРИЛОЖЕНИИ") }
             item {
                 Surface(

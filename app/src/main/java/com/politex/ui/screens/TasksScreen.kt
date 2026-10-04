@@ -114,7 +114,10 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
+import com.politex.util.HintFlags
 import com.politex.util.MpkCurriculum
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 @Composable
@@ -151,12 +154,37 @@ fun TasksScreen(
             }
         }
 
+    // BB12: подсказка свайпа — демо-задание в начале списка, пока жест не освоен.
+    // Демо живет только в UI: id = DEMO_TASK_ID, в БД не пишется ни при каких условиях.
+    var swipeHintDone by remember { mutableStateOf(HintFlags.isDone(context, HintFlags.KEY_SWIPE_TASKS)) }
+    val demoTask =
+        remember(groupInfo.canonicalName, groupInfo.course) {
+            StudentTaskEntity(
+                id = DEMO_TASK_ID,
+                groupName = groupInfo.canonicalName,
+                course = groupInfo.course,
+                subjectName = "Подсказка",
+                taskType = TaskType.HOMEWORK.displayName,
+                title = "Тестовое задание — свайпните влево чтобы удалить",
+            )
+        }
+    val visibleTasks =
+        remember(filteredTasks, swipeHintDone, demoTask) {
+            if (swipeHintDone) filteredTasks else listOf(demoTask) + filteredTasks
+        }
+
     val availableTypes =
         remember(groupInfo.course) {
             TaskType.getAvailableForCourse(groupInfo.course)
         }
 
     fun deleteWithUndo(task: StudentTaskEntity) {
+        // BB12: любой свайп до удаления (демо или реальное) — подсказка освоена
+        if (!swipeHintDone) {
+            HintFlags.markDone(context, HintFlags.KEY_SWIPE_TASKS)
+            swipeHintDone = true
+        }
+        if (isDemoTask(task.id)) return // демо не в БД — просто исчезает из списка
         coroutineScope.launch {
             taskRepository.deleteTask(task)
             if (snackbarHostState == null) return@launch
@@ -166,7 +194,7 @@ fun TasksScreen(
                     actionLabel = "ОТМЕНИТЬ",
                     duration = SnackbarDuration.Indefinite,
                 )
-            if (result == SnackbarResult.ActionPerformed) {
+            if (result == SnackbarResult.ActionPerformed && !isDemoTask(task.id)) {
                 taskRepository.addTask(task.copy())
             }
         }
@@ -247,7 +275,7 @@ fun TasksScreen(
                     .background(ColorDividerLight),
             )
 
-            if (filteredTasks.isEmpty()) {
+            if (visibleTasks.isEmpty()) {
 
                 val filterActive = selectedFilter != null
 
@@ -342,29 +370,35 @@ fun TasksScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(filteredTasks, key = { it.id }) { task ->
-
-                        SwipeToDeleteBox(
-                            onDelete = { deleteWithUndo(task) },
-                        ) {
-                            TaskItemCard(
+                    items(visibleTasks, key = { it.id }) { task ->
+                        if (isDemoTask(task.id)) {
+                            DemoSwipeHintItem(
                                 task = task,
-
-                                modifier = Modifier,
-                                onToggleCompleted = {
-                                    coroutineScope.launch {
-                                        taskRepository.toggleTaskCompleted(task.id, !task.isCompleted)
-                                    }
-                                },
-
-                                onEdit = {
-                                    coroutineScope.launch {
-                                        editingReminders = reminderDao.getForTask(task.id).map { it.triggerAtMillis }
-                                        editingTask = task
-                                    }
-                                },
-                                onLongPressDelete = { deleteConfirmTask = task },
+                                onDelete = { deleteWithUndo(task) },
                             )
+                        } else {
+                            SwipeToDeleteBox(
+                                onDelete = { deleteWithUndo(task) },
+                            ) {
+                                TaskItemCard(
+                                    task = task,
+
+                                    modifier = Modifier,
+                                    onToggleCompleted = {
+                                        coroutineScope.launch {
+                                            taskRepository.toggleTaskCompleted(task.id, !task.isCompleted)
+                                        }
+                                    },
+
+                                    onEdit = {
+                                        coroutineScope.launch {
+                                            editingReminders = reminderDao.getForTask(task.id).map { it.triggerAtMillis }
+                                            editingTask = task
+                                        }
+                                    },
+                                    onLongPressDelete = { deleteConfirmTask = task },
+                                )
+                            }
                         }
                     }
                 }
@@ -708,6 +742,7 @@ internal fun shouldDelete(
 @Composable
 private fun SwipeToDeleteBox(
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -723,7 +758,7 @@ private fun SwipeToDeleteBox(
 
     Box(
         modifier =
-        Modifier
+        modifier
             .fillMaxWidth()
             .then(if (deleting) Modifier.height(startHeight * collapse.value) else Modifier)
             .graphicsLayer { alpha = collapse.value }
@@ -764,6 +799,9 @@ private fun SwipeToDeleteBox(
             modifier =
             Modifier
                 .matchParentSize()
+                // BB12: тот же RoundedCornerShape(2.dp) что у карточки — красный фон
+                // больше не торчит квадратными углами из-под скруглённой карточки
+                .clip(RoundedCornerShape(2.dp))
                 .background(ColorDangerFill),
             contentAlignment = Alignment.CenterEnd,
         ) {
@@ -780,6 +818,46 @@ private fun SwipeToDeleteBox(
         Box(modifier = Modifier.graphicsLayer { translationX = offsetX.value }) {
             content()
         }
+    }
+}
+
+// BB12: демо-задание — чисто UI, id = -1, в БД не попадает никогда
+internal const val DEMO_TASK_ID = -1L
+
+internal fun isDemoTask(id: Long): Boolean = id == DEMO_TASK_ID
+
+/**
+ * BB12: демо-задание периодически «прыгает» влево на 40% ширины и обратно —
+ * показывает жест удаления без затемнения. Реальные карточки не прыгают.
+ */
+@Composable
+private fun DemoSwipeHintItem(
+    task: StudentTaskEntity,
+    onDelete: () -> Unit,
+) {
+    val demoOffset = remember { Animatable(0f) }
+    LaunchedEffect(demoOffset) {
+        while (isActive) {
+            delay(800)
+            repeat(2) {
+                demoOffset.animateTo(-0.4f, tween(700))
+                demoOffset.animateTo(0f, tween(700))
+                delay(200)
+            }
+            delay(2500)
+        }
+    }
+    SwipeToDeleteBox(
+        onDelete = onDelete,
+        modifier = Modifier.graphicsLayer { translationX = demoOffset.value * size.width },
+    ) {
+        // клики/чекбокс у демо неактивны — иначе saveTask/toggle писали бы id=-1 в БД
+        TaskItemCard(
+            task = task,
+            onToggleCompleted = {},
+            onEdit = {},
+            onLongPressDelete = {},
+        )
     }
 }
 

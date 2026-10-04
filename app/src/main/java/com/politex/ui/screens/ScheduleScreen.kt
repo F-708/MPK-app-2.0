@@ -61,7 +61,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -100,6 +104,7 @@ import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberNowMinutes
 import com.politex.ui.util.rememberToday
+import com.politex.util.HintFlags
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
 import java.util.Locale
@@ -143,6 +148,17 @@ fun ScheduleScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+
+    // BB15: подсказка тапа — кнопка кабинета и чип преподавателя первого подходящего
+    // урока пульсируют (без затемнения и блокировки ввода); первый же переход на
+    // карту/карточку ставит флаг и снимает пульс, в т.ч. после возврата.
+    var scheduleHintDone by remember { mutableStateOf(HintFlags.isDone(context, HintFlags.KEY_SCHEDULE_TAPS)) }
+    fun markScheduleHintDone() {
+        if (!scheduleHintDone) {
+            HintFlags.markDone(context, HintFlags.KEY_SCHEDULE_TAPS)
+            scheduleHintDone = true
+        }
+    }
 
     val isTeacherKnown: (String) -> Boolean =
         remember(context) {
@@ -284,8 +300,14 @@ fun ScheduleScreen(
             lessonsForDay(allGroupLessons, activeDateString, activeDayOfWeek)
         }
 
-    val roomClick: (String, String?) -> Unit = { room, fromRoom -> onRoomClick(room, fromRoom) }
-    val teacherClick: (String) -> Unit = { name -> onTeacherClick(name) }
+    val roomClick: (String, String?) -> Unit = { room, fromRoom -> markScheduleHintDone(); onRoomClick(room, fromRoom) }
+    val teacherClick: (String) -> Unit = { name -> markScheduleHintDone(); onTeacherClick(name) }
+
+    // BB15: цель пульса — первый урок, у которого есть кабинет или преподаватель
+    val pulseLessonNumber =
+        remember(lessons) {
+            lessons.firstOrNull { it.roomFirst.isNotBlank() || it.teacherFirst.isNotBlank() }?.lessonNumber
+        }
 
     val pendingTasks: List<com.politex.data.local.entity.StudentTaskEntity> =
         pendingTasksFromVm ?: remember(context, groupInfo.canonicalName) {
@@ -810,6 +832,7 @@ fun ScheduleScreen(
                                 onTeacherClick = teacherClick,
                                 isTeacherKnown = isTeacherKnown,
 
+                                pulse = showPulse(scheduleHintDone, lesson.lessonNumber == pulseLessonNumber),
 
                                 onRoomClick = { room ->
                                     if (lesson.isSplit && lesson.roomFirst.isNotBlank() && lesson.roomSecond.isNotBlank()) {
@@ -935,6 +958,7 @@ fun LessonCard(
     onTeacherClick: (String) -> Unit = {},
     isTeacherKnown: (String) -> Boolean = { true },
     onRoomClick: (String) -> Unit = {},
+    pulse: Boolean = false,
 
     focusAlpha: Float = 0f,
     modifier: Modifier = Modifier,
@@ -1022,6 +1046,7 @@ fun LessonCard(
                         onTeacherClick = onTeacherClick,
                         isTeacherKnown = isTeacherKnown,
                         onRoomClick = onRoomClick,
+                        pulse = pulse,
                         modifier = Modifier.weight(1f),
                     )
 
@@ -1039,6 +1064,7 @@ fun LessonCard(
                         onTeacherClick = onTeacherClick,
                         isTeacherKnown = isTeacherKnown,
                         onRoomClick = onRoomClick,
+                        pulse = pulse,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -1071,7 +1097,7 @@ fun LessonCard(
                             } else {
                                 null
                             },
-
+                            modifier = Modifier.pulseHalo(pulse),
                         )
                     }
 
@@ -1081,6 +1107,7 @@ fun LessonCard(
                             modifier =
                             Modifier
                                 .heightIn(min = 44.dp)
+                                .pulseHalo(pulse)
                                 .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) },
                             contentAlignment = Alignment.Center,
                         ) {
@@ -1202,6 +1229,7 @@ private fun SubgroupPane(
     onTeacherClick: (String) -> Unit,
     isTeacherKnown: (String) -> Boolean,
     onRoomClick: (String) -> Unit,
+    pulse: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1237,6 +1265,7 @@ private fun SubgroupPane(
                     modifier =
                     Modifier
                         .heightIn(min = 44.dp)
+                        .pulseHalo(pulse)
                         .bouncyClickable(scaleDown = 0.97f) { onRoomClick(room) },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -1297,6 +1326,7 @@ private fun SubgroupPane(
                     null
                 },
                 fontSize = 11.sp,
+                modifier = Modifier.pulseHalo(pulse),
             )
         }
     }
@@ -1373,6 +1403,41 @@ fun lessonsForDay(
         exact
     } else {
         allGroupLessons.filter { it.dateString.isBlank() && it.dayOfWeek == activeDayOfWeek }
+    }
+}
+
+// BB15: условие пульсации — чистая функция (тестируется без Compose)
+internal fun showPulse(
+    flagDone: Boolean,
+    isTargetLesson: Boolean,
+): Boolean = !flagDone && isTargetLesson
+
+/**
+ * BB15: кольцо-ореол вокруг цели подсказки (как точка в звонках):
+ * infiniteRepeatable alpha 0.5→0 + scale 1→1.25, ColorActiveBlue.
+ * Только рисует — ввод не блокирует, ничего не затемняет.
+ */
+@Composable
+internal fun Modifier.pulseHalo(active: Boolean): Modifier {
+    if (!active) return this
+    val progress by
+        rememberInfiniteTransition(label = "HintPulse").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(durationMillis = 1100)),
+            label = "HintPulseProgress",
+        )
+    return drawBehind {
+        val scale = 1f + 0.25f * progress
+        val w = size.width * scale
+        val h = size.height * scale
+        drawRoundRect(
+            color = ColorActiveBlue.copy(alpha = 0.5f * (1f - progress)),
+            topLeft = Offset((size.width - w) / 2f, (size.height - h) / 2f),
+            size = Size(w, h),
+            cornerRadius = CornerRadius(6.dp.toPx()),
+            style = Stroke(width = 2.dp.toPx()),
+        )
     }
 }
 
