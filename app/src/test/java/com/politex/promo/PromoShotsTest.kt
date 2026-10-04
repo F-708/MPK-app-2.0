@@ -1,0 +1,461 @@
+package com.politex.promo
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.test.core.app.ApplicationProvider
+import com.github.takahirom.roborazzi.captureRoboImage
+import com.politex.AppGraph
+import com.politex.data.local.MpkDatabase
+import com.politex.data.local.entity.GradeEntryEntity
+import com.politex.data.local.entity.LessonEntity
+import com.politex.data.local.entity.MaterialItemEntity
+import com.politex.data.local.entity.MaterialKind
+import com.politex.data.local.entity.StudentTaskEntity
+import com.politex.data.model.CollegeBellSchedule
+import com.politex.data.model.GroupInfo
+import com.politex.data.model.TaskType
+import com.politex.data.repository.TaskRepository
+import com.politex.ui.components.AppDivider
+import com.politex.ui.components.MainTopBar
+import com.politex.ui.screens.BellsScreen
+import com.politex.ui.screens.CollegeMapScreen
+import com.politex.ui.screens.LessonsHubScreen
+import com.politex.ui.screens.ScheduleScreen
+import com.politex.ui.screens.SettingsScreen
+import com.politex.ui.screens.materials.MaterialDocTextViewer
+import com.politex.ui.theme.ColorBgMain
+import com.politex.ui.theme.ColorSurfaceHighlight
+import com.politex.ui.theme.ColorTextMuted
+import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.MyApplicationTheme
+import com.politex.util.GradeCategory
+import com.politex.util.HintFlags
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
+
+/**
+ * ПРОМО-КАДРЫ реальных экранов «Мой Политех» (Robolectric + Roborazzi, без эмулятора).
+ * Демо-данные вымышленные, без персональных данных. PNG → <корень>/promo/shots/.
+ * Запись: sh ./gradlew :app:recordRoborazziStandardDebug --tests "*PromoShots*"
+ */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35], qualifiers = "w412dp-h915dp-xhdpi")
+class PromoShotsTest {
+    @get:Rule
+    val composeRule = createComposeRule()
+
+    private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
+    private val db get() = MpkDatabase.getInstance(context)
+
+    // course=1 (а не 4): в учебном плане «О»-4 нет «Математики», а кадры оценок/материалов
+    // строятся от MpkCurriculum.getSubjects(code, course) — демо-предметы должны быть в списке.
+    private val group = GroupInfo(rawName = "ИС-99", course = 1, groupNumber = 9, specialtyCode = 'О')
+
+    private val outDir: File = run {
+        val cwd = File(System.getProperty("user.dir"))
+        val root = if (cwd.name == "app") cwd.parentFile else cwd
+        File(root, "promo/shots").apply { mkdirs() }
+    }
+
+    @Before
+    fun setUp() {
+        freezeAtTuesday1030()
+        // обучающие подсказки (пульс кнопок, демо-задание «Свайпните…») в промо-кадрах не нужны
+        HintFlags.markDone(context, HintFlags.KEY_SCHEDULE_TAPS)
+        HintFlags.markDone(context, HintFlags.KEY_SWIPE_TASKS)
+        runBlocking { seedDemoData() }
+    }
+
+    /**
+     * «Заморозка» на ближайший вторник 10:30 (идёт 3 урок, 10:20–11:05).
+     * ShadowSystemClock не подходит: экраны читают Calendar.getInstance(), а JDK-код
+     * Роботрект не инструментрует. Сдвигаем дефолтный TimeZone на дельту до цели —
+     * Calendar/SimpleDateFormat начинают показывать вторник 10:30 при любом реальном времени.
+     */
+    private fun freezeAtTuesday1030() {
+        val real = System.currentTimeMillis()
+        // BASE_TZ — зона ДО любых сдвигов: @Before идёт на каждый тест, а дефолт уже мог быть сдвинут
+        val target = Calendar.getInstance(BASE_TZ).apply {
+            timeInMillis = real
+            set(Calendar.DAY_OF_WEEK, Calendar.TUESDAY)
+            set(Calendar.HOUR_OF_DAY, 10)
+            set(Calendar.MINUTE, 30)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        while (target.timeInMillis <= real) target.add(Calendar.DAY_OF_YEAR, 7)
+        val delta = (target.timeInMillis - real).toInt()
+        val base = BASE_TZ
+        TimeZone.setDefault(
+            object : TimeZone() {
+                init {
+                    id = "PROMO/FROZEN"
+                }
+
+                override fun getOffset(
+                    era: Int,
+                    year: Int,
+                    month: Int,
+                    day: Int,
+                    dayOfWeek: Int,
+                    milliseconds: Int,
+                ): Int = base.getOffset(era, year, month, day, dayOfWeek, milliseconds) + delta
+
+                override fun getOffset(millis: Long): Int = base.getOffset(millis) + delta
+
+                override fun setRawOffset(offsetMillis: Int) = Unit
+
+                override fun getRawOffset(): Int = base.rawOffset + delta
+
+                override fun useDaylightTime(): Boolean = false
+
+                override fun inDaylightTime(date: java.util.Date): Boolean = false
+            },
+        )
+    }
+
+    private suspend fun seedDemoData() {
+        val g = group.canonicalName
+        val now = Calendar.getInstance()
+        val iso = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
+        fun dayIso(plusDays: Int): String =
+            iso.format((now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, plusDays) }.time)
+
+        // 5 уроков на сегодня (вт) и завтра (ср); время — по CollegeBellSchedule
+        val plan = listOf(
+            Triple("Математика", "214", "Иванова И.И."),
+            Triple("Физика", "305", "Петров П.П."),
+            Triple("ПРОГРАММИРОВАНИЕ ЦИФРОВЫХ УСТРОЙСТВ", "118", "Иванова И.И."),
+            Triple("Математика", "214", "Петров П.П."),
+            Triple("Физика", "305", "Иванова И.И."),
+        )
+        val lessons = listOf(2, 3).flatMap { dow ->
+            plan.mapIndexed { i, (subject, room, teacher) ->
+                val (start, end) = CollegeBellSchedule.getTimeForLessonNumber(i + 1, dow)
+                LessonEntity(
+                    groupName = g, dayOfWeek = dow, lessonNumber = i + 1,
+                    timeStart = start, timeEnd = end,
+                    subjectRaw = subject, roomFirst = room, teacherFirst = teacher,
+                )
+            }
+        }
+        with(db.lessonDao()) {
+            clearLessonsForGroup(g)
+            insertLessons(lessons)
+        }
+
+        with(db.taskDao()) {
+            clearTasksForGroup(g)
+            insertTask(
+                StudentTaskEntity(
+                    groupName = g, course = group.course, subjectName = "Математика",
+                    taskType = TaskType.HOMEWORK.displayName, title = "Параграф 12, задачи 1-5",
+                    deadlineDate = dayIso(1),
+                ),
+            )
+            insertTask(
+                StudentTaskEntity(
+                    groupName = g, course = group.course, subjectName = "Физика",
+                    taskType = TaskType.LAB_WORK.displayName, title = "Отчёт по лаб. 3",
+                    deadlineDate = dayIso(3),
+                ),
+            )
+        }
+
+        with(db.gradeDao()) {
+            allEntries().first().forEach { deleteById(it.id) }
+            listOf(-12 to 5, -10 to 4, -7 to 5).forEach { (day, value) ->
+                insert(
+                    GradeEntryEntity(
+                        subjectName = "Математика", category = GradeCategory.REGULAR.name,
+                        value = value, dateIso = dayIso(day),
+                    ),
+                )
+            }
+            insert(
+                GradeEntryEntity(
+                    subjectName = "Математика", category = GradeCategory.CONTROL.name,
+                    value = 4, dateIso = dayIso(-3),
+                ),
+            )
+        }
+
+        with(db.materialDao()) {
+            getAllItems().first().forEach { deleteItemById(it.id) }
+            insertItem(
+                MaterialItemEntity(
+                    kind = MaterialKind.TEXT.name, title = "Конспект: основы ТОЭ",
+                    subjectName = "Математика", textContent = TEXT_MATERIAL, sortOrder = 0,
+                ),
+            )
+            // один архивный FILE — чтобы в корне материалов была секция «Архив» (в кадр не открывается)
+            insertItem(
+                MaterialItemEntity(
+                    kind = MaterialKind.FILE.name, title = "Презентация: основы ТОЭ",
+                    fileName = "toe_slides.pdf", ext = "pdf",
+                    subjectName = "Математика", archived = true, sortOrder = 0,
+                ),
+            )
+        }
+    }
+
+    // ------------------------------------------------------------------ кадры
+
+    @Test
+    fun shotScheduleToday() = shoot("shot_schedule_today", tab = 0, interact = { waitForText("ЦИФРОВЫХ") }) {
+        ScheduleScreen(groupInfo = group, scheduleRepository = AppGraph.scheduleRepository, onSyncRequest = {})
+    }
+
+    @Test
+    fun shotScheduleTomorrow() = shoot("shot_schedule_tomorrow", tab = 0, interact = { waitForText("Завтра") }) {
+        ScheduleScreen(
+            groupInfo = group, scheduleRepository = AppGraph.scheduleRepository,
+            onSyncRequest = {}, selectedSlot = 1,
+        )
+    }
+
+    @Test
+    fun shotBells() = shoot("shot_bells", tab = 2, interact = { waitForText("Расписание звонков") }) {
+        BellsScreen(groupInfo = group, scheduleRepository = AppGraph.scheduleRepository)
+    }
+
+    @Test
+    fun shotTasks() = shoot("shot_tasks", tab = 1, interact = { waitForText("Параграф 12") }) {
+        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao()))
+    }
+
+    @Test
+    fun shotMaterials() = shoot(
+        "shot_materials",
+        tab = 1,
+        interact = {
+            composeRule.onNodeWithText("Материалы").performClick()
+            waitForTag("material_subject_Математика")
+        },
+    ) {
+        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao()))
+    }
+
+    @Test
+    fun shotGrades() = shoot(
+        "shot_grades",
+        tab = 1,
+        interact = {
+            composeRule.onNodeWithText("Оценки").performClick()
+            // часы теста стоят: после клика крутим кадры вручную, иначе секция не пересоберётся
+            waitForTag("grades_root_list")
+            // Математика — 8-я в списке плана; скроллим до неё и ждём средний балл (4.2)
+            waitForTag("grades_subject_row_Математика")
+            composeRule.onNodeWithTag("grades_subject_row_Математика").performScrollTo()
+            waitForText("4.2")
+        },
+    ) {
+        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao()))
+    }
+
+    @Test
+    fun shotMapRoute() = shoot(
+        "shot_map_route",
+        tab = 0,
+        // шевроны маршрута от главного входа живут на 1 этаже (шаг 1); на 2-м крыло с 214 вне канваса
+        interact = {
+            composeRule.onNodeWithText("Шаг 1").performClick()
+            composeRule.mainClock.advanceTimeBy(2_000)
+            composeRule.waitForIdle()
+        },
+    ) {
+        CollegeMapScreen(initialRoom = "214", fromRoom = "", showRoute = true, onBack = {})
+    }
+
+    @Test
+    fun shotSettings() = shoot("shot_settings", tab = 3) {
+        SettingsScreen(groupInfo = group, onGroupChanged = {})
+    }
+
+    @Test
+    fun shotViewerText() {
+        val item = runBlocking { db.materialDao().getAllItems().first().first { it.kind == MaterialKind.TEXT.name } }
+        // в приложении вьюверы полноэкранные (ViewerMode скрывает топбар и навбар)
+        shoot("shot_viewer_text", topBar = false, interact = { waitForText("Электрическая цепь") }) {
+            MaterialDocTextViewer(item = item, dao = db.materialDao(), onBack = {})
+        }
+    }
+
+    // shot_teachers — ПРОПУЩЕН: TeachersPage читает реальные ФИО из assets/teachers.csv (ПД).
+
+    // ------------------------------------------------------------------ обвязка
+
+    /** Кадр как в MainScreen: Scaffold + MainTopBar + навбар (подсветка таба) + экран в контенте. */
+    private fun shoot(
+        name: String,
+        tab: Int = -1,
+        topBar: Boolean = true,
+        interact: (() -> Unit)? = null,
+        content: @Composable () -> Unit,
+    ) {
+        composeRule.mainClock.autoAdvance = false
+        composeRule.setContent {
+            MyApplicationTheme {
+                if (topBar || tab >= 0) {
+                    Scaffold(
+                        topBar = { if (topBar) MainTopBar() },
+                        bottomBar = { if (tab >= 0) PromoNavBar(tab) },
+                    ) { innerPadding ->
+                        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) { content() }
+                    }
+                } else {
+                    content()
+                }
+            }
+        }
+        composeRule.mainClock.advanceTimeBy(3_000)
+        composeRule.waitForIdle()
+        // баннер: Coil в Robolectric всегда падает в error→fallback, но асинхронно —
+        // ждём fallback-текст, иначе кадр изредка ловит пустой слот загрузки
+        if (topBar) runCatching { waitForText("ПОЛИТЕХНИЧЕСКИЙ", 10_000) }
+        if (interact != null) {
+            interact()
+            composeRule.mainClock.advanceTimeBy(1_500)
+            composeRule.waitForIdle()
+        }
+        composeRule.onRoot().captureRoboImage(File(outDir, "$name.png").absolutePath)
+    }
+
+    /** Ждём появления текста (Room/IO асинхронны); часы теста стоят — крутим кадры вручную. */
+    private fun waitForText(text: String, timeoutMs: Long = 20_000) {
+        val deadline = System.nanoTime() + timeoutMs * 1_000_000
+        while (System.nanoTime() < deadline) {
+            if (composeRule.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()) return
+            Thread.sleep(50)
+            composeRule.mainClock.advanceTimeByFrame()
+        }
+        throw AssertionError("Текст «$text» не появился за ${timeoutMs}мс")
+    }
+
+    private fun waitForTag(tag: String, timeoutMs: Long = 20_000) {
+        val deadline = System.nanoTime() + timeoutMs * 1_000_000
+        while (System.nanoTime() < deadline) {
+            if (composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()) return
+            Thread.sleep(50)
+            composeRule.mainClock.advanceTimeByFrame()
+        }
+        throw AssertionError("Узел «$tag» не появился за ${timeoutMs}мс")
+    }
+
+    /** Реплика навбара для кадра: 1-в-1 блок bottomBar из MainScreen (оригинал приватный). */
+    @Composable
+    private fun PromoNavBar(selected: Int) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            AppDivider()
+            NavigationBar(
+                containerColor = ColorBgMain,
+                tonalElevation = 0.dp,
+                modifier = Modifier.fillMaxWidth().height(72.dp),
+            ) {
+                val tabs = listOf(
+                    Triple("Расписание", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
+                    Triple("Уроки", Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
+                    Triple("Звонки", Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
+                    Triple("Другое", Icons.Filled.Apps, Icons.Outlined.Apps),
+                )
+                tabs.forEachIndexed { i, (title, filledIcon, outlinedIcon) ->
+                    val isSelected = selected == i
+                    NavigationBarItem(
+                        selected = isSelected,
+                        onClick = { },
+                        icon = {
+                            Icon(
+                                imageVector = if (isSelected) filledIcon else outlinedIcon,
+                                contentDescription = title,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = title,
+                                softWrap = false,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = TextStyle(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 10.sp,
+                                    letterSpacing = 0.sp,
+                                ),
+                            )
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = ColorTopBar,
+                            selectedTextColor = ColorTopBar,
+                            indicatorColor = ColorSurfaceHighlight,
+                            unselectedIconColor = ColorTextMuted,
+                            unselectedTextColor = ColorTextMuted,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    companion object {
+        /** Зона по умолчанию до сдвигов — снимается один раз при загрузке класса. */
+        private val BASE_TZ: TimeZone = TimeZone.getDefault()
+
+        /** TEXT-материал «Конспект: основы ТОЭ» — 3 абзаца. */
+        private val TEXT_MATERIAL = listOf(
+            "Электрическая цепь — совокупность устройств, образующих путь для электрического тока. " +
+                "Основные элементы цепи: источник энергии, приёмник (нагрузка) и соединительные проводники.",
+            "Закон Ома для участка цепи: сила тока прямо пропорциональна напряжению и обратно " +
+                "пропорциональна сопротивлению участка. I = U / R.",
+            "Первый закон Кирхгофа: алгебраическая сумма токов в любом узле цепи равна нулю. " +
+                "Входящие токи считаются положительными, выходящие — отрицательными.",
+        ).joinToString("\n\n")
+    }
+}
