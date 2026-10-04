@@ -1434,16 +1434,18 @@ internal fun Modifier.pulseHalo(active: Boolean): Modifier {
             label = "HintPulseT",
         )
     return drawBehind {
-        val stroke = 1.5.dp.toPx()
-        val scale = 1f + 0.05f * t
-        val w = size.width * scale + stroke
-        val h = size.height * scale + stroke
+        // DD5: ЗАПОЛНЕННЫЙ прямоугольник за кнопкой (не контур-линия) — нет белого
+        // зазора между кольцом и кнопкой; inflate 3dp, пульс alpha 0.12→0.30, scale 1→1.04
+        val inflate = 3.dp.toPx()
+        val scale = 1f + 0.04f * t
+        val w = size.width * scale + inflate * 2
+        val h = size.height * scale + inflate * 2
         drawRoundRect(
-            color = ColorActiveBlue.copy(alpha = 0.15f + 0.30f * t),
+            color = ColorActiveBlue.copy(alpha = 0.12f + 0.18f * t),
             topLeft = Offset((size.width - w) / 2f, (size.height - h) / 2f),
             size = Size(w, h),
-            cornerRadius = CornerRadius(2.dp.toPx() + stroke / 2f),
-            style = Stroke(width = stroke),
+            cornerRadius = CornerRadius(2.dp.toPx() + inflate),
+            style = androidx.compose.ui.graphics.drawscope.Fill,
         )
     }
 }

@@ -165,7 +165,7 @@ fun TasksScreen(
                 course = groupInfo.course,
                 subjectName = "Подсказка",
                 taskType = TaskType.HOMEWORK.displayName,
-                title = "Тестовое задание — свайпните влево чтобы удалить",
+                title = "Свайпните влево, чтобы удалить",
             )
         }
     val visibleTasks =
