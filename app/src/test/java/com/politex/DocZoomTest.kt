@@ -1,6 +1,10 @@
 package com.politex
 
 import com.politex.ui.screens.materials.DocZoom
+import com.politex.ui.screens.materials.bookmarkSizeFactor
+import com.politex.ui.screens.materials.focalAnchorX
+import com.politex.ui.screens.materials.restoreX
+import com.politex.ui.screens.materials.restoreY
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -66,5 +70,54 @@ class DocZoomTest {
         assertEquals(0.5f, DocZoom.strokeLayerScale(2f), eps)
         assertEquals(0.25f, DocZoom.strokeLayerScale(4f), eps)
         assertTrue(DocZoom.strokeLayerScale(0f).isFinite())
+    }
+
+    // EE1: фокальный зум — точка под пальцами остаётся под пальцами.
+    @Test
+    fun `EE1 focalAnchorX - точка контента под центроидом = scroll + cx`() {
+        assertEquals(150f, focalAnchorX(100f, 50f), eps)
+        assertEquals(0f, focalAnchorX(0f, 0f), eps)
+        assertEquals(-20f, focalAnchorX(10f, -30f), eps)
+    }
+
+    @Test
+    fun `EE1 restoreX - contentX_ratio - cx, clamp в 0_max`() {
+        assertEquals(300f, restoreX(200f, 2f, 100f, 1000f), eps) // 200*2-100
+        assertEquals(500f, restoreX(200f, 10f, 0f, 500f), eps) // 2000 clamp max
+        assertEquals(0f, restoreX(50f, 0.5f, 100f, 1000f), eps) // -75 clamp 0
+        // zoom<1 ⇒ max=0 ⇒ всегда 0 (restore не борется с центрированием)
+        assertEquals(0f, restoreX(500f, 0.5f, 100f, 0f), eps)
+    }
+
+    @Test
+    fun `EE1 restoreX - отрицательный max трактуется как 0`() {
+        assertEquals(0f, restoreX(100f, 2f, 50f, -10f), eps)
+    }
+
+    @Test
+    fun `EE1 restoreY - внутристраничный offset масштабируется пропорционально zoom`() {
+        assertEquals(200f, restoreY(100f, 2f), eps)
+        assertEquals(50f, restoreY(100f, 0.5f), eps)
+        assertEquals(0f, restoreY(0f, 3f), eps)
+    }
+
+    @Test
+    fun `EE1 инвариант фокуса - scroll' + cx = contentX ratio (точка остаётся под центроидом)`() {
+        val scroll = 120f
+        val cx = 300f
+        val ratio = 1.75f
+        val contentX = focalAnchorX(scroll, cx)
+        val newScroll = restoreX(contentX, ratio, cx, maxScroll = 10_000f)
+        assertEquals(contentX * ratio, newScroll + cx, eps)
+    }
+
+    // EE6: bookmark-кнопка масштабируется с zoom, clamp ±20%.
+    @Test
+    fun `EE6 bookmarkSizeFactor клампится в 0_8 до 1_2`() {
+        assertEquals(0.8f, bookmarkSizeFactor(0.5f), eps)
+        assertEquals(0.8f, bookmarkSizeFactor(0.8f), eps)
+        assertEquals(1f, bookmarkSizeFactor(1f), eps)
+        assertEquals(1.2f, bookmarkSizeFactor(1.2f), eps)
+        assertEquals(1.2f, bookmarkSizeFactor(4f), eps)
     }
 }

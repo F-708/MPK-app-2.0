@@ -9,9 +9,11 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -70,6 +72,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -273,10 +276,16 @@ fun MaterialPdfViewer(
     // при > 1 — горизонтальный скролл. Никаких graphicsLayer scale/pan — они обрезали страницу.
     val docZoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
 
+    // EE1: центроид текущего pinch-жеста (в координатах вьюпорта). Пишется в docPinchZoom до
+    // изменения docZoom; читается единственным коллектором для фокальной компенсации панорамирования.
+    // null ⇒ изменение zoom не от жеста (reset/draw-mode) ⇒ фокальный restore не применяется.
+    val focalCentroid = remember(item.id) { mutableStateOf<Offset?>(null) }
+
     // DD1: двойной тап / тап по индикатору — плавный сброс к 100%.
     fun resetZoomSmooth() {
         val from = docZoomState.floatValue
         if (from == DocZoom.DEFAULT) return
+        focalCentroid.value = null // EE1: сброс — не жест, фокальная компенсация не нужна.
         scope.launch {
             Animatable(0f).animateTo(1f, tween(ZOOM_RESET_ANIM_MS)) {
                 docZoomState.floatValue = from + (DocZoom.DEFAULT - from) * value
@@ -364,7 +373,14 @@ fun MaterialPdfViewer(
             onBookmarks = { showBookmarkList = !showBookmarkList },
             onDrawToggle = {
                 drawMode = !drawMode
-                if (drawMode) showBookmarkList = false else eraserActive = false
+                // EE1: в draw-режиме pinch идёт через AnnotationLayer без центроида —
+                // сбрасываем stale-центроид, чтобы зум в draw-режиме не дёргал панораму.
+                if (drawMode) {
+                    showBookmarkList = false
+                    focalCentroid.value = null
+                } else {
+                    eraserActive = false
+                }
             },
         )
 
@@ -426,6 +442,32 @@ fun MaterialPdfViewer(
             val pageW = with(density) { DocZoom.pageWidthPx(boxW, zoom).toDp() }
             val listW = maxOf(maxWidth, pageW)
             val hScrollState = rememberScrollState()
+            // EE6: фактор размера bookmark-кнопки (clamp ±20% от zoom).
+            val bookmarkFactor = bookmarkSizeFactor(zoom)
+
+            // EE1: ЕДИНСТВЕННЫЙ сериализованный коллектор фокального зума (урок BB2 — без гонок).
+            // На каждое изменение docZoom: снять точку контента под центроидом в ТЕКУЩЕЙ (старой)
+            // раскладке, дождаться кадра (layout применит новый pageW), восстановить скролл так,
+            // чтобы точка осталась под пальцами. Один collect ⇒ scrollTo/scrollToItem не конфликтуют.
+            LaunchedEffect(hScrollState, listState) {
+                var prevZoom = docZoomState.floatValue
+                snapshotFlow { docZoomState.floatValue }
+                    .collect { newZoom ->
+                        val ratio = if (prevZoom > 0f) newZoom / prevZoom else 1f
+                        prevZoom = newZoom
+                        val centroid = focalCentroid.value ?: return@collect
+                        if (ratio == 1f) return@collect
+                        // Точка контента под центроидом в старой раскладке (scroll state не зависит
+                        // от layout — снимаем до кадра).
+                        val contentX = focalAnchorX(hScrollState.value.toFloat(), centroid.x)
+                        val anchorIdx = listState.firstVisibleItemIndex
+                        val anchorOff = listState.firstVisibleItemScrollOffset.toFloat()
+                        // Даём раскладке применить новый pageW/высоты страниц.
+                        withFrameNanos { }
+                        hScrollState.scrollTo(restoreX(contentX, ratio, centroid.x, hScrollState.maxValue.toFloat()).roundToInt())
+                        listState.scrollToItem(anchorIdx, restoreY(anchorOff, ratio).roundToInt())
+                    }
+            }
 
             Box(
                 modifier =
@@ -434,6 +476,7 @@ fun MaterialPdfViewer(
                     .docPinchZoom(
                         scaleState = docZoomState,
                         enabled = !drawMode,
+                        focalCentroid = focalCentroid,
                         onReset = { resetZoomSmooth() },
                     )
                     .horizontalScroll(hScrollState),
@@ -457,6 +500,7 @@ fun MaterialPdfViewer(
                             renderWidthPx = renderWidthPx,
                             pageWidth = pageW,
                             strokeLayerScale = DocZoom.strokeLayerScale(zoom),
+                            bookmarkFactor = bookmarkFactor,
                             bookmarked = bookmarks.any { it.page == index },
 
                             onBookmarkClick = { bookmarked ->
@@ -547,6 +591,21 @@ internal object DocZoom {
     fun strokeLayerScale(zoom: Float): Float = 1f / zoom.coerceAtLeast(0.01f)
 }
 
+// EE1: чистые функции фокального зума (юнит-тесты в DocZoomTest).
+// Горизонталь: точка контента под центроидом = scroll + cx; после зума она умножается на
+// ratio, и чтобы остаться под пальцами: scroll = contentX*ratio - cx, clamp в [0, maxScroll].
+internal fun focalAnchorX(scroll: Float, cx: Float): Float = scroll + cx
+
+internal fun restoreX(contentX: Float, ratio: Float, cx: Float, maxScroll: Float): Float =
+    (contentX * ratio - cx).coerceIn(0f, maxScroll.coerceAtLeast(0f))
+
+// Вертикаль: высоты страниц масштабируются пропорционально zoom, поэтому внутристраничный
+// offset первой видимой страницы домножается на ratio — контент у верха вьюпорта остаётся на месте.
+internal fun restoreY(offsetY: Float, ratio: Float): Float = offsetY * ratio
+
+// EE6: bookmark-кнопка масштабируется с zoom, но не сильнее ±20% (иначе на 400% она огромная).
+internal fun bookmarkSizeFactor(zoom: Float): Float = zoom.coerceIn(0.8f, 1.2f)
+
 internal const val ZOOM_RESET_ANIM_MS = 220
 
 // CC4: одиночный палец панит только при увеличении выше этого порога;
@@ -579,6 +638,9 @@ private fun pageCacheKey(pageIndex: Int, widthPx: Int): Long = (pageIndex.toLong
 internal fun Modifier.docPinchZoom(
     scaleState: MutableFloatState,
     enabled: Boolean = true,
+    // EE1: сюда пишется центроид жеста (в координатах вьюпорта) ПЕРЕД каждым изменением docZoom,
+    // чтобы единственный коллектор снял точку контента под пальцами в старой раскладке.
+    focalCentroid: MutableState<Offset?>? = null,
     onReset: () -> Unit = { scaleState.floatValue = DocZoom.DEFAULT },
 ): Modifier =
     this
@@ -590,7 +652,11 @@ internal fun Modifier.docPinchZoom(
                     val event = awaitPointerEvent(PointerEventPass.Initial)
                     if (event.changes.count { it.pressed } >= 2) {
                         val zoomChange = event.calculateZoom()
-                        if (zoomChange != 1f) scaleState.floatValue = DocZoom.apply(scaleState.floatValue, zoomChange)
+                        if (zoomChange != 1f) {
+                            // EE1: центроид снимаем до изменения zoom (layout ещё в старом zoom).
+                            focalCentroid?.value = event.calculateCentroid()
+                            scaleState.floatValue = DocZoom.apply(scaleState.floatValue, zoomChange)
+                        }
                         event.changes.forEach { if (it.positionChanged()) it.consume() }
                     }
                 } while (event.changes.any { it.pressed })
@@ -776,6 +842,8 @@ private fun PdfPageRow(
     pageWidth: Dp,
     // DD2: = 1/docZoom — толщина штриха постоянна относительно страницы («на бумаге»).
     strokeLayerScale: Float,
+    // EE6: фактор размера bookmark-кнопки = docZoom.coerceIn(0.8, 1.2).
+    bookmarkFactor: Float,
     bookmarked: Boolean,
     onBookmarkClick: (bookmarked: Boolean) -> Unit,
     strokes: List<Stroke>,
@@ -887,8 +955,8 @@ private fun PdfPageRow(
                 Modifier
                     .align(Alignment.TopStart)
                     .padding(4.dp)
-                    // DD1: кнопка живёт в layout-блоке страницы — масштабируется вместе с ней.
-                    .size(26.dp)
+                    // EE6: кнопка масштабируется с zoom, но clamp ±20% (bookmarkFactor).
+                    .size((26 * bookmarkFactor).dp)
                     .bouncyClickable(onClick = { onBookmarkClick(bookmarked) })
                     .testTag("pdf_bookmark_add_$pageIndex"),
             ) {
@@ -897,7 +965,7 @@ private fun PdfPageRow(
                         imageVector = if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                         contentDescription = "Закладка на странице ${pageIndex + 1}",
                         tint = if (bookmarked) Color.White else ColorBrandBlue,
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier.size((14 * bookmarkFactor).dp),
                     )
                 }
             }
