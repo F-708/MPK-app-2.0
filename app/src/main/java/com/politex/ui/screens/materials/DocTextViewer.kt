@@ -2,24 +2,19 @@ package com.politex.ui.screens.materials
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
@@ -42,7 +37,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -101,7 +99,15 @@ fun MaterialDocTextViewer(
     val undoStack = remember(item.id) { ArrayDeque<String>() }
     val redoStack = remember(item.id) { ArrayDeque<String>() }
 
+    // CC4: зум как в ImageViewer — graphicsLayer (scale+pan) на колонке абзацев.
+    // fontSize не масштабируется: визуальный масштаб даёт только graphicsLayer.
     val docZoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
+    val docPanState = remember(item.id) { mutableStateOf(Offset.Zero) }
+
+    fun resetZoom() {
+        docZoomState.floatValue = DocZoom.DEFAULT
+        docPanState.value = Offset.Zero
+    }
 
     fun startEdit() {
         val initial = paragraphs?.joinToString("\n") { it.text } ?: item.textContent
@@ -174,7 +180,7 @@ fun MaterialDocTextViewer(
                     color = Color.Transparent,
                     modifier = Modifier
                         .heightIn(min = 44.dp)
-                        .bouncyClickable(onClick = { docZoomState.floatValue = DocZoom.DEFAULT })
+                        .bouncyClickable(onClick = { resetZoom() })
                         .testTag("doc_zoom_indicator"),
                 ) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
@@ -256,44 +262,46 @@ fun MaterialDocTextViewer(
                     }
                 }
 
-                else -> BoxWithConstraints(
+                else -> Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .docZoomGestures(docZoomState),
+                        .clipToBounds()
+                        .docTransformGestures(
+                            scaleState = docZoomState,
+                            panState = docPanState,
+                            onReset = { resetZoom() },
+                        ),
                 ) {
-                    val z = docZoomState.floatValue
-                    val containerW = maxWidth
-                    val pageW = containerW * z
-                    Box(
+                    LazyColumn(
                         modifier = Modifier
-                            .horizontalScroll(rememberScrollState())
-                            .width(maxOf(containerW, pageW)),
-                        contentAlignment = Alignment.TopCenter,
-                    ) {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .width(pageW)
-                                .testTag("doc_paragraph_list"),
-                            contentPadding = PaddingValues(horizontal = (16 * z).dp, vertical = (12 * z).dp),
-                            verticalArrangement = Arrangement.spacedBy((6 * z).dp),
-                        ) {
-                            items(content.size) { index ->
-                                val p = content[index]
-                                Text(
-
-                                    text = parseInlineMarks(p.text),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .then(if (p.heading) Modifier.padding(top = (10 * z).dp) else Modifier)
-                                        .testTag("doc_paragraph_$index"),
-                                    style = when {
-                                        p.heading -> TextStyle(fontSize = (16 * z).sp, fontWeight = FontWeight.Bold, color = ColorTextTitle, lineHeight = (21 * z).sp)
-                                        p.bold -> TextStyle(fontSize = (14 * z).sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle, lineHeight = (19 * z).sp)
-                                        else -> TextStyle(fontSize = (14 * z).sp, fontWeight = FontWeight.Normal, color = ColorTextBody, lineHeight = (19 * z).sp)
-                                    },
-                                )
+                            .fillMaxSize()
+                            // CC4: scale/pan читаются в draw-фазе — без рекомпозиции и
+                            // переразметки текста при pinch.
+                            .graphicsLayer {
+                                scaleX = docZoomState.floatValue
+                                scaleY = docZoomState.floatValue
+                                translationX = docPanState.value.x
+                                translationY = docPanState.value.y
                             }
+                            .testTag("doc_paragraph_list"),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        items(content.size) { index ->
+                            val p = content[index]
+                            Text(
+
+                                text = parseInlineMarks(p.text),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(if (p.heading) Modifier.padding(top = 10.dp) else Modifier)
+                                    .testTag("doc_paragraph_$index"),
+                                style = when {
+                                    p.heading -> TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle, lineHeight = 21.sp)
+                                    p.bold -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle, lineHeight = 19.sp)
+                                    else -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, color = ColorTextBody, lineHeight = 19.sp)
+                                },
+                            )
                         }
                     }
                 }

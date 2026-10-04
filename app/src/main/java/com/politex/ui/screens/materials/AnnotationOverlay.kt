@@ -123,9 +123,9 @@ private fun distPointToSegment(p: Offset, a: Offset, b: Offset): Float {
     return (ap - ab * t).getDistance()
 }
 
-// BB3: штрих рисуется внутри слоя, масштабированного на layerScale (graphicsLayer у изображений;
-// у PDF layerScale=1 — страница масштабируется layout'ом). Чтобы толщина была константой
-// в экранных dp, хранимую widthDp компенсируем делением на layerScale.
+// CC5: штрих рисуется внутри контейнера, масштабированного graphicsLayer'ом (изображения,
+// PDF и DOCX — единая модель зума). Чтобы толщина была константой в экранных dp,
+// хранимую widthDp компенсируем делением на layerScale.
 internal fun compensatedStrokeWidthPx(widthDp: Float, pxPerDp: Float, layerScale: Float): Float =
     widthDp * pxPerDp / layerScale.coerceAtLeast(0.01f)
 
@@ -187,7 +187,7 @@ fun AnnotationLayer(
 
     transformKey: Any? = null,
 
-    // BB3: масштаб слоя, внутри которого рисуем (graphicsLayer у изображений). 1f = без компенсации.
+    // CC5: масштаб graphicsLayer контейнера документа, внутри которого рисуем. 1f = без компенсации.
     layerScale: Float = 1f,
 ) {
 

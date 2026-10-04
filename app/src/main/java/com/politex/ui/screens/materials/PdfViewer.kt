@@ -12,10 +12,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,7 +35,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -56,6 +53,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -77,8 +75,10 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -104,9 +104,7 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.util.bouncyClickable
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -265,50 +263,22 @@ fun MaterialPdfViewer(
 
     var eraserActive by remember { mutableStateOf(false) }
 
+    // CC4: зум по модели ImageViewer — graphicsLayer (scale+pan) на контейнере страниц.
+    // Страницы всегда шириной containerW, битмапы рендерятся ОДИН раз и при pinch не
+    // перерисовываются/переразмечаются — меняется только трансформация слоя (draw-фаза).
     val docZoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
-    val hScroll = rememberScrollState()
+    val docPanState = remember(item.id) { mutableStateOf(Offset.Zero) }
 
-    // BB2: ОДИН источник правды для якоря — снапшот положения ДО старта pinch-жеста.
-    // Во время жеста меняется ТОЛЬКО docZoom (никаких scrollTo из gesture-обработчика);
-    // восстановление скроллов делает один коллектор ниже, ПОСЛЕ layout нового масштаба.
-    var zoomAnchor by remember(item.id) { mutableStateOf<ZoomAnchor?>(null) }
-
-    // BB2: квант render-ширины меняется не чаще раза в 80ms — без debounce битмапы
-    // «скачут» посреди жеста (перерисовка страниц на каждую границу кванта).
-    var renderZoom by remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
-    LaunchedEffect(item.id) {
-        snapshotFlow { quantizeRenderZoom(docZoomState.floatValue) }
-            .distinctUntilChanged()
-            .debounce(RENDER_ZOOM_DEBOUNCE_MS)
-            .collect { renderZoom = it }
-    }
-
-    LaunchedEffect(item.id) {
-        snapshotFlow { docZoomState.floatValue }
-            .collect { z ->
-                val a = zoomAnchor ?: return@collect
-                if (a.fromZoom <= 0f) return@collect
-                // Ждём кадр: layout с новой шириной страниц уже применён,
-                // hScroll.maxValue и позиции элементов актуальны.
-                withFrameNanos { }
-                val r = restoreScroll(a.page, a.offInPage, z / a.fromZoom, a.contentX, a.cx, hScroll.maxValue)
-                listState.scrollToItem(r.page, r.vOffset)
-                hScroll.scrollTo(r.hValue)
-            }
-    }
-
-    // BB2: двойной тап / тап по индикатору — плавный сброс к 100% и скроллам в 0.
+    // CC4: двойной тап / тап по индикатору — плавный сброс к 100% и нулевому pan.
     fun resetZoomSmooth() {
-        zoomAnchor = null
+        val fromScale = docZoomState.floatValue
+        val fromPan = docPanState.value
+        if (fromScale == DocZoom.DEFAULT && fromPan.x == 0f && fromPan.y == 0f) return
         scope.launch {
-            coroutineScope {
-                launch {
-                    Animatable(docZoomState.floatValue).animateTo(DocZoom.DEFAULT, tween(ZOOM_RESET_ANIM_MS)) {
-                        docZoomState.floatValue = value
-                    }
-                }
-                launch { hScroll.animateScrollTo(0, tween(ZOOM_RESET_ANIM_MS)) }
-                launch { listState.animateScrollToItem(0) }
+            Animatable(0f).animateTo(1f, tween(ZOOM_RESET_ANIM_MS)) {
+                val t = value
+                docZoomState.floatValue = fromScale + (DocZoom.DEFAULT - fromScale) * t
+                docPanState.value = fromPan * (1f - t)
             }
         }
     }
@@ -446,91 +416,82 @@ fun MaterialPdfViewer(
 
         BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f).clipToBounds()) {
             val density = LocalDensity.current
-            val containerW = maxWidth
-            val docZoom = docZoomState.floatValue
-            val pageW = containerW * docZoom
-
-            // BB2: render-квант берём из debounce-состояния, а не из живого docZoom.
-            val renderWidthPx =
-                with(density) { (containerW * renderZoom - 8.dp).roundToPx() }.coerceIn(320, 2800)
+            // CC4: фиксированная ширина рендера — битмапы страниц создаются один раз и
+            // при pinch не перерисовываются (зум даёт graphicsLayer, а не layout).
+            val renderWidthPx = with(density) { (maxWidth - 8.dp).roundToPx() }.coerceIn(320, 2800)
+            val boxW = with(density) { maxWidth.toPx() }
+            val boxH = with(density) { maxHeight.toPx() }
 
             Box(
                 modifier =
                 Modifier
                     .fillMaxSize()
-                    .docZoomGestures(
-                        zoomState = docZoomState,
+                    .docTransformGestures(
+                        scaleState = docZoomState,
+                        panState = docPanState,
                         enabled = !drawMode,
-                        onZoomStart = { cx ->
-                            // Запоминаем точку под центроидом ДО первого изменения zoom.
-                            zoomAnchor =
-                                ZoomAnchor(
-                                    page = listState.firstVisibleItemIndex,
-                                    offInPage = listState.firstVisibleItemScrollOffset,
-                                    contentX = hScroll.value + cx,
-                                    cx = cx,
-                                    fromZoom = docZoomState.floatValue,
-                                )
-                        },
-                        // Во время pinch меняем ТОЛЬКО docZoom — без конкурирующих scrollTo.
-                        onZoom = { change, _ -> docZoomState.floatValue = DocZoom.apply(docZoomState.floatValue, change) },
                         onReset = { resetZoomSmooth() },
                     ),
             ) {
-                Box(
+                LazyColumn(
+                    state = listState,
                     modifier =
                     Modifier
-                        .horizontalScroll(hScroll)
-                        .width(maxOf(containerW, pageW)),
-                    contentAlignment = Alignment.TopCenter,
-                ) {
-                    LazyColumn(
-                        state = listState,
-                        modifier =
-                        Modifier
-                            .fillMaxHeight()
-                            .width(pageW)
-                            .testTag("pdf_page_list"),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        contentPadding = PaddingValues(vertical = 6.dp),
-                    ) {
-                        items(count = pageCount, key = { it }) { index ->
-                            PdfPageRow(
-                                renderer = renderer,
-                                pageIndex = index,
-                                cache = pageCache,
-                                renderLock = renderLock,
-                                renderWidthPx = renderWidthPx,
-                                docZoom = docZoom,
-                                bookmarked = bookmarks.any { it.page == index },
-
-                                onBookmarkClick = { bookmarked ->
-                                    if (bookmarked) {
-                                        scope.launch {
-                                            bookmarks.filter { it.page == index }.forEach { dao.deleteBookmarkById(it.id) }
-                                        }
-                                    } else {
-                                        bookmarkDraftPage = index
-                                    }
-                                },
-                                strokes = pageStrokes[index].orEmpty(),
-                                drawMode = drawMode,
-                                drawColor = drawColor,
-                                drawWidthDp = drawWidth,
-                                eraserActive = eraserActive,
-                                onZoomChange = { m -> docZoomState.floatValue = DocZoom.apply(docZoomState.floatValue, m) },
-                                onStrokeFinished = { stroke ->
-                                    pageStrokes[index] = pageStrokes[index].orEmpty() + stroke
-                                    undoSession.record(AnnotationAction.Add(index, stroke))
-                                    markDirty(index)
-                                },
-                                onStrokesErased = { erased, remaining ->
-                                    pageStrokes[index] = remaining
-                                    erased.forEach { (i, st) -> undoSession.record(AnnotationAction.Erase(index, i, st)) }
-                                    markDirty(index)
-                                },
-                            )
+                        .fillMaxSize()
+                        // CC4: scale/pan читаются в draw-фазе — без рекомпозиции при pinch.
+                        .graphicsLayer {
+                            scaleX = docZoomState.floatValue
+                            scaleY = docZoomState.floatValue
+                            translationX = docPanState.value.x
+                            translationY = docPanState.value.y
                         }
+                        .testTag("pdf_page_list"),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(vertical = 6.dp),
+                ) {
+                    items(count = pageCount, key = { it }) { index ->
+                        PdfPageRow(
+                            renderer = renderer,
+                            pageIndex = index,
+                            cache = pageCache,
+                            renderLock = renderLock,
+                            renderWidthPx = renderWidthPx,
+                            layerScale = docZoomState.floatValue,
+                            bookmarked = bookmarks.any { it.page == index },
+
+                            onBookmarkClick = { bookmarked ->
+                                if (bookmarked) {
+                                    scope.launch {
+                                        bookmarks.filter { it.page == index }.forEach { dao.deleteBookmarkById(it.id) }
+                                    }
+                                } else {
+                                    bookmarkDraftPage = index
+                                }
+                            },
+                            strokes = pageStrokes[index].orEmpty(),
+                            drawMode = drawMode,
+                            drawColor = drawColor,
+                            drawWidthDp = drawWidth,
+                            eraserActive = eraserActive,
+                            onTransform = { panChange, zoomChange ->
+                                // CC4: pinch в режиме рисования идёт через AnnotationLayer —
+                                // те же scale/pan; panChange в локальных координатах слоя (×scale).
+                                val s = docZoomState.floatValue
+                                val newScale = DocZoom.apply(s, zoomChange)
+                                docPanState.value = clampPan(docPanState.value + panChange * s, newScale, boxW, boxH)
+                                docZoomState.floatValue = newScale
+                            },
+                            onStrokeFinished = { stroke ->
+                                pageStrokes[index] = pageStrokes[index].orEmpty() + stroke
+                                undoSession.record(AnnotationAction.Add(index, stroke))
+                                markDirty(index)
+                            },
+                            onStrokesErased = { erased, remaining ->
+                                pageStrokes[index] = remaining
+                                erased.forEach { (i, st) -> undoSession.record(AnnotationAction.Erase(index, i, st)) }
+                                markDirty(index)
+                            },
+                        )
                     }
                 }
             }
@@ -579,81 +540,65 @@ internal object DocZoom {
     fun apply(current: Float, multiplier: Float): Float = (current * multiplier).coerceIn(MIN, MAX)
 }
 
-internal const val RENDER_ZOOM_DEBOUNCE_MS = 80L
 internal const val ZOOM_RESET_ANIM_MS = 220
 
-// BB4: визуальный размер кнопки закладки меняется с зумом не более чем ±20%.
-internal fun bookmarkSizeFactor(docZoom: Float): Float = docZoom.coerceIn(0.8f, 1.2f)
+// CC4: одиночный палец панит только при увеличении выше этого порога;
+// при scale == 1 (и рядом с ним) палец не consume-ится — LazyColumn скроллится.
+internal const val PAN_ENABLED_SCALE = 1.05f
 
-// BB2: снапшот положения, снятый ДО первого изменения zoom в жесте (единственный источник правды).
-internal class ZoomAnchor(
-    val page: Int,
-    val offInPage: Int,
-    val contentX: Float,
-    val cx: Float,
-    val fromZoom: Float,
-)
-
-internal data class ScrollRestore(val page: Int, val vOffset: Int, val hValue: Int)
-
-// BB2: чистая формула восстановления якоря после смены zoom на ratio = newZoom/anchorZoom.
-// Вертикаль: смещение внутри первой видимой страницы масштабируется вместе со страницей.
-// Горизонталь: точка contentX (= hScroll + cx) должна остаться под центроидом cx.
-internal fun restoreScroll(
-    pageIdx: Int,
-    offInPage: Int,
-    ratio: Float,
-    contentX: Float,
-    cx: Float,
-    hMax: Int,
-): ScrollRestore =
-    ScrollRestore(
-        page = pageIdx.coerceAtLeast(0),
-        vOffset = (offInPage * ratio).roundToInt().coerceAtLeast(0),
-        hValue = (contentX * ratio - cx).roundToInt().coerceIn(0, hMax.coerceAtLeast(0)),
-    )
-
-internal fun quantizeRenderZoom(zoom: Float): Float =
-    ((zoom * 4f).roundToInt() / 4f).coerceIn(DocZoom.MIN, DocZoom.MAX)
+// CC4: граница pan — масштабированный контейнер не уезжает за viewport больше,
+// чем на половину избытка с каждой стороны; при scale <= 1 pan зафиксирован в 0.
+internal fun clampPan(
+    pan: Offset,
+    scale: Float,
+    widthPx: Float,
+    heightPx: Float,
+): Offset {
+    val maxX = ((scale - 1f) * widthPx / 2f).coerceAtLeast(0f)
+    val maxY = ((scale - 1f) * heightPx / 2f).coerceAtLeast(0f)
+    // Явные нули при maxX/maxY == 0: coerceIn вернул бы -0f, а Offset.equals
+    // сравнивает упакованные биты (-0f != Offset.Zero).
+    val x = if (maxX == 0f) 0f else pan.x.coerceIn(-maxX, maxX)
+    val y = if (maxY == 0f) 0f else pan.y.coerceIn(-maxY, maxY)
+    return Offset(x, y)
+}
 
 private fun pageCacheKey(pageIndex: Int, widthPx: Int): Long = (pageIndex.toLong() shl 32) or widthPx.toLong()
 
-internal fun Modifier.docZoomGestures(
-    zoomState: MutableFloatState,
+// CC4: жесты как в ImageViewer. Два пальца (Initial pass, раньше детей) — scale/pan всегда;
+// один палец при scale > PAN_ENABLED_SCALE — pan; при scale == 1 события не потребляются,
+// вертикальный скролл LazyColumn работает как обычно. Двойной тап — сброс.
+internal fun Modifier.docTransformGestures(
+    scaleState: MutableFloatState,
+    panState: MutableState<Offset>,
     enabled: Boolean = true,
-    onZoomStart: (centroidX: Float) -> Unit = {},
-    onZoom: (change: Float, centroidX: Float) -> Unit = { c, _ -> zoomState.floatValue = DocZoom.apply(zoomState.floatValue, c) },
-    onReset: () -> Unit = { zoomState.floatValue = DocZoom.DEFAULT },
+    onReset: () -> Unit = {
+        scaleState.floatValue = DocZoom.DEFAULT
+        panState.value = Offset.Zero
+    },
 ): Modifier =
     this
-        .pointerInput(zoomState, enabled) {
+        .pointerInput(scaleState, panState, enabled) {
             if (!enabled) return@pointerInput
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                var pinching = false
+                var handled = scaleState.floatValue > PAN_ENABLED_SCALE
                 do {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
-                    if (event.changes.count { it.pressed } >= 2) {
+                    if (!handled && event.changes.count { it.pressed } >= 2) handled = true
+                    if (handled) {
                         val zoomChange = event.calculateZoom()
-                        if (zoomChange != 1f) {
-                            val pressed = event.changes.filter { it.pressed }
-                            val centroid = Offset(
-                                pressed.map { it.position.x }.average().toFloat(),
-                                pressed.map { it.position.y }.average().toFloat(),
-                            )
-                            // Якорь снимается один раз на жест, до первого изменения zoom.
-                            if (!pinching) {
-                                pinching = true
-                                onZoomStart(centroid.x)
-                            }
-                            onZoom(zoomChange, centroid.x)
-                        }
-                        event.changes.forEach { it.consume() }
+                        val panChange = event.calculatePan()
+                        val newScale = DocZoom.apply(scaleState.floatValue, zoomChange)
+                        scaleState.floatValue = newScale
+                        panState.value =
+                            clampPan(panState.value + panChange, newScale, size.width.toFloat(), size.height.toFloat())
+                        event.changes.forEach { if (it.positionChanged()) it.consume() }
                     }
                 } while (event.changes.any { it.pressed })
             }
         }
-        .pointerInput(zoomState) {
+        .pointerInput(scaleState, panState) {
             detectTapGestures(onDoubleTap = { onReset() })
         }
 
@@ -793,7 +738,7 @@ private fun PdfPageRow(
     cache: LruCache<Long, Bitmap>,
     renderLock: Mutex,
     renderWidthPx: Int,
-    docZoom: Float,
+    layerScale: Float,
     bookmarked: Boolean,
     onBookmarkClick: (bookmarked: Boolean) -> Unit,
     strokes: List<Stroke>,
@@ -801,7 +746,7 @@ private fun PdfPageRow(
     drawColor: Int,
     drawWidthDp: Float,
     eraserActive: Boolean,
-    onZoomChange: (zoomMultiplier: Float) -> Unit,
+    onTransform: (panChange: Offset, zoomChange: Float) -> Unit,
     onStrokeFinished: (Stroke) -> Unit,
     onStrokesErased: (erased: List<Pair<Int, Stroke>>, remaining: List<Stroke>) -> Unit,
 ) {
@@ -877,18 +822,19 @@ private fun PdfPageRow(
                 val bh = boxSize.height.toFloat()
                 if (bw > 1f && bh > 1f) {
                     val aspect = bh / bw
-                    // BB3: у PDF страница масштабируется layout'ом (layerScale=1),
-                    // экранная зона ластика постоянна при любом docZoom.
+                    // CC5: страница PDF теперь внутри graphicsLayer(scale) — порог ластика
+                    // компенсируется layerScale, экранная зона касания постоянна при любом зуме.
                     val erased = mutableListOf<Pair<Int, Stroke>>()
                     val remaining = mutableListOf<Stroke>()
                     latestStrokes.forEachIndexed { i, st ->
-                        val th = eraserThresholdNorm(st.widthDp, ERASER_TOUCH_EXTRA_DP, density.density, bw, 1f)
+                        val th = eraserThresholdNorm(st.widthDp, ERASER_TOUCH_EXTRA_DP, density.density, bw, layerScale)
                         if (eraserHitTest(st, p, th, aspect)) erased += i to st else remaining += st
                     }
                     if (erased.isNotEmpty()) onStrokesErased(erased, remaining)
                 }
             },
-            transformGestures = { _, zoomChange -> onZoomChange(zoomChange) },
+            transformGestures = onTransform,
+            layerScale = layerScale,
             modifier = Modifier.matchParentSize(),
         )
 
@@ -900,8 +846,8 @@ private fun PdfPageRow(
             Modifier
                 .align(Alignment.TopStart)
                 .padding(4.dp)
-                // BB4: размер кнопки закладки следует за зумом, но не более чем ±20%.
-                .size(26.dp * bookmarkSizeFactor(docZoom))
+                // CC4: кнопка масштабируется вместе со страницей (graphicsLayer) — как в ImageViewer.
+                .size(26.dp)
                 .bouncyClickable(onClick = { onBookmarkClick(bookmarked) })
                 .testTag("pdf_bookmark_add_$pageIndex"),
         ) {
@@ -910,7 +856,7 @@ private fun PdfPageRow(
                     imageVector = if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                     contentDescription = "Закладка на странице ${pageIndex + 1}",
                     tint = if (bookmarked) Color.White else ColorBrandBlue,
-                    modifier = Modifier.size(14.dp * bookmarkSizeFactor(docZoom)),
+                    modifier = Modifier.size(14.dp),
                 )
             }
         }

@@ -21,7 +21,7 @@ class BBAnnotationModelTest {
     private val s2 = Stroke(0xFFE53935.toInt(), 2f, listOf(Offset(0.3f, 0.3f)))
 
     @Test
-    fun `BB3 компенсация толщины — штрих константен на экране при layerScale 0_5 и 2`() {
+    fun `CC5 компенсация толщины — штрих константен на экране при layerScale 0_5, 2 и 4`() {
         // Штрих рисуется внутри слоя, масштабированного на layerScale.
         // Экранная толщина = compensated * layerScale = widthDp * pxPerDp — константа.
         val pxPerDp = 3f
@@ -38,16 +38,21 @@ class BBAnnotationModelTest {
     }
 
     @Test
-    fun `BB3 eraser при зуме — экранная зона касания постоянна (PDF, страница растёт с зумом)`() {
-        // PDF: layerScale=1, boxW = 1080*zoom → нормализованный порог ∝ 1/boxW.
-        val normAt1 = eraserThresholdNorm(4f, 8f, 3f, boxWidthPx = 1080f, layerScale = 1f)
-        val normAt2 = eraserThresholdNorm(4f, 8f, 3f, boxWidthPx = 2160f, layerScale = 1f)
+    fun `CC5 eraser при зуме — PDF в graphicsLayer, box фиксирован, толщину компенсирует layerScale`() {
+        // CC4: страница PDF больше не растёт layout'ом — box фиксирован, scale уходит в layerScale.
+        val normAt1 = eraserThresholdNorm(4f, 8f, 3f, boxWidthPx = 1056f, layerScale = 1f)
+        val normAt2 = eraserThresholdNorm(4f, 8f, 3f, boxWidthPx = 1056f, layerScale = 2f)
+        val normAt4 = eraserThresholdNorm(4f, 8f, 3f, boxWidthPx = 1056f, layerScale = 4f)
         assertEquals(normAt1, normAt2 * 2f, eps)
+        assertEquals(normAt1, normAt4 * 4f, eps)
 
-        // Hit-test в нормализованных координатах работает на зуме 2 с новым порогом.
+        // Нормализованные координаты штриха масштабируются вместе со страницей автоматически;
+        // компенсированный порог стирает на любом зуме и не стирает далёкую точку.
         val stroke = Stroke(0, 4f, listOf(Offset(0.2f, 0.5f), Offset(0.8f, 0.5f)))
-        assertTrue(eraserHitTest(stroke, Offset(0.5f, 0.5f), normAt2, aspect = 1.4f))
-        assertFalse(eraserHitTest(stroke, Offset(0.5f, 0.9f), normAt2, aspect = 1.4f))
+        listOf(normAt1, normAt2, normAt4).forEach { th ->
+            assertTrue(eraserHitTest(stroke, Offset(0.5f, 0.5f), th, aspect = 1.4f))
+        }
+        assertFalse(eraserHitTest(stroke, Offset(0.5f, 0.9f), normAt4, aspect = 1.4f))
     }
 
     @Test
