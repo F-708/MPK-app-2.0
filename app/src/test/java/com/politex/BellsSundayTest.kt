@@ -3,26 +3,30 @@ package com.politex
 import com.politex.data.model.BellScheduleType
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.ui.screens.bellsForDisplay
+import com.politex.ui.screens.sundayNoteVisible
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BellsSundayTest {
     @Test
-    fun `AA3 sunday with today type shows no bells`() {
-        assertTrue(bellsForDisplay(todayDow = 7, isTodaySelected = true, type = BellScheduleType.STANDARD).isEmpty())
+    fun `BB5 sunday with today type still shows standard bells (inactive, not empty)`() {
+        assertEquals(CollegeBellSchedule.STANDARD_BELLS, bellsForDisplay(BellScheduleType.STANDARD))
+        assertTrue(bellsForDisplay(BellScheduleType.STANDARD).isNotEmpty())
     }
 
     @Test
-    fun `AA3 sunday with other type shows its bells as usual`() {
-        assertEquals(CollegeBellSchedule.THURSDAY_BELLS, bellsForDisplay(7, false, BellScheduleType.THURSDAY))
-        assertEquals(CollegeBellSchedule.SATURDAY_BELLS, bellsForDisplay(7, false, BellScheduleType.SATURDAY))
+    fun `BB5 sunday note visible only on sunday with today type selected`() {
+        assertTrue(sundayNoteVisible(todayDow = 7, isTodaySelected = true))
+        assertFalse(sundayNoteVisible(todayDow = 7, isTodaySelected = false))
+        assertFalse(sundayNoteVisible(todayDow = 3, isTodaySelected = true))
+        assertFalse(sundayNoteVisible(todayDow = 3, isTodaySelected = false))
     }
 
     @Test
-    fun `AA3 weekdays are unaffected`() {
-        assertEquals(CollegeBellSchedule.STANDARD_BELLS, bellsForDisplay(3, true, BellScheduleType.STANDARD))
-        assertEquals(CollegeBellSchedule.STANDARD_BELLS, bellsForDisplay(3, false, BellScheduleType.STANDARD))
-        assertEquals(CollegeBellSchedule.THURSDAY_BELLS, bellsForDisplay(4, true, BellScheduleType.THURSDAY))
+    fun `BB5 other types unchanged`() {
+        assertEquals(CollegeBellSchedule.THURSDAY_BELLS, bellsForDisplay(BellScheduleType.THURSDAY))
+        assertEquals(CollegeBellSchedule.SATURDAY_BELLS, bellsForDisplay(BellScheduleType.SATURDAY))
     }
 }

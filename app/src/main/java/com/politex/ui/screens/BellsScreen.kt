@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -100,17 +99,14 @@ private fun railColor(
     return if (blueEnd != null && minutes <= blueEnd) RAIL_BLUE else RAIL_GRAY
 }
 
-/** AA3: в воскресенье тип «сегодня» не показывает звонки — уроков нет. */
-fun bellsForDisplay(
+/** BB5: звонки всегда показываются для выбранного типа; в воскресенье — неактивный вид (Z5), не пустое состояние. */
+fun bellsForDisplay(type: BellScheduleType): List<BellItem> = CollegeBellSchedule.getBellsForType(type)
+
+/** BB5: плашка «Сегодня воскресенье — уроков нет» — только в воскресенье при выбранном типе «сегодня». */
+fun sundayNoteVisible(
     todayDow: Int,
     isTodaySelected: Boolean,
-    type: BellScheduleType,
-): List<BellItem> =
-    if (todayDow == 7 && isTodaySelected) {
-        emptyList()
-    } else {
-        CollegeBellSchedule.getBellsForType(type)
-    }
+): Boolean = todayDow == 7 && isTodaySelected
 
 private fun dotProgressIn(
     bell: BellItem,
@@ -181,7 +177,8 @@ fun BellsScreen(
         }
 
     val todayTypeSelected = selectedScheduleType == todayType
-    val bells = bellsForDisplay(todayDow, todayTypeSelected, selectedScheduleType)
+    val bells = bellsForDisplay(selectedScheduleType)
+    val showSundayNote = sundayNoteVisible(todayDow, todayTypeSelected)
     val blueEndNum =
         if (isTodaySelected) {
             lastLessonToday ?: bells.lastOrNull { !it.isInfoHour }?.lessonNumber
@@ -362,62 +359,47 @@ fun BellsScreen(
             NowContextCard(context = context)
         }
 
-        if (bells.isEmpty()) {
-            // AA3: воскресенье — пустое состояние вместо звонков понедельника
-            Column(
-                modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .onSizeChanged { viewportPx = it.height },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    repeat(3) {
-                        Box(
-                            modifier =
-                            Modifier
-                                .size(4.dp)
-                                .background(RAIL_GRAY_SOFT, CircleShape),
-                        )
-                    }
+        Column(
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .onSizeChanged { viewportPx = it.height }
+                .verticalScroll(scrollState)
+                .padding(start = 16.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (showSundayNote) {
+                // BB5: воскресенье — звонки видны, но неактивны; короткая пометка первой строкой
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorSurfaceVariantLight,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "Сегодня воскресенье — уроков нет",
+                        style =
+                        androidx.compose.ui.text.TextStyle(
+                            fontSize = 12.sp,
+                            color = ColorTextMuted,
+                        ),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
                 }
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "Воскресенье — уроков нет",
-                    style =
-                    androidx.compose.ui.text.TextStyle(
-                        fontSize = 13.sp,
-                        color = ColorTextMuted,
-                    ),
-                )
             }
-        } else {
-            Column(
-                modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .onSizeChanged { viewportPx = it.height }
-                    .verticalScroll(scrollState)
-                    .padding(start = 16.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                rows.forEach { row ->
-                    when (row) {
-                        is BellRow.Lesson ->
-                            LessonBellCard(
-                                item = row.item,
-                                isActive = activeSlot == row.item,
-                                highlight = flashCurrent && activeSlot == row.item,
-                                railTopColor = railColor(row.item.startMinutes, blueEndMinutes, isTodaySelected),
-                                railBottomColor = railColor(row.item.endMinutes, blueEndMinutes, isTodaySelected),
-                                inBlue = row.item.startMinutes < (blueEndMinutes ?: -1),
-                                dotProgress = dotProgressIn(row.item, currentTimeMinutes, isTodaySelected),
-                            )
-                        is BellRow.Break -> BreakRow(row = row)
-                    }
+            rows.forEach { row ->
+                when (row) {
+                    is BellRow.Lesson ->
+                        LessonBellCard(
+                            item = row.item,
+                            isActive = activeSlot == row.item,
+                            highlight = flashCurrent && activeSlot == row.item,
+                            railTopColor = railColor(row.item.startMinutes, blueEndMinutes, isTodaySelected),
+                            railBottomColor = railColor(row.item.endMinutes, blueEndMinutes, isTodaySelected),
+                            inBlue = row.item.startMinutes < (blueEndMinutes ?: -1),
+                            dotProgress = dotProgressIn(row.item, currentTimeMinutes, isTodaySelected),
+                        )
+                    is BellRow.Break -> BreakRow(row = row)
                 }
             }
         }
