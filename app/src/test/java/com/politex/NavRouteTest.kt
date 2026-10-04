@@ -4,6 +4,7 @@ import com.politex.ui.screens.buildGroupScheduleRoute
 import com.politex.ui.screens.buildMapRoute
 import com.politex.ui.screens.buildScrollRoute
 import com.politex.ui.screens.buildTeacherRoute
+import com.politex.ui.screens.ownerTabIndex
 import com.politex.ui.screens.scrollRoutePattern
 import com.politex.ui.screens.tabIndex
 import com.politex.ui.screens.tabSlideDir
@@ -147,5 +148,36 @@ class NavRouteTest {
         assertEquals(0, tabSlideDir(1, 1))
         assertEquals(0, tabSlideDir(-1, 2))
         assertEquals(0, tabSlideDir(2, -1))
+    }
+
+    @Test
+    fun `DD4 ownerTabIndex - под-экраны Другого маппятся на вкладку 3`() {
+        assertEquals(3, ownerTabIndex("college/settings"))
+        assertEquals(3, ownerTabIndex("college/specialty"))
+        assertEquals(3, ownerTabIndex("college/teachers"))
+        assertEquals(3, ownerTabIndex("college/students"))
+        assertEquals(3, ownerTabIndex("teacher?name=%D0%98%D0%B2%D0%B0%D0%BD%D0%BE%D0%B2%D0%B0"))
+        assertEquals(3, ownerTabIndex("group_schedule?group=41%D0%9E"))
+        assertEquals(3, ownerTabIndex("college"))
+    }
+
+    @Test
+    fun `DD4 ownerTabIndex - корни вкладок сохраняют индекс, карта и неизвестное -1`() {
+        assertEquals(0, ownerTabIndex("schedule"))
+        assertEquals(0, ownerTabIndex("schedule?scroll={scroll}"))
+        assertEquals(1, ownerTabIndex("lessons"))
+        assertEquals(2, ownerTabIndex("bells?scroll=CURRENT_BELL"))
+        assertEquals(-1, ownerTabIndex("map?room=214"))
+        assertEquals(-1, ownerTabIndex("map"))
+        assertEquals(-1, ownerTabIndex("unknown_route"))
+        assertEquals(-1, ownerTabIndex(null))
+    }
+
+    @Test
+    fun `DD4 tabSlideDir с под-экранов - group_schedule и settings влево на bells дают -1`() {
+        assertEquals(-1, tabSlideDir(ownerTabIndex("group_schedule?group=41%D0%9E"), ownerTabIndex("bells")))
+        assertEquals(-1, tabSlideDir(ownerTabIndex("college/settings"), ownerTabIndex("bells")))
+        assertEquals(0, tabSlideDir(ownerTabIndex("college"), ownerTabIndex("college/settings")))
+        assertEquals(0, tabSlideDir(ownerTabIndex("map?room=214"), ownerTabIndex("schedule")))
     }
 }

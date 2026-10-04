@@ -146,6 +146,17 @@ fun tabIndex(route: String?): Int {
     return AppTab.entries.indexOfFirst { it.route == base }
 }
 
+/** DD4: индекс РОДИТЕЛЬСКОЙ вкладки: точные табы → их индекс; под-экраны Другого → 3; карта (исключение заказчика), неизвестно, null → -1. */
+fun ownerTabIndex(route: String?): Int {
+    val base = route?.substringBefore("?") ?: return -1
+    return when (base) {
+        ROUTE_SPECIALTY, ROUTE_TEACHERS, ROUTE_SETTINGS, ROUTE_STUDENTS,
+        ROUTE_TEACHER.substringBefore("?"), ROUTE_GROUP_SCHEDULE.substringBefore("?"),
+        -> AppTab.COLLEGE.ordinal
+        else -> tabIndex(base)
+    }
+}
+
 /** Направление слайда: +1 влево-переход (вперёд), -1 вправо (назад), 0 не-таб/тот же. */
 fun tabSlideDir(from: Int, to: Int): Int = when {
     from < 0 || to < 0 || from == to -> 0
@@ -320,20 +331,20 @@ fun MainScreen(
             val swipeEnabled = remember(context, backStackEntry) {
                 WidgetUpdateHelper.getPrefs(context).getBoolean("swipe_tabs_enabled", true)
             }
-            val curIdx = tabIndex(backStackEntry?.destination?.route)
+            val curIdx = ownerTabIndex(backStackEntry?.destination?.route)
             val gestureActive = swipeEnabled && curIdx >= 0 && !ViewerMode.active && !RouteBuilderMode.active
             Box(
                 modifier =
                 if (gestureActive) {
                     Modifier.tabSwipeGesture(
                         onSwipeLeft = {
-                            val i = tabIndex(backStackEntry?.destination?.route)
+                            val i = ownerTabIndex(backStackEntry?.destination?.route)
                             if (i in 0 until AppTab.entries.size - 1) {
                                 navController.navigateToTab(AppTab.entries[i + 1].route)
                             }
                         },
                         onSwipeRight = {
-                            val i = tabIndex(backStackEntry?.destination?.route)
+                            val i = ownerTabIndex(backStackEntry?.destination?.route)
                             if (i > 0) navController.navigateToTab(AppTab.entries[i - 1].route)
                         },
                     )
@@ -349,19 +360,19 @@ fun MainScreen(
                         .fillMaxSize()
                         .padding(innerPadding),
                     enterTransition = {
-                        val d = tabSlideDir(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route))
+                        val d = tabSlideDir(ownerTabIndex(initialState.destination.route), ownerTabIndex(targetState.destination.route))
                         if (d == 0) fadeIn(tween(150)) else slideInHorizontally(tween(280)) { if (d > 0) it else -it }
                     },
                     exitTransition = {
-                        val d = tabSlideDir(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route))
+                        val d = tabSlideDir(ownerTabIndex(initialState.destination.route), ownerTabIndex(targetState.destination.route))
                         if (d == 0) fadeOut(tween(150)) else slideOutHorizontally(tween(280)) { if (d > 0) -it else it }
                     },
                     popEnterTransition = {
-                        val d = tabSlideDir(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route))
+                        val d = tabSlideDir(ownerTabIndex(initialState.destination.route), ownerTabIndex(targetState.destination.route))
                         if (d == 0) fadeIn(tween(150)) else slideInHorizontally(tween(280)) { if (d > 0) it else -it }
                     },
                     popExitTransition = {
-                        val d = tabSlideDir(tabIndex(initialState.destination.route), tabIndex(targetState.destination.route))
+                        val d = tabSlideDir(ownerTabIndex(initialState.destination.route), ownerTabIndex(targetState.destination.route))
                         if (d == 0) fadeOut(tween(150)) else slideOutHorizontally(tween(280)) { if (d > 0) -it else it }
                     },
                 ) {
