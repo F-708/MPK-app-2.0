@@ -1,47 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- DD: корень — вертикальный центрированный LinearLayout (без лишнего
+     FrameLayout-оверлея). В idle-ветках («Уроков нет» / «Звонков сегодня нет»,
+     tv_countdown_value GONE) получается аккуратная стопка: колокольчик строго
+     по центру, надпись ниже — без наложений. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_countdown_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="10dp">
 
-    <LinearLayout
-        android:id="@+id/widget_countdown_root"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:padding="10dp">
+    <ImageView
+        android:id="@+id/iv_idle"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginBottom="4dp"
+        android:visibility="gone" />
 
-        <!-- CC9: idle-анимация (колокольчик) в ветках «Уроков нет»/«Звонков сегодня нет»
-             (tv_countdown_value GONE). Стоит в том же центрированном LinearLayout —
-             при показе образует аккуратную стопку «колокольчик + надпись» без наложений -->
-        <ImageView
-            android:id="@+id/iv_idle"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="4dp"
-            android:visibility="gone" />
+    <!-- Основная надпись: «до звонка» / «до урока» / «Уроки закончились» -->
+    <TextView
+        android:id="@+id/tv_countdown_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="до звонка"
+        android:textSize="12sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
 
-        <!-- Основная надпись: «до звонка» / «до урока» / «Уроки закончились» -->
-        <TextView
-            android:id="@+id/tv_countdown_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="до звонка"
-            android:textSize="12sp"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <!-- Крупное значение: «12 мин», «1 ч 20 мин» -->
-        <TextView
-            android:id="@+id/tv_countdown_value"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="12 мин"
-            android:textSize="26sp"
-            android:textStyle="bold"
-            android:maxLines="1"
-            android:ellipsize="end" />
-    </LinearLayout>
-
-    </FrameLayout>
+    <!-- Крупное значение: «12 мин», «1 ч 20 мин» -->
+    <TextView
+        android:id="@+id/tv_countdown_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="12 мин"
+        android:textSize="26sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
+</LinearLayout>

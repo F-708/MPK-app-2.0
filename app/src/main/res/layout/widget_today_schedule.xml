@@ -34,26 +34,38 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:orientation="vertical" />
+    </LinearLayout>
+
+    <!-- DD: idle-блок — колокольчик строго по центру виджета, надпись ниже.
+         today_rows в пустом состоянии остаётся видимым (weight=1), поэтому
+         блок центрируется поверх свободного места; он не clickable — клики
+         по виджету (PendingIntent на today_root) проходят насквозь.
+         Оба ребёнка по умолчанию GONE → в обычном состоянии блок нулевой. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingLeft="10dp"
+        android:paddingRight="10dp">
+
+        <ImageView
+            android:id="@+id/iv_idle"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/tv_today_empty"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
             android:text="На сегодня уроков нет"
             android:textSize="12sp"
             android:textColor="#6B7280"
-            android:paddingTop="6dp"
             android:visibility="gone" />
     </LinearLayout>
 
-    <!-- CC9: idle-анимация (колокольчик) когда на сегодня уроков нет;
-         текст tv_today_empty внизу, колокольчик по центру не перекрывает его -->
-    <ImageView
-        android:id="@+id/iv_idle"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_gravity="center"
-        android:layout_marginBottom="16dp"
-        android:visibility="gone" />
-
-    </FrameLayout>
+</FrameLayout>

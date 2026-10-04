@@ -1,9 +1,12 @@
 package com.politex
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.w3c.dom.Element
 import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 
 class WidgetLayoutsTest {
     private val allowedTags =
@@ -104,5 +107,61 @@ class WidgetLayoutsTest {
         val text = File("src/main/res/drawable/anim_idle.xml").readText()
         assertTrue("anim_idle не animated-vector", text.contains("<animated-vector"))
         assertTrue("anim_idle не зациклен", text.contains("android:repeatCount=\"infinite\""))
+    }
+
+    @Test
+    fun `DD idle-блок — колокольчик и надпись в одном вертикальном LinearLayout, колокольчик первый`() {
+        val layouts =
+            listOf(
+                "widget_now_next.xml" to "tv_empty",
+                "widget_today_schedule.xml" to "tv_today_empty",
+                "widget_bell_countdown.xml" to "tv_countdown_label",
+            )
+
+        layouts.forEach { (name, textId) ->
+            val doc =
+                DocumentBuilderFactory.newInstance()
+                    .newDocumentBuilder()
+                    .parse(File(layoutsDir, name))
+
+            fun findById(id: String): Element =
+                doc.getElementsByTagName("*")
+                    .let { nodes ->
+                        (0 until nodes.length)
+                            .map { nodes.item(it) as Element }
+                            .first { it.getAttribute("android:id") == "@+id/$id" }
+                    }
+
+            val bell = findById("iv_idle")
+            val text = findById(textId)
+            val parent = bell.parentNode as Element
+
+            assertEquals("$name: родитель iv_idle не LinearLayout", "LinearLayout", parent.tagName)
+            assertEquals(
+                "$name: idle-блок не вертикальный",
+                "vertical",
+                parent.getAttribute("android:orientation"),
+            )
+            assertSame("$name: надпись не в idle-блоке с колокольчиком", parent, text.parentNode)
+
+            val children =
+                (0 until parent.childNodes.length)
+                    .map { parent.childNodes.item(it) }
+                    .filterIsInstance<Element>()
+            assertEquals("$name: колокольчик не первый в idle-блоке", bell, children.first())
+            assertTrue(
+                "$name: надпись должна идти ниже колокольчика",
+                children.indexOf(bell) < children.indexOf(text),
+            )
+        }
+    }
+
+    @Test
+    fun `DD у колокольчика нет marginBottom-оверлея`() {
+        listOf("widget_now_next.xml", "widget_today_schedule.xml").forEach { name ->
+            val text = File(layoutsDir, name).readText()
+            val attrs = text.substringAfter("android:id=\"@+id/iv_idle\"").substringBefore("/>")
+            assertTrue("$name: у iv_idle остался позиционирующий marginBottom", !attrs.contains("layout_marginBottom"))
+        }
     }
 }
