@@ -5,6 +5,8 @@ import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import android.util.LruCache
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -29,7 +31,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -69,7 +72,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -99,7 +104,9 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.util.bouncyClickable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -260,22 +267,49 @@ fun MaterialPdfViewer(
 
     val docZoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
     val hScroll = rememberScrollState()
-    var viewportWpx by remember { mutableIntStateOf(0) }
 
-    // Фокальный зум: точка под центром жеста остаётся под ним (не «в левый верхний угол»).
-    fun applyDocZoom(change: Float, centroidX: Float) {
-        val old = docZoomState.floatValue
-        val new = DocZoom.apply(old, change)
-        if (new == old) return
-        val ratio = new / old
-        val targetH = ((hScroll.value + centroidX) * ratio - centroidX).roundToInt()
-        val idx = listState.firstVisibleItemIndex
-        val offV = (listState.firstVisibleItemScrollOffset * ratio).roundToInt()
-        docZoomState.floatValue = new
+    // BB2: ОДИН источник правды для якоря — снапшот положения ДО старта pinch-жеста.
+    // Во время жеста меняется ТОЛЬКО docZoom (никаких scrollTo из gesture-обработчика);
+    // восстановление скроллов делает один коллектор ниже, ПОСЛЕ layout нового масштаба.
+    var zoomAnchor by remember(item.id) { mutableStateOf<ZoomAnchor?>(null) }
+
+    // BB2: квант render-ширины меняется не чаще раза в 80ms — без debounce битмапы
+    // «скачут» посреди жеста (перерисовка страниц на каждую границу кванта).
+    var renderZoom by remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
+    LaunchedEffect(item.id) {
+        snapshotFlow { quantizeRenderZoom(docZoomState.floatValue) }
+            .distinctUntilChanged()
+            .debounce(RENDER_ZOOM_DEBOUNCE_MS)
+            .collect { renderZoom = it }
+    }
+
+    LaunchedEffect(item.id) {
+        snapshotFlow { docZoomState.floatValue }
+            .collect { z ->
+                val a = zoomAnchor ?: return@collect
+                if (a.fromZoom <= 0f) return@collect
+                // Ждём кадр: layout с новой шириной страниц уже применён,
+                // hScroll.maxValue и позиции элементов актуальны.
+                withFrameNanos { }
+                val r = restoreScroll(a.page, a.offInPage, z / a.fromZoom, a.contentX, a.cx, hScroll.maxValue)
+                listState.scrollToItem(r.page, r.vOffset)
+                hScroll.scrollTo(r.hValue)
+            }
+    }
+
+    // BB2: двойной тап / тап по индикатору — плавный сброс к 100% и скроллам в 0.
+    fun resetZoomSmooth() {
+        zoomAnchor = null
         scope.launch {
-            withFrameNanos { }
-            hScroll.scrollTo(targetH.coerceIn(0, hScroll.maxValue))
-            listState.scrollToItem(idx, offV)
+            coroutineScope {
+                launch {
+                    Animatable(docZoomState.floatValue).animateTo(DocZoom.DEFAULT, tween(ZOOM_RESET_ANIM_MS)) {
+                        docZoomState.floatValue = value
+                    }
+                }
+                launch { hScroll.animateScrollTo(0, tween(ZOOM_RESET_ANIM_MS)) }
+                launch { listState.animateScrollToItem(0) }
+            }
         }
     }
 
@@ -284,6 +318,10 @@ fun MaterialPdfViewer(
     val pageStrokes = remember(item.id) { mutableStateMapOf<Int, List<Stroke>>() }
     val dirtyPages = remember(item.id) { mutableStateListOf<Int>() }
     var saveVersion by remember { mutableIntStateOf(0) }
+
+    // BB3: undo-история текущей сессии редактирования. Живёт, пока открыт viewer:
+    // выход из документа уничтожает композицию и очищает историю (штрихи в БД остаются).
+    val undoSession = remember(item.id) { AnnotationUndoSession() }
 
     LaunchedEffect(annotations) {
 
@@ -349,7 +387,7 @@ fun MaterialPdfViewer(
             bookmarkListActive = showBookmarkList,
             drawActive = drawMode,
             docZoomPercent = (docZoomState.floatValue * 100).roundToInt(),
-            onZoomReset = { docZoomState.floatValue = DocZoom.DEFAULT },
+            onZoomReset = { resetZoomSmooth() },
             onBack = flushAndBack,
             onPageClick = { showPageJump = true },
             onBookmarks = { showBookmarkList = !showBookmarkList },
@@ -368,16 +406,28 @@ fun MaterialPdfViewer(
                 onColor = { drawColor = it },
                 onWidth = { drawWidth = it },
                 onUndo = {
-                    val s = pageStrokes[currentPage].orEmpty()
-                    if (s.isNotEmpty()) {
-                        pageStrokes[currentPage] = s.dropLast(1)
-                        markDirty(currentPage)
+                    // BB3: отменяем последнее ДЕЙСТВИЕ сессии — добавление ИЛИ стирание ИЛИ корзину.
+                    val action = undoSession.pop()
+                    if (action != null) {
+                        val updated = applyUndo(action, pageStrokes.toMap())
+                        updated.forEach { (p, list) ->
+                            if (pageStrokes[p] != list) {
+                                pageStrokes[p] = list
+                                markDirty(p)
+                            }
+                        }
                     }
                 },
                 onClear = {
-                    pageStrokes[currentPage] = emptyList()
-                    dirtyPages.remove(currentPage)
-                    scope.launch { dao.deletePageAnnotations(item.id, currentPage) }
+                    // BB3: корзина удаляет аннотации ВСЕГО документа (все страницы).
+                    val snapshot = pageStrokes.toMap().filterValues { it.isNotEmpty() }
+                    if (snapshot.isNotEmpty()) {
+                        undoSession.record(AnnotationAction.ClearAll(snapshot))
+                        snapshot.keys.forEach { p ->
+                            pageStrokes[p] = emptyList()
+                            markDirty(p)
+                        }
+                    }
                 },
                 onExit = { drawMode = false },
             )
@@ -400,25 +450,31 @@ fun MaterialPdfViewer(
             val docZoom = docZoomState.floatValue
             val pageW = containerW * docZoom
 
+            // BB2: render-квант берём из debounce-состояния, а не из живого docZoom.
             val renderWidthPx =
-                with(density) { (containerW * quantizeRenderZoom(docZoom) - 8.dp).roundToPx() }.coerceIn(320, 2800)
+                with(density) { (containerW * renderZoom - 8.dp).roundToPx() }.coerceIn(320, 2800)
 
             Box(
                 modifier =
                 Modifier
                     .fillMaxSize()
-                    .onSizeChanged { viewportWpx = it.width }
                     .docZoomGestures(
                         zoomState = docZoomState,
                         enabled = !drawMode,
-                        onZoom = { change, centroidX -> applyDocZoom(change, centroidX) },
-                        onReset = {
-                            docZoomState.floatValue = DocZoom.DEFAULT
-                            scope.launch {
-                                hScroll.scrollTo(0)
-                                listState.scrollToItem(0)
-                            }
+                        onZoomStart = { cx ->
+                            // Запоминаем точку под центроидом ДО первого изменения zoom.
+                            zoomAnchor =
+                                ZoomAnchor(
+                                    page = listState.firstVisibleItemIndex,
+                                    offInPage = listState.firstVisibleItemScrollOffset,
+                                    contentX = hScroll.value + cx,
+                                    cx = cx,
+                                    fromZoom = docZoomState.floatValue,
+                                )
                         },
+                        // Во время pinch меняем ТОЛЬКО docZoom — без конкурирующих scrollTo.
+                        onZoom = { change, _ -> docZoomState.floatValue = DocZoom.apply(docZoomState.floatValue, change) },
+                        onReset = { resetZoomSmooth() },
                     ),
             ) {
                 Box(
@@ -445,6 +501,7 @@ fun MaterialPdfViewer(
                                 cache = pageCache,
                                 renderLock = renderLock,
                                 renderWidthPx = renderWidthPx,
+                                docZoom = docZoom,
                                 bookmarked = bookmarks.any { it.page == index },
 
                                 onBookmarkClick = { bookmarked ->
@@ -464,10 +521,12 @@ fun MaterialPdfViewer(
                                 onZoomChange = { m -> docZoomState.floatValue = DocZoom.apply(docZoomState.floatValue, m) },
                                 onStrokeFinished = { stroke ->
                                     pageStrokes[index] = pageStrokes[index].orEmpty() + stroke
+                                    undoSession.record(AnnotationAction.Add(index, stroke))
                                     markDirty(index)
                                 },
-                                onStrokesReplaced = { list ->
-                                    pageStrokes[index] = list
+                                onStrokesErased = { erased, remaining ->
+                                    pageStrokes[index] = remaining
+                                    erased.forEach { (i, st) -> undoSession.record(AnnotationAction.Erase(index, i, st)) }
                                     markDirty(index)
                                 },
                             )
@@ -520,6 +579,40 @@ internal object DocZoom {
     fun apply(current: Float, multiplier: Float): Float = (current * multiplier).coerceIn(MIN, MAX)
 }
 
+internal const val RENDER_ZOOM_DEBOUNCE_MS = 80L
+internal const val ZOOM_RESET_ANIM_MS = 220
+
+// BB4: визуальный размер кнопки закладки меняется с зумом не более чем ±20%.
+internal fun bookmarkSizeFactor(docZoom: Float): Float = docZoom.coerceIn(0.8f, 1.2f)
+
+// BB2: снапшот положения, снятый ДО первого изменения zoom в жесте (единственный источник правды).
+internal class ZoomAnchor(
+    val page: Int,
+    val offInPage: Int,
+    val contentX: Float,
+    val cx: Float,
+    val fromZoom: Float,
+)
+
+internal data class ScrollRestore(val page: Int, val vOffset: Int, val hValue: Int)
+
+// BB2: чистая формула восстановления якоря после смены zoom на ratio = newZoom/anchorZoom.
+// Вертикаль: смещение внутри первой видимой страницы масштабируется вместе со страницей.
+// Горизонталь: точка contentX (= hScroll + cx) должна остаться под центроидом cx.
+internal fun restoreScroll(
+    pageIdx: Int,
+    offInPage: Int,
+    ratio: Float,
+    contentX: Float,
+    cx: Float,
+    hMax: Int,
+): ScrollRestore =
+    ScrollRestore(
+        page = pageIdx.coerceAtLeast(0),
+        vOffset = (offInPage * ratio).roundToInt().coerceAtLeast(0),
+        hValue = (contentX * ratio - cx).roundToInt().coerceIn(0, hMax.coerceAtLeast(0)),
+    )
+
 internal fun quantizeRenderZoom(zoom: Float): Float =
     ((zoom * 4f).roundToInt() / 4f).coerceIn(DocZoom.MIN, DocZoom.MAX)
 
@@ -528,6 +621,7 @@ private fun pageCacheKey(pageIndex: Int, widthPx: Int): Long = (pageIndex.toLong
 internal fun Modifier.docZoomGestures(
     zoomState: MutableFloatState,
     enabled: Boolean = true,
+    onZoomStart: (centroidX: Float) -> Unit = {},
     onZoom: (change: Float, centroidX: Float) -> Unit = { c, _ -> zoomState.floatValue = DocZoom.apply(zoomState.floatValue, c) },
     onReset: () -> Unit = { zoomState.floatValue = DocZoom.DEFAULT },
 ): Modifier =
@@ -536,6 +630,7 @@ internal fun Modifier.docZoomGestures(
             if (!enabled) return@pointerInput
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                var pinching = false
                 do {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
                     if (event.changes.count { it.pressed } >= 2) {
@@ -546,6 +641,11 @@ internal fun Modifier.docZoomGestures(
                                 pressed.map { it.position.x }.average().toFloat(),
                                 pressed.map { it.position.y }.average().toFloat(),
                             )
+                            // Якорь снимается один раз на жест, до первого изменения zoom.
+                            if (!pinching) {
+                                pinching = true
+                                onZoomStart(centroid.x)
+                            }
                             onZoom(zoomChange, centroid.x)
                         }
                         event.changes.forEach { it.consume() }
@@ -571,17 +671,27 @@ private fun PdfReaderBar(
     onBookmarks: () -> Unit,
     onDrawToggle: () -> Unit,
 ) {
+    // BB1: WindowInsets.statusBars — @Composable-геттер, поднимаем до drawBehind.
+    val statusBars = WindowInsets.statusBars
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorTopBar,
-        modifier = Modifier.fillMaxWidth().testTag("pdf_top_bar"),
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .testTag("pdf_top_bar")
+            // BB1: хост (Scaffold) отступил контент вниз на высоту статусбара — белая полоса
+            // над баром. Заливаем её тем же ColorTopBar, рисуя фон вверх за пределами панели.
+            .drawBehind {
+                val top = statusBars.getTop(this).toFloat()
+                if (top > 0f) drawRect(color = ColorTopBar, topLeft = Offset(0f, -top), size = Size(size.width, top))
+            },
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier =
             Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
                 .height(52.dp)
                 .padding(horizontal = 4.dp),
         ) {
@@ -683,6 +793,7 @@ private fun PdfPageRow(
     cache: LruCache<Long, Bitmap>,
     renderLock: Mutex,
     renderWidthPx: Int,
+    docZoom: Float,
     bookmarked: Boolean,
     onBookmarkClick: (bookmarked: Boolean) -> Unit,
     strokes: List<Stroke>,
@@ -692,7 +803,7 @@ private fun PdfPageRow(
     eraserActive: Boolean,
     onZoomChange: (zoomMultiplier: Float) -> Unit,
     onStrokeFinished: (Stroke) -> Unit,
-    onStrokesReplaced: (List<Stroke>) -> Unit,
+    onStrokesErased: (erased: List<Pair<Int, Stroke>>, remaining: List<Stroke>) -> Unit,
 ) {
     var bitmap by remember(pageIndex) { mutableStateOf(cache.get(pageCacheKey(pageIndex, renderWidthPx))) }
     var currentStroke by remember(pageIndex) { mutableStateOf<Stroke?>(null) }
@@ -766,12 +877,15 @@ private fun PdfPageRow(
                 val bh = boxSize.height.toFloat()
                 if (bw > 1f && bh > 1f) {
                     val aspect = bh / bw
-                    val remaining =
-                        latestStrokes.filterNot { st ->
-                            val th = with(density) { (st.widthDp / 2f + ERASER_TOUCH_EXTRA_DP).dp.toPx() } / bw
-                            eraserHitTest(st, p, th, aspect)
-                        }
-                    if (remaining.size != latestStrokes.size) onStrokesReplaced(remaining)
+                    // BB3: у PDF страница масштабируется layout'ом (layerScale=1),
+                    // экранная зона ластика постоянна при любом docZoom.
+                    val erased = mutableListOf<Pair<Int, Stroke>>()
+                    val remaining = mutableListOf<Stroke>()
+                    latestStrokes.forEachIndexed { i, st ->
+                        val th = eraserThresholdNorm(st.widthDp, ERASER_TOUCH_EXTRA_DP, density.density, bw, 1f)
+                        if (eraserHitTest(st, p, th, aspect)) erased += i to st else remaining += st
+                    }
+                    if (erased.isNotEmpty()) onStrokesErased(erased, remaining)
                 }
             },
             transformGestures = { _, zoomChange -> onZoomChange(zoomChange) },
@@ -786,7 +900,8 @@ private fun PdfPageRow(
             Modifier
                 .align(Alignment.TopStart)
                 .padding(4.dp)
-                .size(26.dp)
+                // BB4: размер кнопки закладки следует за зумом, но не более чем ±20%.
+                .size(26.dp * bookmarkSizeFactor(docZoom))
                 .bouncyClickable(onClick = { onBookmarkClick(bookmarked) })
                 .testTag("pdf_bookmark_add_$pageIndex"),
         ) {
@@ -795,7 +910,7 @@ private fun PdfPageRow(
                     imageVector = if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                     contentDescription = "Закладка на странице ${pageIndex + 1}",
                     tint = if (bookmarked) Color.White else ColorBrandBlue,
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(14.dp * bookmarkSizeFactor(docZoom)),
                 )
             }
         }

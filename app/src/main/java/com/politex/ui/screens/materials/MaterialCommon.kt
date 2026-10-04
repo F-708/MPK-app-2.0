@@ -5,11 +5,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,6 +32,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -77,12 +82,21 @@ fun MaterialViewerTopBar(
     onBack: (() -> Unit)? = null,
     actions: @Composable () -> Unit = {},
 ) {
+    // BB1: WindowInsets.statusBars — @Composable-геттер, поднимаем до drawBehind.
+    val statusBars = WindowInsets.statusBars
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorTopBar,
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(testTag),
+            .testTag(testTag)
+            // BB1: хост (Scaffold) отступил контент вниз на высоту статусбара — белая полоса
+            // над баром. Заливаем её тем же ColorTopBar, рисуя фон вверх за пределами панели:
+            // синий бар начинается от самого верха окна, статусбар — на синем фоне.
+            .drawBehind {
+                val top = statusBars.getTop(this).toFloat()
+                if (top > 0f) drawRect(color = ColorTopBar, topLeft = Offset(0f, -top), size = Size(size.width, top))
+            },
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

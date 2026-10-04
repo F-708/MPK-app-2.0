@@ -30,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,6 +99,8 @@ private const val MIN_POINT_DIST = 0.004f
 
 const val ERASER_TOUCH_EXTRA_DP = 8f
 
+const val CLEAR_CONFIRM_TIMEOUT_MS = 500L
+
 fun eraserHitTest(
     stroke: Stroke,
     point: Offset,
@@ -120,6 +123,54 @@ private fun distPointToSegment(p: Offset, a: Offset, b: Offset): Float {
     return (ap - ab * t).getDistance()
 }
 
+// BB3: штрих рисуется внутри слоя, масштабированного на layerScale (graphicsLayer у изображений;
+// у PDF layerScale=1 — страница масштабируется layout'ом). Чтобы толщина была константой
+// в экранных dp, хранимую widthDp компенсируем делением на layerScale.
+internal fun compensatedStrokeWidthPx(widthDp: Float, pxPerDp: Float, layerScale: Float): Float =
+    widthDp * pxPerDp / layerScale.coerceAtLeast(0.01f)
+
+// BB3: порог ластика в нормализованных координатах страницы. Экранная зона касания
+// (widthDp/2 + extra) постоянна; перевод в пиксели слоя (÷layerScale) и в нормаль (÷boxWidthPx).
+internal fun eraserThresholdNorm(widthDp: Float, extraDp: Float, pxPerDp: Float, boxWidthPx: Float, layerScale: Float): Float =
+    (widthDp / 2f + extraDp) * pxPerDp / (layerScale.coerceAtLeast(0.01f) * boxWidthPx.coerceAtLeast(1f))
+
+// BB3: штрих принадлежит странице, на которой начат; уход пальца за край — точка clamp'ится
+// на границу симметрично со всех сторон (не рисуем на соседней странице).
+internal fun clampToBox(pos: Offset, w: Float, h: Float): Offset =
+    Offset(pos.x.coerceIn(0f, w), pos.y.coerceIn(0f, h))
+
+// BB3: undo — стек ДЕЙСТВИЙ текущей сессии редактирования (добавление ИЛИ стирание ИЛИ корзина).
+// Сессия живёт пока открыт viewer; выход из документа уничтожает её вместе с историей
+// (сохранённые в БД штрихи остаются).
+sealed interface AnnotationAction {
+    data class Add(val page: Int, val stroke: Stroke) : AnnotationAction
+    data class Erase(val page: Int, val index: Int, val stroke: Stroke) : AnnotationAction
+    data class ClearAll(val snapshot: Map<Int, List<Stroke>>) : AnnotationAction
+}
+
+class AnnotationUndoSession {
+    private val stack = ArrayDeque<AnnotationAction>()
+    fun record(action: AnnotationAction) { stack.addLast(action) }
+    fun pop(): AnnotationAction? = stack.removeLastOrNull()
+    fun clear() { stack.clear() }
+    val size: Int get() = stack.size
+}
+
+fun applyUndo(action: AnnotationAction, strokes: Map<Int, List<Stroke>>): Map<Int, List<Stroke>> = when (action) {
+    is AnnotationAction.Add -> {
+        val list = strokes[action.page].orEmpty().toMutableList()
+        val i = list.indexOfLast { it == action.stroke }
+        if (i >= 0) list.removeAt(i)
+        strokes + (action.page to list)
+    }
+    is AnnotationAction.Erase -> {
+        val list = strokes[action.page].orEmpty().toMutableList()
+        list.add(action.index.coerceIn(0, list.size), action.stroke)
+        strokes + (action.page to list)
+    }
+    is AnnotationAction.ClearAll -> strokes + action.snapshot
+}
+
 @Composable
 fun AnnotationLayer(
     strokes: List<Stroke>,
@@ -135,30 +186,45 @@ fun AnnotationLayer(
     onEraseAt: ((Offset) -> Unit)? = null,
 
     transformKey: Any? = null,
+
+    // BB3: масштаб слоя, внутри которого рисуем (graphicsLayer у изображений). 1f = без компенсации.
+    layerScale: Float = 1f,
 ) {
 
     var eraserPos by remember { mutableStateOf<Offset?>(null) }
 
+    // Колбэчи держим свежими: pointerInput не перезапускается при зуме,
+    // а замыкания viewer'а пересоздаются (иначе ластик читает устаревший zoom).
+    val currentOnChange by rememberUpdatedState(onCurrentChange)
+    val currentFinished by rememberUpdatedState(onStrokeFinished)
+    val currentErase by rememberUpdatedState(onEraseAt)
+    val currentTransform by rememberUpdatedState(transformGestures)
+
     val gestureModifier =
         if (drawMode) {
             Modifier.pointerInput(drawMode, eraserActive, strokeColor, strokeWidthDp, transformKey) {
-                val w = size.width.toFloat().coerceAtLeast(1f)
-                val h = size.height.toFloat().coerceAtLeast(1f)
                 awaitEachGesture {
+                    // BB3: размер страницы читаем НА КАЖДЫЙ жест, а не один раз при старте
+                    // pointerInput: при зуме страница меняет размер, устаревшие w/h ломали
+                    // нормализацию координат (ластик «не стирал», штрих вставал не туда).
+                    val w = size.width.toFloat().coerceAtLeast(1f)
+                    val h = size.height.toFloat().coerceAtLeast(1f)
                     val down = awaitFirstDown(requireUnconsumed = false)
                     down.consume()
                     var pts = emptyList<Offset>()
                     fun addPoint(pos: Offset) {
-                        val n = Offset(pos.x / w, pos.y / h)
+                        val c = clampToBox(pos, w, h)
+                        val n = Offset(c.x / w, c.y / h)
                         if (pts.isEmpty() || (n - pts.last()).getDistance() >= MIN_POINT_DIST) {
                             pts = pts + n
-                            onCurrentChange(Stroke(strokeColor, strokeWidthDp, pts))
+                            currentOnChange(Stroke(strokeColor, strokeWidthDp, pts))
                         }
                     }
                     fun eraseAt(pos: Offset) {
-                        val n = Offset(pos.x / w, pos.y / h)
+                        val c = clampToBox(pos, w, h)
+                        val n = Offset(c.x / w, c.y / h)
                         eraserPos = n
-                        onEraseAt?.invoke(n)
+                        currentErase?.invoke(n)
                     }
                     if (eraserActive) eraseAt(down.position) else addPoint(down.position)
                     var transformed = false
@@ -170,12 +236,12 @@ fun AnnotationLayer(
                                 transformed = true
                                 pts = emptyList()
                                 eraserPos = null
-                                onCurrentChange(null)
+                                currentOnChange(null)
                             }
                             val zoomChange = event.calculateZoom()
                             val panChange = event.calculatePan()
                             if (zoomChange != 1f || panChange != Offset.Zero) {
-                                transformGestures?.invoke(panChange, zoomChange)
+                                currentTransform?.invoke(panChange, zoomChange)
                                 event.changes.forEach { if (it.positionChanged()) it.consume() }
                             }
                         } else if (!transformed) {
@@ -189,8 +255,8 @@ fun AnnotationLayer(
                             }
                         }
                     } while (event.changes.any { it.pressed })
-                    if (!transformed && !eraserActive && pts.isNotEmpty()) onStrokeFinished(Stroke(strokeColor, strokeWidthDp, pts))
-                    onCurrentChange(null)
+                    if (!transformed && !eraserActive && pts.isNotEmpty()) currentFinished(Stroke(strokeColor, strokeWidthDp, pts))
+                    currentOnChange(null)
                     eraserPos = null
                 }
             }
@@ -199,11 +265,11 @@ fun AnnotationLayer(
         }
 
     Canvas(modifier = modifier.then(gestureModifier).testTag("annotation_layer")) {
-        (strokes + listOfNotNull(current)).forEach { drawStroke(it) }
+        (strokes + listOfNotNull(current)).forEach { drawStroke(it, layerScale) }
 
         if (eraserActive) {
             eraserPos?.let { p ->
-                val r = (strokeWidthDp / 2f + ERASER_TOUCH_EXTRA_DP).dp.toPx()
+                val r = compensatedStrokeWidthPx(strokeWidthDp / 2f + ERASER_TOUCH_EXTRA_DP, density, layerScale)
                 val center = Offset(p.x * size.width, p.y * size.height)
                 drawCircle(color = Color(0x22E53935), radius = r, center = center)
                 drawCircle(color = Color(0x99E53935), radius = r, center = center, style = DrawStroke(width = 1.5.dp.toPx()))
@@ -212,7 +278,7 @@ fun AnnotationLayer(
     }
 }
 
-private fun DrawScope.drawStroke(s: Stroke) {
+private fun DrawScope.drawStroke(s: Stroke, layerScale: Float) {
     if (s.pts.isEmpty()) return
     val pts = s.pts.map { Offset(it.x * size.width, it.y * size.height) }
     val path =
@@ -232,7 +298,11 @@ private fun DrawScope.drawStroke(s: Stroke) {
     drawPath(
         path = path,
         color = Color(s.color),
-        style = DrawStroke(width = s.widthDp.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+        style = DrawStroke(
+            width = compensatedStrokeWidthPx(s.widthDp, density, layerScale),
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round,
+        ),
     )
 }
 
@@ -253,7 +323,8 @@ fun AnnotationToolbar(
     var clearConfirm by remember { mutableStateOf(false) }
     LaunchedEffect(clearConfirm) {
         if (clearConfirm) {
-            delay(2_500)
+            // BB3: корзина — двойной тап в течение 500ms (первый → «Точно?», второй → удалить всё).
+            delay(CLEAR_CONFIRM_TIMEOUT_MS)
             clearConfirm = false
         }
     }
@@ -312,7 +383,7 @@ fun AnnotationToolbar(
                 ToolbarAction(Icons.AutoMirrored.Filled.Undo, "Отменить штрих", "draw_undo_btn", onClick = onUndo)
                 ToolbarAction(
                     icon = Icons.Default.Delete,
-                    description = if (clearConfirm) "Точно? Нажмите ещё раз" else "Очистить страницу",
+                    description = if (clearConfirm) "Точно? Нажмите ещё раз" else "Удалить все аннотации документа",
                     tag = "draw_clear_btn",
                     tint = if (clearConfirm) ColorDangerFill else ColorBrandBlue,
                 ) {

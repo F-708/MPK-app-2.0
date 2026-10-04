@@ -133,6 +133,9 @@ fun MaterialImageViewer(
     val dirtyPages = remember(item.id) { mutableStateListOf<Int>() }
     var saveVersion by remember { mutableIntStateOf(0) }
 
+    // BB3: undo-сессия живёт пока открыт viewer; выход очищает историю (штрихи в БД остаются).
+    val undoSession = remember(item.id) { AnnotationUndoSession() }
+
     LaunchedEffect(annotations) {
         annotations.forEach { if (it.pageIndex !in dirtyPages) pageStrokes[it.pageIndex] = Stroke.parse(it.strokesJson) }
     }
@@ -237,16 +240,28 @@ fun MaterialImageViewer(
                 onColor = { drawColor = it },
                 onWidth = { drawWidth = it },
                 onUndo = {
-                    val s = pageStrokes[currentPage].orEmpty()
-                    if (s.isNotEmpty()) {
-                        pageStrokes[currentPage] = s.dropLast(1)
-                        markDirty(currentPage)
+                    // BB3: отменяем последнее ДЕЙСТВИЕ сессии — добавление ИЛИ стирание ИЛИ корзину.
+                    val action = undoSession.pop()
+                    if (action != null) {
+                        val updated = applyUndo(action, pageStrokes.toMap())
+                        updated.forEach { (p, list) ->
+                            if (pageStrokes[p] != list) {
+                                pageStrokes[p] = list
+                                markDirty(p)
+                            }
+                        }
                     }
                 },
                 onClear = {
-                    pageStrokes[currentPage] = emptyList()
-                    dirtyPages.remove(currentPage)
-                    scope.launch { dao.deletePageAnnotations(item.id, currentPage) }
+                    // BB3: корзина удаляет аннотации ВСЕГО документа (все страницы).
+                    val snapshot = pageStrokes.toMap().filterValues { it.isNotEmpty() }
+                    if (snapshot.isNotEmpty()) {
+                        undoSession.record(AnnotationAction.ClearAll(snapshot))
+                        snapshot.keys.forEach { p ->
+                            pageStrokes[p] = emptyList()
+                            markDirty(p)
+                        }
+                    }
                 },
                 onExit = { drawMode = false },
             )
@@ -338,22 +353,28 @@ fun MaterialImageViewer(
                         onCurrentChange = { currentStroke = it },
                         onStrokeFinished = { stroke ->
                             pageStrokes[page] = pageStrokes[page].orEmpty() + stroke
+                            undoSession.record(AnnotationAction.Add(page, stroke))
                             markDirty(page)
                         },
                         eraserActive = eraserActive,
                         transformKey = rotation,
+                        // BB3: слой находится внутри graphicsLayer(scaleX/Y = zoom*fit) —
+                        // компенсируем масштаб, чтобы толщина штриха была константой на экране.
+                        layerScale = zoom * fit,
                         onEraseAt = { p ->
 
                             if (boxW > 1f && boxH > 1f) {
                                 val aspect = boxH / boxW
                                 val current = pageStrokes[page].orEmpty()
-                                val remaining =
-                                    current.filterNot { st ->
-                                        val th = with(density) { (st.widthDp / 2f + ERASER_TOUCH_EXTRA_DP).dp.toPx() } / boxW
-                                        eraserHitTest(st, p, th, aspect)
-                                    }
-                                if (remaining.size != current.size) {
+                                val erased = mutableListOf<Pair<Int, Stroke>>()
+                                val remaining = mutableListOf<Stroke>()
+                                current.forEachIndexed { i, st ->
+                                    val th = eraserThresholdNorm(st.widthDp, ERASER_TOUCH_EXTRA_DP, density.density, boxW, zoom * fit)
+                                    if (eraserHitTest(st, p, th, aspect)) erased += i to st else remaining += st
+                                }
+                                if (erased.isNotEmpty()) {
                                     pageStrokes[page] = remaining
+                                    erased.forEach { (i, st) -> undoSession.record(AnnotationAction.Erase(page, i, st)) }
                                     markDirty(page)
                                 }
                             }
