@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -67,6 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -257,6 +259,25 @@ fun MaterialPdfViewer(
     var eraserActive by remember { mutableStateOf(false) }
 
     val docZoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
+    val hScroll = rememberScrollState()
+    var viewportWpx by remember { mutableIntStateOf(0) }
+
+    // Фокальный зум: точка под центром жеста остаётся под ним (не «в левый верхний угол»).
+    fun applyDocZoom(change: Float, centroidX: Float) {
+        val old = docZoomState.floatValue
+        val new = DocZoom.apply(old, change)
+        if (new == old) return
+        val ratio = new / old
+        val targetH = ((hScroll.value + centroidX) * ratio - centroidX).roundToInt()
+        val idx = listState.firstVisibleItemIndex
+        val offV = (listState.firstVisibleItemScrollOffset * ratio).roundToInt()
+        docZoomState.floatValue = new
+        scope.launch {
+            withFrameNanos { }
+            hScroll.scrollTo(targetH.coerceIn(0, hScroll.maxValue))
+            listState.scrollToItem(idx, offV)
+        }
+    }
 
     val annotations by dao.getAnnotationsFlow(item.id).collectAsState(initial = emptyList())
 
@@ -386,12 +407,24 @@ fun MaterialPdfViewer(
                 modifier =
                 Modifier
                     .fillMaxSize()
-                    .docZoomGestures(zoomState = docZoomState, enabled = !drawMode),
+                    .onSizeChanged { viewportWpx = it.width }
+                    .docZoomGestures(
+                        zoomState = docZoomState,
+                        enabled = !drawMode,
+                        onZoom = { change, centroidX -> applyDocZoom(change, centroidX) },
+                        onReset = {
+                            docZoomState.floatValue = DocZoom.DEFAULT
+                            scope.launch {
+                                hScroll.scrollTo(0)
+                                listState.scrollToItem(0)
+                            }
+                        },
+                    ),
             ) {
                 Box(
                     modifier =
                     Modifier
-                        .horizontalScroll(rememberScrollState())
+                        .horizontalScroll(hScroll)
                         .width(maxOf(containerW, pageW)),
                     contentAlignment = Alignment.TopCenter,
                 ) {
@@ -495,6 +528,8 @@ private fun pageCacheKey(pageIndex: Int, widthPx: Int): Long = (pageIndex.toLong
 internal fun Modifier.docZoomGestures(
     zoomState: MutableFloatState,
     enabled: Boolean = true,
+    onZoom: (change: Float, centroidX: Float) -> Unit = { c, _ -> zoomState.floatValue = DocZoom.apply(zoomState.floatValue, c) },
+    onReset: () -> Unit = { zoomState.floatValue = DocZoom.DEFAULT },
 ): Modifier =
     this
         .pointerInput(zoomState, enabled) {
@@ -505,14 +540,21 @@ internal fun Modifier.docZoomGestures(
                     val event = awaitPointerEvent(PointerEventPass.Initial)
                     if (event.changes.count { it.pressed } >= 2) {
                         val zoomChange = event.calculateZoom()
-                        if (zoomChange != 1f) zoomState.floatValue = DocZoom.apply(zoomState.floatValue, zoomChange)
+                        if (zoomChange != 1f) {
+                            val pressed = event.changes.filter { it.pressed }
+                            val centroid = Offset(
+                                pressed.map { it.position.x }.average().toFloat(),
+                                pressed.map { it.position.y }.average().toFloat(),
+                            )
+                            onZoom(zoomChange, centroid.x)
+                        }
                         event.changes.forEach { it.consume() }
                     }
                 } while (event.changes.any { it.pressed })
             }
         }
         .pointerInput(zoomState) {
-            detectTapGestures(onDoubleTap = { zoomState.floatValue = DocZoom.DEFAULT })
+            detectTapGestures(onDoubleTap = { onReset() })
         }
 
 @Composable
