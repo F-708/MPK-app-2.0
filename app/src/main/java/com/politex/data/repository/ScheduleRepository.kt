@@ -7,6 +7,7 @@ import com.politex.data.local.entity.TeacherLessonEntity
 import com.politex.data.network.MpkNetworkClient
 import com.politex.data.network.MpkScheduleParser
 import com.politex.data.network.ProbeResult
+import com.politex.data.network.TeacherSlot
 import com.politex.util.Dow
 import com.politex.util.GroupParser
 import com.politex.util.lessonsWord
@@ -158,6 +159,34 @@ internal fun looksLikeDocument(bytes: ByteArray): Boolean {
     val doc = bytes[0] == 0xD0.toByte() && bytes[1] == 0xCF.toByte() && bytes[2] == 0x11.toByte() && bytes[3] == 0xE0.toByte()
     return docx || doc
 }
+
+// AA5: построение строк кэша преподавателей — отдельно от сети, чтобы E2E-тест
+// прогонял реальный код записи (фикстура дока → parse → rows → dao).
+internal fun teacherRows(
+    parsedAll: Map<String, List<TeacherSlot>>,
+    date: String,
+    requestedDow: Int,
+): List<TeacherLessonEntity> =
+    parsedAll
+        .flatMap { (rawName, slots) ->
+            val surname = TeacherInsights.surnameOf(rawName)
+            if (surname.isBlank()) {
+                emptyList()
+            } else {
+                slots.map { slot ->
+                    TeacherLessonEntity(
+                        teacherName = rawName.trim(),
+                        surnameKey = surname,
+                        dateString = date,
+                        dayOfWeek = if (slot.dayOfWeek != 0) slot.dayOfWeek else requestedDow,
+                        lessonNumber = slot.lessonNumber,
+                        groups = slot.groups.joinToString(", "),
+                        subject = slot.subject,
+                        room = slot.room,
+                    )
+                }
+            }
+        }.distinctBy { "${it.surnameKey}_${it.lessonNumber}_${it.room}_${it.subject}" }
 
 class ScheduleRepository(
     private val lessonDao: LessonDao,
@@ -471,28 +500,7 @@ class ScheduleRepository(
             return@withContext Result.failure(IOException("Документ за другой день"))
         }
 
-        val rows =
-            parsedAll
-                .flatMap { (rawName, slots) ->
-                    val surname = TeacherInsights.surnameOf(rawName)
-                    if (surname.isBlank()) {
-                        emptyList()
-                    } else {
-                        slots.map { slot ->
-                            TeacherLessonEntity(
-                                teacherName = rawName.trim(),
-                                surnameKey = surname,
-                                dateString = date,
-                                dayOfWeek = if (slot.dayOfWeek != 0) slot.dayOfWeek else requestedDow,
-                                lessonNumber = slot.lessonNumber,
-                                groups = slot.groups.joinToString(", "),
-                                subject = slot.subject,
-                                room = slot.room,
-                            )
-                        }
-                    }
-                }.distinctBy { "${it.surnameKey}_${it.lessonNumber}_${it.room}_${it.subject}" }
-
+        val rows = teacherRows(parsedAll, date, requestedDow)
         if (rows.isNotEmpty()) dao.replaceForDate(date, rows)
         Result.success(rows.size)
     }

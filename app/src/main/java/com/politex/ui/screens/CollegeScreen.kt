@@ -40,7 +40,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -147,7 +146,6 @@ internal fun TeacherCardRoute(
     onNotFound: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val context = LocalContext.current
     var teacher by remember(teacherName) { mutableStateOf<Teacher?>(null) }
     LaunchedEffect(teacherName) {
 
@@ -167,11 +165,6 @@ internal fun TeacherCardRoute(
                 teacher = found,
                 groupInfo = groupInfo,
                 scheduleRepository = scheduleRepository,
-                teacherLessonDao =
-                com.politex.data.local.MpkDatabase
-                    .getInstance(context)
-                    .teacherLessonDao(),
-
                 onOpenRoom = onOpenRoom,
                 onBack = onBack,
             )
@@ -1117,7 +1110,6 @@ private fun TeacherCardPageWrapper(
     teacher: Teacher,
     groupInfo: GroupInfo,
     scheduleRepository: ScheduleRepository,
-    teacherLessonDao: com.politex.data.local.dao.TeacherLessonDao,
     onOpenRoom: (String) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -1159,7 +1151,6 @@ private fun TeacherCardPageWrapper(
             }
             leadsTick++
         },
-        teacherLessonDao = teacherLessonDao,
         onOpenRoom = onOpenRoom,
         onBack = onBack,
     )
@@ -1233,7 +1224,6 @@ private fun TeacherCardPage(
     autoActive: Boolean = false,
     lessonsWithGroup: Int,
     onLeadsChipClick: () -> Unit = {},
-    teacherLessonDao: com.politex.data.local.dao.TeacherLessonDao? = null,
     onOpenRoom: (String) -> Unit = {},
     onBack: () -> Unit,
 ) {
@@ -1252,29 +1242,36 @@ private fun TeacherCardPage(
             Spacer(modifier = Modifier.width(10.dp))
             TeacherAvatar(teacher = teacher, size = 52.dp, highlight = isActive)
             Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = teacher.name,
-                    style =
-                    androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = ColorTextTitle,
-                    ),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (teacher.position.isNotBlank()) {
+            // AA4: шильд — в правом нижнем углу блока ФИО, компактный (30dp ≤ 52dp фото).
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = teacher.position,
+                        text = teacher.name,
                         style =
                         androidx.compose.ui.text.TextStyle(
-                            fontSize = 11.sp,
-                            color = ColorBrandBlue,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = ColorTextTitle,
                         ),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (teacher.position.isNotBlank()) {
+                        Text(
+                            text = teacher.position,
+                            style =
+                            androidx.compose.ui.text.TextStyle(
+                                fontSize = 11.sp,
+                                color = ColorBrandBlue,
+                            ),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
 
                 LeadsChip(
@@ -1350,7 +1347,7 @@ private fun TeacherCardPage(
                     subjectsFromSchedule,
                     onOpenRoom,
                 )
-            1 -> TeacherScheduleTab(teacher, teacherLessonDao, onOpenRoom)
+            1 -> TeacherScheduleTab(teacher, onOpenRoom)
         }
     }
 }
@@ -1361,11 +1358,14 @@ private fun LeadsChip(
     autoActive: Boolean,
     onClick: () -> Unit,
 ) {
+    // AA4: авто-факт активен и пользователь его не снимал — шильд не кликабельен
+    // («скрипт уверен, что ведёт»); возврат/установка отметки — только в остальных состояниях.
+    val enabled = canToggleLeads(autoActive, manualOff = autoActive && !leadsNow)
     val text =
         when {
             leadsNow -> "ВЕДЁТ У ВАС"
             autoActive -> "ОТМЕТКА СНЯТА"
-            else -> "НЕ ВЕДЁТ У ВАС"
+            else -> "+ ВЕДЁТ У ВАС"
         }
     Surface(
         shape = RoundedCornerShape(2.dp),
@@ -1373,14 +1373,19 @@ private fun LeadsChip(
         border = BorderStroke(1.dp, if (leadsNow) ColorActiveBlue else ColorBorderLight),
         modifier =
         Modifier
-
-            .heightIn(min = 44.dp)
-            .bouncyClickable(scaleDown = 0.97f, onClick = onClick)
+            .height(30.dp)
+            .then(
+                if (enabled) {
+                    Modifier.bouncyClickable(scaleDown = 0.97f, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
             .testTag("teacher_leads_chip"),
     ) {
         Box(
-            contentAlignment = Alignment.CenterStart,
-            modifier = Modifier.padding(horizontal = 8.dp),
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         ) {
             Text(
                 text = text,
@@ -1388,7 +1393,7 @@ private fun LeadsChip(
                 style =
                 androidx.compose.ui.text.TextStyle(
                     fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp,
+                    fontSize = 11.sp,
                     color = if (leadsNow) Color.White else ColorTextMuted,
                 ),
             )
@@ -1586,32 +1591,70 @@ internal fun teacherTargetCalendar(
 ): Calendar =
     customDate ?: (base.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, dayOffset) }
 
+// AA5: в воскресенье документа преподавателей не существует (проверено curl: вс — 404,
+// сб/пн — 200), поэтому по умолчанию сразу открываем понедельник, а не «сегодня».
+internal fun defaultTeacherDayOffset(todayDow: Int): Int = if (todayDow == 7) 1 else 0
+
+internal fun teacherSyncErrorMessage(
+    e: Throwable,
+    dateKey: String,
+): String {
+    val msg = e.message.orEmpty()
+    return if (msg.contains("не найден") || msg.contains("вместо") || msg.contains("другой день")) {
+        "Расписание преподавателя на $dateKey ещё не опубликовано"
+    } else {
+        "Не удалось загрузить расписание (проверьте интернет)"
+    }
+}
+
+internal data class TeacherDayLoad(
+    val slots: List<com.politex.data.network.TeacherSlot>,
+    val error: String,
+)
+
+// AA5: кэш-первым, сеть один раз; ЛЮБАЯ ошибка (Result.failure или исключение)
+// превращается в текст — вызывающий код всегда может сбросить loading.
+internal suspend fun loadTeacherDay(
+    dateKey: String,
+    fromDatabase: suspend () -> List<com.politex.data.network.TeacherSlot>,
+    sync: suspend () -> Result<Int>,
+): TeacherDayLoad {
+    val cached = fromDatabase()
+    if (cached.isNotEmpty()) return TeacherDayLoad(cached, "")
+
+    var slots = cached
+    var error = ""
+    runCatching { sync() }
+        .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+        .getOrElse { Result.failure(it) }
+        .fold(
+            onSuccess = { slots = fromDatabase() },
+            onFailure = { error = teacherSyncErrorMessage(it, dateKey) },
+        )
+    return TeacherDayLoad(slots, error)
+}
+
+// AA4: авто-факт уверен (weekly/recent) и пользователь его не снимал — шильд не кликабельен.
+internal fun canToggleLeads(
+    autoActive: Boolean,
+    manualOff: Boolean,
+): Boolean = !autoActive || manualOff
+
 @Composable
 private fun TeacherScheduleTab(
     teacher: Teacher,
-    teacherLessonDao: com.politex.data.local.dao.TeacherLessonDao? = null,
     onOpenRoom: (String) -> Unit = {},
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val client =
-        remember {
-            com.politex.data.network
-                .MpkNetworkClient()
-        }
+    val repository = com.politex.AppGraph.scheduleRepository
 
-    val offlineRepository = teacherLessonDao?.let { com.politex.AppGraph.scheduleRepository }
-
-    var dayOffset by rememberSaveable { mutableIntStateOf(0) }
+    val today = rememberToday()
+    var dayOffset by rememberSaveable { mutableIntStateOf(defaultTeacherDayOffset(com.politex.util.Dow.of(today))) }
     var showCalendar by remember { mutableStateOf(false) }
     var customDate by remember { mutableStateOf<Calendar?>(null) }
     var loading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     var slots by remember { mutableStateOf<List<com.politex.data.network.TeacherSlot>>(emptyList()) }
 
-    val cache = remember { mutableMapOf<String, Map<String, List<com.politex.data.network.TeacherSlot>>>() }
-
-    val today = rememberToday()
     val targetCalendar =
         remember(dayOffset, customDate, today) {
             teacherTargetCalendar(dayOffset, customDate)
@@ -1635,80 +1678,34 @@ private fun TeacherScheduleTab(
                 .SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
                 .format(targetCalendar.time)
 
-        suspend fun fromDatabase() = offlineRepository
-            ?.getTeacherLessonsForDate(surname, dateKey)
-            .orEmpty()
-            .filter { it.dayOfWeek == selectedDateDow || it.dayOfWeek == 0 }
-            .map {
-                com.politex.data.network.TeacherSlot(
-                    lessonNumber = it.lessonNumber,
-                    groups = it.groups.split(", ").filter { g -> g.isNotBlank() },
-                    subject = it.subject,
-                    room = it.room,
-                    dayOfWeek = it.dayOfWeek,
-                )
-            }
-
-        if (offlineRepository != null) {
-
-            errorMessage = ""
-            var result = fromDatabase()
-            if (result.isEmpty()) {
-                loading = true
-                offlineRepository.syncTeacherScheduleForDate(targetCalendar).fold(
-                    onSuccess = { result = fromDatabase() },
-                    onFailure = { e ->
-                        errorMessage =
-                            when {
-                                e.message?.contains("не найден") == true ->
-                                    "Расписание на $dateKey ещё не опубликовано"
-                                else -> "Не удалось загрузить расписание (проверьте интернет)"
+        // AA5: loading под try/finally — ни отмена эффекта (смена дня), ни исключение
+        // больше не оставляют вечный спиннер; ошибка сети становится честным текстом.
+        loading = true
+        try {
+            val result =
+                loadTeacherDay(
+                    dateKey = dateKey,
+                    fromDatabase = {
+                        repository
+                            .getTeacherLessonsForDate(surname, dateKey)
+                            .filter { it.dayOfWeek == selectedDateDow || it.dayOfWeek == 0 }
+                            .map {
+                                com.politex.data.network.TeacherSlot(
+                                    lessonNumber = it.lessonNumber,
+                                    groups = it.groups.split(", ").filter { g -> g.isNotBlank() },
+                                    subject = it.subject,
+                                    room = it.room,
+                                    dayOfWeek = it.dayOfWeek,
+                                )
                             }
                     },
+                    sync = { repository.syncTeacherScheduleForDate(targetCalendar) },
                 )
-                loading = false
-            }
-            slots = result
-            return@LaunchedEffect
+            slots = result.slots
+            errorMessage = result.error
+        } finally {
+            loading = false
         }
-
-        val parsedAll =
-            cache[dateKey] ?: run {
-                loading = true
-                errorMessage = ""
-                val fetched = client.fetchTeacherSchedule(targetCalendar)
-                loading = false
-                fetched.fold(
-                    onSuccess = { parsed ->
-                        cache[dateKey] = parsed
-                        parsed
-                    },
-                    onFailure = { e ->
-                        errorMessage =
-                            when {
-                                e.message?.contains("не найден") == true -> "Расписание на $dateKey ещё не опубликовано"
-                                else -> "Не удалось загрузить расписание (проверьте интернет)"
-                            }
-                        null
-                    },
-                )
-            } ?: return@LaunchedEffect
-
-        val allSlots =
-            parsedAll.entries
-                .firstOrNull {
-                    com.politex.data.repository.TeacherInsights
-                        .surnameOf(it.key) == surname
-                }?.value
-                .orEmpty()
-
-        val docDow = allSlots.firstOrNull()?.dayOfWeek ?: 0
-        slots =
-            when {
-                docDow == 0 -> emptyList()
-                docDow == selectedDateDow -> allSlots
-                else -> emptyList()
-            }
     }
 
     if (showCalendar) {
