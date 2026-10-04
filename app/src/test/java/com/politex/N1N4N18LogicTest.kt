@@ -177,32 +177,6 @@ class N1N4N18LogicTest {
     }
 
     @Test
-    fun `N18 ключи markerLessonTypes совпадают с markerLessonNumbers`() {
-        val day = HomeworkMarkers.DayContext(dayIso = "2026-10-05", isToday = false, isPast = false)
-        val lessons = listOf(lesson(1, "ТОЭ", "05.10.2026", 1), lesson(2, "Физика", "05.10.2026", 1))
-        val tasks = listOf(task("ТОЭ", "Домашнее задание", "2026-10-05"))
-
-        val numbers =
-            HomeworkMarkers.markerLessonNumbers(
-                dayLessons = lessons,
-                day = day,
-                nowMillis = 0L,
-                weeklyLessonsByDow = emptyMap(),
-                pendingTasks = tasks,
-            )
-        val types =
-            HomeworkMarkers.markerLessonTypes(
-                dayLessons = lessons,
-                day = day,
-                nowMillis = 0L,
-                weeklyLessonsByDow = emptyMap(),
-                pendingTasks = tasks,
-            )
-        assertEquals(numbers, types.keys)
-        assertEquals(setOf(1), numbers)
-    }
-
-    @Test
     fun `N18 прошедший день — ни номеров, ни типов`() {
         val past = HomeworkMarkers.DayContext(dayIso = "2026-10-01", isToday = false, isPast = true)
         val lessons = listOf(lesson(1, "ТОЭ", "01.10.2026", 4))

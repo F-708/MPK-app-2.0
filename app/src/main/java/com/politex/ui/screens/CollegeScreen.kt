@@ -74,6 +74,7 @@ import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
+import com.politex.ui.util.rememberToday
 import com.politex.util.MpkCurriculum
 import java.util.Calendar
 
@@ -1659,8 +1660,11 @@ private fun TeacherScheduleTab(
 
     val cache = remember { mutableMapOf<String, Map<String, List<com.politex.data.network.TeacherSlot>>>() }
 
+    // QA#7: ключ today (rememberToday) — после полуночи/возврата из фона «сегодня/завтра»
+    // пересчитывается, а не остаётся вчерашним на всю жизнь композиции
+    val today = rememberToday()
     val targetCalendar =
-        remember(dayOffset, customDate) {
+        remember(dayOffset, customDate, today) {
             teacherTargetCalendar(dayOffset, customDate)
         }
 
@@ -1785,7 +1789,7 @@ private fun TeacherScheduleTab(
 
     val dateTitle =
         remember(targetCalendar) {
-            val sdf = java.text.SimpleDateFormat("dd.MM.yyyy (EEEE)", java.util.Locale("ru"))
+            val sdf = java.text.SimpleDateFormat("dd.MM.yyyy (EEEE)", java.util.Locale.forLanguageTag("ru"))
             sdf.format(targetCalendar.time).replaceFirstChar { it.uppercase() }
         }
 

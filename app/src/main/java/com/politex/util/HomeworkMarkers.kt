@@ -35,41 +35,10 @@ object HomeworkMarkers {
         .parseDotDate(date)
         ?.timeInMillis ?: 0L
 
-    fun markerLessonNumbers(
-        dayLessons: List<LessonEntity>,
-        day: DayContext,
-        nowMillis: Long,
-        weeklyLessonsByDow: Map<Int, List<LessonEntity>>,
-        pendingTasks: List<StudentTaskEntity>,
-    ): Set<Int> {
-        if (day.isPast || dayLessons.isEmpty() || pendingTasks.isEmpty()) return emptySet()
-
-        val result = mutableSetOf<Int>()
-        for (lesson in dayLessons) {
-            val subject = lesson.officialSubjectName
-            val matched =
-                pendingTasks.any { task ->
-                    val deadline = task.deadlineDate.trim()
-                    if (!subjectsMatch(subject, task.subjectName)) {
-                        false
-                    } else if (deadline.isNotBlank()) {
-                        sameIsoDay(deadline, day.dayIso)
-                    } else {
-                        val targetIso = resolveNextOccurrenceIso(task.createdAt, subject, weeklyLessonsByDow)
-                        targetIso != null && sameIsoDay(targetIso, day.dayIso)
-                    }
-                }
-            if (matched && !lessonPassed(lesson, day, nowMillis)) {
-                result += lesson.lessonNumber
-            }
-        }
-        return result
-    }
-
     /**
      * N18: для каждого урока (по номеру) с домашкой — СПИСОК типов заданий на этот день.
-     * Тот же матчинг, что в [markerLessonNumbers], но собирает [TaskType] для цветных
-     * бейджей (домашка/лаба/курсовая…). Типы внутри урока дедуплицируются.
+     * Собирает [TaskType] для цветных бейджей (домашка/лаба/курсовая…). Типы внутри урока
+     * дедуплицируются.
      */
     fun markerLessonTypes(
         dayLessons: List<LessonEntity>,
@@ -126,7 +95,7 @@ object HomeworkMarkers {
         val created = (Calendar.getInstance().apply { timeInMillis = createdAt }).clone() as Calendar
         for (offset in 0 until 28) {
             val cal = (created.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, offset) }
-            val dow = calendarDow(cal)
+            val dow = Dow.of(cal)
             val dayLessons = weeklyLessonsByDow[dow] ?: continue
             val subjectLessons =
                 dayLessons
@@ -184,14 +153,4 @@ object HomeworkMarkers {
     ): Boolean = normalizeIso(a) == normalizeIso(b) && normalizeIso(a).isNotBlank()
 
     private fun normalizeIso(value: String): String = value.trim().replace("-", ".").replace("/", ".")
-
-    private fun calendarDow(cal: Calendar): Int = when (cal.get(Calendar.DAY_OF_WEEK)) {
-        Calendar.MONDAY -> 1
-        Calendar.TUESDAY -> 2
-        Calendar.WEDNESDAY -> 3
-        Calendar.THURSDAY -> 4
-        Calendar.FRIDAY -> 5
-        Calendar.SATURDAY -> 6
-        else -> 7
-    }
 }

@@ -221,16 +221,9 @@ object BellCountdownNotifier {
      */
     private fun lessonsEndedMinuteToday(context: Context): Int? {
         val cal = Calendar.getInstance()
-        val dow =
-            when (cal.get(Calendar.DAY_OF_WEEK)) {
-                Calendar.MONDAY -> 1
-                Calendar.TUESDAY -> 2
-                Calendar.WEDNESDAY -> 3
-                Calendar.THURSDAY -> 4
-                Calendar.FRIDAY -> 5
-                Calendar.SATURDAY -> 6
-                else -> return null
-            }
+        // QA#18: Dow.of, но семантика «выходной» сохранена явно — воскресенье = тишина (null)
+        val dow = Dow.of(cal)
+        if (dow == 7) return null
         val bells = CollegeBellSchedule.getBellsForDay(dow)
         return when (getScope(context)) {
             Scope.COLLEGE -> bells.lastOrNull { !it.isInfoHour }?.endMinutes
@@ -303,16 +296,9 @@ object BellCountdownNotifier {
         mode: com.politex.widget.CountdownMode,
     ): Triple<Long, String, Int>? {
         val cal = Calendar.getInstance()
-        val dow =
-            when (cal.get(Calendar.DAY_OF_WEEK)) {
-                Calendar.MONDAY -> 1
-                Calendar.TUESDAY -> 2
-                Calendar.WEDNESDAY -> 3
-                Calendar.THURSDAY -> 4
-                Calendar.FRIDAY -> 5
-                Calendar.SATURDAY -> 6
-                else -> return null
-            }
+        // QA#18: Dow.of, но семантика «выходной» сохранена явно — воскресенье = null
+        val dow = Dow.of(cal)
+        if (dow == 7) return null
         val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
         val bells = CollegeBellSchedule.getBellsForDay(dow)
         val lastGroupLesson =
@@ -393,10 +379,9 @@ object BellCountdownNotifier {
             views.setTextViewText(R.id.nbell_unit, "")
         }
         views.setTextViewText(R.id.nbell_label, info.second)
-        views.setViewVisibility(
-            R.id.nbell_app,
-            if (style == Style.WITH_APP_NAME) android.view.View.VISIBLE else android.view.View.GONE,
-        )
+        // QA#17: Style.from маппит WITH_APP_NAME → COMPACT (W26), стиль «Мой Политех»
+        // недостижим — шапка приложения в кастомном виде всегда скрыта.
+        views.setViewVisibility(R.id.nbell_app, android.view.View.GONE)
         views.setViewVisibility(
             R.id.nbell_progress,
             if (style == Style.WITH_PROGRESS && hasProgress) android.view.View.VISIBLE else android.view.View.GONE,
@@ -473,6 +458,14 @@ object BellCountdownNotifier {
         val hasProgress: Boolean,
     )
 
+    /**
+     * QA#20: длина урока для полосы прогресса (WITH_PROGRESS). Стандартный урок колледжа —
+     * 45 мин (STANDARD_BELLS); считать точную длину из bell.start/end не даёт структура info
+     * (минуты до звонка, а не граница урока). Если появятся уроки другой длины — брать
+     * длительность из BellItem.
+     */
+    private const val PROGRESS_LESSON_MINUTES = 45L
+
     private fun buildContent(
         info: Triple<Long, String, Int>?,
         style: Style,
@@ -484,7 +477,9 @@ object BellCountdownNotifier {
 
         val (minutesLeft, label, _) = info
 
-        val progress = ((45 - minutesLeft).coerceIn(0, 45) * 100 / 45).toInt()
+        val progress =
+            ((PROGRESS_LESSON_MINUTES - minutesLeft).coerceIn(0, PROGRESS_LESSON_MINUTES) * 100 /
+                PROGRESS_LESSON_MINUTES).toInt()
 
         return Content(
             title = label.replaceFirstChar { it.uppercase() } + ": $valueText",

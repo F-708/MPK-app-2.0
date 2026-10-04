@@ -9,6 +9,7 @@ import android.content.Intent
 import android.widget.RemoteViews
 import com.politex.R
 import com.politex.data.local.entity.LessonEntity
+import kotlinx.coroutines.launch
 
 class TodayScheduleWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(
@@ -16,8 +17,16 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
         manager: AppWidgetManager,
         ids: IntArray,
     ) {
-        ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
-        WidgetAlarm.scheduleNext(context)
+        // QA#2: buildViews читает Room (WidgetData.todayLessons) — пересборка на IO через goAsync
+        val pending = goAsync()
+        WidgetUpdateHelper.widgetScope.launch {
+            try {
+                ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
+                WidgetAlarm.scheduleNext(context)
+            } finally {
+                pending.finish()
+            }
+        }
     }
 
     override fun onEnabled(context: Context) = WidgetAlarm.scheduleNext(context)

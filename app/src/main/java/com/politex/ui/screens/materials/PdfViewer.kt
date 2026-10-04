@@ -59,6 +59,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -99,7 +100,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -210,18 +210,22 @@ fun MaterialPdfViewer(
     val scope = rememberCoroutineScope()
     val file = remember(item.uriPath) { File(item.uriPath) }
 
-    // Один файл при входе на экран: открытие дешёвое, зато pageCount известен сразу.
-    val handle =
-        remember(file) {
-            runCatching {
-                val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-                pfd to PdfRenderer(pfd)
-            }.getOrNull()
+    // QA#14 (E2-паттерн): открытие ParcelFileDescriptor + PdfRenderer — дисковая операция,
+    // уходим с main на IO через produceState. null = ещё открывается; Result.failure = Ф5.
+    val handleState by produceState<Result<Pair<ParcelFileDescriptor, PdfRenderer>>?>(
+        initialValue = null,
+        key1 = file,
+    ) {
+        value = runCatching {
+            val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            pfd to PdfRenderer(pfd)
         }
+    }
+    val handle = handleState
 
     DisposableEffect(handle) {
         onDispose {
-            handle?.let { (pfd, renderer) ->
+            handle?.getOrNull()?.let { (pfd, renderer) ->
                 runCatching { renderer.close() }
                 runCatching { pfd.close() }
             }
@@ -229,6 +233,13 @@ fun MaterialPdfViewer(
     }
 
     if (handle == null) {
+        // открытие занимает миллисекунды — пустой экран в цвет фона, без мигания плашкой
+        Box(modifier = modifier.fillMaxSize().background(ColorSurfaceHighlight))
+        return
+    }
+
+    val opened = handle.getOrNull()
+    if (opened == null) {
         // W16: и в аварийном пути — полноэкранный режим (баннер/навигация уже скрыты),
         // поэтому шапка обязана сама нарисовать отступ под статусбар
         Column(modifier = modifier.fillMaxSize().background(ColorSurfaceHighlight)) {
@@ -255,7 +266,7 @@ fun MaterialPdfViewer(
         return
     }
 
-    val renderer = handle.second
+    val renderer = opened.second
     val pageCount = renderer.pageCount
     val bookmarks by dao.getBookmarksFlow(item.id).collectAsState(initial = emptyList())
     val listState =
@@ -316,15 +327,25 @@ fun MaterialPdfViewer(
         persistPages(pages)
     }
 
-    // V9: синхронный flush ДО pop — иначе штрих, нарисованный <500мс назад, теряется:
-    // при выходе compose-scope отменяется и дебаунс-сохранение не успевает.
+    // V9/QA#14: flush БЕЗ runBlocking на main — upsert уходит корутиной на IO, выход
+    // сразу после дописи. Флаг flushing держит BackHandler включённым, пока идёт flush:
+    // второй «назад» не pop'нет композицию (и не отменит scope) до записи штрихов.
+    var flushing by remember { mutableStateOf(false) }
     val flushAndBack: () -> Unit = {
-        val pages = dirtyPages.toList()
-        dirtyPages.clear()
-        if (pages.isNotEmpty()) runBlocking(Dispatchers.IO) { persistPages(pages) }
-        onBack()
+        if (!flushing) {
+            flushing = true
+            val pages = dirtyPages.toList()
+            dirtyPages.clear()
+            scope.launch {
+                try {
+                    if (pages.isNotEmpty()) withContext(Dispatchers.IO) { persistPages(pages) }
+                } finally {
+                    onBack()
+                }
+            }
+        }
     }
-    BackHandler(enabled = dirtyPages.isNotEmpty()) { flushAndBack() }
+    BackHandler(enabled = dirtyPages.isNotEmpty() || flushing) { flushAndBack() }
 
     // M2: запоминаем первую видимую страницу — «где остановился» переживает смерть процесса.
     LaunchedEffect(listState, item.id) {

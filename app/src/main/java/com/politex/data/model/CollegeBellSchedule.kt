@@ -99,22 +99,16 @@ object CollegeBellSchedule {
 
     fun getBellsForDay(dayOfWeek: Int): List<BellItem> = getBellsForType(getTypeForDay(dayOfWeek))
 
+    /**
+     * QA#18: [dayOfWeek] — в формате расписания (1=Пн..7=Вс), дефолт через Dow.of.
+     * Раньше параметр молча считался Calendar.DAY_OF_WEEK-константой и конвертировался
+     * when-блоком — вызовы с расписным dow получали другой день.
+     */
     fun getCurrentSlot(
         currentMinutes: Int,
-        dayOfWeek: Int = Calendar.getInstance().get(Calendar.DAY_OF_WEEK),
+        dayOfWeek: Int = com.politex.util.Dow.of(Calendar.getInstance()),
     ): BellItem? {
-        val convertedDay =
-            when (dayOfWeek) {
-                Calendar.MONDAY -> 1
-                Calendar.TUESDAY -> 2
-                Calendar.WEDNESDAY -> 3
-                Calendar.THURSDAY -> 4
-                Calendar.FRIDAY -> 5
-                Calendar.SATURDAY -> 6
-                Calendar.SUNDAY -> 7
-                else -> 1
-            }
-        val bells = getBellsForDay(convertedDay)
+        val bells = getBellsForDay(dayOfWeek)
         return bells.firstOrNull { currentMinutes in it.startMinutes..it.endMinutes }
     }
 

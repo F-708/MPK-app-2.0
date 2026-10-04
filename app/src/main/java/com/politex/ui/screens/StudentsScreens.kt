@@ -67,11 +67,13 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
+import com.politex.ui.util.rememberNowMinutes
+import com.politex.ui.util.rememberToday
+import com.politex.util.Dow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Calendar
 
 private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
@@ -369,21 +371,11 @@ fun StudentCardScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val now = remember { Calendar.getInstance() }
-    val dow = remember {
-        when (now.get(Calendar.DAY_OF_WEEK)) {
-            Calendar.MONDAY -> 1
-            Calendar.TUESDAY -> 2
-            Calendar.WEDNESDAY -> 3
-            Calendar.THURSDAY -> 4
-            Calendar.FRIDAY -> 5
-            Calendar.SATURDAY -> 6
-            else -> 7
-        }
-    }
-    val minutes = remember {
-        now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-    }
+    // QA#5: «сегодня»/минуты не замораживаем на время жизни композиции — rememberToday
+    // пересчитывается на ON_RESUME (полуночь/возврат из фона), rememberNowMinutes тикает
+    val today = rememberToday()
+    val dow = remember(today) { Dow.of(today) }
+    val minutes = rememberNowMinutes()
 
     val allGroupLessons by scheduleRepository
         .getAllLessonsForGroup(student.group)

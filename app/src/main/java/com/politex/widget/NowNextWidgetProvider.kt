@@ -11,7 +11,9 @@ import com.politex.R
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.ui.util.RouteStartResolver
+import com.politex.util.Dow
 import com.politex.util.SubjectFormatter
+import kotlinx.coroutines.launch
 
 class NowNextWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(
@@ -19,8 +21,17 @@ class NowNextWidgetProvider : AppWidgetProvider() {
         manager: AppWidgetManager,
         ids: IntArray,
     ) {
-        ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
-        WidgetAlarm.scheduleNext(context)
+        // QA#2: buildViews читает Room (WidgetData.todayLessons) — нельзя на main из
+        // onReceive. goAsync держит процесс живым, пересборка уходит на IO.
+        val pending = goAsync()
+        WidgetUpdateHelper.widgetScope.launch {
+            try {
+                ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
+                WidgetAlarm.scheduleNext(context)
+            } finally {
+                pending.finish()
+            }
+        }
     }
 
     override fun onEnabled(context: Context) = WidgetAlarm.scheduleNext(context)
@@ -98,12 +109,12 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             } else if (current != null) {
                 views.setTextViewText(R.id.tv_now_label, "СЕЙЧАС")
                 views.setTextViewText(R.id.tv_now_subject, SubjectFormatter.getShortName(current.subjectRaw))
-                views.setTextViewText(R.id.tv_now_details, detailsOf(current, showRoom))
+                views.setTextViewText(R.id.tv_now_details, detailsOf(current))
                 applyRoomChip(context, views, R.id.tv_now_room, current, showRoom, appWidgetId, "now", nowFromRoom)
                 if (next != null) {
                     views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                     views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next.subjectRaw))
-                    views.setTextViewText(R.id.tv_next_details, detailsOf(next, showRoom))
+                    views.setTextViewText(R.id.tv_next_details, detailsOf(next))
                     applyRoomChip(context, views, R.id.tv_next_room, next, showRoom, appWidgetId, "next", nextFromRoom)
                 } else {
                     views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
@@ -129,7 +140,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 // current == null && next == null исключён выше → next здесь всегда есть
                 views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                 views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next!!.subjectRaw))
-                views.setTextViewText(R.id.tv_next_details, detailsOf(next, showRoom))
+                views.setTextViewText(R.id.tv_next_details, detailsOf(next))
                 applyRoomChip(context, views, R.id.tv_next_room, next, showRoom, appWidgetId, "next", nextFromRoom)
             }
 
@@ -149,10 +160,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             return views
         }
 
-        private fun detailsOf(
-            lesson: LessonEntity,
-            showRoom: Boolean,
-        ): String = "${lesson.timeStart}–${lesson.timeEnd}"
+        private fun detailsOf(lesson: LessonEntity): String = "${lesson.timeStart}–${lesson.timeEnd}"
 
         /**
          * Б7: кабинет в виджете — отдельная кликабельная кнопка, а не хвост строки со
@@ -213,19 +221,7 @@ object WidgetData {
         return cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
     }
 
-    fun dayOfWeek(context: Context): Int = when (
-        java.util.Calendar
-            .getInstance()
-            .get(java.util.Calendar.DAY_OF_WEEK)
-    ) {
-        java.util.Calendar.MONDAY -> 1
-        java.util.Calendar.TUESDAY -> 2
-        java.util.Calendar.WEDNESDAY -> 3
-        java.util.Calendar.THURSDAY -> 4
-        java.util.Calendar.FRIDAY -> 5
-        java.util.Calendar.SATURDAY -> 6
-        else -> 7
-    }
+    fun dayOfWeek(context: Context): Int = Dow.of(java.util.Calendar.getInstance())
 
     // O1: результат не зависит от appWidgetId и меняется раз в минуту, а runBlocking в Room
     // на каждом пересборе виджета = «виджет пропал». Кэш по (минута + группа).
@@ -242,13 +238,7 @@ object WidgetData {
         val minute = minuteOfDay(context)
         if (minute == cacheMinute && group == cacheGroup) return cacheLessons
         val dow = dayOfWeek(context)
-        val cal = java.util.Calendar.getInstance()
-        val todayString =
-            "%02d.%02d.%04d".format(
-                cal.get(java.util.Calendar.DAY_OF_MONTH),
-                cal.get(java.util.Calendar.MONTH) + 1,
-                cal.get(java.util.Calendar.YEAR),
-            )
+        val todayString = todayDateString()
         val result =
             try {
                 kotlinx.coroutines.runBlocking {
@@ -270,16 +260,34 @@ object WidgetData {
     }
 
     /**
-     * WID-01: только СЕГОДНЯШНИЕ строки (dateString == todayString, формат dd.MM.yyyy —
-     * фиксированная ширина, сравнение через == корректно). Если сегодняшней синхронизации
-     * не было — фолбэк на недельный шаблон (dateString.isBlank()). Чужие даты не показываем
-     * никогда: нет ни того, ни другого — пустой список.
+     * QA#10: единое «сегодня» для всех виджетов — dd.MM.yyyy, Locale.ROOT. Локаль устройства
+     * может давать не-ASCII цифры («%02d».format без локали), и строковое сравнение дат ломается.
+     */
+    internal fun todayDateString(): String {
+        val cal = java.util.Calendar.getInstance()
+        return String.format(
+            java.util.Locale.ROOT,
+            "%02d.%02d.%04d",
+            cal.get(java.util.Calendar.DAY_OF_MONTH),
+            cal.get(java.util.Calendar.MONTH) + 1,
+            cal.get(java.util.Calendar.YEAR),
+        )
+    }
+
+    /** QA#10: dateString из БД встречается в двух видах (dd.MM.yyyy / dd-MM-yyyy) — к одному перед сравнением. */
+    internal fun normalizeDate(s: String): String = s.replace('-', '.')
+
+    /**
+     * WID-01: только СЕГОДНЯШНИЕ строки (dateString == todayString после нормализации,
+     * формат dd.MM.yyyy — фиксированная ширина, сравнение через == корректно). Если сегодняшней
+     * синхронизации не было — фолбэк на недельный шаблон (dateString.isBlank()). Чужие даты
+     * не показываем никогда: нет ни того, ни другого — пустой список.
      */
     fun filterTodayLessons(
         all: List<LessonEntity>,
         todayString: String,
     ): List<LessonEntity> {
-        val today = all.filter { it.dateString == todayString }
+        val today = all.filter { normalizeDate(it.dateString) == todayString }
         val source = if (today.isNotEmpty()) today else all.filter { it.dateString.isBlank() }
         return source.sortedBy { it.lessonNumber }
     }

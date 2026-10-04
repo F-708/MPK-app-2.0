@@ -13,13 +13,23 @@ import com.politex.R
 import com.politex.data.model.BellItem
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.util.Dow
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
 class BellCountdownWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        updateWidgets(context, appWidgetManager, appWidgetIds)
-        WidgetAlarm.scheduleNext(context)
+        // QA#2: buildViews читает Room (lastGroupLessonForToday) — нельзя на main из
+        // onReceive. goAsync держит процесс живым, пересборка уходит на IO.
+        val pending = goAsync()
+        WidgetUpdateHelper.widgetScope.launch {
+            try {
+                updateWidgets(context, appWidgetManager, appWidgetIds)
+                WidgetAlarm.scheduleNext(context)
+            } finally {
+                pending.finish()
+            }
+        }
     }
 
     override fun onEnabled(context: Context) {
@@ -65,15 +75,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             mode: CountdownMode = CountdownMode.GROUP_LESSONS,
         ): Triple<Long, String, Int>? {
             val cal = java.util.Calendar.getInstance()
-            val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
-                Calendar.MONDAY -> 1
-                Calendar.TUESDAY -> 2
-                Calendar.WEDNESDAY -> 3
-                Calendar.THURSDAY -> 4
-                Calendar.FRIDAY -> 5
-                Calendar.SATURDAY -> 6
-                else -> 7
-            }
+            val dow = Dow.of(cal)
             val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
             val bells = CollegeBellSchedule.getBellsForDay(dow)
 
@@ -239,21 +241,9 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
         fun lastGroupLessonForToday(context: Context, cal: Calendar): Int? {
             val group = WidgetUpdateHelper.getSelectedGroup(context)
             if (group.isBlank()) return null
-            val dow = when (cal.get(Calendar.DAY_OF_WEEK)) {
-                Calendar.MONDAY -> 1
-                Calendar.TUESDAY -> 2
-                Calendar.WEDNESDAY -> 3
-                Calendar.THURSDAY -> 4
-                Calendar.FRIDAY -> 5
-                Calendar.SATURDAY -> 6
-                else -> 7
-            }
-            val todayString = String.format(
-                "%02d.%02d.%d",
-                cal.get(Calendar.DAY_OF_MONTH),
-                cal.get(Calendar.MONTH) + 1,
-                cal.get(Calendar.YEAR),
-            )
+            val dow = Dow.of(cal)
+            // QA#10: общий формат даты с NowNext (Locale.ROOT, dd.MM.yyyy) и общая нормализация
+            val todayString = WidgetData.todayDateString()
             // BEL-04/WID-04: «последний урок группы сегодня» не меняется в течение дня —
             // ключ БЕЗ минут. Раньше ключ включал HH:mm и кэш промахивался каждую минуту:
             // runBlocking+Room 1440 раз в день при живом сервисе вместо одного запроса.
@@ -264,7 +254,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                     val lessons = com.politex.data.local.MpkDatabase.getInstance(context)
                         .lessonDao().getLessonsForDaySync(group, dow)
                     val forToday = lessons.filter {
-                        it.dateString.isNotBlank() && it.dateString.replace("-", ".") == todayString
+                        it.dateString.isNotBlank() && WidgetData.normalizeDate(it.dateString) == todayString
                     }
                     // Дневные строки на сегодняшнюю дату имеют приоритет; иначе — регулярные по дню недели.
                     if (forToday.isNotEmpty()) {
@@ -433,10 +423,6 @@ enum class CountdownMode(val title: String, val description: String) {
                 .putString(PREF_PREFIX + appWidgetId, mode.name)
                 .apply()
         }
-
-        fun remove(context: Context, appWidgetId: Int) {
-            WidgetUpdateHelper.getPrefs(context).edit().remove(PREF_PREFIX + appWidgetId).apply()
-        }
     }
 }
 
@@ -497,10 +483,6 @@ enum class WidgetStyle(
                 .edit()
                 .putString(PREF_PREFIX + appWidgetId, style.name)
                 .apply()
-        }
-
-        fun remove(context: Context, appWidgetId: Int) {
-            WidgetUpdateHelper.getPrefs(context).edit().remove(PREF_PREFIX + appWidgetId).apply()
         }
     }
 }
@@ -587,26 +569,35 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             ACTION_TICK -> {
-                // X29(а): если полный update всех виджетов давно не происходил (onUpdate не
-                // пришёл, doze/OEM сдвинули будильник, Today/Bells пропустили границу урока) —
-                // принудительно пересобираем ВСЕ четыре, а не только минутные.
-                if (WidgetUpdateHelper.isFullUpdateStale(context)) {
-                    WidgetUpdateHelper.updateAllWidgets(context)
-                } else {
-                    // O1: если BellTimerService ЖИВ, он уже пересобрал BellCountdown на этой же
-                    // границе минуты — повторно не делаем, обновляем только NowNext (сервис его не трогает).
-                    // WID-02: но сервис убивается OEM (battery saver на Xiaomi/Samsung) даже как FGS —
-                    // тогда countdown встал бы до следующего неточного будильника. Поэтому если сервис
-                    // НЕ запущен, пересобираем ОБА минутных виджета сами (будильник = страховка).
-                    val serviceAlive = com.politex.util.BellCountdownNotifier.isEnabled(context) &&
-                        com.politex.util.BellTimerService.isRunning
-                    if (serviceAlive) {
-                        NowNextWidgetProvider.updateAll(context)
-                    } else {
-                        WidgetUpdateHelper.updateMinuteWidgets(context)
+                // QA#2: пересборка читает Room (runBlocking) — на main из onReceive нельзя.
+                // goAsync() + IO-scope: минутный тик/TimeChanged больше не блокируют main.
+                val pending = goAsync()
+                WidgetUpdateHelper.widgetScope.launch {
+                    try {
+                        // X29(а): если полный update всех виджетов давно не происходил (onUpdate не
+                        // пришёл, doze/OEM сдвинули будильник, Today/Bells пропустили границу урока) —
+                        // принудительно пересобираем ВСЕ четыре, а не только минутные.
+                        if (WidgetUpdateHelper.isFullUpdateStale(context)) {
+                            WidgetUpdateHelper.updateAllWidgets(context)
+                        } else {
+                            // O1: если BellTimerService ЖИВ, он уже пересобрал BellCountdown на этой же
+                            // границе минуты — повторно не делаем, обновляем только NowNext (сервис его не трогает).
+                            // WID-02: но сервис убивается OEM (battery saver на Xiaomi/Samsung) даже как FGS —
+                            // тогда countdown встал бы до следующего неточного будильника. Поэтому если сервис
+                            // НЕ запущен, пересобираем ОБА минутных виджета сами (будильник = страховка).
+                            val serviceAlive = com.politex.util.BellCountdownNotifier.isEnabled(context) &&
+                                com.politex.util.BellTimerService.isRunning
+                            if (serviceAlive) {
+                                NowNextWidgetProvider.updateAll(context)
+                            } else {
+                                WidgetUpdateHelper.updateMinuteWidgets(context)
+                            }
+                        }
+                        WidgetAlarm.scheduleNext(context)
+                    } finally {
+                        pending.finish()
                     }
                 }
-                WidgetAlarm.scheduleNext(context)
             }
             Intent.ACTION_BOOT_COMPLETED -> {
                 WidgetAlarm.scheduleNext(context)

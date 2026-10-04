@@ -6,6 +6,7 @@ import android.content.Intent
 import com.politex.util.BellCountdownNotifier
 import com.politex.util.BellTimerService
 import com.politex.worker.MpkWorkManagerHelper
+import kotlinx.coroutines.launch
 
 /**
  * X43: пользователь сменил дату/время/часовой пояс — виджеты и будильники зависают в
@@ -30,7 +31,18 @@ class TimeChangedReceiver : BroadcastReceiver() {
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_DATE_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED,
-            -> onTimeChanged(context)
+            -> {
+                // QA#2: пересборка виджетов читает Room (runBlocking) — на main из onReceive
+                // нельзя. goAsync() держит процесс, работа уходит на IO.
+                val pending = goAsync()
+                WidgetUpdateHelper.widgetScope.launch {
+                    try {
+                        onTimeChanged(context)
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
         }
     }
 

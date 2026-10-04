@@ -60,7 +60,7 @@ import com.politex.ui.util.bouncyClickable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.max
 import kotlin.math.min
@@ -191,13 +191,25 @@ fun MaterialImageViewer(
     }
 
     val currentPage = pagerState.currentPage
+    // QA#14: flush БЕЗ runBlocking на main — upsert уходит корутиной на IO, выход сразу
+    // после дописи. Флаг flushing держит BackHandler включённым, пока идёт flush:
+    // второй «назад» не pop'нет композицию (и не отменит scope) до записи штрихов.
+    var flushing by remember { mutableStateOf(false) }
     val flushAndBack: () -> Unit = {
-        val pages = dirtyPages.toList()
-        dirtyPages.clear()
-        if (pages.isNotEmpty()) runBlocking(Dispatchers.IO) { persistPages(pages) }
-        onBack()
+        if (!flushing) {
+            flushing = true
+            val pages = dirtyPages.toList()
+            dirtyPages.clear()
+            scope.launch {
+                try {
+                    if (pages.isNotEmpty()) withContext(Dispatchers.IO) { persistPages(pages) }
+                } finally {
+                    onBack()
+                }
+            }
+        }
     }
-    BackHandler(enabled = dirtyPages.isNotEmpty()) { flushAndBack() }
+    BackHandler(enabled = dirtyPages.isNotEmpty() || flushing) { flushAndBack() }
 
     Column(modifier = modifier.fillMaxSize().background(Color.Black)) {
         MaterialViewerTopBar(

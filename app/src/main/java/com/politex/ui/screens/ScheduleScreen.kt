@@ -379,7 +379,9 @@ fun ScheduleScreen(
     // selectedDateString), а слоты «сегодня/завтра» всегда разные дни недели: день
     // поменялся — ключи тоже. Лишний ключ гонял fuzzy-матчинг на каждый тап вкладки.
     val homeworkByLesson: Map<Int, List<TaskType>> =
-        remember(lessons, pendingTasks, activeDayOfWeek, selectedDateString) {
+        // QA#20: nowMinutes в ключах — System.currentTimeMillis() внутри remember иначе
+        // замерзал до смены остальных ключей и «прошедшие уроки» переставали гаснуть
+        remember(lessons, pendingTasks, activeDayOfWeek, selectedDateString, nowMinutes) {
             val now = System.currentTimeMillis()
             val dayIso =
                 com.politex.util.HomeworkMarkers

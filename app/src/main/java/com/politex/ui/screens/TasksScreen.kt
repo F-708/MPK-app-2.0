@@ -1219,33 +1219,9 @@ fun TaskEditDialog(
     )
 }
 
-internal fun isoDate(millis: Long): String {
-    val c =
-        java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
-            timeInMillis = millis
-        }
-    return String.format(
-        java.util.Locale.ROOT,
-        "%04d-%02d-%02d",
-        c.get(java.util.Calendar.YEAR),
-        c.get(java.util.Calendar.MONTH) + 1,
-        c.get(java.util.Calendar.DAY_OF_MONTH),
-    )
-}
-
 internal fun formatDateForShow(raw: String): String {
     val m = Regex("""^(\d{4})-(\d{2})-(\d{2})$""").find(raw.trim()) ?: return raw
     return "${m.groupValues[3]}.${m.groupValues[2]}.${m.groupValues[1]}"
-}
-
-internal fun millisFromIso(iso: String): Long? {
-    val m = Regex("""^(\d{4})-(\d{2})-(\d{2})$""").find(iso.trim()) ?: return null
-    val cal =
-        java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
-            clear()
-            set(m.groupValues[1].toInt(), m.groupValues[2].toInt() - 1, m.groupValues[3].toInt())
-        }
-    return cal.timeInMillis
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

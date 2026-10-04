@@ -280,11 +280,6 @@ class ScheduleRepository(
 
     fun getDistinctDates(groupName: String): Flow<List<String>> = lessonDao.getDistinctDatesForGroup(groupName).flowOn(Dispatchers.IO)
 
-    fun searchLessons(
-        groupName: String,
-        query: String,
-    ): Flow<List<LessonEntity>> = lessonDao.searchLessonsForGroup(groupName, query).flowOn(Dispatchers.IO)
-
     /** Пары в кабинете на дату (для карты колледжа, «Подробнее» в RoomPanel). */
     fun getLessonsForRoomOnDate(
         room: String,

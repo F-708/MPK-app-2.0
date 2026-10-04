@@ -80,7 +80,7 @@ object MpkScheduleParser {
     )
 
     private val DATE_IN_TEXT_REGEX = Regex(
-        "([0-3]?[0-9])[.\\-/]([0-1]?[0-9])[.\\-/](202[0-9])",
+        "([0-3]?[0-9])[.\\-/]([0-1]?[0-9])[.\\-/](20[0-9]{2})",
     )
 
     /**
@@ -88,7 +88,7 @@ object MpkScheduleParser {
      * Все сравнения дат в приложении идут через этот разбор, не по строкам.
      */
     fun parseDotDate(date: String): java.util.Calendar? {
-        val iso = Regex("\\s*(202[0-9])-([0-1]?[0-9])-([0-3]?[0-9])\\s*").find(date)
+        val iso = Regex("\\s*(20[0-9]{2})-([0-1]?[0-9])-([0-3]?[0-9])\\s*").find(date)
         if (iso != null) {
             val cal = java.util.Calendar.getInstance()
             cal.clear()
@@ -102,15 +102,7 @@ object MpkScheduleParser {
         return cal
     }
 
-    fun dowOfCalendar(cal: java.util.Calendar): Int = when (cal.get(java.util.Calendar.DAY_OF_WEEK)) {
-        java.util.Calendar.MONDAY -> 1
-        java.util.Calendar.TUESDAY -> 2
-        java.util.Calendar.WEDNESDAY -> 3
-        java.util.Calendar.THURSDAY -> 4
-        java.util.Calendar.FRIDAY -> 5
-        java.util.Calendar.SATURDAY -> 6
-        else -> 7
-    }
+    fun dowOfCalendar(cal: java.util.Calendar): Int = com.politex.util.Dow.of(cal)
 
     /**
      * Реальная дата каждой строки: anchor + (dayOfWeek − anchorDow) дней.

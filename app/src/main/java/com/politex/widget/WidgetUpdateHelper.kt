@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 object WidgetUpdateHelper {
     private const val PREFS_NAME = "mpk_widget_prefs"
@@ -20,7 +21,9 @@ object WidgetUpdateHelper {
     private const val KEY_LAST_FULL_UPDATE = "last_full_update_ms"
     private const val STALE_AFTER_MS = 10 * 60_000L
 
-    private val widgetScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // QA#2: общий IO-scope виджетов — в нём провайдеры/ресиверы пересобирают виджеты
+    // после goAsync(), чтобы runBlocking-чтение Room не попадало на main thread.
+    internal val widgetScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** Секунды в виджетах: кэш 60 с — проверка зовётся из цикла BellTimerService. */
     @Volatile private var secondsWidgetsCache = false
@@ -64,7 +67,9 @@ object WidgetUpdateHelper {
         groupName: String,
     ) {
         getPrefs(context).edit().putString(KEY_SELECTED_GROUP, groupName).apply()
-        updateAllWidgets(context)
+        // QA#2: вызов приходит с main (AppViewModel.setGroup, импорт бэкапа) —
+        // пересборка виджетов читает Room, уходим на IO.
+        widgetScope.launch { updateAllWidgets(context) }
     }
 
     fun isNotificationEnabled(context: Context): Boolean = getPrefs(context).getBoolean(KEY_NOTIFY_NEXT_DAY, true)

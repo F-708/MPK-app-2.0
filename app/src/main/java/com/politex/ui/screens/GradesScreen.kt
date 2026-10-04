@@ -112,8 +112,6 @@ import kotlin.math.roundToInt
 
 /**
  * V17: детальный режим оценок (открыт предмет или его настройки) — по образцу ViewerMode.
- * TODO(босс): скрыть чипы хаба (материалы/задания/оценки) в этом режиме — требует правки
- * LessonsHubScreen (зона VIEWERS): обернуть чипы в `if (!GradeDetailMode.active && !ViewerMode.active)`.
  * Флаг не rememberSaveable: смерть процесса обязана его сбрасывать.
  */
 object GradeDetailMode {

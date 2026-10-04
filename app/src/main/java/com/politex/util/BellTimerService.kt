@@ -18,7 +18,6 @@ import kotlinx.coroutines.launch
 class BellTimerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var tickJob: Job? = null
-    private var widgetRefreshCounter = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -87,11 +86,7 @@ class BellTimerService : Service() {
                     }
 
                     if (minuteBoundary) {
-                        widgetRefreshCounter++
-                        if (widgetRefreshCounter >= 1) {
-                            widgetRefreshCounter = 0
-                            BellCountdownWidgetProvider.updateAll(this@BellTimerService)
-                        }
+                        BellCountdownWidgetProvider.updateAll(this@BellTimerService)
                     }
                 }
             }

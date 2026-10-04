@@ -110,14 +110,6 @@ interface LessonDao {
     )
     fun getDistinctDatesForGroup(groupName: String): Flow<List<String>>
 
-    @Query(
-        "SELECT * FROM lessons WHERE groupName = :groupName AND (subjectRaw LIKE '%' || :query || '%' OR teacherFirst LIKE '%' || :query || '%' OR teacherSecond LIKE '%' || :query || '%' OR roomFirst LIKE '%' || :query || '%') ORDER BY dayOfWeek ASC, lessonNumber ASC",
-    )
-    fun searchLessonsForGroup(
-        groupName: String,
-        query: String,
-    ): Flow<List<LessonEntity>>
-
     @Query("SELECT COUNT(*) FROM lessons WHERE groupName = :groupName")
     suspend fun getLessonCountForGroup(groupName: String): Int
 

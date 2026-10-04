@@ -91,7 +91,9 @@ import com.politex.util.TutorialFlags
 import com.politex.util.defaultBackupFileName
 import com.politex.widget.WidgetUpdateHelper
 import com.politex.worker.MpkWorkManagerHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Ф4: исход «Проверить соединение» — живёт в теле экрана, а не в item{} LazyColumn. */
 private enum class ConnState { IDLE, RUNNING, OK, FAIL }
@@ -154,9 +156,12 @@ fun SettingsScreen(
         if (uri == null) return@rememberLauncherForActivityResult
         backupScope.launch {
             backupMessage = try {
-                val json = com.politex.util.BackupManager.buildBackup(context)
-                context.contentResolver.openOutputStream(uri)?.use { out ->
-                    out.write(json.toByteArray(Charsets.UTF_8))
+                // QA#20: SAF-поток и сборка бэкапа — на IO, не на Main
+                withContext(Dispatchers.IO) {
+                    val json = com.politex.util.BackupManager.buildBackup(context)
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        out.write(json.toByteArray(Charsets.UTF_8))
+                    }
                 }
                 backupIsError = false
                 "Копия сохранена"
@@ -173,13 +178,22 @@ fun SettingsScreen(
         if (uri == null) return@rememberLauncherForActivityResult
         backupScope.launch {
             backupMessage = try {
-                val json = context.contentResolver.openInputStream(uri)
-                    ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                if (json.isNullOrBlank()) {
+                // QA#20: SAF-поток и восстановление — на IO; результат разбираем на Main
+                // (onGroupChanged дёргает живой ViewModel)
+                val restored = withContext(Dispatchers.IO) {
+                    val json = context.contentResolver.openInputStream(uri)
+                        ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    if (json.isNullOrBlank()) {
+                        null
+                    } else {
+                        com.politex.util.BackupManager.restoreBackup(context, json)
+                    }
+                }
+                if (restored == null) {
                     backupIsError = true
                     "Файл пустой"
                 } else {
-                    com.politex.util.BackupManager.restoreBackup(context, json).fold(
+                    restored.fold(
                         onSuccess = { result ->
                             backupIsError = false
                             // QA#9(а): prefs уже перезаписаны в restoreBackup — дёргаем
@@ -691,7 +705,7 @@ fun SettingsScreen(
                                 text = "СОХРАНИТЬ В ФАЙЛ",
                                 filled = true,
                                 modifier = Modifier.weight(1f),
-                                onClick = { exportLauncher.launch(defaultBackupFileName(context)) },
+                                onClick = { exportLauncher.launch(defaultBackupFileName()) },
                             )
                             ActionChip(
                                 text = "ВОССТАНОВИТЬ",
@@ -807,18 +821,7 @@ fun SettingsScreen(
                         LinkItem(
                             title = "Сайт колледжа",
                             subtitle = "guo-mpk.by — официальная информация",
-                            onClick = {
-                                // N14: действие скопировано из CollegeScreen (try/catch — нет браузера)
-                                try {
-                                    context.startActivity(
-                                        Intent(
-                                            Intent.ACTION_VIEW,
-                                            Uri.parse("https://guo-mpk.by/"),
-                                        ),
-                                    )
-                                } catch (_: Exception) {
-                                }
-                            },
+                            onClick = { openLink(context, "https://guo-mpk.by/") },
                         )
 
                         Spacer(modifier = Modifier.height(6.dp))
@@ -828,10 +831,7 @@ fun SettingsScreen(
                         LinkItem(
                             title = "Портал расписания",
                             subtitle = "guo-mpk.by/raspisanie/",
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://guo-mpk.by/raspisanie/"))
-                                context.startActivity(intent)
-                            },
+                            onClick = { openLink(context, "https://guo-mpk.by/raspisanie/") },
                         )
                     }
                 }
@@ -1295,9 +1295,19 @@ internal fun canScheduleExactAlarms(context: Context): Boolean = Build.VERSION.S
 // C3: строка-подсказка нужна только на SDK 31+ и без разрешения
 internal fun exactAlarmHintNeeded(sdkInt: Int, canScheduleExact: Boolean): Boolean = sdkInt >= Build.VERSION_CODES.S && !canScheduleExact
 
+// QA#12: открытие внешней ссылки — без браузера не роняемся, а говорим пользователю.
+// Общий путь для «Сайт колледжа» и «Портал расписания».
+private fun openLink(context: Context, url: String): Boolean =
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        true
+    } catch (_: android.content.ActivityNotFoundException) {
+        Toast.makeText(context, "Нет браузера", Toast.LENGTH_SHORT).show()
+        false
+    }
+
 // C3: системная страница выдачи разрешения на точные будильники (intent c package URI)
-private fun openExactAlarmSettings(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+private fun openExactAlarmSettings(context: Context) {    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
     try {
         context.startActivity(
             Intent(
@@ -1315,18 +1325,19 @@ private fun openExactAlarmSettings(context: Context) {
 }
 
 private fun stylePreviewTitle(style: com.politex.util.BellCountdownNotifier.Style): String = when (style) {
-    com.politex.util.BellCountdownNotifier.Style.COMPACT -> "До звонка: 12 мин"
-    com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME -> "Мой Политех"
+    // QA#17: WITH_APP_NAME недостижим (Style.from маппит его в COMPACT) — превью как у компактного
+    com.politex.util.BellCountdownNotifier.Style.COMPACT,
+    com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME,
+    -> "До звонка: 12 мин"
     com.politex.util.BellCountdownNotifier.Style.WITH_LESSON -> "До звонка: 12 мин"
     com.politex.util.BellCountdownNotifier.Style.WITH_PROGRESS -> "До звонка: 12 мин"
     com.politex.util.BellCountdownNotifier.Style.WITH_SECONDS -> "До звонка: 11:32"
 }
 
 private fun stylePreviewBody(style: com.politex.util.BellCountdownNotifier.Style): String = when (style) {
-    com.politex.util.BellCountdownNotifier.Style.COMPACT ->
-        "Только суть — сколько осталось"
-    com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME ->
-        "Сверху название приложения, ниже отсчёт"
+    com.politex.util.BellCountdownNotifier.Style.COMPACT,
+    com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME,
+    -> "Только суть — сколько осталось"
     com.politex.util.BellCountdownNotifier.Style.WITH_LESSON ->
         "Плюс номер идущего урока или «Перемена»"
     com.politex.util.BellCountdownNotifier.Style.WITH_PROGRESS ->

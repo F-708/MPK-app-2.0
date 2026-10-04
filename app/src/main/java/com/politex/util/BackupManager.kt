@@ -257,7 +257,7 @@ private fun StudentTaskEntity.dedupeKey(): String = listOf(groupName, subjectNam
 
 private fun GradeEntryEntity.dedupeKey(): String = listOf(subjectName, category, value, label, dateIso).joinToString("|").lowercase()
 
-fun defaultBackupFileName(context: Context): String {
+fun defaultBackupFileName(): String {
     val cal = java.util.Calendar.getInstance()
     val stamp =
         String.format(

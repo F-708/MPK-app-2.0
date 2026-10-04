@@ -63,17 +63,7 @@ class ScheduleCheckWorker(
             }
         }
 
-        val targetDayOfWeek =
-            when (targetCalendar.get(Calendar.DAY_OF_WEEK)) {
-                Calendar.MONDAY -> 1
-                Calendar.TUESDAY -> 2
-                Calendar.WEDNESDAY -> 3
-                Calendar.THURSDAY -> 4
-                Calendar.FRIDAY -> 5
-                Calendar.SATURDAY -> 6
-                Calendar.SUNDAY -> 7
-                else -> 1
-            }
+        val targetDayOfWeek = com.politex.util.Dow.of(targetCalendar)
 
         val targetDateString = dateFormat.format(targetCalendar.time)
 

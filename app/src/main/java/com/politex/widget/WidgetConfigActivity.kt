@@ -44,6 +44,7 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.MyApplicationTheme
 import com.politex.ui.util.bouncyClickable
+import kotlinx.coroutines.launch
 
 class WidgetConfigActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -206,7 +207,11 @@ class WidgetConfigActivity : ComponentActivity() {
                                         CountdownMode.save(this@WidgetConfigActivity, appWidgetId, countdownMode)
                                         WidgetOptions.setSeconds(this@WidgetConfigActivity, appWidgetId, showSeconds)
                                     }
-                                    WidgetUpdateHelper.updateOne(this@WidgetConfigActivity, appWidgetId)
+                                    // QA#2: updateOne читает Room — не на main; активити жива,
+                                    // goAsync не нужен, достаточно IO-scope виджетов
+                                    WidgetUpdateHelper.widgetScope.launch {
+                                        WidgetUpdateHelper.updateOne(this@WidgetConfigActivity, appWidgetId)
+                                    }
                                     WidgetAlarm.scheduleNext(this@WidgetConfigActivity)
 
                                     setResult(
@@ -328,13 +333,6 @@ object WidgetOptions {
             .apply()
         // настройка изменилась — сервис должен увидеть это сразу, не через 60 с кэша
         WidgetUpdateHelper.invalidateSecondsCache()
-    }
-
-    fun removeSeconds(
-        context: android.content.Context,
-        appWidgetId: Int,
-    ) {
-        WidgetUpdateHelper.getPrefs(context).edit().remove(PREF_SECONDS + appWidgetId).apply()
     }
 }
 
