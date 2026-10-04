@@ -108,6 +108,7 @@ import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
+import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.Dow
 import kotlinx.coroutines.flow.first
@@ -167,6 +168,9 @@ fun CollegeMapScreen(
 
     // AA7: инкремент при смене этапа маршрута (тап чипа) → zoom-to-fit этапа
     var stageFocus by rememberSaveable { mutableIntStateOf(0) }
+
+    // EE4: выбранный ШАГ маршрута (индекс этапа после склейки соседних этажей)
+    var stageIndex by rememberSaveable { mutableIntStateOf(0) }
 
     var roomScheduleFor by remember { mutableStateOf<String?>(null) }
 
@@ -323,11 +327,17 @@ fun CollegeMapScreen(
     val routeFinishHere =
         remember(activeRoute, floorId) { activeRoute?.floorPaths?.lastOrNull()?.floorId == floorId }
 
-    // BB8: шильдик «через N этаж» убран; BB9: соседние одинаковые этажи схлопнуты
-    val routeSegments =
+    // BB8: шильдик «через N этаж» убран; BB9: соседние одинаковые этажи схлопнуты.
+    // EE4: шаги = стадии после склейки; полоса видна всегда при активном маршруте (и с 1 шагом).
+    val routeStages =
         remember(activeRoute) {
-            dedupeStages(activeRoute?.takeIf { it.crossesFloors }?.floorPaths?.map { it.floorId } ?: emptyList())
+            dedupeStages(activeRoute?.floorPaths?.map { it.floorId } ?: emptyList())
         }
+
+    // EE4: подсвечен тапнутый шаг; если этаж сменили извне (чипы этажей, поиск,
+    // авто-переключение на target) — первый шаг на текужном этаже.
+    val selectedStage =
+        if (routeStages.getOrNull(stageIndex) == floorId) stageIndex else routeStages.indexOfFirst { it == floorId }
 
     Column(
         modifier =
@@ -469,9 +479,13 @@ fun CollegeMapScreen(
             routePoints = routePoints,
             routeOffsetsDp = routeOffsetsDp,
             routeFinishHere = routeFinishHere,
-            routeSegments = routeSegments,
-            onSelectRouteSegment = { fid ->
-                // AA7: тап чипа этапа — zoom-to-fit bbox'а этого этапа (только при смене этажа)
+            routeStages = routeStages,
+            selectedStage = selectedStage,
+            onSelectStage = { i ->
+                // EE4: тап шага — выбрать шаг и переключить этаж;
+                // AA7: zoom-to-fit bbox'а этапа только при смене этажа
+                stageIndex = i
+                val fid = routeStages[i]
                 if (fid != floorId) {
                     stageFocus++
                     floorId = fid
@@ -901,8 +915,9 @@ private fun MapCanvas(
 
     routePoints: List<List<MapPoint>>? = null,
     routeFinishHere: Boolean = false,
-    routeSegments: List<String> = emptyList(),
-    onSelectRouteSegment: (String) -> Unit = {},
+    routeStages: List<String> = emptyList(),
+    selectedStage: Int = -1,
+    onSelectStage: (Int) -> Unit = {},
     stageFocus: Int = 0,
 
     routeOffsetsDp: List<Float> = emptyList(),
@@ -1146,8 +1161,10 @@ private fun MapCanvas(
             }
         }
 
-        // BB8: без шильдика «через N этаж» — только stage-чипы у самого верха карты
-        if (routeSegments.size > 1) {
+        // EE4: чипы ШАГОВ маршрута («Шаг 1..N») у самого верха карты — без подписей
+        // этажей (этаж и так виден в чипах этажей сверху). Видны всегда при активном
+        // маршруте, CircleShape на широком контенте даёт пилюлю.
+        if (routeStages.isNotEmpty()) {
             Row(
                 modifier =
                 Modifier
@@ -1155,24 +1172,27 @@ private fun MapCanvas(
                     .padding(top = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                routeSegments.forEach { fid ->
-                    val selected = fid == floorId
+                stepLabels(routeStages).forEachIndexed { i, label ->
+                    val selected = i == selectedStage
                     Surface(
                         shape = CircleShape,
-                        color = if (selected) ColorBrandFill else ColorBgMain,
+                        color = if (selected) ColorTopBar else ColorBgMain,
                         border =
                         BorderStroke(
                             1.dp,
-                            if (selected) ColorBrandFill else ColorBorderLight,
+                            if (selected) ColorTopBar else ColorBorderLight,
                         ),
                         modifier =
                         Modifier
-                            .size(32.dp)
-                            .bouncyClickable { onSelectRouteSegment(fid) },
+                            .height(32.dp)
+                            .bouncyClickable { onSelectStage(i) },
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                        ) {
                             Text(
-                                text = fid,
+                                text = label,
                                 maxLines = 1,
                                 softWrap = false,
                                 style =
@@ -1585,6 +1605,9 @@ private fun DrawScope.drawDirectionChevron(
 
 /** BB9: схлопывает ПОДРЯД идущие одинаковые floorId этапов («3-4, 3-4» → «3-4»). Чистая функция. */
 internal fun dedupeStages(list: List<String>): List<String> = list.filterIndexed { i, id -> i == 0 || id != list[i - 1] }
+
+/** EE4: подписи шагов маршрута — «Шаг 1..N» по порядку этапов после склейки. Чистая функция. */
+internal fun stepLabels(stages: List<String>): List<String> = stages.mapIndexed { i, _ -> "Шаг ${i + 1}" }
 
 private fun mapRes(floorId: String): Int = when (floorId) {
     "2" -> com.politex.R.drawable.map_floor2

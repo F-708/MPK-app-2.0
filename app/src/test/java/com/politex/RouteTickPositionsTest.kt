@@ -5,6 +5,7 @@ import com.politex.data.model.MapPoint
 import com.politex.ui.screens.dedupeStages
 import com.politex.ui.screens.fitStageViewport
 import com.politex.ui.screens.routeTickPositions
+import com.politex.ui.screens.stepLabels
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -192,5 +193,20 @@ class RouteTickPositionsTest {
         assertEquals(listOf("3-4"), dedupeStages(listOf("3-4", "3-4")))
         // несоседние дубликаты сохраняются (маршрут реально вернулся на этаж)
         assertEquals(listOf("1", "2", "1"), dedupeStages(listOf("1", "2", "1")))
+    }
+
+    // ---- EE4: подписи шагов ----
+
+    @Test
+    fun `stepLabels нумерует шаги с 1`() {
+        assertEquals(listOf("Шаг 1", "Шаг 2", "Шаг 3"), stepLabels(listOf("1", "2", "1")))
+        assertEquals(listOf("Шаг 1"), stepLabels(listOf("3-4")))
+        assertEquals(emptyList<String>(), stepLabels(emptyList()))
+    }
+
+    @Test
+    fun `шаги после склейки - 1-2-1 даёт 3 шага, 1-1-2-2 даёт 2`() {
+        assertEquals(listOf("Шаг 1", "Шаг 2", "Шаг 3"), stepLabels(dedupeStages(listOf("1", "2", "1"))))
+        assertEquals(listOf("Шаг 1", "Шаг 2"), stepLabels(dedupeStages(listOf("1", "1", "2", "2"))))
     }
 }
