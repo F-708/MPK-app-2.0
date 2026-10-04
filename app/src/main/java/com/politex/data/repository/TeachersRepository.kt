@@ -19,11 +19,7 @@ data class Teacher(
 class TeachersRepository(
     private val context: Context,
 ) {
-    /**
-     * Б13: CSV преподавателей — неизменяемый ассет, а читался и парсился при каждом
-     * вызове, в том числе прямо из тел композаблов и на каждой рекомпозиции-реминдере
-     * (6 мест). Кэш один на процесс: тот же приём, что в ScheduleScreen для фамилий.
-     */
+
     fun loadTeachers(): List<Teacher> = cached ?: parseTeachers().also { cached = it }
 
     private fun parseTeachers(): List<Teacher> = try {
@@ -59,12 +55,6 @@ class TeachersRepository(
         }.filter { it.name.isNotBlank() }
         .sortedBy { it.name }
 
-    /**
-     * TEA-01: в CSV прочерк «—» (U+2014) буквально стоит в room/phone/email у ~89 строк.
-     * isNotBlank() его не ловит → UI рисует секцию «КОНТАКТЫ» с прочерками. Нормализуем
-     * ячейку ЦЕЛИКОМ: trim, и если результат — один из прочерков, вернуть "". Дефисы
-     * внутри значений не трогаем (телефон «338-33-42» остаётся как есть).
-     */
     private fun cell(
         p: List<String>,
         i: Int,

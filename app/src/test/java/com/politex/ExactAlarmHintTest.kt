@@ -6,7 +6,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-// C3: подсказка про точные будильники — только SDK 31+ и только без разрешения
 class ExactAlarmHintTest {
     @Test
     fun `подсказка показана на SDK 31+ без разрешения`() {

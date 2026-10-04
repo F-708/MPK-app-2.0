@@ -36,14 +36,8 @@ class ScheduleCheckWorker(
         val groupInfo = GroupParser.parse(groupName)
         val isFirstCourse = groupInfo?.course == 1
 
-        // V2: вместо хардкода daysToAdd — кандидаты «завтра» (завтра → сб → пн) из
-        // nextDayCandidates; цель = первый кандидат, документ которого probe нашёл на сайте.
-        // Не нашёл ничего — последний кандидат (понедельник): syncScheduleForDate ищет
-        // полным водопадом. Уже отмеченные (notified/checked) кандидаты не probe'ятся вовсе.
-        // ponytail: в пятницу (сб+пн живые) probe — пара HEAD-запросов раз в 15 минут;
-        // если станет дорого, кэшировать NotFound в prefs до конца дня.
         val repository = com.politex.AppGraph.scheduleRepository
-        // QA#4: Locale.ROOT — ключ prefs и dateString сравниваются с БД (ASCII dd.MM.yyyy)
+
         val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT)
         val prefs = WidgetUpdateHelper.getPrefs(applicationContext)
         fun marked(cal: Calendar): Boolean {
@@ -68,13 +62,9 @@ class ScheduleCheckWorker(
         val targetDateString = dateFormat.format(targetCalendar.time)
 
         val prefKey = "notified_${groupName}_$targetDateString"
-        // F4: документ уже скачан и разобран, но уроков по группе на эту дату в нём нет
-        // (суббота/праздник/пустой день). Без этой отметки воркер качал и разбирал бы
-        // весь документ по всем группам каждые 15 минут до 21:00 без всякого эффекта.
+
         val checkedKey = "checked_${groupName}_$targetDateString"
 
-        // E1/Б3: шаренный репозиторий из AppGraph — документ разбирается по всем группам
-        // каталога, кэш и teacherLessonDao те же, что у UI
         val result = repository.syncScheduleForDate(groupName, targetCalendar)
 
         result.fold(
@@ -82,12 +72,11 @@ class ScheduleCheckWorker(
                 if (allLessons.isNotEmpty()) {
                     WidgetUpdateHelper.updateAllWidgets(applicationContext)
 
-                    // Строки перештампованы реальными датами (парсер): фильтр только по дате
                     val targetLessons =
                         allLessons.filter {
                             it.dateString == targetDateString
                         }
-                    // Фолбэк для старого формата (пустая dateString) — по дню недели
+
                     val fallbackLessons =
                         if (targetLessons.isEmpty()) {
                             allLessons.filter { it.dateString.isBlank() && it.dayOfWeek == targetDayOfWeek }
@@ -118,20 +107,17 @@ class ScheduleCheckWorker(
 
                         prefs.edit().putBoolean(prefKey, true).apply()
                     } else {
-                        // День прочитан и разобран, уроков для группы нет — второй раз не ходим
+
                         prefs.edit().putBoolean(checkedKey, true).apply()
                     }
                 } else {
-                    // WID-03: success+пусто теперь бывает только когда документ найден
-                    // (syncScheduleForDate при ненайденном документе возвращает failure) —
-                    // день действительно пустой, второй раз не долбим сайт
+
                     prefs.edit().putBoolean(checkedKey, true).apply()
                 }
                 Result.success()
             },
             onFailure = {
-                // Документ не найден/сеть отвалилась — checkedKey НЕ ставим,
-                // воркер повторит попытку через 15 минут
+
                 Result.success()
             },
         )

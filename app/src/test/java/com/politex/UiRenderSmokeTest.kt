@@ -63,7 +63,7 @@ class UiRenderSmokeTest {
 
     @Test
     fun `экран другого рендерится`() {
-        // E4: CollegeScreen теперь только меню — подразделы стали route'ами NavController
+
         composeRule.setContent {
             MyApplicationTheme {
                 CollegeScreen(groupInfo = group)

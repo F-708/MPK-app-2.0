@@ -17,7 +17,7 @@ class GroupCatalogTest {
     @Test
     fun `ассет group_codes_csv попадает в standard и содержит все группы колледжа`() {
         val all = catalog.all()
-        // 62 группы из выгрузки O8 (не 66 — столько уникальных кодов в выгрузке)
+
         assertEquals(62, all.size)
         assertEquals(all.distinct(), all)
         assertTrue(all.all { it.length == 3 })
@@ -35,14 +35,14 @@ class GroupCatalogTest {
         catalog.all().forEach { code ->
             assertTrue("код группы не должен содержать пробелов: $code", !code.contains(' '))
             assertTrue("код группы не должен содержать ';': $code", !code.contains(';'))
-            // формат: курс + номер + буква, буква кириллическая
+
             assertTrue(GroupParser.parse(code)?.canonicalName == code)
         }
     }
 
     @Test
     fun `поиск понимает регистр и латиницу`() {
-        // русская С — не латинская C
+
         assertEquals("41С", catalog.find("41С"))
         assertEquals("41С", catalog.find("41C"))
         assertEquals("41С", catalog.find("41c"))

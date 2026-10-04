@@ -8,11 +8,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * V10: токенайзер инлайн-разметки конспекта. Чистая функция (AnnotatedString — чистый
- * Kotlin, Robolectric не нужен): текст без токенов обязан оставаться байт-в-байт,
- * токены — становиться span'ами, «- » — маркером «• », незакрытый токен — литералом.
- */
 class ParseInlineMarksTest {
     @Test
     fun `токены становятся спанами а текст теряет маркеры`() {

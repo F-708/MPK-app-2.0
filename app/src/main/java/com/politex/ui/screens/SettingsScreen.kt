@@ -95,7 +95,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Ф4: исход «Проверить соединение» — живёт в теле экрана, а не в item{} LazyColumn. */
 private enum class ConnState { IDLE, RUNNING, OK, FAIL }
 
 @Composable
@@ -134,13 +133,10 @@ fun SettingsScreen(
     }
 
     var backupMessage by remember { mutableStateOf("") }
-    // Ф4: успех/ошибка бэкапа красятся по-разному — флаг живёт рядом с сообщением
+
     var backupIsError by remember { mutableStateOf(false) }
     val backupScope = rememberCoroutineScope()
 
-    // Ф4: «Проверить соединение» = viewModel.syncSchedule() (асинхронно). Результат ловим
-    // по переходу isSyncing true→false: hasSyncError определяет ✓/✗. Состояние в теле экрана
-    // (не в item{}) — иначе терялось при скролле и «Запущено…» висело вечно.
     var connectionState by remember { mutableStateOf(ConnState.IDLE) }
     var wasSyncing by remember { mutableStateOf(false) }
     LaunchedEffect(isSyncing) {
@@ -156,7 +152,7 @@ fun SettingsScreen(
         if (uri == null) return@rememberLauncherForActivityResult
         backupScope.launch {
             backupMessage = try {
-                // QA#20: SAF-поток и сборка бэкапа — на IO, не на Main
+
                 withContext(Dispatchers.IO) {
                     val json = com.politex.util.BackupManager.buildBackup(context)
                     context.contentResolver.openOutputStream(uri)?.use { out ->
@@ -178,8 +174,7 @@ fun SettingsScreen(
         if (uri == null) return@rememberLauncherForActivityResult
         backupScope.launch {
             backupMessage = try {
-                // QA#20: SAF-поток и восстановление — на IO; результат разбираем на Main
-                // (onGroupChanged дёргает живой ViewModel)
+
                 val restored = withContext(Dispatchers.IO) {
                     val json = context.contentResolver.openInputStream(uri)
                         ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
@@ -196,8 +191,7 @@ fun SettingsScreen(
                     restored.fold(
                         onSuccess = { result ->
                             backupIsError = false
-                            // QA#9(а): prefs уже перезаписаны в restoreBackup — дёргаем
-                            // onGroupChanged, чтобы живой AppViewModel подхватил группу
+
                             result.groupRestored?.let { onGroupChanged(it) }
                             val parts = mutableListOf("Восстановлено заданий: ${result.tasksRestored}")
                             if (result.gradesRestored > 0) parts += "оценок: ${result.gradesRestored}"
@@ -289,13 +283,11 @@ fun SettingsScreen(
                             shape = RoundedCornerShape(2.dp),
                             color = ColorBrandFill,
                             modifier = Modifier
-                                // ST4: хитбокс «СМЕНИТЬ» 48dp — смена группы важное действие
-                                .heightIn(min = com.politex.ui.theme.Tokens.ButtonHeight) // V15: токен 44dp
+
+                                .heightIn(min = com.politex.ui.theme.Tokens.ButtonHeight)
                                 .bouncyClickable { showGroupDialog = true },
                         ) {
-                            // Surface — это Box с выравниванием TopStart: без обёртки текст 11sp
-                            // прилипал к верху 48dp-кнопки, снизу оставалась пустая полоса.
-                            // Тот же приём, что в GroupScheduleScreen («СМЕНИТЬ» там по центру).
+
                             Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier.padding(horizontal = 12.dp),
@@ -316,7 +308,6 @@ fun SettingsScreen(
                 }
             }
 
-            // X28: порядок секций — расписание/синхронизация сверху, тема компактно, данные внизу
             item { SectionHeader("РАСПИСАНИЕ И СИНХРОНИЗАЦИЯ") }
             item {
                 Surface(
@@ -407,9 +398,6 @@ fun SettingsScreen(
                 }
             }
 
-            // X27: «Проверить соединение» — подключён мёртвый параметр onRunConnectionTest
-            // (MainScreen передаёт viewModel.syncSchedule()): кнопка запускает проверку,
-            // Ф4: состояние (connectionState) поднято в тело экрана, спиннер — по isSyncing из VM.
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -433,7 +421,7 @@ fun SettingsScreen(
                                     color = ColorTextTitle,
                                 ),
                             )
-                            // Ф4: успех/ошибка различимы — ✓ зелёный, ✗ красный
+
                             when (connectionState) {
                                 ConnState.OK -> Text(
                                     text = "✓ Соединение есть, расписание обновилось",
@@ -459,8 +447,7 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .heightIn(min = com.politex.ui.theme.Tokens.ButtonHeight)
                                 .testTag("connection_test_button")
-                                // Ф4: на время синхронизации кнопка заблокирована —
-                                // повторные клики не запускают syncSchedule снова
+
                                 .bouncyClickable(enabled = !isSyncing) {
                                     connectionState = ConnState.RUNNING
                                     onRunConnectionTest()
@@ -496,7 +483,6 @@ fun SettingsScreen(
 
             item { SectionHeader("КАРТА") }
 
-            // W36/X28: тогл «Маршруты по карте» — вынесен из «Обратной связи» в свою секцию
             item {
                 var routesEnabled by remember {
                     mutableStateOf(
@@ -559,7 +545,7 @@ fun SettingsScreen(
             }
 
             item { SectionHeader("ОЦЕНКИ") }
-            // X9: глобальный тогл весов — пишет GradeSettings, GradesScreen читает тот же ключ
+
             item {
                 var weightsEnabled by remember {
                     mutableStateOf(GradeSettings.getGlobalWeightsEnabled(context))
@@ -614,8 +600,7 @@ fun SettingsScreen(
                 SectionHeader("ВНЕШНИЙ ВИД")
             }
             item {
-                // N13: компактная тема — горизонтальная лента свотчей в одну строку
-                // вместо развернутой сетки на весь экран (как чипы категорий в AddTaskDialog)
+
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -639,7 +624,7 @@ fun SettingsScreen(
                                     .padding(horizontal = 8.dp, vertical = 10.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
-                                // превью темы: верхняя панель + брендовая полоса
+
                                 Box(
                                     modifier = Modifier
                                         .size(36.dp)
@@ -663,9 +648,7 @@ fun SettingsScreen(
                                         textAlign = TextAlign.Center,
                                     ),
                                 )
-                                // W30: галочка с выбранного свотча УБРАНА (меняла высоту —
-                                // масштаб ленты прыгал при скролле). Выбор виден только
-                                // синей обводкой + жирным заголовком.
+
                                 Spacer(modifier = Modifier.height(2.dp))
                             }
                         }
@@ -691,7 +674,7 @@ fun SettingsScreen(
                             ),
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        // X28: описание сокращено по заказчику — одна строка вместо трёх
+
                         Text(
                             text = "Настройки и всё остальное сохраняются в файл.",
                             style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted),
@@ -720,7 +703,7 @@ fun SettingsScreen(
                                 text = backupMessage,
                                 style = androidx.compose.ui.text.TextStyle(
                                     fontSize = 12.sp,
-                                    // Ф4: успех зелёный, ошибка красная — не одним синим
+
                                     color = if (backupIsError) ColorError else ColorSuccess,
                                 ),
                             )
@@ -729,7 +712,6 @@ fun SettingsScreen(
                 }
             }
 
-            // X37: админ-сброс пройденных туториалов; в standard-сборке строки нет
             if (BuildConfig.FLAVOR == "admin") {
                 item {
                     Surface(
@@ -799,7 +781,6 @@ fun SettingsScreen(
                 }
             }
 
-            // N14: «Сайт колледжа» переехал сюда из вкладки «Другое»
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -837,7 +818,6 @@ fun SettingsScreen(
                 }
             }
 
-            // X28: строка версии — последняя в «О приложении»
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -947,7 +927,7 @@ private fun BellCountdownNotificationCard() {
     var selectedTheme by remember {
         mutableStateOf(com.politex.util.BellCountdownNotifier.getTheme(context))
     }
-    // C3: разрешение на точные будильники; перепроверяем на ON_RESUME (возврат из настроек системы)
+
     var canExactAlarms by remember { mutableStateOf(canScheduleExactAlarms(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -1054,7 +1034,6 @@ private fun BellCountdownNotificationCard() {
                 ),
             )
 
-            // C3: нет разрешения на точные будильники — отсчёт будет с задержкой, предлагаем открыть настройки
             if (exactAlarmHintNeeded(Build.VERSION.SDK_INT, canExactAlarms)) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Surface(
@@ -1078,7 +1057,7 @@ private fun BellCountdownNotificationCard() {
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        // ST3: хитбокс кнопки 44dp
+
                         Surface(
                             shape = RoundedCornerShape(2.dp),
                             color = ColorBrandFill,
@@ -1118,8 +1097,6 @@ private fun BellCountdownNotificationCard() {
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // W26: стиль «Мой Политех» (WITH_APP_NAME) убран из выбора по заказчику —
-                // остаются: компактный / с номером урока / с полосой прогресса / с секундами
                 com.politex.util.BellCountdownNotifier.Style.entries
                     .filter { it != com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME }
                     .forEach { style ->
@@ -1131,7 +1108,7 @@ private fun BellCountdownNotificationCard() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 3.dp)
-                            // ST3: хитбокс строки-опции 44dp
+
                             .heightIn(min = 44.dp)
                             .bouncyClickable {
                                 selectedStyle = style
@@ -1190,7 +1167,7 @@ private fun BellCountdownNotificationCard() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 3.dp)
-                            // ST3: хитбокс строки-опции 44dp
+
                             .heightIn(min = 44.dp)
                             .bouncyClickable {
                                 selectedTheme = theme
@@ -1245,7 +1222,7 @@ private fun BellCountdownNotificationCard() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 3.dp)
-                            // ST3: хитбокс строки-опции 44dp
+
                             .heightIn(min = 44.dp)
                             .bouncyClickable {
                                 selectedScope = scope
@@ -1288,15 +1265,11 @@ private fun BellCountdownNotificationCard() {
     }
 }
 
-// C3: на SDK < 31 точные будильники разрешены всегда, на 31+ спрашиваем AlarmManager
 internal fun canScheduleExactAlarms(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
     (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
 
-// C3: строка-подсказка нужна только на SDK 31+ и без разрешения
 internal fun exactAlarmHintNeeded(sdkInt: Int, canScheduleExact: Boolean): Boolean = sdkInt >= Build.VERSION_CODES.S && !canScheduleExact
 
-// QA#12: открытие внешней ссылки — без браузера не роняемся, а говорим пользователю.
-// Общий путь для «Сайт колледжа» и «Портал расписания».
 private fun openLink(context: Context, url: String): Boolean =
     try {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -1306,7 +1279,6 @@ private fun openLink(context: Context, url: String): Boolean =
         false
     }
 
-// C3: системная страница выдачи разрешения на точные будильники (intent c package URI)
 private fun openExactAlarmSettings(context: Context) {    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
     try {
         context.startActivity(
@@ -1316,7 +1288,7 @@ private fun openExactAlarmSettings(context: Context) {    if (Build.VERSION.SDK_
             ),
         )
     } catch (_: Exception) {
-        // нет такой страницы в прошивке — открываем общие настройки
+
         try {
             context.startActivity(Intent(Settings.ACTION_SETTINGS))
         } catch (_: Exception) {
@@ -1325,7 +1297,7 @@ private fun openExactAlarmSettings(context: Context) {    if (Build.VERSION.SDK_
 }
 
 private fun stylePreviewTitle(style: com.politex.util.BellCountdownNotifier.Style): String = when (style) {
-    // QA#17: WITH_APP_NAME недостижим (Style.from маппит его в COMPACT) — превью как у компактного
+
     com.politex.util.BellCountdownNotifier.Style.COMPACT,
     com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME,
     -> "До звонка: 12 мин"
@@ -1371,8 +1343,8 @@ private fun ActionChip(
         color = if (filled) ColorBrandFill else ColorBgMain,
         border = BorderStroke(1.dp, if (filled) ColorBrandFill else ColorBorderLight),
         modifier = modifier
-            // ST3: хитбокс чипа 48dp
-            .heightIn(min = com.politex.ui.theme.Tokens.ButtonHeight) // V15: токен 44dp
+
+            .heightIn(min = com.politex.ui.theme.Tokens.ButtonHeight)
             .bouncyClickable(onClick = onClick),
     ) {
         Box(

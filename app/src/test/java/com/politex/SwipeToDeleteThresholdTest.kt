@@ -5,11 +5,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * X11a: пороги swipe-to-delete — чистая функция shouldDelete.
- * Стенд: ширина 300px, порог флинга 36px (12dp на плотности 3x).
- * Граница позиции включительная: 0.35·300 = 105f точно (IEEE754) → удаляет.
- */
 class SwipeToDeleteThresholdTest {
     @Test
     fun `drag past 35 percent deletes`() {

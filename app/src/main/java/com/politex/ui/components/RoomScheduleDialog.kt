@@ -47,14 +47,6 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.util.bouncyClickable
 
-/**
- * Чистая логика выбора/сортировки пар для кабинета — вынесена отдельно для тестируемости.
- *
- * Правила (как в ScheduleScreen для дат):
- * 1. Оставляем пары, у которых номер кабинета совпадает с roomFirst ИЛИ roomSecond (дробные пары).
- * 2. Если есть строки с точной датой — только они; пустой dateString — фолбэк-шаблон дня недели.
- * 3. Сортировка по lessonNumber.
- */
 fun filterRoomLessonsForDate(
     lessons: List<LessonEntity>,
     room: String,
@@ -67,11 +59,6 @@ fun filterRoomLessonsForDate(
         .sortedBy { it.lessonNumber }
 }
 
-/**
- * Номер текущей (идущей прямо сейчас) пары, null — если сейчас перемена/вне занятий.
- * Тот же расчёт, что во вкладке «Расписание»: звонки дня недели (dayOfWeek 1=Пн..7=Вс)
- * и текущая минута суток. Инфочас четверга (lessonNumber=0) парой не считается.
- */
 fun currentRoomLessonNumber(
     currentMinutes: Int,
     dayOfWeek: Int,
@@ -85,23 +72,6 @@ fun currentRoomLessonNumber(
         ?.takeIf { it > 0 }
 }
 
-/**
- * Диалог «Расписание кабинета»: список пар (предмет, время, группа, преподаватель),
- * текущая пара выделена синей рамкой и лёгким фоном — как во вкладке «Расписание».
- *
- * W7: шапка — две строки без каши: слева номер кабинета (цифра 20sp bold,
- * подпись «кабинет» 11sp muted сверху), крестик справа (48dp хитбокс);
- * ниже — дата одной строкой слева и компактный сегмент «Сегодня|Завтра» справа.
- * W8: карточки без секционных заголовков и без номера урока внутри —
- * плоский список, отсортированный по lessonNumber.
- *
- * @param roomNumber номер кабинета (для заголовка)
- * @param dateTitle  подпись с датой («02.10.2026, пятница») — приходит одной строкой,
- *                   рендерим в одну строку (maxLines=1), перенос не вставляем
- * @param lessons    готовый список пар по кабинету (загружается снаружи через репозиторий)
- * @param currentLessonNumber номер текущей пары или null
- * @param onTeacherClick клик по преподавателю — открытие его карточки
- */
 @Composable
 fun RoomScheduleDialog(
     roomNumber: String,
@@ -110,7 +80,7 @@ fun RoomScheduleDialog(
     currentLessonNumber: Int?,
     onTeacherClick: (String) -> Unit,
     onDismissRequest: () -> Unit,
-    // Б8: «сегодня»/«завтра» — заказчик просил смотреть кабинет на оба дня
+
     tomorrowSelected: Boolean = false,
     onDayChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -125,8 +95,7 @@ fun RoomScheduleDialog(
         containerColor = ColorBgMain,
         confirmButton = {},
         title = {
-            // W7: шапка в две строки — цифра крупно слева, крестик справа,
-            // дата + переключатель дня второй строкой
+
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -148,7 +117,7 @@ fun RoomScheduleDialog(
                     }
                     IconButton(
                         onClick = onDismissRequest,
-                        // W7: крупный хитбокс крестика 48dp, выше контента
+
                         modifier = Modifier.size(48.dp).testTag("room_close"),
                     ) {
                         Icon(
@@ -166,7 +135,7 @@ fun RoomScheduleDialog(
                     if (dateTitle.isNotBlank()) {
                         Text(
                             text = dateTitle,
-                            // W7: дата строго одной строкой — не переносим посреди числа
+
                             style = TextStyle(fontSize = 13.sp, color = ColorTextBody),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -188,7 +157,7 @@ fun RoomScheduleDialog(
             if (lessons.isEmpty()) {
                 RoomScheduleEmptyState(tomorrow = tomorrowSelected)
             } else {
-                // W8: плоский список карточек — без секционных заголовков «к 1 уроку 1 группа»
+
                 LazyColumn(
                     modifier =
                     Modifier
@@ -226,10 +195,6 @@ private fun RoomScheduleEmptyState(tomorrow: Boolean) {
     }
 }
 
-/**
- * Б8/W7: компактный сегмент «Сегодня|Завтра» — Row из двух кнопок высотой 32dp,
- * активная залита брендовым цветом.
- */
 @Composable
 private fun DayToggle(
     tomorrowSelected: Boolean,
@@ -297,9 +262,9 @@ private fun RoomScheduleEmptyContent(tomorrow: Boolean) {
         Text(
             text =
             if (tomorrow) {
-                "Нет занятий в этом кабинете завтра"
+                "Нет уроков в этом кабинете завтра"
             } else {
-                "Нет занятий в этом кабинете сегодня"
+                "Нет уроков в этом кабинете сегодня"
             },
             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -307,11 +272,6 @@ private fun RoomScheduleEmptyContent(tomorrow: Boolean) {
     }
 }
 
-/**
- * W8: компактная карточка пары — ТОЛЬКО предмет (14sp semi-bold, максимум 2 строки),
- * время (12sp muted), группа (12sp) и преподаватель (12sp, кликабельный чип).
- * Текущая пара: рамка 2dp ColorActiveBlue + лёгкий фон.
- */
 @Composable
 private fun RoomLessonCard(
     lesson: LessonEntity,
@@ -321,7 +281,7 @@ private fun RoomLessonCard(
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        // W8: подсветка текущей пары — рамка 2dp синим + лёгкий синий фон
+
         color = if (isCurrent) ColorActiveBlue.copy(alpha = 0.07f) else ColorBgMain,
         border = BorderStroke(if (isCurrent) 2.dp else 1.dp, if (isCurrent) ColorActiveBlue else ColorBorderLight),
         shadowElevation = 0.dp,
@@ -355,7 +315,6 @@ private fun RoomLessonCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // W8: группа и преподаватели в один ряд, компактно
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,

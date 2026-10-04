@@ -74,8 +74,7 @@ object BellCountdownNotifier {
         ;
 
         companion object {
-            // W26: WITH_APP_NAME («Мой Политех») убран из настроек; сохранённые значения
-            // маппятся на COMPACT, чтобы никто не остался на удалённом стиле
+
             fun from(id: String?): Style =
                 entries
                     .firstOrNull { it.id == id }
@@ -181,10 +180,7 @@ object BellCountdownNotifier {
         if (!isEnabled(context)) return
         if (!canPost(context)) return
         val notification = buildNotification(context)
-        // O6: в «мёртвом окне» (>конца уроков и до 06:00) тишина. Если сервис foreground —
-        // уведомление показать обязан сам сервис (startForeground), поэтому здесь его не
-        // трогаем: остаётся тихая заглушка (buildNotification). Если foreground-сервис не
-        // активен (уведомление показано из настроек/after boot) — снимаем уведомление совсем.
+
         if (isQuietWindowNow(context) && !BellTimerService.isRunning) {
             cancel(context)
             return
@@ -195,17 +191,8 @@ object BellCountdownNotifier {
         }
     }
 
-    /** O6: возобновление показа утром — 06:00 (перебивает виджетный гейт 07:00). */
     const val RESUME_MINUTE = 6 * 60
 
-    /**
-     * O6: «мёртвое окно» — уроки сегодня закончились, но утро (06:00) ещё не наступило.
-     * Тишина тянется с [lessonsEndedMinute] до 06:00 СЛЕДУЮЩЕГО дня, поэтому:
-     *  - сейчас < 06:00 → тишина всегда (уроков в пятом часу нет);
-     *  - сейчас в 06:00..[lessonsEndedMinute] → показываем (уроки идут);
-     *  - сейчас > [lessonsEndedMinute] → тишина до утра.
-     * [lessonsEndedMinute] == null (уроков в этот день нет) → тишина весь день. Чистая функция.
-     */
     fun isQuietWindow(
         nowMinutes: Int,
         lessonsEndedMinute: Int?,
@@ -215,13 +202,9 @@ object BellCountdownNotifier {
         return nowMinutes > lessonsEndedMinute
     }
 
-    /**
-     * O6: минута конца последних уроков по режиму (колледж — конец последнего звонка дня,
-     * мои уроки — конец последнего урока группы). null — уроков в этот день нет.
-     */
     private fun lessonsEndedMinuteToday(context: Context): Int? {
         val cal = Calendar.getInstance()
-        // QA#18: Dow.of, но семантика «выходной» сохранена явно — воскресенье = тишина (null)
+
         val dow = Dow.of(cal)
         if (dow == 7) return null
         val bells = CollegeBellSchedule.getBellsForDay(dow)
@@ -234,11 +217,6 @@ object BellCountdownNotifier {
         }
     }
 
-    /**
-     * O6: утреннее окно 06:00–07:00 — виджетный гейт 07:00 ещё скрывает строку, но заказчику
-     * она нужна с 06:00. Показываем «до 1 урока», только если сегодня есть уроки
-     * (нет уроков → null → тишина весь день). С 07:00 строку строит обычный путь.
-     */
     private fun morningInfo(context: Context): Triple<Long, String, Int>? {
         val cal = Calendar.getInstance()
         val now = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
@@ -249,7 +227,6 @@ object BellCountdownNotifier {
         return Triple((first.startMinutes - now).toLong(), "до 1 урока", 0)
     }
 
-    /** День недели в формате расписания (1=Пн..6=Сб, 7=Вс). */
     private fun modeLessonsDay(cal: Calendar): Int = Dow.of(cal)
 
     private fun isQuietWindowNow(context: Context): Boolean {
@@ -271,15 +248,10 @@ object BellCountdownNotifier {
             }
         val info = BellCountdownWidgetProvider.countdownInfo(context, mode)
 
-        // Т10: скрыто (выходной / до 07:00 / уроки закончились / нет уроков) —
-        // минимальная тихая заглушка вместо «Уроки закончились» круглосуточно.
         if (info == null || info.first < 0) {
-            // O6: 06:00–07:00 — виджетный гейт 07:00 (не наш файл) ещё молчит, но заказчику
-            // строку надо вернуть уже в 06:00. Даём её здесь, если по режиму есть уроки сегодня.
+
             morningInfo(context)?.let { return buildVisibleNotification(context, it) }
-            // N5: строка должна быть «живой» как в Яндекс.Картах — всегда показывать актуальное.
-            // Вечер после уроков и ночь до уроков берём те же подписи, что и виджет
-            // («до 1 урока завтра: 14 ч» / «до 1 урока: N мин»), вместо пустой заглушки.
+
             eveningOrNightInfo(context, mode)?.let { return buildVisibleNotification(context, it) }
             return buildHiddenNotification(context)
         }
@@ -287,16 +259,12 @@ object BellCountdownNotifier {
         return buildVisibleNotification(context, info)
     }
 
-    /**
-     * N5: вечернее/ночное окно — та же логика, что у виджета (W3/O6), чтобы строка
-     * уведомления никогда не была бессмысленной. null → заглушка (выходной/нет уроков).
-     */
     private fun eveningOrNightInfo(
         context: Context,
         mode: com.politex.widget.CountdownMode,
     ): Triple<Long, String, Int>? {
         val cal = Calendar.getInstance()
-        // QA#18: Dow.of, но семантика «выходной» сохранена явно — воскресенье = null
+
         val dow = Dow.of(cal)
         if (dow == 7) return null
         val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
@@ -311,14 +279,12 @@ object BellCountdownNotifier {
             ?: BellCountdownWidgetProvider.nightFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
     }
 
-    /** O6: сборка обычной строки отсчёта — общая для основного пути и утреннего окна 06:00. */
     private fun buildVisibleNotification(
         context: Context,
         info: Triple<Long, String, Int>,
     ): android.app.Notification {
         val style = getStyle(context)
 
-        // Секунды: цель минутная, остаток = минуты*60 − текущая секунда (13:30:45 + 35 мин → 34:15).
         val secondsNow = Calendar.getInstance().get(Calendar.SECOND)
         val valueText =
             if (style == Style.WITH_SECONDS) {
@@ -350,8 +316,7 @@ object BellCountdownNotifier {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_STATUS)
                 .setShowWhen(false)
-                // N5: кастомный вид — крупные цифры отсчёта (как в Яндекс.Погоде), а не просто
-                // заголовок+подпись. Decorated сохраняет системную шапку (иконка, время, приложение).
+
                 .setStyle(NotificationCompat.DecoratedCustomViewStyle())
 
         if (theme.accent != 0) {
@@ -361,15 +326,11 @@ object BellCountdownNotifier {
             }
         }
 
-        // Fallback для старых версий/свёрнутого вида — обычный текст
         builder.setContentTitle(title)
         builder.setContentText(info.second)
 
-        // Кастомный RemoteViews: крупное значение + единица + подпись
         val views = android.widget.RemoteViews(context.packageName, R.layout.notification_bell_countdown)
-        // «25 мин» → value=«25», unit=«мин»; «1 ч 5 мин» → value=«1 ч 5», unit=«мин» —
-        // просто режем по последнему пробелу, цифры крупно, единица мелко.
-        // «4:32» (стиль с секундами) пробела не содержит → всё значение крупно, unit пустой.
+
         val cut = valueText.lastIndexOf(' ')
         if (cut > 0) {
             views.setTextViewText(R.id.nbell_value, valueText.substring(0, cut))
@@ -379,8 +340,7 @@ object BellCountdownNotifier {
             views.setTextViewText(R.id.nbell_unit, "")
         }
         views.setTextViewText(R.id.nbell_label, info.second)
-        // QA#17: Style.from маппит WITH_APP_NAME → COMPACT (W26), стиль «Мой Политех»
-        // недостижим — шапка приложения в кастомном виде всегда скрыта.
+
         views.setViewVisibility(R.id.nbell_app, android.view.View.GONE)
         views.setViewVisibility(
             R.id.nbell_progress,
@@ -397,17 +357,6 @@ object BellCountdownNotifier {
         return builder.build()
     }
 
-    /**
-     * Заглушка для скрытого состояния: служба foreground обязана держать уведомление,
-     * поэтому «исчезновение» строки = замена на минимальную тихую (Т10.2).
-     */
-    /**
-     * X2: «нечего показать» (выходной / уроков нет / тихое окно при живом foreground-сервисе).
-     * Раньше была заглушка «Мой Политех» в две строки — заказчик: лучше вообще не показывать
-     * или показать ОСМЫСЛЕННО крупным шрифтом. Сервис foreground обязан держать уведомление,
-     * поэтому рисуем кастомный вид с крупной строкой «Уроков нет» (тот же шрифт, что отсчёт).
-     * Когда сервис НЕ запущен — show() отзывает уведомление совсем (cancel).
-     */
     private fun buildHiddenNotification(context: Context): android.app.Notification {
         val openIntent =
             PendingIntent.getActivity(
@@ -458,12 +407,6 @@ object BellCountdownNotifier {
         val hasProgress: Boolean,
     )
 
-    /**
-     * QA#20: длина урока для полосы прогресса (WITH_PROGRESS). Стандартный урок колледжа —
-     * 45 мин (STANDARD_BELLS); считать точную длину из bell.start/end не даёт структура info
-     * (минуты до звонка, а не граница урока). Если появятся уроки другой длины — брать
-     * длительность из BellItem.
-     */
     private const val PROGRESS_LESSON_MINUTES = 45L
 
     private fun buildContent(
@@ -488,10 +431,6 @@ object BellCountdownNotifier {
         )
     }
 
-    /**
-     * Значение «с секундами» для стиля WITH_SECONDS: минуты + текущая секунда → mm:ss.
-     * Чистая функция (юнит-тесты); 0/отрицательный остаток → «0:00».
-     */
     fun formatMinutesSeconds(
         minutes: Long,
         seconds: Int,

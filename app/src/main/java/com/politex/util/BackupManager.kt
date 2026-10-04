@@ -12,8 +12,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object BackupManager {
-    // v2 (QA#9): + оценки (grade_entries) и напоминания (task_reminders внутри заданий).
-    // v1-файлы читаются как раньше: новые секции opt-* — их отсутствие не ошибка.
+
     private const val FORMAT_VERSION = 2
 
     private const val KEY_VERSION = "version"
@@ -68,8 +67,7 @@ object BackupManager {
             tasks.forEach { task ->
                 array.put(
                     taskToJson(task).apply {
-                        // QA#9: напоминания живут ВНУТРИ json задания — пара task+reminder
-                        // переносится согласованно, старый taskId наружу не утекает
+
                         val reminders = reminderDao.getForTask(task.id)
                         if (reminders.isNotEmpty()) {
                             put(
@@ -83,8 +81,6 @@ object BackupManager {
             root.put(KEY_TASKS, array)
         }
 
-        // QA#9: оценки самодостаточны (предмет/категория/значение/дата) — переносятся как есть.
-        // Материалы НЕ бэкапим: метаданные без файлов на новом телефоне бесполезны.
         val grades = MpkDatabase.getInstance(context).gradeDao().allEntries().first()
         val gradesArray = JSONArray()
         grades.forEach { grade ->
@@ -185,8 +181,7 @@ object BackupManager {
                 }
                 val newTaskId = dao.insertTask(entity)
                 restored++
-                // QA#9: напоминания переносим только для восстановленных заданий,
-                // маппя старый id → новый (напоминание живёт внутри json задания)
+
                 val remindersJson = item.optJSONArray(KEY_REMINDERS)
                 if (remindersJson != null && remindersJson.length() > 0) {
                     val reminders =
@@ -203,9 +198,6 @@ object BackupManager {
             if (skipped > 0) warnings += "Уже есть, пропущено: $skipped"
         }
 
-        // QA#9: merge оценок — дедуп по (предмет|категория|значение|подпись|дата),
-        // повторный импорт того же файла не плодит копии. EXAM — через upsertExam,
-        // чтобы не сломать инвариант «одна активная экзаменационная запись на предмет».
         val gradeDao = db.gradeDao()
         val gradesArray = root.optJSONArray(KEY_GRADES)
         var gradesRestored = 0

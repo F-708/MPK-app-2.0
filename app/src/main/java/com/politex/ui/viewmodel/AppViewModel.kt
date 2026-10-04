@@ -28,12 +28,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/**
- * E4/N15: карта route'ов NavHost (ARC-01). Базовые имена — navigate() ходит по ним;
- * паттерны с опциональными query-аргументами строятся в MainScreen (scrollRoutePattern,
- * buildMapRoute и т.д.). Константы живут здесь, чтобы AppTab.route и MainScreen/MainActivity
- * ссылались на один источник.
- */
 const val ROUTE_SCHEDULE = "schedule"
 const val ROUTE_LESSONS = "lessons"
 const val ROUTE_BELLS = "bells"
@@ -46,7 +40,6 @@ const val ROUTE_TEACHER = "teacher?name={name}"
 const val ROUTE_MAP = "map?room={room}&from={from}&route={route}"
 const val ROUTE_GROUP_SCHEDULE = "group_schedule?group={group}"
 
-/** Ключ одноразового запроса автопрокрутки в SavedStateHandle записи навигации. */
 const val ARG_SCROLL = "scroll"
 
 enum class AppTab(
@@ -55,17 +48,11 @@ enum class AppTab(
 ) {
     SCHEDULE("Расписание", ROUTE_SCHEDULE),
 
-    // Ф4: вкладка переименована по заказчику: внутри — Материалы/Задания/Оценки
     TASKS("Уроки", ROUTE_LESSONS),
     BELLS("Звонки", ROUTE_BELLS),
     COLLEGE("Другое", ROUTE_COLLEGE),
 }
 
-/**
- * E4: из состояния УБРАНЫ currentTab/returnTab/pendingRoom/pendingFromRoom/
- * pendingTeacherName/showRouteOnMap/scrollTarget — их заменили backstack и
- * аргументы Navigation-Compose (ARC-01/ARC-06). VM осталась только про данные.
- */
 data class AppUiState(
     val currentGroupName: String,
     val groupInfo: GroupInfo?,
@@ -79,8 +66,6 @@ class AppViewModel(
 ) : AndroidViewModel(application) {
     private val database = MpkDatabase.getInstance(application)
 
-    // E1: единый экземпляр из AppGraph (полный набор deps: каталог + teacherLessonDao),
-    // вместо локального создания с риском рассинхрона зависимостей
     val scheduleRepository = com.politex.AppGraph.scheduleRepository
     val taskRepository = TaskRepository(database.taskDao())
 
@@ -102,21 +87,12 @@ class AppViewModel(
     private val currentGroup: Flow<String> =
         _uiState.map { it.currentGroupName }.distinctUntilChanged()
 
-    /**
-     * C3: расписание группы живёт в VM, а не в композиции ScheduleScreen.
-     * Раньше collectAsState подписывался внутри экрана: при смене вкладки (when в
-     * MainScreen уничтожает поддерево) подписка умирала, и на возврате первый эмит
-     * Room приходил только после нового запроса к БД → спиннер → «ещё не опубликовано».
-     * stateIn держит последнее значение в любом случае, поэтому возврат на вкладку
-     * получает кэш синхронно, без обращения к БД.
-     */
     @OptIn(ExperimentalCoroutinesApi::class)
     val groupLessons: StateFlow<List<LessonEntity>> =
         currentGroup
             .flatMapLatest { name -> scheduleRepository.getAllLessonsForGroup(name) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** C3: то же для домашки — Flow тоже переживает пересоздание поддерева вкладки. */
     val pendingTasks: StateFlow<List<StudentTaskEntity>> =
         currentGroup
             .flatMapLatest { name -> taskRepository.getPendingTasksForGroup(name) }
@@ -125,8 +101,7 @@ class AppViewModel(
     init {
 
         if (!uiState.value.showGroupSelection) {
-            // O1/C: при наличии кэша в БД не ходим в сеть на старте — иначе холодный
-            // старт ждал сеть и расписание появлялось только через ~1 секунду.
+
             viewModelScope.launch {
                 if (!scheduleRepository.hasSchedule(uiState.value.currentGroupName)) {
                     syncSchedule(isAutoSync = true)
@@ -148,9 +123,7 @@ class AppViewModel(
         }
         viewModelScope.launch {
             _toastEvent.emit("Выбрана группа: ${parsed.canonicalName}")
-            // Б3: после синка всех групп день обычно уже в Room — принудительный поход в
-            // сеть при каждой смене группы больше не нужен (заказчик жаловался на
-            // повторные скачивания при недоступном сайте).
+
             if (!scheduleRepository.hasSchedule(parsed.canonicalName)) {
                 syncSchedule(isAutoSync = false)
             }
@@ -172,8 +145,7 @@ class AppViewModel(
             result.fold(
                 onSuccess = { outcome ->
                     _uiState.update { it.copy(isSyncing = false, hasSyncError = false) }
-                    // Y1: честные тосты по различимому исходу. NotFound на авто-синке
-                    // (холодный старт) не показываем — как раньше; Ok и FoundNoGroup — всегда.
+
                     val showToast = outcome !is SyncOutcome.NotFound || !isAutoSync
                     if (showToast) _toastEvent.emit(toastFor(outcome, targetGroup))
                 },

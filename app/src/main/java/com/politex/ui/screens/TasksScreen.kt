@@ -125,22 +125,18 @@ fun TasksScreen(
     groupInfo: GroupInfo,
     taskRepository: TaskRepository,
     modifier: Modifier = Modifier,
-    // T1: SnackbarHost из MainScreen — undo удаления задания
+
     snackbarHostState: SnackbarHostState? = null,
 ) {
     val coroutineScope = rememberCoroutineScope()
     var selectedFilter by remember { mutableStateOf<TaskType?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
 
-    // H1: редактирование по тапу + напоминания. Напоминания живут в отдельной таблице,
-    // DAO берём из той же боевой БД (паттерн как в ScheduleScreen) — репозиторий заданий
-    // конструируется в нескольких местах (в т.ч. в запрещённом к правке ScheduleScreen),
-    // поэтому не меняем его конструктор, а работаем с reminderDao напрямую.
     val context = LocalContext.current
     val reminderDao = remember { MpkDatabase.getInstance(context).taskReminderDao() }
     var editingTask by remember { mutableStateOf<StudentTaskEntity?>(null) }
     var editingReminders by remember { mutableStateOf<List<Long>>(emptyList()) }
-    // V13 (доступность): долгий тап по карточке — диалог подтверждения удаления
+
     var deleteConfirmTask by remember { mutableStateOf<StudentTaskEntity?>(null) }
 
     val allTasksFlow =
@@ -163,14 +159,6 @@ fun TasksScreen(
             TaskType.getAvailableForCourse(groupInfo.course)
         }
 
-    /**
-     * T1/V13: удаление с undo. Удаляем сразу; снекбар «ОТМЕНИТЬ» возвращает задание ТЕМ ЖЕ id
-     * (напоминания в task_reminders остаются привязаны). Окно undo — ровно 7 с (X11b): показываем с
-     * Indefinite (в SnackbarDuration нет «7 с»), UndoSnackbar в MainScreen рисует полосу-таймер
-     * и по её исчерпании сам гасит хост (onExpire → dismissSnackbar).
-     * В снекбар уходит не сама сущность, а её копия — Room мог бы дергать
-     * этот же объект при повторном удалении, копия исключает гонки.
-     */
     fun deleteWithUndo(task: StudentTaskEntity) {
         coroutineScope.launch {
             taskRepository.deleteTask(task)
@@ -187,14 +175,11 @@ fun TasksScreen(
         }
     }
 
-    // V14: туториал «Удаление свайпом» — по первому входу во вкладку, и ТОЛЬКО если есть
-    // задания. При пустом списке цели нет → запрос не делаем, флаг не ставим: туториал
-    // откладывается до момента, когда задание появится (переживёт обновление приложения).
     val firstTaskId = filteredTasks.firstOrNull()?.id
     LaunchedEffect(firstTaskId) {
         if (firstTaskId != null) TutorialController.request(context, TutorialFeature.TASK_SWIPE)
     }
-    // Уход с вкладки при живом туториале — снимаем БЕЗ флага (покажем при следующем входе).
+
     DisposableEffect(Unit) {
         onDispose {
             if (TutorialController.active == TutorialFeature.TASK_SWIPE) TutorialController.clear()
@@ -208,9 +193,7 @@ fun TasksScreen(
             .background(ColorBgMain),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // V12: шапка одной строкой — слева фирменная «ДОБАВИТЬ» (BrandActionButton,
-            // высота 44 = Tokens.ButtonHeight), справа скроллящийся Row wrap-content чипов
-            // (Все + типы по курсу, Tokens.ChipScreen=40) с автоскроллом к выбранному.
+
             Row(
                 modifier =
                 Modifier
@@ -227,18 +210,17 @@ fun TasksScreen(
                 )
 
                 val chipScroll = rememberScrollState()
-                // Позиции чипов в координатах контента (positionInParent не зависит от
-                // скролла): start → width. X15: автоскролл ЦЕНТРИРУЕТ выбранный чип.
+
                 val chipOffsets = remember { mutableMapOf<Int, Pair<Int, Int>>() }
                 LaunchedEffect(selectedFilter) {
                     val index = if (selectedFilter == null) 0 else availableTypes.indexOf(selectedFilter) + 1
                     if (index == 0) {
-                        // «Все» — первый чип, скролл в начало
+
                         chipScroll.animateScrollTo(0)
                     } else {
                         chipOffsets[index]?.let { (start, width) ->
                             chipScroll.animateScrollTo(
-                                // viewportSize в ScrollState 1.7 — Int (ширина вьюпорта, px)
+
                                 centerScrollOffset(start, width, chipScroll.viewportSize, chipScroll.maxValue),
                             )
                         }
@@ -280,7 +262,7 @@ fun TasksScreen(
             )
 
             if (filteredTasks.isEmpty()) {
-                // T4: пустое состояние честно различает «нет вообще» и «нет по фильтру»
+
                 val filterActive = selectedFilter != null
 
                 Box(
@@ -322,22 +304,19 @@ fun TasksScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         if (filterActive) {
-                            // Сброс фильтра прямо из пустого состояния
+
                             Surface(
                                 shape = RoundedCornerShape(2.dp),
                                 color = ColorBrandFill,
                                 contentColor = Color.White,
                                 modifier =
                                 Modifier
-                                    // V15: высота кнопки — токен 44
+
                                     .heightIn(min = Tokens.ButtonHeight)
                                     .bouncyClickable { selectedFilter = null }
                                     .testTag("reset_filter_btn"),
                             ) {
-                                // C2: у Surface внутри Box(propagateMinConstraints=true)
-                                // без contentAlignment — голый Text вставал к верху
-                                // 48dp-слота. Box берёт min-высоту как свою и центрирует.
-                                // fillMaxWidth НЕ добавляем: кнопка wrap-content.
+
                                 Box(contentAlignment = Alignment.Center) {
                                     Text(
                                         text = "СБРОСИТЬ ФИЛЬТР",
@@ -346,7 +325,7 @@ fun TasksScreen(
                                         style =
                                         androidx.compose.ui.text.TextStyle(
                                             fontWeight = FontWeight.Bold,
-                                            // V15: CAPS-текст кнопок — токен 12sp
+
                                             fontSize = Tokens.ButtonText,
                                             color = Color.White,
                                         ),
@@ -378,8 +357,7 @@ fun TasksScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(filteredTasks, key = { it.id }) { task ->
-                        // V13: удаление свайпом влево (кнопка ✕ из карточки убрана)
-                        // V14: свайп-удаление = успех туториала task_swipe
+
                         SwipeToDeleteBox(
                             onDelete = {
                                 deleteWithUndo(task)
@@ -388,7 +366,7 @@ fun TasksScreen(
                         ) {
                             TaskItemCard(
                                 task = task,
-                                // V14: первая карточка — цель туториала «Удаление свайпом»
+
                                 modifier =
                                 if (task.id == firstTaskId) {
                                     Modifier.tutorialAnchor("task_card_first")
@@ -400,7 +378,7 @@ fun TasksScreen(
                                         taskRepository.toggleTaskCompleted(task.id, !task.isCompleted)
                                     }
                                 },
-                                // H1: тап по карточке — редактирование (не «выполнено»)
+
                                 onEdit = {
                                     coroutineScope.launch {
                                         editingReminders = reminderDao.getForTask(task.id).map { it.triggerAtMillis }
@@ -416,8 +394,6 @@ fun TasksScreen(
         }
     }
 
-    // H1: общий путь сохранения — upsert задания (REPLACE по id) + атомарная замена напоминаний.
-    // Один и тот же для «добавить» (id=0) и «сохранить правку» (id=N).
     fun saveTaskAndReminders(
         entity: StudentTaskEntity,
         reminderMillis: List<Long>,
@@ -459,8 +435,6 @@ fun TasksScreen(
         )
     }
 
-    // V13 (доступность): свайп недоступен без жеста — долгий тап даёт тот же путь
-    // удаления через подтверждающий диалог, дальше работает deleteWithUndo.
     deleteConfirmTask?.let { task ->
         AlertDialog(
             onDismissRequest = { deleteConfirmTask = null },
@@ -534,7 +508,7 @@ fun TaskItemCard(
     task: StudentTaskEntity,
     onToggleCompleted: () -> Unit,
     onEdit: () -> Unit,
-    // V13: долгий тап — подтверждение удаления (доступность вместо свайпа)
+
     onLongPressDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -556,8 +530,7 @@ fun TaskItemCard(
         modifier =
         modifier
             .fillMaxWidth()
-            // H1: тап по карточке открывает редактирование; «выполнено» — только на чекбоксе слева.
-            // V13: combinedClickable разводит тап и долгий тап (bouncyClickable longClick не умеет).
+
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -573,8 +546,7 @@ fun TaskItemCard(
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // T2/V15: чекбокс — самое частое действие; хитбокс = Tokens.IconHit (44).
-            // ОДИН обработчик на узле (паттерн HomeworkBadge): Box+bouncyClickable, Icon внутри.
+
             Box(
                 modifier =
                 Modifier
@@ -592,8 +564,7 @@ fun TaskItemCard(
             Spacer(modifier = Modifier.width(6.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                // V16: строка 1 — предмет (вес на всю ширину) + справа бейдж типа задания.
-                // Цветная точка 8dp и подполоса 2dp из W24 удалены.
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (task.subjectName.isNotBlank()) {
                         Text(
@@ -682,12 +653,11 @@ fun TaskItemCard(
                     }
                 }
             }
-            // V13: кнопка ✕ Delete удалена — только свайп влево / долгий тап + подтверждение
+
         }
     }
 }
 
-// W23: короткие подписи сегментов фильтра — 7 штук помещаются в ряд без прокрутки
 private fun TaskType.shortFilterLabel(): String =
     when (this) {
         TaskType.HOMEWORK -> "ДЗ"
@@ -698,11 +668,6 @@ private fun TaskType.shortFilterLabel(): String =
         TaskType.DIPLOMA -> "Дипл"
     }
 
-/**
- * V12: чип фильтра категорий — wrap-content, высота Tokens.ChipScreen (40),
- * selected = ColorTopBar + белый Bold. Пишет свои (start, width) в [offsets] (координаты
- * скроллящегося родителя) — по ним шапка центрирует выбранный чип (X15).
- */
 @Composable
 private fun TaskFilterChip(
     label: String,
@@ -741,10 +706,6 @@ private fun TaskFilterChip(
     }
 }
 
-/**
- * X15: скролл, при котором центр чипа совпадает с центром вьюпорта; клампится в [0, maxScroll]
- * (первый чип → 0, последний → maxScroll). Чистая функция для юнит-тестов, все значения в px.
- */
 internal fun centerScrollOffset(
     chipStart: Int,
     chipWidth: Int,
@@ -752,23 +713,11 @@ internal fun centerScrollOffset(
     maxScroll: Int,
 ): Int = (chipStart + chipWidth / 2 - viewport / 2).coerceIn(0, maxScroll)
 
-// ─────────────────────────────────────────────────────────────────────────────
-// V13: swipe-to-delete — контейнер карточки + чистая функция порогов (юнит-тест)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Флинг: кадровое смещение больше этого (в сторону удаления) считается броском. X11a: 24→12. */
 private val SwipeFlingThreshold = 12.dp
 
-/** Возврат карточки после свайпа ниже порога — пружина по спеке V13. */
 private val SwipeReturnSpring: FiniteAnimationSpec<Float> =
     spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow)
 
-/**
- * V13/X11a: удалять ли при отпускании. Чистая функция для юнит-тестов.
- * Условия: утянули влево на 35% ширины или дальше (|offsetX| ≥ 0.35·width)
- * ИЛИ флинг влево (кадровый Δx ≤ -порог). offsetX ∈ [-width, 0];
- * флинг вправо — это жест возврата, удалять он не должен.
- */
 internal fun shouldDelete(
     offsetX: Float,
     widthPx: Float,
@@ -778,13 +727,6 @@ internal fun shouldDelete(
     widthPx > 0f &&
         (-offsetX >= widthPx * 0.35f || lastFrameDeltaPx <= -flingThresholdPx)
 
-/**
- * V13: свайп-контейнер задания. Тянем строго влево (x ∈ [-width, 0]); под карточкой —
- * красный слой ColorDangerFill с иконкой удаления. При превышении порога ([shouldDelete])
- * две фазы: выезд до -width (150 мс), затем схлопывание высоты measured→0 и alpha→0
- * (200 мс), после чего вызывается [onDelete] (deleteWithUndo). Ниже порога — возврат
- * пружиной [SwipeReturnSpring].
- */
 @Composable
 private fun SwipeToDeleteBox(
     onDelete: () -> Unit,
@@ -793,7 +735,7 @@ private fun SwipeToDeleteBox(
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val offsetX = remember { Animatable(0f) }
-    // фаза 2: доля высоты/непрозрачности, 1 → 0 за 200 мс
+
     val collapse = remember { Animatable(1f) }
     var widthPx by remember { mutableFloatStateOf(0f) }
     var heightPx by remember { mutableIntStateOf(0) }
@@ -868,7 +810,7 @@ private fun SwipeToDeleteBox(
 fun TaskEditDialog(
     groupInfo: GroupInfo,
     availableTypes: List<TaskType>,
-    // H1: null = новое задание; не-null = редактирование (поля предзаполняются)
+
     task: StudentTaskEntity? = null,
     initialReminders: List<Long> = emptyList(),
     onDismissRequest: () -> Unit,
@@ -877,8 +819,7 @@ fun TaskEditDialog(
     val isEdit = task != null
     var title by remember { mutableStateOf(task?.title ?: "") }
     var description by remember { mutableStateOf(task?.description ?: "") }
-    // W32: «Срок сдачи» (выбор даты) удалён из диалога; deadlineDate в БД остаётся —
-    // новое задание пишется с пустым сроком, при правке прежний срок не затирается.
+
     val currentYear =
         remember {
             java.util.Calendar
@@ -892,7 +833,7 @@ fun TaskEditDialog(
             MpkCurriculum.getSubjects(groupInfo.specialtyCode, groupInfo.course)
         }
     val defaultSubject = officialSubjects.firstOrNull() ?: "Охрана труда"
-    // H1: предмет из официального списка → dropdown; иначе → «своё название»
+
     val subjectIsOfficial = task != null && officialSubjects.contains(task.subjectName)
     var selectedSubject by remember {
         mutableStateOf(if (subjectIsOfficial) (task?.subjectName ?: defaultSubject) else defaultSubject)
@@ -904,13 +845,12 @@ fun TaskEditDialog(
     }
     val effectiveSubject = if (isCustomSubject) customSubject.trim() else selectedSubject
 
-    // H1: напоминания (epoch millis, локальное время). Чипы-список + компактный композер.
     var reminders by remember { mutableStateOf(initialReminders) }
     var showReminderComposer by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
-        // D8: тап вне диалога не закрывает — набранный текст не теряется
+
         properties = DialogProperties(dismissOnClickOutside = false),
         shape = RoundedCornerShape(2.dp),
         containerColor = ColorBgMain,
@@ -931,7 +871,7 @@ fun TaskEditDialog(
                 )
                 IconButton(
                     onClick = onDismissRequest,
-                    // D4/V15: хитбокс крестика — Tokens.IconHit (44)
+
                     modifier = Modifier.size(Tokens.IconHit),
                 ) {
                     Icon(imageVector = Icons.Default.Close, contentDescription = "Закрыть", tint = ColorTextMuted)
@@ -943,12 +883,12 @@ fun TaskEditDialog(
                 modifier =
                 Modifier
                     .fillMaxWidth()
-                    // H1: форма стала выше (блок напоминаний) — прокрутка, чтобы не резалось
+
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    // W24: полный тип задания — здесь (в карточке осталась только цветная точка)
+
                     text = "Категория: ${selectedType.displayName}",
                     style =
                     androidx.compose.ui.text
@@ -997,8 +937,6 @@ fun TaskEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                // H1: блок «Напоминания». W33: перенесён ВЫШЕ блока предмета —
-                // порядок полей: Категория → Что нужно сделать → Напоминания → Предмет.
                 Text(
                     text = "Напоминания:",
                     style =
@@ -1010,7 +948,7 @@ fun TaskEditDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    // быстрые чипы: W32 — больше не привязаны к «Сроку сдачи», считаем от сегодня
+
                     item {
                         ReminderQuickChip(text = "+1 день") {
                             reminderMillisFrom(todayIso(), 18, 0, 1)?.let { m -> reminders = reminders + m }
@@ -1026,7 +964,6 @@ fun TaskEditDialog(
                     }
                 }
 
-                // добавленные напоминания чипами «12.10 18:00 ×» (удаление по крестику)
                 reminders.forEachIndexed { index, millis ->
                     ReminderChip(
                         label = formatReminderChip(millis),
@@ -1046,7 +983,6 @@ fun TaskEditDialog(
                     )
                 }
 
-                // W33: предмет — НИЖЕ блока напоминаний (по замечанию заказчика)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -1144,8 +1080,7 @@ fun TaskEditDialog(
             }
         },
         confirmButton = {
-            // Находка 1: пустое название/предмет → кнопка физически disabled и затемнена,
-            // вместо «тап молча ничего не делает»
+
             val canSave = title.isNotBlank() && effectiveSubject.isNotBlank()
             Surface(
                 shape = RoundedCornerShape(2.dp),
@@ -1155,10 +1090,9 @@ fun TaskEditDialog(
                     .testTag("task_edit_confirm")
                     .alpha(if (canSave) 1f else 0.4f)
                     .bouncyClickable(enabled = canSave) {
-                    // W32: срок сдачи в диалоге больше не выбирается — новое задание
-                    // пишется с пустым deadlineDate, правка не затирает прежний срок.
+
                     val dueIso = task?.deadlineDate ?: ""
-                    // H1: новое → собираем сущность; правка → copy (id/group/completed/createdAt сохраняются)
+
                     val entity =
                         if (task == null) {
                             StudentTaskEntity(
@@ -1224,15 +1158,6 @@ internal fun formatDateForShow(raw: String): String {
     return "${m.groupValues[3]}.${m.groupValues[2]}.${m.groupValues[1]}"
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// H1: напоминания — хелперы времени и компактный выбор даты/времени
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * H1: epoch millis из ISO-даты (yyyy-MM-dd) + время, в ЛОКАЛЬНОМ часовом поясе устройства
- * (напоминание должно срабатывать по местному настенному времени, в отличие от deadlineDate,
- * который хранится как дата без TZ). plusDays — для быстрых чипов «+1 день», «+2 дня».
- */
 internal fun reminderMillisFrom(
     iso: String,
     hour: Int,
@@ -1249,7 +1174,6 @@ internal fun reminderMillisFrom(
     return cal.timeInMillis
 }
 
-/** H1: подпись чипа напоминания «12.10 18:00» (локальный TZ). */
 internal fun formatReminderChip(millis: Long): String {
     val c =
         java.util.Calendar
@@ -1265,7 +1189,6 @@ internal fun formatReminderChip(millis: Long): String {
     )
 }
 
-/** H1: сегодняшняя дата в ISO (локальный TZ) — старт композера, когда срок сдачи не задан. */
 internal fun todayIso(): String {
     val c = java.util.Calendar.getInstance()
     return String.format(
@@ -1333,7 +1256,7 @@ private fun ReminderChip(
                 ),
                 modifier = Modifier.weight(1f),
             )
-            // V15/находка 7: зона крестика — Tokens.IconHit (44), визуальный размер иконки прежний
+
             IconButton(onClick = onRemove, modifier = Modifier.size(Tokens.IconHit)) {
                 Icon(
                     imageVector = Icons.Default.Close,
@@ -1377,11 +1300,6 @@ private fun TimeChip(
     }
 }
 
-/**
- * H1: компактный выбор напоминания — дата (SimpleDatePickerDialog) + время
- * (быстрые чипы 08:00/12:00/18:00/21:00 или «своё» ЧЧ:ММ). Покрывает сценарии заказчика:
- * несколько дат с одним временем, одна дата с разными временами, «следующий день — другое время».
- */
 @Composable
 private fun ReminderComposer(
     initialDateIso: String,
@@ -1526,7 +1444,7 @@ private fun ReminderComposer(
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                // Находка 1: та же enabled+alpha-логика — невалидное «своё» время → кнопка disabled
+
                 val h = if (customTime) hourInput.toIntOrNull() ?: -1 else presetHour
                 val m = if (customTime) minuteInput.toIntOrNull() ?: -1 else presetMinute
                 val canAdd = h in 0..23 && m in 0..59

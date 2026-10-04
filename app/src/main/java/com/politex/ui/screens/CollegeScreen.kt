@@ -82,14 +82,6 @@ private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
 private val ADMIN_GOLD = Color(0xFFE8C55A)
 
-/**
- * E4/N15: вкладка «Другое» — только МЕНЮ. Внутренний стек OtherPage/pageStack/goBack/
- * navigateDeepEntry и BackHandler УДАЛЕНЫ: подразделы стали route'ами общего NavController
- * (college/specialty, college/teachers, college/settings, college/students, teacher?name=,
- * map?…, group_schedule?group= — см. MainScreen), «назад» обрабатывает системный backstack.
- * Корень N15 устранён: back с карты возвращается на ПРЕДЫДУЩИЙ route (расписание выбранной
- * группы), а не «на уровень глубже» к выбору группы.
- */
 @Composable
 fun CollegeScreen(
     groupInfo: GroupInfo,
@@ -119,8 +111,6 @@ fun CollegeScreen(
     }
 }
 
-// ---------- Обёртки route'ов подразделов (контент — прежние приватные страницы) ----------
-
 @Composable
 internal fun SpecialtyRoute(
     groupInfo: GroupInfo,
@@ -148,12 +138,6 @@ internal fun TeachersRoute(
     }
 }
 
-/**
- * E4: карточка преподавателя — route teacher?name=. ФИО разрешается в Teacher ОДИН раз
- * при входе в composable (IO, кэш AppGraph на процесс); прежние три дубля поиска по фамилии
- * (pendingTeacherName / карта / расписание группы) схлопнулись в этот route: callers просто
- * navigate(buildTeacherRoute(name)). Не найден → возврат (onNotFound), как в старом коде.
- */
 @Composable
 internal fun TeacherCardRoute(
     teacherName: String,
@@ -166,7 +150,7 @@ internal fun TeacherCardRoute(
     val context = LocalContext.current
     var teacher by remember(teacherName) { mutableStateOf<Teacher?>(null) }
     LaunchedEffect(teacherName) {
-        // E2: парсинг teachers.csv — не на main-потоке
+
         teacher =
             kotlinx.coroutines
                 .withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -187,8 +171,7 @@ internal fun TeacherCardRoute(
                 com.politex.data.local.MpkDatabase
                     .getInstance(context)
                     .teacherLessonDao(),
-                // Б3: кабинет в расписании преподавателя ведёт на ту же карту,
-                // что и кабинет из своего расписания (раньше надпись была мёртвой)
+
                 onOpenRoom = onOpenRoom,
                 onBack = onBack,
             )
@@ -201,7 +184,7 @@ internal fun SettingsRoute(
     groupInfo: GroupInfo,
     onGroupChanged: (String) -> Unit,
     onRunConnectionTest: () -> Unit,
-    // Ф4: состояние синхронизации из VM uiState — для спиннера и ✓/✗ «Проверить соединение»
+
     isSyncing: Boolean,
     hasSyncError: Boolean,
     onBack: () -> Unit,
@@ -218,12 +201,6 @@ internal fun SettingsRoute(
     }
 }
 
-/**
- * База учащихся (admin). ponytail: список→карточка — локальное состояние route'а, а не
- * отдельный route: Student не сериализуется в nav-аргумент, а перезагрузка 800 КБ CSV
- * по имени — лишний IO. Внутренний BackHandler возвращает из карточки в список;
- * глубже двух уровней здесь не было и нет.
- */
 @Composable
 internal fun StudentsRoute(
     scheduleRepository: ScheduleRepository,
@@ -330,7 +307,7 @@ private fun OtherMenu(
                     onClick = onOpenSettings,
                 )
             }
-            // N14: пункт «Сайт колледжа» перенесён в низ экрана настроек
+
         }
     }
 }
@@ -755,8 +732,7 @@ private fun MySpecialtyPage(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                // P3: нейтральная формулировка — причина в данных колледжа,
-                                // не «приложение сломалось»
+
                                 text =
                                 "Список предметов для этого курса неполный — " +
                                     "уточните в деканате.",
@@ -820,7 +796,7 @@ private fun TeachersPage(
     onOpenTeacher: (Teacher) -> Unit,
 ) {
     val context = LocalContext.current
-    // E1: единый репозиторий из AppGraph (кэш парсинга на процесс)
+
     val repository = com.politex.AppGraph.teachersRepository
     val teachers = remember { repository.loadTeachers() }
 
@@ -905,7 +881,6 @@ private fun TeachersPage(
                 .background(ColorDividerLight),
         )
 
-        // X14: единый SearchBar дизайн-системы вместо локального OutlinedTextField
         SearchBar(
             value = searchQuery,
             onValueChange = { searchQuery = it },
@@ -924,7 +899,7 @@ private fun TeachersPage(
                     .padding(24.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                // Ф12: честное пустое состояние + сброс поиска (как в StudentsScreens)
+
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = "Ничего не найдено по запросу «$searchQuery»",
@@ -1147,14 +1122,13 @@ private fun TeacherCardPageWrapper(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    // E1: единый репозиторий из AppGraph (кэш парсинга на процесс)
+
     val repository = com.politex.AppGraph.teachersRepository
     val teachers = remember { repository.loadTeachers() }
     val allLessons by scheduleRepository
         .getAllLessonsForGroup(groupInfo.canonicalName)
         .collectAsState(initial = emptyList())
 
-    // X41: инкремент после записи в prefs → пересборка insights с новыми отметками
     var leadsTick by remember { mutableIntStateOf(0) }
 
     val insights =
@@ -1162,7 +1136,7 @@ private fun TeacherCardPageWrapper(
             TeacherInsights(
                 teachers,
                 allLessons,
-                // X41: ручные отметки «ведёт у вас» из prefs
+
                 leadsOffTs = { LeadsMarks.offTs(context, it) },
                 leadsOn = { LeadsMarks.isOn(context, it) },
             )
@@ -1176,7 +1150,7 @@ private fun TeacherCardPageWrapper(
         autoActive = insights.isActive(teacher.name),
         lessonsWithGroup = insights.lessonCount(teacher.name),
         onLeadsChipClick = {
-            // X41: одна точка на все три состояния чипа
+
             val name = teacher.name
             when {
                 insights.isLeadsNow(name) -> LeadsMarks.markOff(context, name, System.currentTimeMillis())
@@ -1191,13 +1165,6 @@ private fun TeacherCardPageWrapper(
     )
 }
 
-/**
- * X41: ручная отметка «ведёт у вас» — prefs «mpk_prefs» (тот же файл, что GradeSettings /
- * WidgetUpdateHelper). Ключи: «leads_off_<фамилия>» = timestamp снятия (Long),
- * «leads_on_<фамилия>» = принудительная отметка (Boolean). Нет ключей = авто-логика W28.
- * Снятие возвращается само, когда появится урок с датой ПОЗЖЕ timestamp снятия.
- */
-// ponytail: ключ — фамилия без инициалов; однофамильцы делят отметку. Полное ФИО в ключ, если станет мешать.
 private object LeadsMarks {
     private const val PREFS = "mpk_prefs"
 
@@ -1222,7 +1189,6 @@ private object LeadsMarks {
         name: String,
     ): Boolean = prefs(ctx).getBoolean(key(name, "leads_on"), false)
 
-    /** Снять отметку: принудительную «on» стираем, пишем timestamp снятия. */
     fun markOff(
         ctx: Context,
         name: String,
@@ -1235,7 +1201,6 @@ private object LeadsMarks {
             .apply()
     }
 
-    /** Принудительно пометить «ведёт»: снятие стираем. */
     fun markOn(
         ctx: Context,
         name: String,
@@ -1247,7 +1212,6 @@ private object LeadsMarks {
             .apply()
     }
 
-    /** Вернуть авто-логику: удалить оба ключа. */
     fun clear(
         ctx: Context,
         name: String,
@@ -1312,7 +1276,7 @@ private fun TeacherCardPage(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                // X41: переключаемый шильдик «Ведёт у вас» (тап = снять/вернуть/пометить)
+
                 LeadsChip(
                     leadsNow = isActive,
                     autoActive = autoActive,
@@ -1343,11 +1307,11 @@ private fun TeacherCardPage(
                     color = if (selected) ColorTopBar else ColorBgMain,
                     modifier =
                     Modifier
-                        // P2: хитбокс табов карточки преподавателя 44dp
+
                         .heightIn(min = 44.dp)
                         .bouncyClickable { tab = index },
                 ) {
-                    // C2: у material3 Surface нет contentAlignment — без Box текст прижат к верху
+
                     Box(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = Alignment.Center,
@@ -1391,12 +1355,6 @@ private fun TeacherCardPage(
     }
 }
 
-/**
- * X41: чип ручной отметки «ведёт у вас» в шапке карточки преподавателя.
- * Синий «ВЕДЁТ У ВАС» (показан) → тап снимает; серый «ОТМЕТКА СНЯТА» (авто-факт
- * активен, но снят) → тап возвращает авто-логику; серый «НЕ ВЕДЁТ У ВАС» → тап
- * принудительно помечает.
- */
 @Composable
 private fun LeadsChip(
     leadsNow: Boolean,
@@ -1415,7 +1373,7 @@ private fun LeadsChip(
         border = BorderStroke(1.dp, if (leadsNow) ColorActiveBlue else ColorBorderLight),
         modifier =
         Modifier
-            // P2: хитбокс кликабельного элемента не меньше 44dp
+
             .heightIn(min = 44.dp)
             .bouncyClickable(scaleDown = 0.97f, onClick = onClick)
             .testTag("teacher_leads_chip"),
@@ -1592,7 +1550,7 @@ private fun AboutTeacherTab(
             item {
                 EmptyCard(
                     text =
-                    "По расписанию вашей группы этот преподаватель занятий не ведёт.\n\n" +
+                    "По расписанию вашей группы этот преподаватель уроков не ведёт.\n\n" +
                         "Откройте вкладку «Расписание», чтобы посмотреть его полное расписание.",
                 )
             }
@@ -1621,11 +1579,6 @@ private fun AboutTeacherTab(
     }
 }
 
-/**
- * X42: чистая функция выбора дня вкладки «Расписание» преподавателя: дата из календаря
- * побеждает «сегодня/завтра» (dayOffset). Вынесена из remember, чтобы выбор дня можно
- * было проверить юнит-тестом (TeacherScheduleDayPickTest).
- */
 internal fun teacherTargetCalendar(
     dayOffset: Int,
     customDate: Calendar?,
@@ -1646,9 +1599,7 @@ private fun TeacherScheduleTab(
             com.politex.data.network
                 .MpkNetworkClient()
         }
-    // Офлайн-путь: тот же репозиторий, что у приложения, — читает из teacher_lessons
-    // E1: экземпляр AppGraph уже содержит teacherLessonDao; null — только если экран
-    // открыт без офлайн-дао явно (семантика прежнего remember(teacherLessonDao))
+
     val offlineRepository = teacherLessonDao?.let { com.politex.AppGraph.scheduleRepository }
 
     var dayOffset by rememberSaveable { mutableIntStateOf(0) }
@@ -1660,8 +1611,6 @@ private fun TeacherScheduleTab(
 
     val cache = remember { mutableMapOf<String, Map<String, List<com.politex.data.network.TeacherSlot>>>() }
 
-    // QA#7: ключ today (rememberToday) — после полуночи/возврата из фона «сегодня/завтра»
-    // пересчитывается, а не остаётся вчерашним на всю жизнь композиции
     val today = rememberToday()
     val targetCalendar =
         remember(dayOffset, customDate, today) {
@@ -1674,7 +1623,6 @@ private fun TeacherScheduleTab(
                 .surnameOf(teacher.name)
         }
 
-    // День недели выбранной даты (для звонов и фильтра слотов)
     val selectedDateDow =
         remember(targetCalendar) {
             com.politex.data.network.MpkScheduleParser
@@ -1687,7 +1635,6 @@ private fun TeacherScheduleTab(
                 .SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
                 .format(targetCalendar.time)
 
-        /** Занятия из базы → слоты для UI. Пустой список означает «этого дня в базе нет». */
         suspend fun fromDatabase() = offlineRepository
             ?.getTeacherLessonsForDate(surname, dateKey)
             .orEmpty()
@@ -1703,7 +1650,7 @@ private fun TeacherScheduleTab(
             }
 
         if (offlineRepository != null) {
-            // Офлайн-режим: источник истины — база. День уже разобран синком → сети нет.
+
             errorMessage = ""
             var result = fromDatabase()
             if (result.isEmpty()) {
@@ -1725,7 +1672,6 @@ private fun TeacherScheduleTab(
             return@LaunchedEffect
         }
 
-        // Без базы (тесты, вызов без DAO) — прежний путь через сетевой кэш экрана
         val parsedAll =
             cache[dateKey] ?: run {
                 loading = true
@@ -1756,9 +1702,6 @@ private fun TeacherScheduleTab(
                 }?.value
                 .orEmpty()
 
-        // Слоты размечены днём недели документа: показываем только совпадающий день.
-        // O7: при нераспознанном дне (docDow == 0) НЕ показываем весь документ —
-        // иначе под любой прошлой датой возникало расписание (жалоба заказчика).
         val docDow = allSlots.firstOrNull()?.dayOfWeek ?: 0
         slots =
             when {
@@ -1774,7 +1717,7 @@ private fun TeacherScheduleTab(
             scheduleRepository = com.politex.AppGraph.scheduleRepository,
             onDismiss = { showCalendar = false },
             onDateSelected = { _, dateStr ->
-                // dateStr приходит в dd.MM.yyyy; парсим календарём, не строковой заменой
+
                 val parsed =
                     com.politex.data.network.MpkScheduleParser
                         .parseDotDate(dateStr)
@@ -1885,7 +1828,7 @@ private fun TeacherScheduleTab(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "В этот день у преподавателя занятий нет",
+                        text = "В этот день у преподавателя уроков нет",
                         style =
                         androidx.compose.ui.text
                             .TextStyle(fontSize = 14.sp, color = ColorTextMuted),
@@ -1927,7 +1870,7 @@ private fun TeacherScheduleTab(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = slot.subject.ifBlank { "Занятие" },
+                                        text = slot.subject.ifBlank { "Урок" },
                                         style =
                                         androidx.compose.ui.text.TextStyle(
                                             fontWeight = FontWeight.Bold,
@@ -1958,8 +1901,7 @@ private fun TeacherScheduleTab(
                                     )
                                 }
                                 if (slot.room.isNotBlank()) {
-                                    // Б3: тот же стиль и то же поведение, что у кабинета в своём
-                                    // расписании (ScheduleScreen.SubgroupPane) — тап открывает карту
+
                                     Surface(
                                         shape = RoundedCornerShape(2.dp),
                                         color = ColorSurfaceHighlight,
@@ -2032,7 +1974,7 @@ private fun SubPageBackButton(onBack: () -> Unit) {
         border = BorderStroke(1.dp, ColorBorderLight),
         modifier =
         Modifier
-            // Ф7: хитбокс «назад» — Tokens.IconHit (44), иконка 20 (было 36/18)
+
             .size(Tokens.IconHit)
             .bouncyClickable(onClick = onBack),
     ) {
@@ -2112,8 +2054,7 @@ private fun InfoRow(
     value: String,
     onClick: (() -> Unit)? = null,
 ) {
-    // Б3: значение-кабинет (onClick != null) выглядит и ведёт себя как остальные
-    // кликабельные кабинеты приложения — синим, с зоной нажатия не меньше 48dp.
+
     val clickModifier =
         if (onClick != null) {
             Modifier

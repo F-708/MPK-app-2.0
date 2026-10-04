@@ -11,11 +11,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.URLDecoder
 
-/**
- * E4/N15: построители route-строк Navigation-Compose — чистые функции (URLEncoder, JVM).
- * Ошибкодельность кодирования = сломанная навигация по ФИО/группам с кириллицей и пробелами,
- * поэтому round-trip проверяется явно.
- */
 class NavRouteTest {
     private fun decode(value: String) = URLDecoder.decode(value, "UTF-8")
 
@@ -31,7 +26,7 @@ class NavRouteTest {
 
     @Test
     fun `from пустой строкой сохраняется — это маршрут от главного входа (R1)`() {
-        // from="" и from=null РАЗНЫЕ: "" = показать маршрут от главного входа, null = без маршрута
+
         assertEquals("map?room=321&from=", buildMapRoute("321", "", false))
     }
 
@@ -52,8 +47,7 @@ class NavRouteTest {
 
     @Test
     fun `X4 карта из календаря-архива — кабинет без маршрута (from=null, route=false)`() {
-        // Архив-ветка ScheduleScreen: onRoomClick(room, null) → buildMapRoute(room, null, false).
-        // Колледж-карта читает from=null и route=false → routeActive=false, маршрут НЕ строится.
+
         val route = buildMapRoute("214", null, false)
         assertEquals("map?room=214", route)
         assertFalse(route.contains("from="))
@@ -97,8 +91,6 @@ class NavRouteTest {
         assertEquals("bells?scroll={scroll}", scrollRoutePattern("bells"))
     }
 
-    // ---- X7: системная «назад» на корнях вкладок ----
-
     @Test
     fun `X7 backAction - корень college ведёт на schedule`() {
         assertEquals(com.politex.ui.screens.BackAction.TO_SCHEDULE, com.politex.ui.screens.backAction("college"))
@@ -113,7 +105,7 @@ class NavRouteTest {
 
     @Test
     fun `X7 backAction - query вкладки отбрасывается (паттерн route)`() {
-        // destination.route вкладки несёт паттерн «schedule?scroll={scroll}» — base = schedule
+
         assertEquals(com.politex.ui.screens.BackAction.EXIT, com.politex.ui.screens.backAction("schedule?scroll={scroll}"))
         assertEquals(com.politex.ui.screens.BackAction.EXIT, com.politex.ui.screens.backAction("bells?scroll=CURRENT_BELL"))
     }

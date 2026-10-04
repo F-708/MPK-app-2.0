@@ -39,7 +39,6 @@ interface LessonDao {
         dayOfWeek: Int,
     ): Flow<List<LessonEntity>>
 
-    // Пары в конкретном кабинете на дату (точная дата приоритетна, пустой dateString — фолбэк по дню недели)
     @Query(
         """
         SELECT * FROM lessons
@@ -66,7 +65,6 @@ interface LessonDao {
         dayOfWeek: Int,
     ): List<LessonEntity>
 
-    // Т5: группы, у которых есть уроки в указанную дату (или недельный шаблон на этот день)
     @Query(
         """
         SELECT DISTINCT groupName FROM lessons
@@ -134,8 +132,6 @@ interface LessonDao {
         insertLessons(newLessons)
     }
 
-    // O7/O1: DELETE + INSERT одной транзакцией — иначе между ними Room эмитит пустой
-    // список и в UI на миг мелькает «расписание не опубликовано».
     @Transaction
     suspend fun replaceForDate(
         groupName: String,

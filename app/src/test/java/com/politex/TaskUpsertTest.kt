@@ -15,13 +15,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * H1 (Задача 3.1): upsert-семантика редактирования по тапу.
- *
- * Проверяем на реальной in-memory Room, что `saveTask` (insert-with-replace по id):
- * новое задание вставляет, а повторный вызов с тем же id — ЗАМЕНЯЕТ строку, а не дублирует.
- * Сценарий заказчика: add → edit title → в списке одна запись с новым title.
- */
 @RunWith(RobolectricTestRunner::class)
 class TaskUpsertTest {
     private lateinit var db: MpkDatabase
@@ -58,11 +51,10 @@ class TaskUpsertTest {
 
     @Test
     fun `add then edit title keeps a single row with new title`() = runBlocking {
-        // добавляем новое (id=0 → сгенерируется)
+
         val newId = repo.saveTask(task(title = "Лаба 1"))
         assertTrue("новая запись должна получить id > 0", newId > 0)
 
-        // редактируем title, сохраняем тем же id (upsert)
         val sameId = repo.saveTask(task(id = newId, title = "Лаба 1 (исправлено)"))
         assertEquals("id должен сохраниться", newId, sameId)
 

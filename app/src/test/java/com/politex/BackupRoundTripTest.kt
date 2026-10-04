@@ -16,11 +16,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * QA#9: бэкап v2 — export→import возвращает задания с напоминаниями и оценки.
- * Напоминания переносятся только вместе с восстановленным заданием (старый id → новый),
- * повторный импорт не плодит дубликаты (merge по dedupe-ключу).
- */
 @RunWith(RobolectricTestRunner::class)
 class BackupRoundTripTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
@@ -58,7 +53,6 @@ class BackupRoundTripTest {
 
         val json = BackupManager.buildBackup(context)
 
-        // «новый телефон»: стираем пользовательские данные
         db.taskDao().deleteTaskById(taskId)
         db.taskReminderDao().deleteForTask(taskId)
         db.gradeDao().deleteById(gradeId)
@@ -80,7 +74,6 @@ class BackupRoundTripTest {
         assertEquals("2026-10-01", grade.dateIso)
         assertEquals("REGULAR", grade.category)
 
-        // повторный импорт того же файла — без дубликатов
         val again = BackupManager.restoreBackup(context, json).getOrThrow()
         assertEquals("оценки дедуплицируются", 0, again.gradesRestored)
         assertEquals(

@@ -101,23 +101,21 @@ class CollegeRouteFinderTest {
         )
     }
 
-    // W40a: комната цепляется ПРОЕКЦИЕЙ двери на ближайший сегмент коридора (без радиуса),
-    // а не к дальнему узлу — маршрут из двери выходит в коридор сразу, без крюка.
     @Test
     fun `W40a - комната цепляется проекцией двери на коридор без крюка к узлу`() {
-        val f = floorWithCorridor() // коридор (0.1,0.5)-(0.9,0.5): вершины-концы в 0.4 от дверей
+        val f = floorWithCorridor()
         val a = room("101", 0.5f, 0.3f).let { it.copy(door = MapPoint(0.5f, 0.46f)) }
         val b = room("105", 0.5f, 0.7f).let { it.copy(door = MapPoint(0.5f, 0.54f)) }
 
         val route = CollegeRouteFinder.findRoute(a, b, f)
 
         assertNotNull("маршрут должен найтись", route)
-        // путь проходит через точку проекции (0.5,0.5) — перпендикуляр из обеих дверей
+
         assertTrue(
             "в пути должна быть точка проекции (0.5,0.5), путь ${route!!.points}",
             route.points.any { Math.abs(it.x - 0.5f) < 1e-3f && Math.abs(it.y - 0.5f) < 1e-3f },
         )
-        // и НЕ ходит к концам коридора (крюк к дальнему узлу)
+
         assertTrue(
             "путь не должен идти к концам коридора (крюк), путь ${route.points}",
             route.points.none {
@@ -125,24 +123,22 @@ class CollegeRouteFinderTest {
                     (Math.abs(it.x - 0.9f) < 1e-3f && Math.abs(it.y - 0.5f) < 1e-3f)
             },
         )
-        // длина по прямой через коридор, а не 2×0.4+0.8 крюком через конец
+
         assertTrue("длина должна быть короткой, получилось ${route.distance}", route.distance < 0.5f)
     }
 
-    // W40b: две двери на ОДНОМ длинном сегменте «на глаз»-коридора связаны цепочкой
-    // проекций по t — маршрут идёт вдоль коридора, не кидаясь к дальним концам сегмента.
     @Test
     fun `W40b - две двери на одном сегменте идут вдоль коридора`() {
-        val f = floorWithCorridor() // один длинный сегмент (0.1,0.5)-(0.9,0.5)
+        val f = floorWithCorridor()
         val a = room("101", 0.3f, 0.3f).let { it.copy(door = MapPoint(0.3f, 0.46f)) }
         val b = room("105", 0.7f, 0.3f).let { it.copy(door = MapPoint(0.7f, 0.46f)) }
 
         val route = CollegeRouteFinder.findRoute(a, b, f)
 
         assertNotNull(route)
-        // центры добавляют по 0.16 подхода к двери: длина ≈ 0.16+0.04+0.4+0.04+0.16 = 0.8
+
         assertTrue("длина вдоль коридора ~0.8, получилось ${route!!.distance}", route.distance in 0.7f..0.9f)
-        // концы сегмента не посещаются — нет крюка к дальним узлам
+
         assertTrue(
             "путь не должен касаться концов сегмента, путь ${route.points}",
             route.points.none {
@@ -151,8 +147,6 @@ class CollegeRouteFinderTest {
             },
         )
     }
-
-    // ---- W39c: ортогонализация маршрута для отрисовки ----
 
     @Test
     fun `ортогонализация - диагональ заменяется L-уголком`() {
@@ -165,7 +159,7 @@ class CollegeRouteFinderTest {
 
     @Test
     fun `ортогонализация - уголок выбирается мимо комнаты`() {
-        // комната (x 0.05-0.15, y 0.2-0.3) перекрывает вертикальную ногу уголка c1=(0.1,0.4)
+
         val blocker =
             MapRoom(
                 id = "r", number = "105", title = "", note = "", status = "normal",
@@ -182,8 +176,7 @@ class CollegeRouteFinderTest {
 
     @Test
     fun `ортогонализация - комнаты концов сегмента не блокируют`() {
-        // старт — центр комнаты: первая нога неизбежно проходит сквозь её прямоугольник,
-        // но это СВОЯ комната — уголок допустим
+
         val startRoom =
             MapRoom(
                 id = "a", number = "101", title = "", note = "", status = "normal",
@@ -199,12 +192,11 @@ class CollegeRouteFinderTest {
 
     @Test
     fun `ортогонализация - оба уголка через комнаты, диагональ НЕ остаётся (меньший пробой)`() {
-        // две комнаты блокируют обе пары ног: Y7 запрещает диагональ вовсе —
-        // берётся уголок с МЕНЬШИМ числом пробоев (здесь равны → c1)
+
         val blockers =
             listOf(
-                MapRoom(id = "r1", number = "301", title = "", note = "", status = "normal", x = 0.1f, y = 0.25f, w = 0.1f, h = 0.1f), // нога c1
-                MapRoom(id = "r2", number = "302", title = "", note = "", status = "normal", x = 0.5f, y = 0.25f, w = 0.1f, h = 0.1f), // нога c2 (x 0.45-0.55)
+                MapRoom(id = "r1", number = "301", title = "", note = "", status = "normal", x = 0.1f, y = 0.25f, w = 0.1f, h = 0.1f),
+                MapRoom(id = "r2", number = "302", title = "", note = "", status = "normal", x = 0.5f, y = 0.25f, w = 0.1f, h = 0.1f),
             )
         val out = CollegeRouteFinder.orthogonalize(
             listOf(MapPoint(0.1f, 0.1f), MapPoint(0.5f, 0.4f)),
@@ -214,14 +206,13 @@ class CollegeRouteFinderTest {
         assertEquals(MapPoint(0.1f, 0.4f), out[1])
     }
 
-    // Y7: дрожание разметки (уклон < ~19° в plan-px) защёлкивается на ось — итог строго осевой
     @Test
     fun `Y7 ортогонализация - все сегменты осевые в plan-px (снап дрожания)`() {
         val pts =
             listOf(
                 MapPoint(0.1f, 0.5f),
-                MapPoint(0.5f, 0.502f), // уклон 0.002*768=1.5px на 550px — дрожание
-                MapPoint(0.52f, 0.2f), // уклон по x: 27px на 232px — почти вертикаль
+                MapPoint(0.5f, 0.502f),
+                MapPoint(0.52f, 0.2f),
             )
         val out = CollegeRouteFinder.orthogonalize(pts, emptyList())
         assertEquals(3, out.size)
@@ -234,15 +225,14 @@ class CollegeRouteFinderTest {
         assertEquals("вертикаль защёлкнута на x предыдущей", 0.5f, out[2].x, 1e-6f)
     }
 
-    // Y7: avoidRooms — осевой сегмент сквозь кабинет сдвигается на ближайшую свободную ось коридора
     @Test
     fun `Y7 avoidRooms - пробитый осевой сегмент обходится по оси соседнего коридора`() {
         val blocker =
             MapRoom(id = "B", number = "999", title = "", note = "", status = "normal", x = 0.5f, y = 0.5f, w = 0.2f, h = 0.1f)
         val corridors =
             listOf(
-                MapCorridor("c1", listOf(MapPoint(0.1f, 0.5f), MapPoint(0.9f, 0.5f)), 0.012f), // пробит блокером
-                MapCorridor("c2", listOf(MapPoint(0.1f, 0.7f), MapPoint(0.9f, 0.7f)), 0.012f), // свободная ось
+                MapCorridor("c1", listOf(MapPoint(0.1f, 0.5f), MapPoint(0.9f, 0.5f)), 0.012f),
+                MapCorridor("c2", listOf(MapPoint(0.1f, 0.7f), MapPoint(0.9f, 0.7f)), 0.012f),
             )
         val out =
             CollegeRouteFinder.avoidRooms(
@@ -262,7 +252,6 @@ class CollegeRouteFinderTest {
         }
     }
 
-    // Y7: коннект к двери — первая/последняя точка мультиэтажного маршрута = дверь комнаты
     @Test
     fun `Y7 коннект - маршрут стартует и финиширует ровно в двери`() {
         val f = floorWithCorridor()
@@ -279,11 +268,9 @@ class CollegeRouteFinderTest {
         assertEquals(b.door!!.y, last.y, 1e-4f)
     }
 
-    // Y7: гарантия «не сквозь кабинеты» — ни одна нога итоговой полилинии не пробивает чужую комнату
     @Test
     fun `Y7 обход - полилиния маршрута не пробивает чужие кабинеты (синтетика)`() {
-        // коридор y=0.5; кабинет-блокер нависает над коридором между дверями:
-        // прямой проход вдоль коридора чист, но диагональ старт→финиш пробила бы блокер
+
         val corridor = MapCorridor("c", listOf(MapPoint(0.1f, 0.5f), MapPoint(0.9f, 0.5f)), 0.012f)
         val blocker =
             MapRoom(id = "B", number = "999", title = "", note = "", status = "normal", x = 0.5f, y = 0.35f, w = 0.3f, h = 0.2f)
@@ -308,8 +295,6 @@ class CollegeRouteFinderTest {
         assertEquals(pts, CollegeRouteFinder.orthogonalize(pts, emptyList()))
     }
 
-    // ---- X26: segCrossesRect (Liang–Barsky) + чистая проекция attach ----
-
     @Test
     fun `X26 segCrossesRect Liang-Barsky`() {
         val r = floatArrayOf(0.4f, 0.4f, 0.6f, 0.6f)
@@ -323,9 +308,7 @@ class CollegeRouteFinderTest {
 
     @Test
     fun `X26 attach проекция огибает чужую комнату - без пробоя стены`() {
-        // Коридор y=0.5 из НЕСКОЛЬКИХ сегментов. Комната A(0.5,0.8) door=null. Блокер B —
-        // узкая стена прямо под A: ближайшая проекция (0.5,0.5) пробила бы B, но соседняя
-        // (0.4,0.5) чистая → X26 выбирает её, и ни одна нога маршрута не пересекает B.
+
         val corridor =
             MapCorridor(
                 "c",
@@ -360,17 +343,15 @@ class CollegeRouteFinderTest {
     fun `X26 ортогонализация - оба уголка blocked, берётся уголок с меньшим пробоем`() {
         val a = MapPoint(0.1f, 0.1f)
         val b = MapPoint(0.5f, 0.5f)
-        // c1=(0.1,0.5): вертикаль x=0.1 пробивает b1 + горизонталь y=0.5 пробивает b2 → 2 пробоя.
-        // c2=(0.5,0.1): горизонталь y=0.1 чиста + вертикаль x=0.5 пробивает b3 → 1 пробой.
-        // диагональ a→b пробивает d → 1 пробой (НЕ чище c2) → выбирается уголок c2.
+
         fun r(id: String, x: Float, y: Float, w: Float, h: Float) =
             MapRoom(id = id, number = id, title = "", note = "", status = "normal", x = x, y = y, w = w, h = h)
         val blockers =
             listOf(
-                r("b1", 0.1f, 0.25f, 0.04f, 0.1f), // [0.08,0.20,0.12,0.30] — вертикаль c1
-                r("b2", 0.35f, 0.5f, 0.1f, 0.04f), // [0.30,0.48,0.40,0.52] — горизонталь c1
-                r("b3", 0.5f, 0.25f, 0.04f, 0.1f), // [0.48,0.20,0.52,0.30] — вертикаль c2
-                r("d", 0.3f, 0.3f, 0.04f, 0.04f), // [0.28,0.28,0.32,0.32] — диагональ
+                r("b1", 0.1f, 0.25f, 0.04f, 0.1f),
+                r("b2", 0.35f, 0.5f, 0.1f, 0.04f),
+                r("b3", 0.5f, 0.25f, 0.04f, 0.1f),
+                r("d", 0.3f, 0.3f, 0.04f, 0.04f),
             )
         val out = CollegeRouteFinder.orthogonalize(listOf(a, b), blockers)
         assertEquals(3, out.size)

@@ -6,42 +6,33 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * M5: нечёткий поиск — опечатки (Даммерау-Левенштейн), перестановки соседних букв,
- * «ё»→«е», совпадение по префиксу от 4 символов, регистр-тогл «Aa».
- *
- * Чистый JVM-тест: FuzzySearch не трогает Android, Robolectric здесь только замедлил бы прогон.
- */
 class FuzzySearchTest {
-    // ── Расстояние Даммерау-Левенштейна ──────────────────────────────────────
 
     @Test
     fun `расстояние считает замены вставки и удаления`() {
         assertEquals(0, FuzzySearch.damerauLevenshtein("abc", "abc"))
-        assertEquals(1, FuzzySearch.damerauLevenshtein("abc", "abd")) // замена
-        assertEquals(1, FuzzySearch.damerauLevenshtein("abc", "ab")) // удаление
-        assertEquals(1, FuzzySearch.damerauLevenshtein("abc", "abcd")) // вставка
+        assertEquals(1, FuzzySearch.damerauLevenshtein("abc", "abd"))
+        assertEquals(1, FuzzySearch.damerauLevenshtein("abc", "ab"))
+        assertEquals(1, FuzzySearch.damerauLevenshtein("abc", "abcd"))
         assertEquals(3, FuzzySearch.damerauLevenshtein("kitten", "sitting"))
         assertEquals(3, FuzzySearch.damerauLevenshtein("", "abc"))
     }
 
     @Test
     fun `перестановка соседних символов стоит единицу`() {
-        // Главное отличие Даммерау от Левенштейна: «фиизка» → «физика» одной правкой, а не двумя
+
         assertEquals(1, FuzzySearch.damerauLevenshtein("физика", "фиизка"))
         assertEquals(1, FuzzySearch.damerauLevenshtein("ab", "ba"))
     }
 
     @Test
     fun `лимит даёт ранний выход и возвращает лимит плюс один`() {
-        // «ранета» и «дерево» разошлись дальше двойки — точное число нам уже не нужно
+
         assertEquals(3, FuzzySearch.damerauLevenshtein("ранета", "дерево", limit = 2))
         assertEquals(3, FuzzySearch.damerauLevenshtein("abcdef", "uvwxyz", limit = 2))
-        // разница длин больше лимита — выход до входа в цикл
+
         assertEquals(3, FuzzySearch.damerauLevenshtein("а", "абвгд", limit = 2))
     }
-
-    // ── Совпадение слов ──────────────────────────────────────────────────────
 
     @Test
     fun `опечатка в длинном слове считается совпадением`() {
@@ -60,19 +51,17 @@ class FuzzySearchTest {
     fun `совпадение по префиксу от четырёх символов`() {
         assertTrue(FuzzySearch.wordMatches("программирование", "программиров"))
         assertTrue(FuzzySearch.wordMatches("сопротивление", "сопр"))
-        // три символа — слишком общий префикс, иначе «сом» найдёт «сопротивление»
+
         assertFalse(FuzzySearch.wordMatches("сопротивление", "сом"))
     }
 
     @Test
     fun `короткие слова ищутся только точно`() {
         assertTrue(FuzzySearch.wordMatches("да", "да"))
-        // при допуске 2 для трёхбуквенных слов «да» сматчило бы «до», «ду», «од»… — шум
+
         assertFalse(FuzzySearch.wordMatches("до", "да"))
         assertFalse(FuzzySearch.wordMatches("сон", "сын"))
     }
-
-    // ── Нормализация ─────────────────────────────────────────────────────────
 
     @Test
     fun `ё приводится к е`() {
@@ -94,14 +83,11 @@ class FuzzySearchTest {
         assertEquals("с включённым Aa другой регистр не совпадает", 0, FuzzySearch.score("ЛЕКЦИЯ по ТОЭ", "лекция", caseSensitive = true))
     }
 
-    // ── score: мультисловные запросы ─────────────────────────────────────────
-
     @Test
     fun `считаются только найденные слова запроса`() {
         val text = "Методичка по математике, лекция 3, пределы"
         assertEquals(3, FuzzySearch.score(text, "математика лекция пределы"))
-        // частичное совпадение отдаётся честно: 3 из 4 слов найдены, «физики» в тексте нет.
-        // Бейдж «3/4» в выдаче показывает ровно это, а сортировка по убыванию выводит полные выше.
+
         assertEquals(3, FuzzySearch.score(text, "математика лекция пределы физика"))
         assertEquals("ни одно слово не найдено — материал не подходит", 0, FuzzySearch.score(text, "физика химия"))
     }

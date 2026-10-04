@@ -12,11 +12,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * X39: осталось два туториала — TASK_SWIPE (свайп) и SCHEDULE_TAP (тап по кабинету ИЛИ
- * преподавателю). Траектории демо-жеста — чистые функции (Rect/Offset из compose-ui-geometry,
- * Android не нужен). Стенд: hole 100×50px в (0,0).
- */
 class TutorialTrajectoryTest {
     private val rect = Rect(0f, 0f, 100f, 50f)
 
@@ -46,16 +41,15 @@ class TutorialTrajectoryTest {
     @Test
     fun `success by any of two anchors closes only the active feature`() {
         TutorialController.clear()
-        // Фича не активна — сигнал с экрана расписания игнорируется.
+
         TutorialController.success(TutorialFeature.SCHEDULE_TAP)
         assertEquals(0, TutorialController.successSignal)
 
         TutorialController.active = TutorialFeature.SCHEDULE_TAP
-        // Чужой успех (задания) расписание не закрывает.
+
         TutorialController.success(TutorialFeature.TASK_SWIPE)
         assertEquals(0, TutorialController.successSignal)
-        // Успех активной фичи засчитывается с любого якоря: и room-кнопка, и чип
-        // преподавателя зовут success(SCHEDULE_TAP) — сигнал один на обоих.
+
         TutorialController.success(TutorialFeature.SCHEDULE_TAP)
         assertEquals(1, TutorialController.successSignal)
 
@@ -69,10 +63,10 @@ class TutorialTrajectoryTest {
         val pts = trajectorySwipe(rect)
         assertEquals(2, pts.size)
         val (start, end) = pts
-        // Обе точки на одной высоте (горизонтальный свайп).
+
         assertEquals(rect.center.y, start.y, 0.001f)
         assertEquals(rect.center.y, end.y, 0.001f)
-        // Старт справа, конец левее — жест слева направо НЕ возможен.
+
         assertTrue("свайп должен идти справа налево", end.x < start.x)
     }
 

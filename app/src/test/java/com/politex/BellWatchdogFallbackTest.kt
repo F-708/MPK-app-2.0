@@ -5,12 +5,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * QA#1: страховка BellServiceWatchdogWorker. На Android 12+ прямой startForegroundService
- * из фонового воркера бросает ForegroundServiceStartNotAllowedException → start() вернёт
- * false → должен быть запланирован точный будильник AlarmManager (start из exempt-контекста
- * BellServiceAlarmReceiver). Логика решения — чистая функция, без Android-зависимостей.
- */
 class BellWatchdogFallbackTest {
     @Test
     fun `failed FGS start on Android 12+ schedules fallback alarm`() {

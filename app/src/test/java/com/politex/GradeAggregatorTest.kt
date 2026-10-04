@@ -6,18 +6,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * Ф4.2 (G2): формула заказчика — парное сворачивание по priority.
- * Чистый JVM-тест: GradeAggregator не знает ни про Room, ни про Android.
- * Кейсы из спеки: без экзамена, с экзаменом, пустая контрольная пропускается,
- * только практ, свой priority, LAB не входит, округление до 1 знака.
- */
 class GradeAggregatorTest {
     private val delta = 1e-9
 
     @Test
     fun `дефолтная формула без экзамена`() {
-        // ((8 + 7) / 2 + 9) / 2 = 8.25 — обычные средние, практ, контрольная
+
         val avg =
             GradeAggregator.average(
                 mapOf(
@@ -31,7 +25,7 @@ class GradeAggregatorTest {
 
     @Test
     fun `дефолтная формула с экзаменом`() {
-        // (((8 + 7) / 2 + 9) / 2 + 10) / 2 = 9.125
+
         val avg =
             GradeAggregator.average(
                 mapOf(
@@ -47,7 +41,7 @@ class GradeAggregatorTest {
 
     @Test
     fun `пустая контрольная пропускается без сдвига acc`() {
-        // (8 + 6) / 2 = 7.0; CONTROL пуст — acc НЕ делится лишний раз
+
         val avg =
             GradeAggregator.average(
                 mapOf(
@@ -58,7 +52,6 @@ class GradeAggregatorTest {
             )
         assertEquals(7.0, avg!!, delta)
 
-        // то же самое, если категории вообще нет в карте
         assertEquals(
             7.0,
             GradeAggregator.average(mapOf("REGULAR" to listOf(8), "PRACTICAL" to listOf(6)))!!,
@@ -81,9 +74,9 @@ class GradeAggregatorTest {
     @Test
     fun `свой priority меняет результат сворачивания`() {
         val values = mapOf("REGULAR" to listOf(6), "CONTROL" to listOf(8), "EXAM" to listOf(10))
-        // дефолт: ((6 + 8) / 2 + 10) / 2 = 8.5
+
         assertEquals(8.5, GradeAggregator.average(values)!!, delta)
-        // свой: экзамен первым — ((10 + 8) / 2 + 6) / 2 = 7.5
+
         assertEquals(
             7.5,
             GradeAggregator.average(values, listOf("EXAM", "CONTROL", "REGULAR"))!!,
@@ -95,13 +88,13 @@ class GradeAggregatorTest {
     fun `LAB не входит в агрегацию даже если попал в priority`() {
         val values = mapOf("REGULAR" to listOf(8), "LAB" to listOf(0, 1))
         assertEquals(8.0, GradeAggregator.average(values)!!, delta)
-        // явно сунули LAB в priority — всё равно пропускается
+
         assertEquals(
             8.0,
             GradeAggregator.average(values, listOf("REGULAR", "LAB"))!!,
             delta,
         )
-        // только LAB → среднего нет
+
         assertNull(GradeAggregator.average(mapOf("LAB" to listOf(1)), listOf("LAB")))
     }
 
@@ -126,8 +119,6 @@ class GradeAggregatorTest {
             GradeAggregator.DEFAULT_PRIORITY,
         )
     }
-
-    // ── W22: buildTreeLevels — дерево формулы для отрисовки ──────────────────
 
     @Test
     fun `buildTreeLevels — лестница склеивает первые два узла каждого уровня`() {
@@ -162,7 +153,7 @@ class GradeAggregatorTest {
 
     @Test
     fun `buildTreeLevels — порядок узлов зеркалит порядок сворачивания average`() {
-        // дерево по приоритету [EXAM, CONTROL, REGULAR] — пары те же, что в average
+
         val priority = listOf("EXAM", "CONTROL", "REGULAR")
         assertEquals(
             listOf(
@@ -172,7 +163,7 @@ class GradeAggregatorTest {
             ),
             GradeAggregator.buildTreeLevels(priority),
         )
-        // верхний узел = те же листья, что сворачивает average
+
         assertEquals(
             GradeAggregator.average(mapOf("EXAM" to listOf(10), "CONTROL" to listOf(8), "REGULAR" to listOf(6)), priority)!!,
             GradeAggregator.average(
@@ -182,8 +173,6 @@ class GradeAggregatorTest {
             delta,
         )
     }
-
-    // ── V18: weightedAverage + roundAvg ─────────────────────────────────────
 
     @Test
     fun `weightedAverage — равные веса это обычное среднее`() {
@@ -197,7 +186,7 @@ class GradeAggregatorTest {
 
     @Test
     fun `weightedAverage — неравные веса тянут балл`() {
-        // 8 * 0.7 + 6 * 0.3 = 7.4
+
         val avg =
             GradeAggregator.weightedAverage(
                 mapOf("REGULAR" to listOf(8), "EXAM" to listOf(6)),
@@ -208,8 +197,7 @@ class GradeAggregatorTest {
 
     @Test
     fun `weightedAverage — пустые категории и нулевые веса не входят в знаменатель`() {
-        // CONTROL пуст (w=40 пропадает), PRACTICAL w=0 с оценками — тоже пропускается:
-        // (8*50 + 10*50) / 100 = 9.0, а не деление на 130
+
         val avg =
             GradeAggregator.weightedAverage(
                 mapOf(
@@ -221,7 +209,7 @@ class GradeAggregatorTest {
                 mapOf("REGULAR" to 50, "PRACTICAL" to 0, "CONTROL" to 40, "EXAM" to 50),
             )
         assertEquals(9.0, avg!!, delta)
-        // категории нет в weights — вес 0
+
         assertEquals(
             8.0,
             GradeAggregator.weightedAverage(mapOf("REGULAR" to listOf(8), "EXAM" to listOf(10)), mapOf("REGULAR" to 1))!!,
@@ -249,12 +237,10 @@ class GradeAggregatorTest {
         )
     }
 
-    // ── X8: roundAvg HALF_UP (.0 / .00 / целое) ─────────────────────────────
-
     @Test
     fun `roundAvg — _0 стандартное школьное HALF_UP`() {
-        assertEquals(8.3, GradeAggregator.roundAvg(8.25, ".0"), delta) // 0.05 → вверх
-        assertEquals(8.2, GradeAggregator.roundAvg(8.24, ".0"), delta) // 0.04 → вниз
+        assertEquals(8.3, GradeAggregator.roundAvg(8.25, ".0"), delta)
+        assertEquals(8.2, GradeAggregator.roundAvg(8.24, ".0"), delta)
         assertEquals(7.0, GradeAggregator.roundAvg(7.0, ".0"), delta)
         assertEquals(8.0, GradeAggregator.roundAvg(8.04, ".0"), delta)
         assertEquals(8.1, GradeAggregator.roundAvg(8.05, ".0"), delta)
@@ -271,14 +257,12 @@ class GradeAggregatorTest {
     @Test
     fun `roundAvg — неизвестный и legacy mode = 1 знак`() {
         assertEquals(8.3, GradeAggregator.roundAvg(8.25, "garbage"), delta)
-        assertEquals(8.3, GradeAggregator.roundAvg(8.25, "0.1"), delta) // legacy v8
+        assertEquals(8.3, GradeAggregator.roundAvg(8.25, "0.1"), delta)
     }
-
-    // ── X9: plainAverage, дефолт весов, шаг слайдера 25 ─────────────────────
 
     @Test
     fun `plainAverage — все оценки всех категорий одним средним`() {
-        // границы категорий не важны: (8 + 6 + 9 + 10) / 4 = 8.25
+
         assertEquals(
             8.25,
             GradeAggregator.plainAverage(mapOf("REGULAR" to listOf(8, 6), "EXAM" to listOf(9, 10)))!!,
@@ -296,7 +280,7 @@ class GradeAggregatorTest {
     @Test
     fun `X9 — дефолт весов Обычн 25 Практ 25 Контр 50 Экз 100`() {
         assertEquals(listOf(25, 25, 50, 100), GradeAggregator.DEFAULT_WEIGHTS)
-        // (8*25 + 7*25 + 9*50 + 10*100) / 200 = 9.125
+
         val avg =
             GradeAggregator.weightedAverage(
                 mapOf("REGULAR" to listOf(8), "PRACTICAL" to listOf(7), "CONTROL" to listOf(9), "EXAM" to listOf(10)),
@@ -308,11 +292,11 @@ class GradeAggregatorTest {
     @Test
     fun `X9 — snapWeight шаг 25, пять позиций, края clamp`() {
         assertEquals(0, GradeAggregator.snapWeight(0f))
-        assertEquals(0, GradeAggregator.snapWeight(0.1f)) // 0.4 слота → 0
-        assertEquals(25, GradeAggregator.snapWeight(0.15f)) // 0.6 слота → 1
+        assertEquals(0, GradeAggregator.snapWeight(0.1f))
+        assertEquals(25, GradeAggregator.snapWeight(0.15f))
         assertEquals(50, GradeAggregator.snapWeight(0.5f))
         assertEquals(100, GradeAggregator.snapWeight(1f))
-        assertEquals(100, GradeAggregator.snapWeight(3f)) // за пределами → clamp
+        assertEquals(100, GradeAggregator.snapWeight(3f))
         assertEquals(0, GradeAggregator.snapWeight(-1f))
     }
 
@@ -322,7 +306,7 @@ class GradeAggregatorTest {
         assertEquals("7.00", GradeAggregator.format(7.0, ".00"))
         assertEquals("9", GradeAggregator.format(8.6, "целое"))
         assertEquals("8.3", GradeAggregator.format(8.25, ".0"))
-        assertEquals("8.3", GradeAggregator.format(8.25)) // legacy-вызов = 1 знак
+        assertEquals("8.3", GradeAggregator.format(8.25))
         assertEquals("—", GradeAggregator.format(null, ".00"))
     }
 }

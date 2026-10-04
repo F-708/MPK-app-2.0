@@ -72,7 +72,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
 
-// B2: рельса таймлайна — только токены палитры, тема доходит до последнего экрана
 private val RAIL_BLUE: Color get() = ColorActiveBlue
 private val RAIL_BLUE_SOFT: Color get() = ColorActiveBlue.copy(alpha = 0.30f)
 private val RAIL_GRAY: Color get() = ColorTextMuted.copy(alpha = 0.55f)
@@ -91,7 +90,6 @@ private sealed interface BellRow {
     ) : BellRow
 }
 
-/** Цвет половины рельса карточки: не-сегодня → серый, до blueEnd → синий, после → приглушённый. */
 private fun railColor(
     minutes: Int,
     blueEnd: Int?,
@@ -101,7 +99,6 @@ private fun railColor(
     return if (blueEnd != null && minutes <= blueEnd) RAIL_BLUE else RAIL_GRAY
 }
 
-/** Прогресс точки «сейчас» внутри урока (0..1) либо null, если сейчас не в этом уроке. */
 private fun dotProgressIn(
     bell: BellItem,
     nowMinutes: Int,
@@ -125,11 +122,11 @@ fun BellsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    // SUI-01-паттерн и здесь: remember{Calendar.getInstance()} застревал на дне открытия
+
     val now =
         com.politex.ui.util
             .rememberToday()
-    // QA#6: ключ now — производные пересчитываются после полуночи/ON_RESUME
+
     val todayDow =
         remember(now) {
             Dow.of(now)
@@ -201,11 +198,9 @@ fun BellsScreen(
             result
         }
 
-    // Тап по виджету «До звонка»/«Звонки»: проскроллить к текущему звонку
-    // (или к последнему, если уроки уже закончились). Одноразово.
     val density = androidx.compose.ui.platform.LocalDensity.current
     var viewportPx by remember { mutableStateOf(0) }
-    // N17: кратковременная подсветка текущего звонка после входа из виджета — фидбэк глазу
+
     var flashCurrent by remember { mutableStateOf(false) }
     LaunchedEffect(flashCurrent) {
         if (!flashCurrent) return@LaunchedEffect
@@ -214,7 +209,7 @@ fun BellsScreen(
     }
     LaunchedEffect(scrollToCurrentRequested, activeSlot, rows) {
         if (!scrollToCurrentRequested) return@LaunchedEffect
-        // Ждём первого лэйаута, иначе вьюпорт/maxValue ещё 0 и прокрутка невозможна
+
         androidx.compose.runtime
             .snapshotFlow { scrollState.maxValue > 0 }
             .first { it }
@@ -224,13 +219,13 @@ fun BellsScreen(
         val idx = rows.indexOfFirst { (it as? BellRow.Lesson)?.item == target }
         if (idx >= 0) {
             with(density) {
-                // Позиция верха целевой строки: карточка урока ~56dp, перемена ~26dp + отступ 6dp
+
                 var posPx = 0f
                 rows.take(idx).forEach { row ->
                     posPx += (if (row is BellRow.Lesson) 56.dp else 26.dp).toPx() + 6.dp.toPx()
                 }
                 val cardH = 56.dp.toPx()
-                // Центр карточки — в середине вьюпорта
+
                 val scrollTo = (posPx + cardH / 2 - viewportPx / 2).toInt()
                 scrollState.animateScrollTo(scrollTo.coerceIn(0, scrollState.maxValue))
             }
@@ -246,8 +241,7 @@ fun BellsScreen(
             .background(ColorBgMain),
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            // W34: двойной заголовок («Расписание звонков» + «Расписание уроков колледжа»)
-            // убран — остаётся один, место освободилось
+
             Text(
                 text = "Расписание звонков",
                 style = TextStylePageTitle,
@@ -276,13 +270,11 @@ fun BellsScreen(
                         modifier =
                         Modifier
                             .fillMaxWidth()
-                            // B5: хитбокс переключателя графиков 44dp
+
                             .heightIn(min = 44.dp)
                             .bouncyClickable { selectedScheduleType = type },
                     ) {
-                        // O2: у material3 Surface нет contentAlignment (внутри Box с TopStart),
-                        // а propagateMinConstraints=true растягивает Text на 44dp — глифы прижаты
-                        // к верху. Центрируем через Box (как в TasksScreen/GroupSelectionDialog).
+
                         Box(
                             modifier = Modifier.fillMaxWidth(),
                             contentAlignment = Alignment.Center,
@@ -333,9 +325,6 @@ fun BellsScreen(
                 .background(ColorDividerLight),
         )
 
-        // B3 (решение владельца): контекстная карточка «СЕЙЧАС» есть ВСЕГДА —
-        // слот не схлопывается, список не прыгает при смене урока.
-        // До 1-го звонка: «Уроки ещё не начались», после последнего: «Уроки закончились».
         if (isTodaySelected && bells.isNotEmpty()) {
             val breakIdx =
                 bells.indexOfFirst { bell ->
@@ -387,7 +376,6 @@ fun BellsScreen(
     }
 }
 
-/** B3: контекст карточки «СЕЙЧАС» — активный слот либо пограничное состояние. */
 private sealed interface NowContext {
     data class Active(
         val slot: BellItem,
@@ -481,14 +469,14 @@ private fun LessonBellCard(
     dotProgress: Float?,
     highlight: Boolean = false,
 ) {
-    // N17: вспышка-подсветка текущей строки при входе из виджета (~1.6s, гаснет)
+
     val flashAlpha by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (highlight) 0.16f else 0f,
         animationSpec = tween(durationMillis = if (highlight) 150 else 900),
         label = "BellFlash",
     )
     val tickColor = if (inBlue) RAIL_BLUE else RAIL_GRAY_SOFT
-    // 3.0: точка «сейчас» с пульс-ореолом на рельсе этой карточки
+
     val pulseRadius by
         if (dotProgress != null) {
             rememberInfiniteTransition(label = "DotPulse").animateFloat(
@@ -518,7 +506,7 @@ private fun LessonBellCard(
         Modifier
             .fillMaxWidth()
             .drawBehind {
-                // N17: фоновая вспышка подсветки (flashAlpha гаснет до 0)
+
                 if (flashAlpha > 0.005f) {
                     drawRect(
                         color = ColorActiveBlue.copy(alpha = flashAlpha),
@@ -526,8 +514,6 @@ private fun LessonBellCard(
                     )
                 }
 
-                // 3.0: пер-карточный рельс — две половины (верх/низ), чёрточки по краям,
-                // точка с пульсом по dotProgress. x — в end-паддинге списка (24dp).
                 val cx = size.width + 10.dp.toPx()
                 val tickLen = 5.dp.toPx()
 
@@ -651,7 +637,7 @@ private fun BreakRow(row: BellRow.Break) {
         modifier =
         Modifier
             .fillMaxWidth()
-            // 3.0: серый рельс на всю высоту строки перемены (без точки)
+
             .drawBehind {
                 val cx = size.width + 10.dp.toPx()
                 drawLine(

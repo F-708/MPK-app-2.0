@@ -20,15 +20,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * M1/M4/W11: MaterialDao — то, что ломается незаметно и сразу у всех: порядок материалов
- * внутри ПРЕДМЕТА (reorder), перенос в Архив и обратно, переименование, каскадное удаление
- * закладок вместе с материалом.
- *
- * Порядок хранится в `sortOrder`, поэтому «переставить» = обменять значения у соседей;
- * тест проверяет именно РЕЗУЛЬРУЮЩУЮ выдачу getForSubject, а не сами числа — иначе тест
- * зелёный даже тогда, когда список в экране остался прежним.
- */
 @RunWith(RobolectricTestRunner::class)
 class MaterialDaoTest {
     private lateinit var db: MpkDatabase
@@ -146,7 +137,6 @@ class MaterialDaoTest {
         )
         assertTrue(dao.getItemById(archived)?.archived == true)
 
-        // W15: мягкий путь — вернуть из Архива: материал возвращается, остальные остаются в архиве
         val restoreOrder = dao.nextItemSortOrder("ТОЭ")
         dao.setArchived(moved, true, dao.nextArchiveSortOrder())
         dao.setArchived(kept, true, dao.nextArchiveSortOrder())
@@ -202,12 +192,10 @@ class MaterialDaoTest {
         dao.setRotationDeg(id, 270)
         assertEquals(270, dao.getItemById(id)?.rotationDeg)
 
-        // порядок страниц набора живёт в uriPath: строки = страницы
         val paths = listOf("/files/materials/$id-0.jpg", "/files/materials/$id-1.jpg")
         dao.setImagePaths(id, paths.joinToString("\n"))
         assertEquals(paths, dao.getItemById(id)?.imagePaths)
 
-        // перестановка страниц — тот же механизм, что и reorder стрелками
         dao.setImagePaths(id, paths.reversed().joinToString("\n"))
         assertEquals(paths.reversed(), dao.getItemById(id)?.imagePaths)
     }

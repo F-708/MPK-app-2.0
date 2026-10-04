@@ -75,29 +75,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.roundToInt
 
-/** Расширения, которые встроенный просмотрщик показывает как текст (M2). */
 private val TEXT_LIKE_EXT = setOf("txt", "md", "markdown", "csv", "log", "json", "xml")
 
-/**
- * M2: просмотрщик DOCX и простого текста.
- *
- * DOCX = ZIP с `word/document.xml`: читаем `DocxTextExtractor`-ом (stdlib XmlPullParser),
- * получаем список абзацев с флагами «жирный»/«заголовок» — этого хватает, чтобы конспект
- * выглядел конспектом, а не стеной одинакового текста.
- *
- * Простой текст и материалы типа TEXT идут тем же рендером (строка = абзац): LazyColumn по
- * абзацам вместо одного гигантского Text в verticalScroll — на методичке в 300 КБ разница
- * в скорости прокрутки кратная, потому что LazyColumn меряет только видимое.
- *
- * V10: встроенный редактор (карандаш в шапке для TEXT/текстоподобных/docx): ОДИН multiline
- * TextField вместо списка абзацев, разметка токенами **жирный** / *курсив* / __подчёркнутый__
- * и «- » → маркер списка. Сохранение ТОЛЬКО явной кнопкой (dao.updateTextContent → textContent
- * + textEdited=1 в БД; файл на диске не трогаем). Находка 3: выход из редактора (карандаш
- * toggle-off И системный back) с несохранёнными правками спрашивает «СОХРАНИТЬ / ВЫЙТИ БЕЗ
- * СОХРАНЕНИЯ» — текст больше не сгорает молча, и «передумал» по-прежнему не пишет в БД.
- *
- * .doc (бинарный OLE2) — честная заглушка, см. [UnsupportedFormatPlaque].
- */
 @Composable
 fun MaterialDocTextViewer(
     item: MaterialItemEntity,
@@ -114,18 +93,14 @@ fun MaterialDocTextViewer(
         failed = paragraphs == null
     }
 
-    // ── V10: состояние редактора ──────────────────────────────────────────────
     var editMode by remember(item.id) { mutableStateOf(false) }
     var textValue by remember(item.id) { mutableStateOf(TextFieldValue()) }
-    // Находка 3: исходный текст на момент входа в редактор — для сравнения «есть ли правки»
+
     var originalText by remember(item.id) { mutableStateOf("") }
     var showUnsavedDialog by remember(item.id) { mutableStateOf(false) }
     val undoStack = remember(item.id) { ArrayDeque<String>() }
     val redoStack = remember(item.id) { ArrayDeque<String>() }
 
-    // ── Y3: единый зум документа (как в PDF): session-only, щипок 2 пальца, двойной тап — сброс.
-    // Масштабируется колонка (width=container*docZoom), fontSize и padding — как Word: при <1
-    // текст мельче и видны поля, при >1 — крупнее + общий горизонтальный скролл.
     val docZoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
 
     fun startEdit() {
@@ -137,14 +112,10 @@ fun MaterialDocTextViewer(
         editMode = true
     }
 
-    // Находка 3: выход из редактора (карандаш toggle-off И системный back) — если текст
-    // изменён, спрашиваем «СОХРАНИТЬ / ВЫЙТИ БЕЗ СОХРАНЕНИЯ», иначе молча закрываем.
     fun requestExitEdit() {
         if (textValue.text != originalText) showUnsavedDialog = true else editMode = false
     }
 
-    // ponytail: снапшоты на каждое изменение, стек cap 10; для текстов >100КБ снапшоты
-    // скипаем (10×100КБ строк в памяти того не стоят) — undo на больших текстах не работает.
     fun snapshot() {
         if (textValue.text.length > 100_000) return
         undoStack.addLast(textValue.text)
@@ -192,13 +163,12 @@ fun MaterialDocTextViewer(
 
     val canEdit = item.kindEnum == MaterialKind.TEXT || item.ext in TEXT_LIKE_EXT || item.ext == "docx"
 
-    // Находка 3: системный «назад» в режиме правки — тот же путь, что toggle-off карандаша
     BackHandler(enabled = editMode) { requestExitEdit() }
 
     Column(modifier = modifier.fillMaxSize().background(ColorBgMain)) {
         MaterialViewerTopBar(title = item.title, testTag = "doc_top_bar", onBack = onBack) {
             if (!editMode) {
-                // Y3: индикатор зума — «140%», тап = сброс к 100%
+
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = Color.Transparent,
@@ -249,7 +219,7 @@ fun MaterialDocTextViewer(
         } else {
             val content = paragraphs
             when {
-                // Нечитаемый/неподдерживаемый формат — плашка, а не пустой экран
+
                 failed -> UnsupportedFormatPlaque(ext = item.ext, fileName = item.fileName.ifBlank { item.title })
 
                 content == null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -266,7 +236,7 @@ fun MaterialDocTextViewer(
                             style = TextStyle(fontSize = 13.sp),
                             textAlign = TextAlign.Center,
                         )
-                        // Находка 12: у пустого состояния есть действие — «НАЗАД» (onBack)
+
                         Spacer(modifier = Modifier.height(16.dp))
                         Surface(
                             shape = RoundedCornerShape(2.dp),
@@ -311,7 +281,7 @@ fun MaterialDocTextViewer(
                             items(content.size) { index ->
                                 val p = content[index]
                                 Text(
-                                    // V10: токены разметки (**/*/__) и «- » → «• » рендерятся в AnnotatedString
+
                                     text = parseInlineMarks(p.text),
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -331,7 +301,6 @@ fun MaterialDocTextViewer(
         }
     }
 
-    // Находка 3: выход из редактора с несохранёнными правками — СОХРАНИТЬ / ВЫЙТИ БЕЗ СОХРАНЕНИЯ
     if (showUnsavedDialog) {
         AlertDialog(
             onDismissRequest = { showUnsavedDialog = false },
@@ -375,7 +344,6 @@ fun MaterialDocTextViewer(
     }
 }
 
-/** V10: панель редактора [B][I][U][•][undo][redo][СОХРАНИТЬ] под хедером. */
 @Composable
 private fun TextEditToolbar(
     onBold: () -> Unit,
@@ -454,14 +422,6 @@ private fun EditMarkIcon(
     }
 }
 
-/**
- * V10: рендер инлайн-разметки абзаца: `**жирный**`, `*курсив*`, `__подчёркнутый__` →
- * span'ы AnnotatedString, ведущий «- » → «• ». Незакрытый токен остаётся литералом
- * (текст конспекта важнее «красивой» разметки). Чистая функция — покрыта unit-тестом.
- *
- * ponytail: токенайзер в один проход без вложенности (`*a **b** c*` разберется плоско);
- * полноценный markdown-парсер тащить только если появится реальная вложенная разметка.
- */
 internal fun parseInlineMarks(par: String): AnnotatedString {
     val s = if (par.startsWith("- ")) "• " + par.substring(2) else par
     return buildAnnotatedString {
@@ -503,17 +463,12 @@ internal fun parseInlineMarks(par: String): AnnotatedString {
     }
 }
 
-/**
- * Загрузка абзацев. `null` = «встроенный просмотрщик это не умеет» (плашка), пустой список =
- * «умеем, но текста нет». Различение нужно, чтобы .xls не выглядел пустой заметкой.
- */
 private fun loadParagraphs(item: MaterialItemEntity): List<DocxParagraph>? {
-    // V10: ПЕРВЫМ делом — пользовательская правка: она приоритетнее любого файла
+
     if (item.textEdited) {
         return item.textContent.split('\n').map { DocxParagraph(it.trimEnd()) }
     }
 
-    // Текст, набранный в приложении: байтов на диске нет, всё уже в БД
     if (item.kindEnum == MaterialKind.TEXT) {
         if (item.textContent.isBlank()) return emptyList()
         return item.textContent.split('\n').map { DocxParagraph(it.trimEnd()) }
@@ -528,12 +483,10 @@ private fun loadParagraphs(item: MaterialItemEntity): List<DocxParagraph>? {
             file.inputStream().use { DocxTextExtractor.extract(it) }
         }.getOrNull()
 
-        // Для текстовых файлов — полная версия с диска (в БД лежит обрезанный поисковый индекс)
         in TEXT_LIKE_EXT -> runCatching {
             MaterialImporter.decodeSmart(file.readBytes()).split('\n').map { DocxParagraph(it.trimEnd()) }
         }.getOrNull()
 
-        // .doc, .xls/.xlsx, .pptx и прочее — честно не умеем
         else -> null
     }
 }

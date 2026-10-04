@@ -9,11 +9,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * X43: смена даты/времени/часового пояса системы перепланирует виджеты и будильники.
- * Проверяем (1) ресивер объявлен в манифесте на всех трёх системных action'ах и
- * (2) делегат onTimeChanged отрабатывает на реальном контексте без исключений.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class TimeChangedReceiverTest {
@@ -35,8 +30,7 @@ class TimeChangedReceiverTest {
 
     @Test
     fun `onTimeChanged перепланирует без исключений`() {
-        // Нет виджетов на «экране» → update* это no-op; тик-сервис выключён; WorkManager
-        // обёрнут в try/catch. Достаточно, что делегат не бросает (X43).
+
         TimeChangedReceiver.onTimeChanged(ctx)
     }
 }

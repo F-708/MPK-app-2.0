@@ -10,11 +10,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 
-/**
- * TEA-01/02: парсинг teachers.csv. Прочерк «—» в room/phone/email нормализуется в "",
- * дефисы внутри значений (телефон) сохраняются, строки с лишним полем (48/93) после
- * фикса данных дают корректные имя/должность.
- */
 @RunWith(RobolectricTestRunner::class)
 class TeachersCsvParseTest {
     private val teachers: List<Teacher> =

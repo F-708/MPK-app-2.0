@@ -23,8 +23,7 @@ import com.politex.util.NotificationHelper
 import com.politex.worker.MpkWorkManagerHelper
 
 class MainActivity : ComponentActivity() {
-    // E4: навигация — NavController (создаётся в setContent); интенты виджетов/уведомлений
-    // вместо pending*-полей VM (ARC-01/ARC-06) вызывают navigate() с аргументами.
+
     private var navController: NavHostController? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,9 +47,9 @@ class MainActivity : ComponentActivity() {
                 .start(this)
         }
         MpkWorkManagerHelper.setupPeriodicScheduleCheck(this)
-        // WID-02/BEL-03: страховка FGS-сервиса отсчёта — OEM убивают его, воркер поднимает обратно
+
         MpkWorkManagerHelper.setupBellServiceWatchdog(this)
-        // H1: доставка напоминаний о заданиях (периодический воркер, 15 мин)
+
         MpkWorkManagerHelper.setupPeriodicReminderCheck(this)
 
         setContent {
@@ -58,12 +57,10 @@ class MainActivity : ComponentActivity() {
             val navController = rememberNavController()
             this@MainActivity.navController = navController
 
-            // Холодный старт: интент обрабатывается ПОСЛЕ первой композиции (NavHost жив)
             LaunchedEffect(Unit) {
                 handleIntent(intent, navController)
             }
 
-            // W3: splash-оверлей УДАЛЁН по заказчику («убери анимацию, пусть стартует быстрее»)
             MyApplicationTheme {
                 MainScreen(
                     viewModel = appViewModel,
@@ -77,24 +74,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // Тёплый тап виджета → navigate (CLEAR_TOP|SINGLE_TOP активити не пересоздаёт)
+
         navController?.let { handleIntent(intent, it) }
     }
 
     override fun onResume() {
         super.onResume()
-        // O1: updateAllWidgets отсюда убран — на каждый резюм (вкл. возврат из фона/диалогов)
-        // это была пересборка 4 провайдеров × все инстансы × runBlocking в Room.
-        // Виджеты обновляются минутным тиком (WidgetAlarm) и BellTimerService.
+
     }
 
-    /**
-     * E4: интенты виджетов/уведомлений → nav-аргументы вместо pending*-полей VM.
-     * Б7: тап по кнопке кабинета в виджете — сразу на карту с этим кабинетом.
-     * N8: EXTRA_SHOW_ROUTE (виджеты Today/NowNext) — открыть карту С маршрутом.
-     * V21: EXTRA_FROM_ROOM (NowNext) — старт маршрута от кабинета текущего слота,
-     * а не всегда от главного входа; null = главный вход.
-     */
     private fun handleIntent(
         intent: Intent?,
         navController: NavHostController,
@@ -115,15 +103,12 @@ class MainActivity : ComponentActivity() {
             when (intent?.getStringExtra("EXTRA_OPEN_TAB")) {
                 "SCHEDULE" -> AppTab.SCHEDULE
                 "BELLS" -> AppTab.BELLS
-                // H1: тап по уведомлению-напоминанию открывает вкладку заданий
+
                 "TASKS" -> AppTab.TASKS
                 else -> null
             } ?: return
         navController.navigateToTab(buildScrollRoute(tab.route, scrollTarget))
-        // Виджет просит не только открыть вкладку, но и проскроллить к «сейчас».
-        // Пишем в SavedStateHandle записи: одноразовое чтение (см. rememberScrollRequest),
-        // повторный тёплый тап эмитит снова даже при launchSingleTop (аргументы записи
-        // при переиспользовании не обновляются — handle обновляется всегда).
+
         if (!scrollTarget.isNullOrBlank()) {
             navController.currentBackStackEntry?.savedStateHandle?.set(ARG_SCROLL, scrollTarget)
         }

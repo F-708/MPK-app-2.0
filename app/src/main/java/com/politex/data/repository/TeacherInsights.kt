@@ -5,20 +5,15 @@ import com.politex.data.local.entity.LessonEntity
 class TeacherInsights(
     private val teachers: List<Teacher>,
     lessons: List<LessonEntity>,
-    // W28: «срез» актуальности для шильдика «Ведёт у вас». Замены/ушедшие преподаватели
-    // fade-out: погашаем, если нет ни недельного шаблона, ни урока с датой за последние
-    // [STALE_DAYS] дней. Дефолт — текущее время (вызывающие не меняются).
+
     private val nowMillis: Long = System.currentTimeMillis(),
-    // X41: ручные отметки «ведёт у вас» (prefs-колбэки; дефолты = «отметок нет» —
-    // прежнее поведение W28, юнит-тесты остаются без Android).
-    // leadsOffTs: полное ФИО → timestamp снятия отметки; leadsOn: ФИО → принудительная отметка.
+
     private val leadsOffTs: (String) -> Long? = { null },
     private val leadsOn: (String) -> Boolean = { false },
 ) {
     private val bySurname: Map<String, List<Teacher>> =
         teachers.groupBy { surnameOf(it.name) }.filterKeys { it.isNotBlank() }
 
-    /** Порог погашения W28 — ВЫШЕ matched: buildFacts читает его при инициализации. */
     private val staleMillis = STALE_DAYS * 24L * 60L * 60L * 1000L
 
     private val matched: Map<String, TeacherFacts> = buildFacts(lessons)
@@ -36,16 +31,8 @@ class TeacherInsights(
 
     fun lastSeenDate(name: String): String = matched[name]?.lastDate.orEmpty()
 
-    /** X41: epoch последней датированной пары; null — только недельный шаблон/нет уроков. */
     internal fun lastLessonMillis(name: String): Long? = matched[name]?.lastMillis
 
-    /**
-     * X41: «Ведёт у вас» с учётом ручной отметки пользователя.
-     * - принудительная отметка (leadsOn) → true, пока пользователь её не снимет;
-     * - отметка снята (leadsOffTs != null) → false, ПОКА не появится урок с датой
-     *   ПОЗЖЕ timestamp снятия (lastLessonMillis > offTs); без датированных уроков — снята;
-     * - нет ключей — авто-логика W28 [isActive].
-     */
     fun isLeadsNow(name: String): Boolean {
         if (leadsOn(name)) return true
         if (!isActive(name)) return false
@@ -59,10 +46,9 @@ class TeacherInsights(
         val subjects: List<String>,
         val count: Int,
         val lastDate: String,
-        // W28: недельный шаблон (регулярное расписание) ИЛИ последняя датированная
-        // пара свежее порога → преподаватель «ведёт сейчас»
+
         val activeNow: Boolean = false,
-        // X41: epoch последней датированной пары — для возврата шильдика после снятия отметки
+
         val lastMillis: Long? = null,
     )
 
@@ -91,22 +77,18 @@ class TeacherInsights(
 
                 val dateKey = lesson.dateString.replace("-", ".")
                 if (dateKey.isNotBlank()) {
-                    // W28/QA#15: сравнение дат — только через epoch, лексикографика
-                    // dd.MM.yyyy запрещена конвенцией (на стыке месяцев «30.09» > «01.10»
-                    // строково, но это неверно). lastDate тоже выводится из max epoch.
+
                     parseDotDateMillis(dateKey)?.let { ms ->
                         val prevMs = dateMillis[full]
                         if (prevMs == null || ms > prevMs) dateMillis[full] = ms
                     }
                 } else {
-                    // Пустая dateString = недельный шаблон — преподаватель в актуальном
-                    // расписании группы, свежесть не проверяем
+
                     weekly[full] = true
                 }
             }
         }
 
-        // QA#15: локальный форматтер (SimpleDateFormat не потокобезопасен — не поднимаем в поле)
         val lastDateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
         return counts.keys.associateWith { full ->
             TeacherFacts(
@@ -129,7 +111,6 @@ class TeacherInsights(
         }
     }
 
-    /** Дата урока → epoch millis; оба встречающихся формата: dd.MM.yyyy и yyyy-MM-dd (→ yyyy.MM.dd). null при кривом. */
     private fun parseDotDateMillis(date: String): Long? {
         val parts = date.split(".")
         if (parts.size != 3) return null
@@ -176,7 +157,7 @@ class TeacherInsights(
     }
 
     companion object {
-        /** W28: дней свежести датированных уроков для шильдика «Ведёт у вас». */
+
         const val STALE_DAYS = 30L
 
         fun splitTeacherNames(raw: String): List<String> = raw

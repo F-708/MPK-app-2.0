@@ -8,11 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Calendar
 
-/**
- * W1: целевой день синка = следующий УЧЕБНЫЙ день группы, как в UI (суббота только
- * у 1 курса). Прежний расчёт («+1 минус воскресенье») в пятницу уводил синк на субботу,
- * а документ понедельника 05.10.2026, опубликованный на сайте, не запрашивался вовсе.
- */
 class W1SyncTargetDateTest {
     private fun cal(
         y: Int,
@@ -37,7 +32,7 @@ class W1SyncTargetDateTest {
 
     @Test
     fun `W1 пятница для группы без субботы - цель понедельник 05_10_2026`() {
-        // 02.10.2026 — пятница. Сайт: /2026/10/05.10.2026-raspisanie-uchashhihsya.doc = 200 OK
+
         val target = nextSchoolDay(cal(2026, 10, 2), saturdayIsSchoolDay = false)
         assertDate("05.10.2026", target)
         assertEquals(Calendar.MONDAY, target.get(Calendar.DAY_OF_WEEK))
@@ -70,7 +65,7 @@ class W1SyncTargetDateTest {
 
     @Test
     fun `W1 будний день - следующий день без перескоков`() {
-        // четверг → пятница при любом флаге субботы
+
         assertDate("02.10.2026", nextSchoolDay(cal(2026, 10, 1), saturdayIsSchoolDay = false))
         assertDate("02.10.2026", nextSchoolDay(cal(2026, 10, 1), saturdayIsSchoolDay = true))
     }
@@ -79,9 +74,9 @@ class W1SyncTargetDateTest {
     fun `W1 суббота учебная - 1 курс или фактические субботние уроки в БД`() {
         assertTrue(saturdayIsSchoolDayFor("11О", existingSaturdayLessons = false))
         assertFalse(saturdayIsSchoolDayFor("41О", existingSaturdayLessons = false))
-        // нераспознанное имя группы — консервативно НЕ считаем субботу учебной (правило курса)
+
         assertFalse(saturdayIsSchoolDayFor("???", existingSaturdayLessons = false))
-        // У группы 2–4 курса есть субботние уроки — суббота учебная (как в UI)
+
         assertTrue(saturdayIsSchoolDayFor("41О", existingSaturdayLessons = true))
     }
 

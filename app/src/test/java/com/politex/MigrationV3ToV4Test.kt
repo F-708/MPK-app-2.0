@@ -11,22 +11,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * H1 (Задача 3.2): миграция v3 → v4 (таблица напоминаний `task_reminders`).
- *
- * Зачем: база с `fallbackToDestructiveMigration` — ошибка/отсутствие миграции не падает,
- * а ТИХО СТИРАЕТ `student_tasks` (ДЗ студента). Плюс Room при открытии сверяет фактическую
- * схему с ожидаемой (включая имена таблиц/индексов) — расхождение = crash у всех обновившихся.
- * Тест создаёт реальную базу v3 (по образцу MigrationV2ToV3Test), открывает БОЕВЫМ getInstance
- * и проверяет: данные student_tasks/lessons переживают, task_reminders + индекс созданы.
- */
 @RunWith(RobolectricTestRunner::class)
 class MigrationV3ToV4Test {
 
     private val dbName = com.politex.data.local.MpkDatabase.DATABASE_NAME
     private val group = "41О"
 
-    /** Схема v3 в точности как создал бы Room версии 3 (lessons с индексами + teacher_lessons). */
     private fun createV3Database(context: Context) {
         context.deleteDatabase(dbName)
         val helper = FrameworkSQLiteOpenHelperFactory().create(
@@ -97,14 +87,10 @@ class MigrationV3ToV4Test {
         val context = ApplicationProvider.getApplicationContext<Context>()
         createV3Database(context)
 
-        // INSTANCE — статический singleton: другой миграционный тест в той же JVM мог
-        // закэшировать инстанс на своей базе. Сбрасываем рефлекшеном, чтобы getInstance
-        // открыл ИМЕННО нашу свежую v3-базу (приём из MigrationV2ToV3Test).
         resetSingleton()
 
         val db = com.politex.data.local.MpkDatabase.getInstance(context)
 
-        // ДЗ и расписание пережили миграцию
         val tasks = kotlinx.coroutines.runBlocking { db.taskDao().getAllTasks() }
         assertEquals("ДЗ должно пережить миграцию", 1, tasks.size)
         assertEquals("Лаба по ТОЭ", tasks.first().title)
@@ -114,11 +100,9 @@ class MigrationV3ToV4Test {
         assertEquals("урок должен пережить миграцию", 1, lessons.size)
         assertEquals("01.10.2026", lessons.first().dateString)
 
-        // новая таблица task_reminders существует и запросима (пустая)
         val reminders = kotlinx.coroutines.runBlocking { db.taskReminderDao().getDueUntil(Long.MAX_VALUE) }
         assertTrue("task_reminders должна существовать и быть пустой", reminders.isEmpty())
 
-        // таблица и индекс созданы с Room-именами (проверяем через sqlite_master)
         val tables = mutableSetOf<String>()
         db.openHelper.readableDatabase.query("SELECT name FROM sqlite_master WHERE type='table' AND name='task_reminders'")
             .use { c -> while (c.moveToNext()) tables.add(c.getString(0)) }
@@ -133,7 +117,6 @@ class MigrationV3ToV4Test {
         )
     }
 
-    /** Сброс статического INSTANCE, чтобы getInstance открыл именно нашу свежую v3-базу. */
     private fun resetSingleton() {
         try {
             val cls = Class.forName("com.politex.data.local.MpkDatabase")
@@ -141,7 +124,7 @@ class MigrationV3ToV4Test {
             field.isAccessible = true
             field.set(null, null)
         } catch (_: Exception) {
-            // если поля нет/недоступно — тест упадёт ниже с ясной причиной
+
         }
     }
 }

@@ -8,12 +8,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * MAP-02: hit-test тапа по ЦЕЛЕВЫМ (покойным) значениям зума/смещения.
- * Заказчик-баг: «после двух выборов кабинета в третий раз ничего не нажимается» — тап во время
- * зум-анимации читал анимируемые scale.value/offset.value и промахивался. Чистая функция
- * принимает только target-значения, поэтому попадает всегда, даже mid-анимация.
- */
 class MapTapHitTest {
     private val imgW = 1000f
     private val imgH = 600f
@@ -31,10 +25,9 @@ class MapTapHitTest {
         )
     private val floor = FloorMap(rooms = listOf(room))
 
-    // Целевое «приближение к кабинету»: room в центре вида при zoom=2.6
     private val zoom = 2.6f
-    private val targetOffsetX = imgW / 2f - room.x * imgW * zoom // = -800
-    private val targetOffsetY = imgH / 2f - room.y * imgH * zoom // = -480
+    private val targetOffsetX = imgW / 2f - room.x * imgW * zoom
+    private val targetOffsetY = imgH / 2f - room.y * imgH * zoom
 
     @Test
     fun `тап в центре приближённой карты попадает в кабинет по target-значениям`() {
@@ -53,7 +46,7 @@ class MapTapHitTest {
 
     @Test
     fun `тап рядом с кабинетом дотягивается slop-фолбэком`() {
-        // Чуть в стороне от центра (в пределах допуска) — всё равно попадаем
+
         val hit =
             mapTapToRoom(
                 pos = Offset(imgW / 2f + 18f, imgH / 2f - 12f),

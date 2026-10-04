@@ -17,7 +17,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
         manager: AppWidgetManager,
         ids: IntArray,
     ) {
-        // QA#2: buildViews читает Room (WidgetData.todayLessons) — пересборка на IO через goAsync
+
         val pending = goAsync()
         WidgetUpdateHelper.widgetScope.launch {
             try {
@@ -61,7 +61,6 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 if (group.isBlank()) "РАСПИСАНИЕ" else "СЕГОДНЯ • $group",
             )
 
-            // W8: без выбранной группы причина пустоты — «настрой группу», не «уроков нет»
             views.setTextViewText(
                 R.id.tv_today_empty,
                 if (group.isBlank()) "Выберите группу в приложении" else "На сегодня уроков нет",
@@ -79,7 +78,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                         buildRow(context, lesson, now, style, showRoom, appWidgetId),
                     )
                 }
-                // W5: обрезка >12 строк больше не тихая — хвост виден
+
                 if (lessons.size > MAX_ROWS) {
                     views.addView(
                         R.id.today_rows,
@@ -93,8 +92,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                     context,
                     appWidgetId,
                     Intent(context, com.politex.MainActivity::class.java)
-                        // CLEAR_TOP|SINGLE_TOP: тёплый тап по виджету доходит до onNewIntent,
-                        // а не плодит копии активити
+
                         .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                         .putExtra("EXTRA_OPEN_TAB", "SCHEDULE")
                         .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_LESSON"),
@@ -143,24 +141,14 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             )
             row.setTextColor(R.id.row_subject, textColor)
 
-            // N8/V21: кабинет — кликабельный чип (как в NowNext): акцентный цвет + рамка-фон,
-            // тап открывает карту с этим кабинетом И маршрутом (EXTRA_SHOW_ROUTE — старт от
-            // главного входа; на экране гейтится тоглом map_routes_enabled).
             val room = lesson.roomFirst.takeIf { it.isNotBlank() } ?: lesson.roomSecond
             if (showRoom && room.isNotBlank()) {
                 row.setTextViewText(R.id.row_room, "каб. $room")
-                // X31: чип кабинета — ТОТ ЖЕ паттерн, что в NowNext (applyRoomChip):
-                // фон = highlightColor, текст = mainColor. Пара даёт контраст во всех
-                // 4 стилях: LIGHT (тёмный mainColor по светло-голубому highlight) и
-                // DARK/BLUE/SKY (белый mainColor по тёмно-синему highlight). Было: жёстко
-                // тёмно-синий текст 0xFF0B3564 по highlightColor — в DARK/SKY (highlight
-                // = 0xFF0B3564) и BLUE (0xFF16457F) цифра сливалась с фоном и не читалась.
+
                 row.setTextColor(R.id.row_room, style.mainColor)
                 row.setInt(R.id.row_room, "setBackgroundColor", style.highlightColor)
                 val d = context.resources.displayMetrics.density
-                // N7(44dp): отступы чипа 10dp (были 7/2) — тап-зона выше, меньше
-                // промахов в корневой intent. В плотном списке (12 строк) высота
-                // строки всё равно ограничена весом — чип заполняет её, не overflowing.
+
                 val ph = (10 * d + 0.5f).toInt()
                 val pv = (10 * d + 0.5f).toInt()
                 row.setViewPadding(R.id.row_room, ph, pv, ph, pv)
@@ -169,7 +157,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                         .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                         .putExtra("EXTRA_OPEN_TAB", "MAP")
                         .putExtra("EXTRA_ROOM", room)
-                        // V21: маршрут ВСЕГДА при запросе — раньше чип открывал карту без пути
+
                         .putExtra("EXTRA_SHOW_ROUTE", true)
                 row.setOnClickPendingIntent(
                     R.id.row_room,
@@ -188,7 +176,6 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             return row
         }
 
-        // W5: строка «…ещё N» тем же layout-рядом, тише основного (subColor)
         private fun buildMoreRow(
             context: Context,
             style: WidgetStyle,

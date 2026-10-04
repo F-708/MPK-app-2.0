@@ -15,15 +15,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * H1 (Задача 3.2): due-логика напоминаний + атомарная замена + одноразовость.
- *
- * `getDueUntil(until)` возвращает все строки с `triggerAtMillis <= until`. QA#8: воркер
- * передаёт until = now (ТОЛЬКО наступившие) — будущее напоминание не доставляется рано,
- * его подберёт следующий периодический запуск. Просроченное (приложение было закрыто в
- * момент срабатывания) и ровно на границе — возвращаются.
- * `replaceForTask` заменяет атомо, `deleteById` — одноразовая отправка.
- */
 @RunWith(RobolectricTestRunner::class)
 class ReminderDaoTest {
     private lateinit var db: MpkDatabase
@@ -59,9 +50,9 @@ class ReminderDaoTest {
         val taskId = insertTask()
         val now = System.currentTimeMillis()
 
-        val past = now - 60_000L // просрочено
-        val boundary = now // ровно на границе (<=)
-        val future = now + 10 * 60_000L // QA#8: внутри старого lookahead-окна — рано доставлять нельзя
+        val past = now - 60_000L
+        val boundary = now
+        val future = now + 10 * 60_000L
 
         dao.insertAll(
             listOf(
@@ -108,13 +99,11 @@ class ReminderDaoTest {
         )
         assertEquals("две строки после первой замены", 2, dao.getForTask(taskId).size)
 
-        // повторная замена (правка напоминаний) — старые удалены, новые вставлены
         dao.replaceForTask(taskId, listOf(TaskReminderEntity(taskId = taskId, triggerAtMillis = now + 5000)))
         val after = dao.getForTask(taskId)
         assertEquals("одна строка после второй замены", 1, after.size)
         assertEquals(now + 5000, after.first().triggerAtMillis)
 
-        // одноразовая отправка: воркер удаляет строку по id
         dao.deleteById(after.first().id)
         assertTrue("после отправки напоминаний нет", dao.getForTask(taskId).isEmpty())
     }

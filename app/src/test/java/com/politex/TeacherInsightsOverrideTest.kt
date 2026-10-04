@@ -10,12 +10,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * X41: ручная отметка «ведёт у вас» — override-колбэки leadsOffTs/leadsOn.
- * Чистый JVM (без Android): prefs подменяются лямбдами, как в юнит-тестах задумано.
- */
 class TeacherInsightsOverrideTest {
-    private val now = 1_800_000_000_000L // ~2027-01-15 (тот же якорь, что в W28-тестах)
+    private val now = 1_800_000_000_000L
     private val name = "Зыбин Олег Львович"
     private val base = listOf(Teacher(name = name))
 
@@ -55,7 +51,7 @@ class TeacherInsightsOverrideTest {
                 base,
                 listOf(lesson("10.01.2027")),
                 nowMillis = now,
-                leadsOffTs = { now }, // сняли «сейчас» — урок 10.01 older
+                leadsOffTs = { now },
             )
         assertTrue("авто-факт не меняется", ti.isActive(name))
         assertFalse("отметка снята, нового урока нет — скрыт", ti.isLeadsNow(name))
@@ -72,7 +68,7 @@ class TeacherInsightsOverrideTest {
                 base,
                 listOf(lesson("10.01.2027")),
                 nowMillis = now,
-                leadsOffTs = { last!! - 1 }, // сняли ДО урока
+                leadsOffTs = { last!! - 1 },
             )
         assertTrue("урок датирован позже снятия — авто-факт вернул шильдик", ti.isLeadsNow(name))
     }
@@ -95,8 +91,7 @@ class TeacherInsightsOverrideTest {
 
     @Test
     fun `снятие при недельном шаблоне без дат держит шильдик снятым`() {
-        // Семантика X41: возврат только по ДАТИРОВАННОМУ уроку позже timestamp снятия;
-        // недельный шаблон дат не имеет → остаётся снятым.
+
         val ti =
             TeacherInsights(
                 base,

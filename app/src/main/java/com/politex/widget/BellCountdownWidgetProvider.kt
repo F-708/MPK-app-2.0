@@ -19,8 +19,7 @@ import java.util.Calendar
 class BellCountdownWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        // QA#2: buildViews читает Room (lastGroupLessonForToday) — нельзя на main из
-        // onReceive. goAsync держит процесс живым, пересборка уходит на IO.
+
         val pending = goAsync()
         WidgetUpdateHelper.widgetScope.launch {
             try {
@@ -42,7 +41,6 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
 
     companion object {
 
-        /** Первый показ строки/виджета — 07:00 (заказчик, Q5). */
         const val SHOW_FROM_MINUTE = 7 * 60
 
         fun updateWidgets(context: Context, manager: AppWidgetManager, ids: IntArray) {
@@ -58,11 +56,6 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             if (ids.isNotEmpty()) updateWidgets(context, manager, ids)
         }
 
-        /**
-         * Секундный тик (виджет с включёнными секундами): обновляем ТОЛЬКО countdown-виджеты
-         * с секундами — не все провайдеры и не все countdown-виджеты (без секунд им хватит
-         * минутного тика на границе минуты).
-         */
         fun updateSecondsWidgets(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, BellCountdownWidgetProvider::class.java))
@@ -79,28 +72,16 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
             val bells = CollegeBellSchedule.getBellsForDay(dow)
 
-            // Режим «мои уроки»: cutoff = последний урок группы (уроки закончились → строка скрыта).
-            // Данные считаем здесь и в цикле не матчим звонки после последнего урока группы.
             val lastGroupLesson = if (mode == CountdownMode.GROUP_LESSONS) {
                 lastGroupLessonForToday(context, cal)
             } else {
                 null
             }
 
-            // V4: воскресенье больше не мёртвое — countdownForMinute на Вс даёт null,
-            // воскресную/субботнюю ветку («до 1 урока в пн») подхватывает tomorrow-лейбл.
             return countdownForMinute(minutes, dow, bells, mode, lastGroupLesson)
                 ?: tomorrowFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
         }
 
-        /**
-         * W3/V4: отсчёт до первого урока ближайшего дня со звонками вместо пустой строки.
-         * Чистая функция, те же входные, что countdownForMinute; null → показать пусто.
-         *
-         * Границы: минуты после конца последнего звонка дня (для GROUP_LESSONS — конца
-         * последнего урока группы). Вс и сб-вечер: ближайший день со звонками — понедельник,
-         * подпись «до 1 урока в пн»; Вс считается с 07:00. Остальные вечера — «до 1 урока завтра».
-         */
         fun tomorrowFirstLessonLabel(
             minutes: Int,
             dayOfWeek: Int,
@@ -110,12 +91,9 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
         ): Triple<Long, String, Int>? {
             if (minutes < SHOW_FROM_MINUTE) return null
 
-            // V4: воскресенье — уроков нет весь день, с 07:00 считаем до понедельника
             if (dayOfWeek == 7) return nextBellsDayLabel(minutes, dayOfWeek)
             if (bells.isEmpty()) return null
 
-            // Тот же критерий «уроки закончились», что в countdownForMinute:
-            // GROUP_LESSONS — конец последнего урока группы, ALL_BELLS — конец дня.
             val lastEnd = if (mode == CountdownMode.GROUP_LESSONS) {
                 lastGroupLesson ?: return null
                 bells.lastOrNull { !it.isInfoHour && it.lessonNumber <= lastGroupLesson }?.endMinutes
@@ -127,11 +105,6 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             return nextBellsDayLabel(minutes, dayOfWeek)
         }
 
-        /**
-         * V4: отсчёт до первого звонка ближайшего дня со звонками. Вс пропускаем
-         * (сб-вечер → пн через 2 дня, вс → пн через день) — «до 1 урока завтра»
-         * в субботу было бы ложью. Подпись: «в пн» когда цель не завтра.
-         */
         private fun nextBellsDayLabel(
             minutes: Int,
             dayOfWeek: Int,
@@ -149,15 +122,6 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             return Triple(minutesToStart.toLong(), label, 0)
         }
 
-        /**
-         * Ночное окно (00:00 – 07:00): отсчёт до первого урока СЕГОДНЯ.
-         *
-         * Заказчик: «0:24, виджет когда звонок пустой без текста». До этого окна виджет
-         * был пуст всю ночь, а он всегда виден на экране — пустая плашка читается как поломка.
-         * Ночью «завтра» уже наступило, поэтому показываем ближайший урок сегодняшнего дня.
-         *
-         * null: воскресенье, звонков нет, у группы сегодня нет уроков, либо первый урок уже идёт.
-         */
         fun nightFirstLessonLabel(
             minutes: Int,
             dayOfWeek: Int,
@@ -167,7 +131,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
         ): Triple<Long, String, Int>? {
             if (dayOfWeek == 7 || bells.isEmpty()) return null
             if (minutes >= SHOW_FROM_MINUTE) return null
-            // В режиме «мои уроки» день без уроков группы — показывать нечего
+
             if (mode == CountdownMode.GROUP_LESSONS && lastGroupLesson == null) return null
 
             val first = bells.firstOrNull { !it.isInfoHour } ?: return null
@@ -175,13 +139,6 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             return Triple((first.startMinutes - minutes).toLong(), "до 1 урока", 0)
         }
 
-        /**
-         * Чистая логика отсчёта (Т10): null = строка скрыта
-         * (выходной / до 07:00 / уроки закончились / у группы нет уроков в этот день).
-         *
-         * Cutoff группы проверяется ДО цикла по звонкам (Т10.1) — сам цикл идёт по полному
-         * списку, чтобы не ломать смежность «перемена → инфочас → следующий урок» (четверг).
-         */
         fun countdownForMinute(
             minutes: Int,
             dayOfWeek: Int,
@@ -193,7 +150,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             if (minutes < SHOW_FROM_MINUTE) return null
 
             if (mode == CountdownMode.GROUP_LESSONS) {
-                // Нет уроков группы в этот день — скрыто весь день (без fallback на все звонки).
+
                 if (lastGroupLesson == null) return null
                 val lastBell = bells.lastOrNull {
                     !it.isInfoHour && it.lessonNumber <= lastGroupLesson
@@ -226,14 +183,6 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             return null
         }
 
-        /**
-         * Последний урок группы сегодня: сначала строки с датой (dateString dd.MM.yyyy / dd-MM-yyyy),
-         * при отсутствии — регулярные по dayOfWeek (graceful degradation). Пусто → null (уроков нет).
-         */
-
-        // O1: тот же runBlocking в Room, что и в WidgetData.todayLessons; результат
-        // не зависит от appWidgetId и меняется раз в минуту → кэш по (дата+время+группа).
-        // Поля @Volatile: updateAll зовётся и из будильника, и из BellTimerService.
         @Volatile private var cacheKey: String? = null
 
         @Volatile private var cacheLastLesson: Int? = null
@@ -242,11 +191,9 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             val group = WidgetUpdateHelper.getSelectedGroup(context)
             if (group.isBlank()) return null
             val dow = Dow.of(cal)
-            // QA#10: общий формат даты с NowNext (Locale.ROOT, dd.MM.yyyy) и общая нормализация
+
             val todayString = WidgetData.todayDateString()
-            // BEL-04/WID-04: «последний урок группы сегодня» не меняется в течение дня —
-            // ключ БЕЗ минут. Раньше ключ включал HH:mm и кэш промахивался каждую минуту:
-            // runBlocking+Room 1440 раз в день при живом сервисе вместо одного запроса.
+
             val key = "$group|$dow|$todayString"
             if (key == cacheKey) return cacheLastLesson
             val result = try {
@@ -256,7 +203,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                     val forToday = lessons.filter {
                         it.dateString.isNotBlank() && WidgetData.normalizeDate(it.dateString) == todayString
                     }
-                    // Дневные строки на сегодняшнюю дату имеют приоритет; иначе — регулярные по дню недели.
+
                     if (forToday.isNotEmpty()) {
                         forToday.maxOf { it.lessonNumber }
                     } else {
@@ -266,7 +213,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             } catch (_: Exception) {
                 null
             }
-            // Ключ пишем последним (публикация data → key), см. WidgetData.todayLessons
+
             cacheLastLesson = result
             cacheKey = key
             return result
@@ -285,19 +232,15 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             val dow = Dow.of(cal)
             val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
             val bells = CollegeBellSchedule.getBellsForDay(dow)
-            // Один read БД на обновление (countdownInfo читал бы его второй раз)
+
             val lastGroupLesson = if (mode == CountdownMode.GROUP_LESSONS && dow in 1..6) {
                 lastGroupLessonForToday(context, cal)
             } else {
                 null
             }
 
-            // Тот же расчёт, что countdownInfo, но без повторного обращения к БД.
-            // V4: для Вс countdownForMinute сам даёт null — воскресную ветку
-            // («до 1 урока в пн», с 07:00) подхватывает tomorrowFirstLessonLabel.
             val info = countdownForMinute(minutes, dow, bells, mode, lastGroupLesson)
-            // Секунды: значение mm:ss досчитывается от текущей секунды календаря
-            // (цель минутная: 13:30:45 + 35 мин → 34:15 → «34:15»).
+
             val secondsOn = WidgetOptions.seconds(context, appWidgetId)
             val secondNow = cal.get(Calendar.SECOND)
             fun valueText(minutesLeft: Long): String =
@@ -308,11 +251,10 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                     views.setTextViewText(R.id.tv_countdown_label, label)
                     views.setTextViewText(R.id.tv_countdown_value, valueText(minutesLeft))
                 }
-                // W3 (Т10+): вечер после конца уроков — «до 1 урока завтра» вместо пустоты
+
                 else -> {
                     val tomorrow = tomorrowFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
-                    // O6/C: ночь (00:00–07:00) — виджет виден на экране, пустая плашка
-                    // читается как поломка. Показываем отсчёт до первого урока сегодня.
+
                     val night = if (tomorrow == null) {
                         nightFirstLessonLabel(minutes, dow, bells, mode, lastGroupLesson)
                     } else {
@@ -327,9 +269,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                             views.setTextViewText(R.id.tv_countdown_label, night.second)
                             views.setTextViewText(R.id.tv_countdown_value, valueText(night.first))
                         }
-                        // V4: пустая плашка читается как поломка — причина словами,
-                        // крупное значение прячем (RemoteViews каждый раз свежий,
-                        // видимость сама вернётся к дефолтной)
+
                         dow in 1..6 && mode == CountdownMode.GROUP_LESSONS && lastGroupLesson == null -> {
                             views.setTextViewText(R.id.tv_countdown_label, "Уроков нет")
                             views.setViewVisibility(R.id.tv_countdown_value, android.view.View.GONE)
@@ -339,7 +279,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                             views.setViewVisibility(R.id.tv_countdown_value, android.view.View.GONE)
                         }
                         else -> {
-                            // До 07:00 (в т.ч. воскресная ночь) — пусто, как раньше.
+
                             views.setTextViewText(R.id.tv_countdown_label, "")
                             views.setTextViewText(R.id.tv_countdown_value, "")
                         }
@@ -351,8 +291,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 context,
                 appWidgetId,
                 Intent(context, com.politex.MainActivity::class.java)
-                    // CLEAR_TOP|SINGLE_TOP: тёплый тап по виджету доходит до onNewIntent,
-                    // а не плодит копии активити
+
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     .putExtra("EXTRA_OPEN_TAB", "BELLS")
                     .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_BELL"),
@@ -373,17 +312,11 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        /** W3: часы, округлённые до ближайшего («до 1 урока завтра: 14 ч»). */
         fun formatHoursRounded(totalMinutes: Long): String {
             val hours = Math.round(totalMinutes / 60.0).toLong().coerceAtLeast(1L)
             return "$hours ч"
         }
 
-        /**
-         * Секундный отсчёт: «0:59» (<1 мин), «4:32» (минуты), «1:02:33» (часы).
-         * Минуты и часы не дополняются нулями, секунды — всегда двухзначные.
-         * 0 и отрицательное (граница звонка) → «0:00».
-         */
         fun formatSeconds(totalSeconds: Long): String {
             val s = totalSeconds.coerceAtLeast(0L)
             val h = s / 3600
@@ -504,12 +437,6 @@ object WidgetAlarm {
         )
     }
 
-    /**
-     * O1: будильник нужен, только если на экране есть хотя бы один виджет.
-     * Раньше короткое замыкание на «сервис включён» возвращало true даже без виджетов —
-     * будильник каждую минуту будил процесс ради пустого updateAll.
-     * Сам дубль с BellTimerService убран в WidgetUpdateHelper.updateMinuteWidgets (тик).
-     */
     private fun hasWork(context: Context): Boolean {
         val manager = AppWidgetManager.getInstance(context)
         return listOf(
@@ -529,10 +456,7 @@ object WidgetAlarm {
         val triggerAt = if (minutes in SCHOOL_START until SCHOOL_END) {
             System.currentTimeMillis() + 60_000L
         } else {
-            // X29: следующий тик — 07:00. Раньше ВСЕГДА брали «завтра», из-за чего ночью
-            // (00:00–07:00) будильник уезжал на +28 ч и countdown залипал до утра, если
-            // BellTimerService был убит OEM. Берём 07:00 сегодня и сдвигаем на день, только
-            // если это время уже прошло (вечер после SCHOOL_END) — ночь получает 07:00 сегодня.
+
             (cal.clone() as Calendar).apply {
                 set(Calendar.HOUR_OF_DAY, 7)
                 set(Calendar.MINUTE, 0)
@@ -543,10 +467,7 @@ object WidgetAlarm {
         }
 
         val pi = pendingIntent(context)
-        // X29(б): точный будильник — setExactAndAllowWhileIdle (минутный тик переживает doze).
-        // Когда SCHEDULE_EXACT_ALARM не выдан (Android 12+/14+ по умолчанию) — деградируем до
-        // setAndAllowWhileIdle, а не setWindow: while-idle вариант тоже стреляет в doze, тогда
-        // как setWindow ждал бы ближайшего maintenance-окна. Точность ниже — но тик не пропадает.
+
         val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
         try {
             if (canExact) {
@@ -569,22 +490,15 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             ACTION_TICK -> {
-                // QA#2: пересборка читает Room (runBlocking) — на main из onReceive нельзя.
-                // goAsync() + IO-scope: минутный тик/TimeChanged больше не блокируют main.
+
                 val pending = goAsync()
                 WidgetUpdateHelper.widgetScope.launch {
                     try {
-                        // X29(а): если полный update всех виджетов давно не происходил (onUpdate не
-                        // пришёл, doze/OEM сдвинули будильник, Today/Bells пропустили границу урока) —
-                        // принудительно пересобираем ВСЕ четыре, а не только минутные.
+
                         if (WidgetUpdateHelper.isFullUpdateStale(context)) {
                             WidgetUpdateHelper.updateAllWidgets(context)
                         } else {
-                            // O1: если BellTimerService ЖИВ, он уже пересобрал BellCountdown на этой же
-                            // границе минуты — повторно не делаем, обновляем только NowNext (сервис его не трогает).
-                            // WID-02: но сервис убивается OEM (battery saver на Xiaomi/Samsung) даже как FGS —
-                            // тогда countdown встал бы до следующего неточного будильника. Поэтому если сервис
-                            // НЕ запущен, пересобираем ОБА минутных виджета сами (будильник = страховка).
+
                             val serviceAlive = com.politex.util.BellCountdownNotifier.isEnabled(context) &&
                                 com.politex.util.BellTimerService.isRunning
                             if (serviceAlive) {

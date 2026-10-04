@@ -53,35 +53,17 @@ import com.politex.util.TutorialFlags
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * V14: интерактивные туториалы. Одна фича активна в момент времени; оверлей затемняет
- * всё окно, кроме «дырки» вокруг цели, показывает демо-жест пальцем и ждёт, пока
- * пользователь повторит его сам (успех приходит с экрана через [TutorialController.success]).
- *
- * Координаты: приложение работает в enableEdgeToEdge, поэтому корневой Box MainScreen
- * начинается в (0,0) окна, и [boundsInWindow] якоря совпадают с локальными координатами
- * оверлея — дополнительных пересчётов не нужно.
- */
-
-/** Куда экран пишет свои границы; оверлей читает их по [TutorialFeature.anchorId]. */
 object TutorialAnchors {
     val bounds = mutableStateMapOf<String, Rect>()
 }
 
-/** Помечает цель туториала: пишет boundsInWindow в [TutorialAnchors] по id. */
 fun Modifier.tutorialAnchor(id: String): Modifier =
     this.onGloballyPositioned { coords ->
         TutorialAnchors.bounds[id] = coords.boundsInWindow()
     }
 
-/** Тип демо-жеста. */
 enum class TutorialGesture { SWIPE, TAP }
 
-/**
- * Активные фичи и их тексты. [key] — стабильный идентификатор флага пройденности
- * (имя enum), переживает обновление приложения. [altAnchorId] — запасная цель, если
- * основной якорь на экране отсутствует (X39: кабинет ИЛИ преподаватель).
- */
 enum class TutorialFeature(
     val anchorId: String,
     val title: String,
@@ -110,19 +92,13 @@ enum class TutorialFeature(
     val key: String get() = name
 }
 
-/**
- * Оркестрация по образцу ViewerMode/GradeDetailMode: один объект-синглтон держит активную
- * фичу. Экраны зовут [request] при первой композиции и [success] при реальном результате.
- */
 object TutorialController {
-    /** Активная фича (null = оверлей скрыт). Публичный var — оверлей гасит его в [clear]. */
+
     var active by mutableStateOf<TutorialFeature?>(null)
 
-    /** Инкремент = «пользователь повторил жест»; оверлей по нему завершает туториал. */
     var successSignal by mutableIntStateOf(0)
         private set
 
-    /** Показать туториал, если он ещё не пройден и сейчас ничего не активно. */
     fun request(
         ctx: Context,
         feature: TutorialFeature,
@@ -133,7 +109,6 @@ object TutorialController {
         }
     }
 
-    /** Экран сообщает об успешном результате; засчитывается только для активной фичи. */
     fun success(feature: TutorialFeature) {
         if (active == feature) successSignal++
     }
@@ -144,10 +119,6 @@ object TutorialController {
     }
 }
 
-/**
- * Траектория демо-свайпа: справа налево на 60% ширины [rect]. Две точки (старт, конец);
- * «и обратно» дорисовывает анимация оверлея. Чистая функция — см. TutorialTrajectoryTest.
- */
 fun trajectorySwipe(rect: Rect): List<Offset> {
     val y = rect.center.y
     val start = Offset(rect.right - rect.width * 0.15f, y)
@@ -155,11 +126,8 @@ fun trajectorySwipe(rect: Rect): List<Offset> {
     return listOf(start, end)
 }
 
-/** Траектория демо-тапа: одна точка в центре [rect] (палец пульсирует на месте). */
 fun trajectoryTap(rect: Rect): List<Offset> = listOf(rect.center)
 
-// X38: демо проигрывается ПОЛНЫМ циклом (2 жеста «вперёд-назад» с паузами), и только
-// потом подпись меняется на «повторите» — отдельным таймером на TOTAL_DEMO_MS.
 private const val DEMO_TWEEN_MS = 1100
 private const val DEMO_PAUSE_MS = 600L
 private const val DEMO_CYCLES = 2
@@ -167,10 +135,6 @@ private const val TOTAL_DEMO_MS = DEMO_CYCLES * 2 * (DEMO_TWEEN_MS + DEMO_PAUSE_
 
 private enum class TutorialPhase { DEMO, REPEAT }
 
-/**
- * Хостится в корневом Box MainScreen поверх контента. Ничего не рисует, пока
- * [TutorialController.active] == null или якорь ещё не измерен.
- */
 @Composable
 fun TutorialOverlay(modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
@@ -180,15 +144,15 @@ fun TutorialOverlay(modifier: Modifier = Modifier) {
     val anchor =
         TutorialAnchors.bounds[feature.anchorId]
             ?: feature.altAnchorId?.let { TutorialAnchors.bounds[it] }
-    // Ждём первый замер цели: без rect рисовать нечего, а «пустой» оверлей перехватил бы весь экран.
+
     if (anchor == null || anchor.width <= 0f || anchor.height <= 0f) return
 
     val scope = rememberCoroutineScope()
     val fade = remember(feature) { Animatable(1f) }
     var phase by remember(feature) { mutableStateOf(TutorialPhase.DEMO) }
-    // SWIPE: прогресс 0→1 вдоль траектории (Animatable<Offset> не нужен — точек всего две).
+
     val demoT = remember(feature) { Animatable(0f) }
-    // TAP: пульс масштаба пальца на месте.
+
     val fingerScale = remember(feature) { Animatable(1f) }
     var containerH by remember { mutableFloatStateOf(0f) }
 
@@ -208,11 +172,8 @@ fun TutorialOverlay(modifier: Modifier = Modifier) {
         }
     }
 
-    // Системное «назад» = «Пропустить».
     BackHandler { dismiss(markDone = true) }
 
-    // Демо-фаза: палец по траектории — полный цикл (2 жеста «вперёд-назад» с паузами).
-    // Ключ ТОЛЬКО feature: прежний ключ hole перезапускал эффект при каждом перезамере якоря.
     LaunchedEffect(feature) {
         when (feature.gesture) {
             TutorialGesture.SWIPE ->
@@ -232,20 +193,16 @@ fun TutorialOverlay(modifier: Modifier = Modifier) {
         }
     }
 
-    // X38: подпись «повторите» — ТОЛЬКО после полного демо (delay(TOTAL_DEMO_MS));
-    // до этого показан demo-текст.
     LaunchedEffect(feature) {
         delay(TOTAL_DEMO_MS)
         phase = TutorialPhase.REPEAT
     }
 
-    // Фаза «Повторите»: ждём РЕАЛЬНОГО результата с экрана (successSignal).
     val signal = TutorialController.successSignal
     LaunchedEffect(signal, phase, feature) {
         if (phase == TutorialPhase.REPEAT && signal > 0) dismiss(markDone = true)
     }
 
-    // Плашка-подпись: под hole, если цель в верхней части экрана, иначе над hole.
     val gap = with(density) { 12.dp.roundToPx() }
     val below = anchor.center.y < containerH * 0.6f
     val captionY =
@@ -262,7 +219,7 @@ fun TutorialOverlay(modifier: Modifier = Modifier) {
             .onSizeChanged { containerH = it.height.toFloat() }
             .graphicsLayer { alpha = fade.value },
     ) {
-        // X12: Canvas ТОЛЬКО рисует dim+hole+палец — без pointerInput, ничего не перехватывает.
+
         Canvas(modifier = Modifier.fillMaxSize()) {
             val corner = 4.dp.toPx()
             val full = Path().apply { addRect(Rect(0f, 0f, size.width, size.height)) }
@@ -282,7 +239,7 @@ fun TutorialOverlay(modifier: Modifier = Modifier) {
                         val t = demoT.value
                         Offset(it[0].x + (it[1].x - it[0].x) * t, it[0].y)
                     } ?: tapPt
-                // Хвост-«палец» вниз-вправо от курсора.
+
                 drawLine(
                     color = Color.White.copy(alpha = 0.9f),
                     start = pos,
@@ -300,10 +257,6 @@ fun TutorialOverlay(modifier: Modifier = Modifier) {
             }
         }
 
-        // Y6: оверлей НЕ перехватывает ввод вообще: dim+hole+палец — чисто визуальные
-        // (Canvas без pointerInput), пользователь может работать с приложением сразу,
-        // включая целевую зону и всё остальное. Успех ловят колбэки экранов
-        // (TutorialController.success), «Пропустить» — явная кнопка ниже и системный back.
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.TopEnd,

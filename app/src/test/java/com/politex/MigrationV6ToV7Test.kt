@@ -15,26 +15,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * W11: миграция v6 → v7 — материалы принадлежат ПРЕДМЕТУ, папки выпилены из UI.
- * Приём из MigrationV5ToV6Test: реальная база v6 на диске, открытие боевым getInstance
- * (со сбросом статического INSTANCE рефлекшением).
- *
- * Зачем: включён `fallbackToDestructiveMigration`, поэтому кривая/отсутствующая миграция
- * тихо стирает ДЗ, материалы и напоминания; плюс Room сверяет схему побайтово — расхождение
- * имён колонок/DEFAULT-выражений = crash у всех обновившихся.
- *
- * Семантика миграции: каждому материалу присваивается предмет его папки (JOIN),
- * `archived = 1` если папка-владелец была архивом. Таблица `material_folders` и колонка
- * `folderId` НЕ дропаются (лишняя таблица/колонка Room не ломают — проверяем этим тестом).
- */
 @RunWith(RobolectricTestRunner::class)
 class MigrationV6ToV7Test {
 
     private val dbName = com.politex.data.local.MpkDatabase.DATABASE_NAME
     private val group = "41О"
 
-    /** Схема v6 в точности как создал бы Room версии 6 (см. app/schemas/…/6.json). */
     private fun createV6Database(context: Context) {
         context.deleteDatabase(dbName)
         val helper = FrameworkSQLiteOpenHelperFactory().create(
@@ -157,19 +143,13 @@ class MigrationV6ToV7Test {
         val context = ApplicationProvider.getApplicationContext<Context>()
         createV6Database(context)
 
-        // INSTANCE — статический singleton: другой миграционный тест в той же JVM мог
-        // закэшировать инстанс на своей базе (обязательный приём из MigrationV3ToV4Test).
         resetSingleton()
 
-        // Открытие = миграция + побайтовая валидация схемы Room: DEFAULT-выражения новых
-        // колонок совпадают с @ColumnInfo(defaultValue=...) — иначе здесь будет crash.
         val db = com.politex.data.local.MpkDatabase.getInstance(context)
 
-        // Старые данные пережили миграцию
         val tasks = runBlocking { db.taskDao().getAllTasks() }
         assertEquals("ДЗ должно пережить миграцию", 1, tasks.size)
 
-        // W11: предмет и архив перенесены из папок
         val dao = db.materialDao()
         val conspect = runBlocking { dao.getItemById(1) }
         assertNotNull(conspect)
@@ -184,18 +164,14 @@ class MigrationV6ToV7Test {
         val old = runBlocking { dao.getItemById(3) }
         assertEquals("материал из папки-архива помечен archived", true, old?.archived)
 
-        // Лишняя таблица material_folders (entity оставлен в @Database, но миграция её не
-        // трогает) не ломает Room — открытие выше уже это доказывает; проверим наличие.
         val tables = queryNames(db, "SELECT name FROM sqlite_master WHERE type='table'")
         assertTrue("таблица material_folders не дропнута", tables.contains("material_folders"))
 
-        // Новые запросы работают на мигрированной базе
         val tox = runBlocking { dao.getForSubject("ТОЭ", false).first() }
         assertEquals(2, tox.size)
         val archive = runBlocking { dao.getForSubject("Архив", true).first() }
         assertEquals(1, archive.size)
 
-        // Вставка нового материала в предмет на мигрированной базе
         runBlocking { dao.setArchived(1, true, dao.nextArchiveSortOrder()) }
         val toxAfter = runBlocking { dao.getForSubject("ТОЭ", false).first() }
         assertEquals("архив скрыл материал из предмета", 1, toxAfter.size)
@@ -210,7 +186,6 @@ class MigrationV6ToV7Test {
         return out
     }
 
-    /** Сброс статического INSTANCE, чтобы getInstance открыл именно нашу свежую v6-базу. */
     private fun resetSingleton() {
         try {
             val cls = Class.forName("com.politex.data.local.MpkDatabase")
@@ -218,7 +193,7 @@ class MigrationV6ToV7Test {
             field.isAccessible = true
             field.set(null, null)
         } catch (_: Exception) {
-            // если поля нет/недоступно — тест упадёт ниже с ясной причиной
+
         }
     }
 }

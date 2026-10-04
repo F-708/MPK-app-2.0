@@ -2,15 +2,6 @@ package com.politex.util
 
 import android.content.Context
 
-/**
- * V14: локальные флаги пройденности интерактивных туториалов.
- *
- * Заказчик: «флаги переживают обновление приложения; после апдейта показывается только
- * туториал НОВОЙ непройденной фичи». SharedPreferences хранятся в файле `mpk_tutorial`
- * в data-каталоге приложения — они НЕ стираются при установке нового APK поверх
- * (в отличие от кэша), поэтому однажды пройденный туториал больше не всплывает, а
- * добавленные в обновлении фичи (свои ключи) — показываются. Ключ — `tutorial_done_$feature`.
- */
 object TutorialFlags {
     private const val PREFS = "mpk_tutorial"
 
@@ -22,7 +13,6 @@ object TutorialFlags {
         prefs(ctx).edit().putBoolean(key(feature), true).apply()
     }
 
-    /** X37: админ-сброс — снять все флаги пройденности, туториалы покажутся заново. */
     fun resetAll(ctx: Context) {
         val p = prefs(ctx)
         val editor = p.edit()

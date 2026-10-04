@@ -98,8 +98,6 @@ class TeacherScheduleParserTest {
         assertTrue("Бирюк ведёт у 31П", groups.contains("31П"))
     }
 
-    // O7: слоты документа обязаны нести день недели из заголовка (0 = «неизвестен» →
-    // UI покажет пустое состояние, а не пары другого дня под произвольной датой).
     @Test
     fun `слоты размечены днём недели документа`() {
         val slots = parsed().values.flatten()
@@ -125,7 +123,6 @@ class TeacherScheduleParserTest {
         assertEquals(4, TeacherScheduleParser.dowFromHeaderText(TeacherScheduleParser.findHeaderLine(text)!!))
     }
 
-    // O7: документ, скачанный под дату, обязан совпасть с запрошенной датой.
     @Test
     fun `документ проверяется на соответствие запрошенной дате`() {
         val bytes = realDocBytes()

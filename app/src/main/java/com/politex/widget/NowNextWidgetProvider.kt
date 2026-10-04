@@ -21,8 +21,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
         manager: AppWidgetManager,
         ids: IntArray,
     ) {
-        // QA#2: buildViews читает Room (WidgetData.todayLessons) — нельзя на main из
-        // onReceive. goAsync держит процесс живым, пересборка уходит на IO.
+
         val pending = goAsync()
         WidgetUpdateHelper.widgetScope.launch {
             try {
@@ -59,10 +58,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.tv_next_subject, style.mainColor)
             views.setTextColor(R.id.tv_now_details, style.subColor)
             views.setTextColor(R.id.tv_next_details, style.subColor)
-            // N7: чип кабинета — фон highlightColor, текст mainColor. Пара даёт
-            // контраст во всех 4 стилях: LIGHT (тёмный текст по светло-голубому),
-            // DARK/BLUE/SKY (белый текст по тёмно-синему). Было: текст mainColor по
-            // почти-белой плашке bg_widget_room_chip — белый по белому в DARK/BLUE/SKY.
+
             views.setInt(R.id.tv_now_room, "setBackgroundColor", style.highlightColor)
             views.setInt(R.id.tv_next_room, "setBackgroundColor", style.highlightColor)
             views.setTextColor(R.id.tv_now_room, style.mainColor)
@@ -73,9 +69,6 @@ class NowNextWidgetProvider : AppWidgetProvider() {
 
             val current = lessons.firstOrNull { now in it.startMinutes()..it.endMinutes() }
 
-            // V21: старт маршрута — «где студент сейчас»: для «ДАЛЬШЕ» это кабинет текущего
-            // слота, для «СЕЙЧАС» — кабинет предыдущего (в том же слоте from == to и маршрут
-            // вырождается). null → карта построит маршрут от главного входа (N8).
             val nextFromRoom = RouteStartResolver.previousRoomNow(lessons, now)
             val nowFromRoom =
                 current?.let { c ->
@@ -88,9 +81,6 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                     else -> lessons.firstOrNull { it.startMinutes() > now }
                 }
 
-            // V3: пустые состояния — одна строка по центру виджета вместо двух
-            // полупустых блоков. RemoteViews каждый раз свежий, видимость блоков
-            // возвращается к дефолтной (visible) сама.
             val groupBlank = WidgetUpdateHelper.getSelectedGroup(context).isBlank()
             val emptyText =
                 when {
@@ -123,7 +113,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.tv_next_room, android.view.View.GONE)
                 }
             } else {
-                // V3: до первого звонка — «Перемена» с внятной причиной (W4), время из bells
+
                 val bells = CollegeBellSchedule.getBellsForDay(WidgetData.dayOfWeek(context))
                 val firstBell = bells.firstOrNull()
                 views.setTextViewText(R.id.tv_now_label, "СЕЙЧАС")
@@ -137,7 +127,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                     },
                 )
                 views.setViewVisibility(R.id.tv_now_room, android.view.View.GONE)
-                // current == null && next == null исключён выше → next здесь всегда есть
+
                 views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                 views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next!!.subjectRaw))
                 views.setTextViewText(R.id.tv_next_details, detailsOf(next))
@@ -149,8 +139,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                     context,
                     appWidgetId,
                     Intent(context, com.politex.MainActivity::class.java)
-                        // CLEAR_TOP|SINGLE_TOP: тёплый тап по виджету доходит до onNewIntent,
-                        // а не плодит копии активити
+
                         .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                         .putExtra("EXTRA_OPEN_TAB", "SCHEDULE")
                         .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_LESSON"),
@@ -162,14 +151,6 @@ class NowNextWidgetProvider : AppWidgetProvider() {
 
         private fun detailsOf(lesson: LessonEntity): String = "${lesson.timeStart}–${lesson.timeEnd}"
 
-        /**
-         * Б7: кабинет в виджете — отдельная кликабельная кнопка, а не хвост строки со
-         * временем. Тап открывает приложение сразу на карте с этим кабинетом.
-         * Пустой/скрытый кабинет прячем (showRoom выключен или у пары его нет).
-         *
-         * PendingIntent — по (appWidgetId + слот), иначе «сейчас» и «дальше» делят
-         * один requestCode и второй тап открывает кабинет первого.
-         */
         private fun applyRoomChip(
             context: Context,
             views: RemoteViews,
@@ -178,7 +159,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             showRoom: Boolean,
             appWidgetId: Int,
             slot: String,
-            // V21: кабинет «где студент сейчас» — старт маршрута вместо главного входа
+
             fromRoom: String? = null,
         ) {
             val rooms =
@@ -198,9 +179,9 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     .putExtra("EXTRA_OPEN_TAB", "SCHEDULE")
                     .putExtra("EXTRA_ROOM", room)
-                    // N8: тап по кабинету в NowNext — карта С маршрутом
+
                     .putExtra("EXTRA_SHOW_ROUTE", true)
-            // V21: старт маршрута — кабинет текущего слота, если он есть (иначе главный вход)
+
             if (!fromRoom.isNullOrBlank()) intent.putExtra("EXTRA_FROM_ROOM", fromRoom)
             views.setOnClickPendingIntent(
                 viewId,
@@ -223,9 +204,6 @@ object WidgetData {
 
     fun dayOfWeek(context: Context): Int = Dow.of(java.util.Calendar.getInstance())
 
-    // O1: результат не зависит от appWidgetId и меняется раз в минуту, а runBlocking в Room
-    // на каждом пересборе виджета = «виджет пропал». Кэш по (минута + группа).
-    // Вызывается из разных потоков (будильник, BellTimerService, WorkManager) — поля @Volatile.
     @Volatile private var cacheMinute = -1
 
     @Volatile private var cacheGroup = ""
@@ -252,17 +230,13 @@ object WidgetData {
             } catch (_: Exception) {
                 emptyList()
             }
-        // Ключ (cacheMinute) пишем последним: читатель, увидевший новую минуту, видит и свежие данные
+
         cacheLessons = result
         cacheGroup = group
         cacheMinute = minute
         return result
     }
 
-    /**
-     * QA#10: единое «сегодня» для всех виджетов — dd.MM.yyyy, Locale.ROOT. Локаль устройства
-     * может давать не-ASCII цифры («%02d».format без локали), и строковое сравнение дат ломается.
-     */
     internal fun todayDateString(): String {
         val cal = java.util.Calendar.getInstance()
         return String.format(
@@ -274,15 +248,8 @@ object WidgetData {
         )
     }
 
-    /** QA#10: dateString из БД встречается в двух видах (dd.MM.yyyy / dd-MM-yyyy) — к одному перед сравнением. */
     internal fun normalizeDate(s: String): String = s.replace('-', '.')
 
-    /**
-     * WID-01: только СЕГОДНЯШНИЕ строки (dateString == todayString после нормализации,
-     * формат dd.MM.yyyy — фиксированная ширина, сравнение через == корректно). Если сегодняшней
-     * синхронизации не было — фолбэк на недельный шаблон (dateString.isBlank()). Чужие даты
-     * не показываем никогда: нет ни того, ни другого — пустой список.
-     */
     fun filterTodayLessons(
         all: List<LessonEntity>,
         todayString: String,

@@ -4,12 +4,8 @@ import com.politex.data.model.CollegeMapData
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Чистые функции RouteBuilder (Y8: конструктор = ровно две точки): X36 (laneOffsetDp),
- * X19 (buildLegs глобальный дедуп), 2-точечная пара A→B = один перегон. Синтетика — без Compose.
- */
 class RouteBuilderTest {
-    // ---- X36: laneOffsetDp ----
+
     @Test
     fun `X36 laneOffsetDp раскладывает полосы 0 6 -6 12 -12 18`() {
         assertEquals(0f, laneOffsetDp(0), 1e-6f)
@@ -20,7 +16,6 @@ class RouteBuilderTest {
         assertEquals(18f, laneOffsetDp(5), 1e-6f)
     }
 
-    // ---- Y8: две точки = ровно один перегон A→B ----
     @Test
     fun `Y8 две точки дают один перегон A-B`() {
         val mapData = CollegeMapData(emptyMap())
@@ -39,7 +34,6 @@ class RouteBuilderTest {
         assertEquals("B", legs[0].to.key)
     }
 
-    // ---- X19: buildLegs глобальный дедуп ----
     @Test
     fun `X19 buildLegs схлопывает последовательный дубль`() {
         val mapData = CollegeMapData(emptyMap())

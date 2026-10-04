@@ -44,13 +44,7 @@ class BellTimerService : Service() {
         tickJob =
             scope.launch {
                 while (true) {
-                    // Посекундный режим: секунды включены в одном из countdown-виджетов
-                    // (кэш 60 с) ИЛИ стиль уведомления «с секундами». Иначе — минутный тик,
-                    // поведение не меняется вообще.
-                    // ponytail: посекундно тикает ТОЛЬКО foreground BellTimerService; WidgetAlarm
-                    // остаётся минутной страховкой. Сервис убит OEM / не включён — секунды
-                    // пропадают, виджет честно деградирует до минутного (посекундный будильник
-                    // не заводим: будить процесс 60 раз в минуту ради смены цифры — слишком).
+
                     val style = BellCountdownNotifier.getStyle(this@BellTimerService)
                     val secondMode =
                         WidgetUpdateHelper.needSecondTick(
@@ -58,17 +52,11 @@ class BellTimerService : Service() {
                             style,
                         )
                     val nowMs = System.currentTimeMillis()
-                    // тик к границе секунды (секунды) или минуты (как раньше)
+
                     delay(if (secondMode) 1000L - nowMs % 1000L else 60_000L - nowMs % 60_000L)
 
-                    // Минутная граница: в секундном режиме просыпаемся каждый тик на :00
-                    // секунды — тогда делаем и обычную минутную работу (updateAll).
                     val minuteBoundary = !secondMode || System.currentTimeMillis() % 60_000L < 1_000L
 
-                    // Т10: показ ИЛИ демоут в заглушку — foreground-уведомление сервиса
-                    // всегда обновляется через startForeground (в скрытом состоянии это
-                    // заменяет строку тихой заглушкой; сервис живёт и в 07:00 вернёт отсчёт).
-                    // Секунды в уведомлении = стиль WITH_SECONDS → пересборка каждый тик.
                     if (minuteBoundary || style == BellCountdownNotifier.Style.WITH_SECONDS) {
                         try {
                             startForeground(
@@ -81,7 +69,7 @@ class BellTimerService : Service() {
                     }
 
                     if (secondMode) {
-                        // только countdown-виджеты с включёнными секундами
+
                         BellCountdownWidgetProvider.updateSecondsWidgets(this@BellTimerService)
                     }
 
@@ -99,17 +87,10 @@ class BellTimerService : Service() {
     }
 
     companion object {
-        /** O6: сервис держит foreground-уведомление — нотификатор по этому флагу понимает,
-         *  что снимать строку нельзя, можно только заменить её тихой заглушкой. */
+
         @Volatile
         var isRunning: Boolean = false
 
-        /**
-         * QA#1: возвращает true, если старт принял вызов. На Android 12+ старт FGS из
-         * фона бросает ForegroundServiceStartNotAllowedException — раньше он тонул в
-         * пустом catch, и страховка (watchdog) считала сервис поднятым. Теперь вызывающий
-         * получает false и заводит точный будильник (см. BellServiceWatchdogWorker).
-         */
         fun start(context: Context): Boolean {
             val intent = Intent(context, BellTimerService::class.java)
             return try {

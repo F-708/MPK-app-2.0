@@ -19,14 +19,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * N1/N4/N18: чистая логика без сети и Compose-композиции.
- *  - N1  — решение «рукопожатия» по HTTP-кодам (FOUND / NOT_FOUND / NETWORK_ERROR);
- *  - N4  — фильтр дня в памяти (переключение «Сегодня/Завтра» без новой подписки);
- *  - N18 — маппинг TaskType→цвет бейджа и урок→типы заданий.
- */
 class N1N4N18LogicTest {
-    // ---------- N1: исход «рукопожатия» по кодам HEAD и GET-Range ----------
 
     @Test
     fun `N1 HEAD 2xx — файл найден, GET-Range не нужен`() {
@@ -99,8 +92,6 @@ class N1N4N18LogicTest {
         assertTrue(r.found)
     }
 
-    // ---------- N18: TaskType → цвет бейджа ----------
-
     @Test
     fun `N18 каждый тип задания отображается в свой цвет бейджа`() {
         assertEquals(ColorBadgeHW, taskTypeBadgeColor(TaskType.HOMEWORK))
@@ -116,8 +107,6 @@ class N1N4N18LogicTest {
         val colors = TaskType.entries.map { taskTypeBadgeColor(it) }
         assertEquals("все 6 типов дают разные цвета", 6, colors.distinct().size)
     }
-
-    // ---------- N18: урок → типы заданий дня ----------
 
     private fun lesson(
         num: Int,
@@ -157,9 +146,9 @@ class N1N4N18LogicTest {
             listOf(
                 task("ТОЭ", "Домашнее задание", "2026-10-05"),
                 task("ТОЭ", "Лабораторная работа", "2026-10-05"),
-                // дубль того же типа — должен схлопнуться
+
                 task("ТОЭ", "Домашнее задание", "2026-10-05"),
-                // чужой предмет — не матчится
+
                 task("Математика", "Домашнее задание", "2026-10-05"),
             )
 
@@ -193,14 +182,12 @@ class N1N4N18LogicTest {
         )
     }
 
-    // ---------- N4: фильтр дня в памяти (без новой подписки) ----------
-
     @Test
     fun `N4 точная дата приоритетнее шаблона дня недели`() {
         val rows =
             listOf(
-                lesson(1, "ТОЭ", "05.10.2026", 1), // точная дата
-                lesson(2, "Химия", "", 1), // шаблон дня недели (пн)
+                lesson(1, "ТОЭ", "05.10.2026", 1),
+                lesson(2, "Химия", "", 1),
             )
         val exact = lessonsForDay(rows, activeDateString = "05.10.2026", activeDayOfWeek = 1)
         assertEquals(1, exact.size)
@@ -211,8 +198,8 @@ class N1N4N18LogicTest {
     fun `N4 нет точной даты — фолбэк на шаблон нужного дня недели`() {
         val rows =
             listOf(
-                lesson(1, "ТОЭ", "", 1), // пн
-                lesson(2, "Химия", "", 2), // вт
+                lesson(1, "ТОЭ", "", 1),
+                lesson(2, "Химия", "", 2),
             )
         val tue = lessonsForDay(rows, activeDateString = "06.10.2026", activeDayOfWeek = 2)
         assertEquals(1, tue.size)

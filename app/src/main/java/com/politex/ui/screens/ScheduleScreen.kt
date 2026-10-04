@@ -104,8 +104,6 @@ import kotlinx.coroutines.flow.first
 import java.util.Calendar
 import java.util.Locale
 
-// O1/G: CSV учителей парсился на главном потоке при каждом входе на вкладку.
-// Теперь — ленивый синглтон процесса: один разбор на всё приложение.
 private var knownTeacherSurnamesCache: Set<String>? = null
 
 private fun knownTeacherSurnames(context: android.content.Context): Set<String> = knownTeacherSurnamesCache ?: java.util.Collections
@@ -124,32 +122,27 @@ fun ScheduleScreen(
     scheduleRepository: ScheduleRepository,
     onSyncRequest: () -> Unit,
     isSyncing: Boolean = false,
-    // SUI-02: сбой синхронизации из uiState — пустое состояние не должно выдавать
-    // сетевую ошибку за «расписание ещё не опубликовано»
+
     hasSyncError: Boolean = false,
-    // N18: тап по значку домашки ведёт на вкладку заданий (плумбится из MainScreen)
+
     onOpenTasks: () -> Unit = {},
     onTeacherClick: (String) -> Unit = {},
     onRoomClick: (room: String, fromRoom: String?) -> Unit = { _, _ -> },
     listState: LazyListState = rememberLazyListState(),
     scrollToCurrentRequested: Boolean = false,
     onScrollToCurrentConsumed: () -> Unit = {},
-    // O1/D: выбранный день живёт над when() в MainScreen (rememberSaveable), поэтому
-    // смена вкладки больше не сбрасывает состояние. Раньше — локальные remember(key).
+
     selectedSlot: Int = 0,
     onSlotChange: (Int) -> Unit = {},
     selectedDateString: String = "",
     onDateChange: (String) -> Unit = {},
-    // C3: данные группы приходят из AppViewModel (переживают пересоздание поддерева вкладки).
-    // Фолбэк на null — для тестов и вызовов без VM: тогда экран подписывается сам, как раньше.
+
     groupLessonsFromVm: List<LessonEntity>? = null,
     pendingTasksFromVm: List<com.politex.data.local.entity.StudentTaskEntity>? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
 
-    // N1: живой статус синхронизации («Проверяю сайт…» → «Файл найден, загружаю…») —
-    // показываем в пустом состоянии, чтобы заказчик видел «рукопожатие» с сайтом.
     val diagnosticInfo by scheduleRepository.diagnosticInfo.collectAsState()
 
     val isTeacherKnown: (String) -> Boolean =
@@ -162,16 +155,9 @@ fun ScheduleScreen(
             check
         }
 
-    // SUI-01: «сегодня» с ключом дня + пересчёт на ON_RESUME. Прежний remember{} залипал
-    // на вчерашней дате, если композиция переживала полночь в фоне.
     val realNow = rememberToday()
     val realDayOfWeek = groupScheduleDayOfWeek(realNow)
 
-    // O1/A+F: единственный Flow по группе — источник и для списка дня, и для weekly-разметки,
-    // и для субботы. Раньше их было 7 (день+5 дней+суббота), каждая инвалидация гнала 7 перезапросов.
-    // C3: когда данные приходят из VM — подписки здесь нет вообще. Она умирала вместе с
-    // поддеревом при смене вкладки, и на возврате первый эмит Room приходил только после
-    // нового запроса к БД → спиннер → «расписание ещё не опубликовано» на ~секунду.
     val allGroupLessons: List<com.politex.data.local.entity.LessonEntity> =
         groupLessonsFromVm ?: scheduleRepository
             .getAllLessonsForGroup(groupInfo.canonicalName)
@@ -182,13 +168,8 @@ fun ScheduleScreen(
         remember(allGroupLessons) { allGroupLessons.filter { it.dayOfWeek == 6 } }
     val saturdayIsSchoolDay = groupInfo.course == 1 || saturdayLessons.isNotEmpty()
 
-    // SUI-05: calendarDayOfWeek был локальным близнецом groupScheduleDayOfWeek — используем общий
     fun calendarDayOfWeek(cal: Calendar): Int = groupScheduleDayOfWeek(cal)
 
-    // SUI-01: ключ realNow — слоты пересчитываются после полуночи/возврата из фона
-    // V2: правый слот — «завтра» с фолбэком суббота→понедельник: неучебная суббота, но
-    // расписание на неё есть → показываем субботу; на субботу ничего нет, а понедельник
-    // уже опубликован → сразу понедельник (как syncScheduleFromWeb считает цель синка).
     val daySlots =
         remember(groupInfo.canonicalName, saturdayIsSchoolDay, realNow, allGroupLessons) {
             val left =
@@ -210,7 +191,6 @@ fun ScheduleScreen(
     val leftCal = daySlots.first
     val rightCal = daySlots.second
 
-    // SUI-01: «завтра» — от того же наблюдаемого «сегодня»
     val tomorrow = remember(realNow) { (realNow.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) } }
 
     fun sameDay(
@@ -222,10 +202,6 @@ fun ScheduleScreen(
     val leftIsToday = sameDay(leftCal, realNow)
     val rightIsTomorrow = sameDay(rightCal, tomorrow)
 
-    // O1/D: ранее локальные remember(groupInfo.canonicalName) — смена вкладки убивала их.
-    // Смена группы по-прежнему сбрасывает слот и архивную дату. lastGroup — обычный
-    // remember: при возврате на вкладку поддерево пересоздаётся, он инициализируется
-    // ТЕКУЩЕЙ группой и сброса не происходит (иначе фикс D затирал бы восстановленный день).
     var lastGroup by remember { mutableStateOf(groupInfo.canonicalName) }
     LaunchedEffect(groupInfo.canonicalName) {
         if (lastGroup != groupInfo.canonicalName) {
@@ -238,12 +214,12 @@ fun ScheduleScreen(
 
     val activeDayOfWeek = if (selectedSlot == 0) calendarDayOfWeek(leftCal) else calendarDayOfWeek(rightCal)
     val activeCal = if (selectedSlot == 0) leftCal else rightCal
-    // Дата активного дня в формате БД: выбранная в архиве либо календарная ячейка «сегодня/завтра»
+
     val activeDateString =
         remember(selectedDateString, activeCal) {
             if (selectedDateString.isNotBlank()) {
                 com.politex.data.network.MpkScheduleParser.parseDotDate(selectedDateString)?.let {
-                    // QA#4: Locale.ROOT — формат даты БД, не UI-подпись
+
                     String.format(
                         java.util.Locale.ROOT,
                         "%02d.%02d.%04d",
@@ -268,7 +244,7 @@ fun ScheduleScreen(
         if (selectedDateString.isNotBlank()) {
             "${dayNamesNominative[activeDayOfWeek]} • $selectedDateString"
         } else {
-            // Календарная ячейка (сегодня/завтра) — показываем её дату
+
             val d = activeCal.get(Calendar.DAY_OF_MONTH)
             val m = activeCal.get(Calendar.MONTH) + 1
             val prefix =
@@ -280,8 +256,6 @@ fun ScheduleScreen(
             String.format(java.util.Locale.ROOT, "%s, %02d.%02d", prefix, d, m)
         }
 
-    // SUI-03: тикающая минута в ключе — иначе «текущая пара» залипала на уже закончившемся
-    // уроке, пока композиция жива (время читалось внутри remember, но в ключ не входило).
     val nowMinutes = rememberNowMinutes()
 
     val currentLessonNumber =
@@ -297,29 +271,17 @@ fun ScheduleScreen(
             }
         }
 
-    // O1/A: ОДИН Flow по группе вместо пересоздания на каждый тап «Сегодня/Завтра».
-    // Раньше ключ Flow включал activeDateString/activeDayOfWeek → tap = resubscribe
-    // → initial=null → спиннер → «расписание ещё не опубликовано».
-    // O1/B: спиннер только до первого эмита Room, а не пока стейт null.
-    // C3: при данных из VM прогревать нечего — VM уже отдала последнее значение,
-    // поэтому спиннер при возврате на вкладку не мигает.
     var firstEmit by remember(groupInfo.canonicalName) {
         mutableStateOf(groupLessonsFromVm != null)
     }
     LaunchedEffect(allGroupLessons) { firstEmit = true }
     val isInitialLoad = !firstEmit
 
-    // Строки с точной датой приоритетны; шаблон дня недели (пустой dateString) — дополнение
     val lessons: List<com.politex.data.local.entity.LessonEntity> =
         remember(allGroupLessons, activeDateString, activeDayOfWeek) {
             lessonsForDay(allGroupLessons, activeDateString, activeDayOfWeek)
         }
 
-    // X39: туториал «Расписание» — цель: кнопка кабинета (приоритет) ИЛИ чип преподавателя
-    // первого урока, у которого преподаватель есть в базе teachers; если ни одного такого
-    // урока нет — первый урок с кабинетом. Сплит-уроки пропускаем: их карточка состоит из
-    // двух SubgroupPane, якоря вешаются на обычную карточку.
-    // ponytail: сплит-уроки без якоря — добавить параметр в SubgroupPane, если первый урок часто сплит.
     val tutorialLessonNumber =
         remember(lessons, isTeacherKnown) {
             lessons
@@ -330,14 +292,13 @@ fun ScheduleScreen(
     LaunchedEffect(tutorialLessonNumber) {
         if (tutorialLessonNumber != null) TutorialController.request(context, TutorialFeature.SCHEDULE_TAP)
     }
-    // Уход с вкладки при живом туториале — снимаем БЕЗ флага (покажем при следующем входе).
+
     DisposableEffect(Unit) {
         onDispose {
             if (TutorialController.active == TutorialFeature.SCHEDULE_TAP) TutorialController.clear()
         }
     }
-    // X39: переход на карту ИЛИ в карточку преподавателя = успех туториала
-    // (TutorialController.success засчитывает сигнал только пока фича активна).
+
     val roomClick: (String, String?) -> Unit = { room, fromRoom ->
         TutorialController.success(TutorialFeature.SCHEDULE_TAP)
         onRoomClick(room, fromRoom)
@@ -347,9 +308,6 @@ fun ScheduleScreen(
         onTeacherClick(name)
     }
 
-    // C3: как и allGroupLessons — подписка внутри экрана умирает со сменой вкладки.
-    // Если VM передала значение, берём его; иначе (тесты) — старый путь через репозиторий.
-    // Репозиторий создаётся лениво: в проде эта ветка не исполняется.
     val pendingTasks: List<com.politex.data.local.entity.StudentTaskEntity> =
         pendingTasksFromVm ?: remember(context, groupInfo.canonicalName) {
             com.politex.data.local.MpkDatabase
@@ -361,8 +319,6 @@ fun ScheduleScreen(
                 }.getPendingTasksForGroup(groupInfo.canonicalName)
         }.collectAsState(initial = emptyList()).value
 
-    // O1/F: 5 дневных Flow схлопнуты в один allGroupLessons + groupBy в памяти.
-    // Инвалидация таблицы lessons гнала 7 перезапросов, теперь 2 (allGroupLessons + суббота).
     val weeklyLessonsByDow: Map<Int, List<com.politex.data.local.entity.LessonEntity>> =
         remember(allGroupLessons) {
             allGroupLessons
@@ -373,14 +329,8 @@ fun ScheduleScreen(
                 }
         }
 
-    // N18: урок → типы заданий на день (для цветных бейджей); ключи = уроки с домашкой.
-    // Одна и та же разметка, что и раньше (markerLessonNumbers), но с типами заданий.
-    // QA#13: selectedSlot НЕ ключ — матчинг зависит от дня (lessons/activeDayOfWeek/
-    // selectedDateString), а слоты «сегодня/завтра» всегда разные дни недели: день
-    // поменялся — ключи тоже. Лишний ключ гонял fuzzy-матчинг на каждый тап вкладки.
     val homeworkByLesson: Map<Int, List<TaskType>> =
-        // QA#20: nowMinutes в ключах — System.currentTimeMillis() внутри remember иначе
-        // замерзал до смены остальных ключей и «прошедшие уроки» переставали гаснуть
+
         remember(lessons, pendingTasks, activeDayOfWeek, selectedDateString, nowMinutes) {
             val now = System.currentTimeMillis()
             val dayIso =
@@ -405,16 +355,11 @@ fun ScheduleScreen(
         }
     val homeworkMarkerNumbers: Set<Int> = homeworkByLesson.keys
 
-    // --- Автопрокрутка списка к текущему уроку ---
-
     val isViewingToday = selectedSlot == 0 && selectedDateString.isBlank() && leftIsToday
     val lessonNumbers = remember(lessons) { lessons.map { it.lessonNumber } }
-    // O1/E: rememberSaveable — иначе автопрокрутка к «сейчас» повторялась при каждом
-    // возврате на вкладку (заметный «прыжок»), т.к. поддерево пересоздаётся.
-    // ponytail: индексом «пользователь уже скроллил» остаётся listState (он тоже saveable).
+
     var didColdStartScroll by rememberSaveable { mutableStateOf(false) }
 
-    // Ждём первого лэйаута списка — иначе вьюпорт ещё 0 и центрирование невозможно.
     suspend fun awaitFirstLayout() {
         androidx.compose.runtime
             .snapshotFlow {
@@ -422,10 +367,6 @@ fun ScheduleScreen(
             }.first { it }
     }
 
-    // 8.2: холодный старт — один раз после загрузки урока скроллим к «сейчас».
-    // Пользователь уже скроллил (позиция > 0) или возврат на вкладку — не мешаем:
-    // поднятый listState хранит позицию, а свежий заход с позиции 0 либо уже
-    // был проскроллен (индекс > 0), либо idx == 0 и скроллить не нужно.
     LaunchedEffect(isInitialLoad, currentLessonNumber, isViewingToday) {
         if (isInitialLoad || didColdStartScroll) return@LaunchedEffect
         if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
@@ -435,15 +376,12 @@ fun ScheduleScreen(
         val idx = autoScrollLessonIndex(lessonNumbers, currentLessonNumber, isViewingToday)
         if (idx != null && idx > 0) {
             awaitFirstLayout()
-            // Примерно по центру: подтягиваем карточку на треть вьюпорта выше
+
             listState.animateScrollToItem(idx, -listState.layoutInfo.viewportEndOffset / 3)
         }
         didColdStartScroll = true
     }
 
-    // Уроки просматриваемого дня уже закончились (сейчас позже конца последнего урока).
-    // Считаем по звонкам: конец последнего урока, который есть у группы в этот день.
-    // SUI-03: тот же тикающий ключ — иначе после конца занятий экран не переключался на «завтра»
     val schoolDayEnded: Boolean =
         remember(nowMinutes, activeDayOfWeek, selectedSlot, activeDateString, lessons, leftIsToday) {
             if (selectedSlot != 0 || !leftIsToday) {
@@ -459,7 +397,6 @@ fun ScheduleScreen(
             }
         }
 
-    // Одноразовая подсветка «где я» при входе с виджета: вспыхивает и гаснет.
     var highlightLesson by remember { mutableStateOf<Int?>(null) }
     val highlightAlpha =
         remember {
@@ -471,15 +408,10 @@ fun ScheduleScreen(
         highlightAlpha.snapTo(0f)
         highlightAlpha.animateTo(0.85f, tween(220))
         highlightAlpha.animateTo(0f, tween(1100))
-        // Гасим только если за время анимации не запросили другой урок
+
         if (highlightLesson == target) highlightLesson = null
     }
 
-    // 8.3: тап по виджету «Сейчас/дальше»/«Расписание сегодня» — одноразовый
-    // запрос прокрутки к текущему уроку. Уроки кончились → листаем на «завтра»
-    // в начало списка (заказчик: «веди в начало списка на завтрашний день»).
-    // Потребляем запрос ПОСЛЕ прокрутки: иначе смена ключа перезапустит эффект
-    // и отменит анимацию на полпути.
     LaunchedEffect(scrollToCurrentRequested, isInitialLoad) {
         if (!scrollToCurrentRequested || isInitialLoad) return@LaunchedEffect
         if (!isViewingToday) {
@@ -498,8 +430,7 @@ fun ScheduleScreen(
         if (idx != null && idx > 0) {
             listState.animateScrollToItem(idx, -listState.layoutInfo.viewportEndOffset / 3)
         }
-        // N17: урок уже виден (idx == 0 либо скроллить некуда) — подсветка всё равно нужна.
-        // На перемене/до уроков currentLessonNumber == null — подсвечиваем ближайший урок.
+
         highlightLesson = currentLessonNumber
             ?: (idx ?: 0).let { lessonNumbers.getOrNull(it) }
         onScrollToCurrentConsumed()
@@ -511,7 +442,7 @@ fun ScheduleScreen(
             scheduleRepository = scheduleRepository,
             onDismiss = { showArchiveDialog = false },
             onDateSelected = { _, dateStr ->
-                // ISO из календаря нормализуем в dd.MM.yyyy на границе
+
                 onDateChange(
                     com.politex.data.network.MpkScheduleParser
                         .parseDotDate(dateStr)
@@ -526,9 +457,7 @@ fun ScheduleScreen(
                         } ?: dateStr,
                 )
             },
-            // X4: кабинет → карта БЕЗ маршрута (from=null → buildMapRoute(room, null,
-            // showRoute=false) → «map?room=X», routeActive=false); преподаватель → его
-            // карточка. Диалог закрываем до навигации, чтобы не висел поверх нового экрана.
+
             onOpenRoom = { room ->
                 showArchiveDialog = false
                 roomClick(room, null)
@@ -582,7 +511,7 @@ fun ScheduleScreen(
                 animationSpec = infiniteRepeatable(tween(durationMillis = 900)),
                 label = "SyncRotationAngle",
             )
-            // S2: визуально кнопка 34dp, зона нажатия 48×48 (кнопка центрируется)
+
             Box(
                 modifier =
                 Modifier
@@ -683,13 +612,9 @@ fun ScheduleScreen(
         )
 
         AnimatedContent(
-            // Ключ анимации — просматриваемый ДЕНЬ, а не данные:
-            // эмиссии Room (синхронизация, домашка, отметки) не перезапускают
-            // fade — список обновляется на месте. Fade только при смене дня/архива.
+
             targetState = selectedSlot to selectedDateString,
-            // Данные обоих дней уже в памяти (один Flow группы), поэтому дни
-            // переключаются мгновенно — дефолтные 220 мс кроссфейда читались как
-            // «зависание»: список появлялся через долю секунды после тапа.
+
             transitionSpec = { fadeIn(tween(110)) togetherWith fadeOut(tween(90)) },
             label = "ScheduleListAnimation",
             modifier = Modifier.weight(1f),
@@ -730,7 +655,7 @@ fun ScheduleScreen(
                                 .background(ColorSurfaceHighlight),
                             contentAlignment = Alignment.Center,
                         ) {
-                            // N1: во время синка — спиннер, иначе «нет занятий»
+
                             if (isSyncing) {
                                 androidx.compose.material3.CircularProgressIndicator(
                                     color = ColorBrandBlue,
@@ -749,13 +674,6 @@ fun ScheduleScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // SUI-02: при сетевом сбое честный текст — раньше он маскировался
-                        // под «не опубликовано» и уводил диагностику не туда.
-                        // N1/Y1: живой статус синка, а после синка — его честный итог
-                        // («ещё не опубликовано» vs «опубликовано, но вашей группы нет»).
-                        // ponytail: diagnosticInfo общий на все группы (один StateFlow сети);
-                        // сброс в начале каждого синка ограничивает устаревание своей группой.
-                        // Группо-скоупный статус — только если тянуть новый параметр через MainScreen.
                         Text(
                             text =
                             when {
@@ -825,7 +743,7 @@ fun ScheduleScreen(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        // SUI-02: при сбое — «ПОВТОРИТЬ», иначе прежний текст
+
                                         text = if (hasSyncError) "ПОВТОРИТЬ" else "СИНХРОНИЗИРОВАТЬ С САЙТОМ",
                                         style =
                                         androidx.compose.ui.text.TextStyle(
@@ -866,17 +784,14 @@ fun ScheduleScreen(
                                 lesson = lesson,
                                 isCurrent = lesson.lessonNumber == currentLessonNumber,
                                 hasHomework = lesson.lessonNumber in homeworkMarkerNumbers,
-                                // N18: типы заданий урока → цветные бейджи; тап → вкладка заданий
+
                                 homeworkTypes = homeworkByLesson[lesson.lessonNumber] ?: emptyList(),
                                 onHomeworkClick = onOpenTasks,
                                 onTeacherClick = teacherClick,
                                 isTeacherKnown = isTeacherKnown,
-                                // X39: цель туториала «Расписание» — кабинет/преподаватель этого урока
+
                                 tutorialTarget = lesson.lessonNumber == tutorialLessonNumber,
-                                // V21: маршрут ВСЕГДА — старт считает startForLesson по тапнутому
-                                // уроку (сегодня: где пользователь сейчас; другой день: кабинет
-                                // предыдущего урока). "" = от главного входа; непустой fromRoom —
-                                // маркер «запрос из расписания, с маршрутом».
+
                                 onRoomClick = { room ->
                                     roomClick(
                                         room,
@@ -884,7 +799,7 @@ fun ScheduleScreen(
                                             .startForLesson(lessons, lesson, isViewingToday, nowMinutes),
                                     )
                                 },
-                                // Б8: волна-подсветка «вы здесь» — только при входе с виджета
+
                                 focusAlpha =
                                 if (highlightLesson == lesson.lessonNumber) {
                                     highlightAlpha.value
@@ -956,16 +871,16 @@ fun LessonCard(
     lesson: LessonEntity,
     isCurrent: Boolean = false,
     hasHomework: Boolean = false,
-    // N18: типы заданий урока — для цветных точек-бейджей (пусто → доминирующий цвет дня)
+
     homeworkTypes: List<TaskType> = emptyList(),
-    // N18: тап по значку домашки → вкладка заданий
+
     onHomeworkClick: () -> Unit = {},
     onTeacherClick: (String) -> Unit = {},
     isTeacherKnown: (String) -> Boolean = { true },
     onRoomClick: (String) -> Unit = {},
-    // X39: этот урок — цель туториала «Расписание» (якорь на кабинете или преподавателе)
+
     tutorialTarget: Boolean = false,
-    // Б8: 0..1 — одноразовая «волна» подсветки при входе с виджета (не активна в обычном открытии)
+
     focusAlpha: Float = 0f,
     modifier: Modifier = Modifier,
 ) {
@@ -979,7 +894,7 @@ fun LessonCard(
             .fillMaxWidth()
             .testTag("lesson_card_${lesson.lessonNumber}"),
     ) {
-        // drawBehind на Surface оказался бы ПОД его же фоном — рисуем на внутреннем Column
+
         Column(
             modifier =
             Modifier
@@ -1025,8 +940,7 @@ fun LessonCard(
                 }
 
                 if (hasHomework) {
-                    // N18: выразительный кликабельный бейдж задания (тап → вкладка заданий),
-                    // мультицвет по типам заданий вместо одного серого «редактировать»
+
                     HomeworkBadge(
                         lessonNumber = lesson.lessonNumber,
                         types = homeworkTypes,
@@ -1102,8 +1016,7 @@ fun LessonCard(
                             } else {
                                 null
                             },
-                            // X39: якорь-преподаватель — только когда нет кнопки кабинета
-                            // (кабинет — приоритетная цель туториала).
+
                             modifier =
                             if (tutorialTarget && lesson.roomFirst.isBlank()) {
                                 Modifier.tutorialAnchor("schedule_teacher_target")
@@ -1114,13 +1027,13 @@ fun LessonCard(
                     }
 
                     if (lesson.roomFirst.isNotBlank()) {
-                        // S4: чип кабинета — визуал прежний, зона нажатия 44dp
+
                         Box(
                             modifier =
                             Modifier
                                 .heightIn(min = 44.dp)
                                 .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) }
-                                // X39: якорь-кабинет туториала «Расписание»
+
                                 .then(if (tutorialTarget) Modifier.tutorialAnchor("schedule_room_target") else Modifier),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -1184,7 +1097,6 @@ private fun TeacherChip(
         return
     }
 
-    // S4: визуальный чип прежний, зона нажатия 44dp (чип центрируется)
     Box(
         modifier =
         modifier
@@ -1273,8 +1185,7 @@ private fun SubgroupPane(
             }
 
             if (room.isNotBlank()) {
-                // S5/X13: чип кабинета в подгрупповой панели — ТОТ ЖЕ визуал кнопки,
-                // что у одиночных уроков (Surface+рамка+иконка), зона нажатия 44dp
+
                 Box(
                     modifier =
                     Modifier
@@ -1391,11 +1302,6 @@ private fun DaySlotCell(
     }
 }
 
-/**
- * Индекс слота (номер урока), к которому автопрокручивается список при открытии.
- * Идёт урок — текущий; уроки кончились — последний; не начались — первый.
- * null → не скроллить (данных нет). Чистая функция ради юнит-тестов.
- */
 fun autoScrollLessonIndex(
     lessonNumbers: List<Int>,
     currentLessonNumber: Int?,
@@ -1410,11 +1316,6 @@ fun autoScrollLessonIndex(
     }
 }
 
-/**
- * C3: уроки просматриваемого дня. Строки с точной датой приоритетны; шаблон недели
- * (пустая dateString) — дополнение. Вынесено из remember ради юнит-теста: раньше логику
- * нельзя было зафиксировать, не поднимая весь экран.
- */
 fun lessonsForDay(
     allGroupLessons: List<LessonEntity>,
     activeDateString: String,
@@ -1428,12 +1329,6 @@ fun lessonsForDay(
     }
 }
 
-/**
- * N18: TaskType → цвет бейджа (та же палитра, что в TasksScreen). Чистая функция ради
- * юнит-теста маппинга типов→цвета. ponytail: дубль одной `when`-ветки из TasksScreen —
- * выносить в общий маппер ради 6 строк не стоит, но если палитра бейджей разъедется,
- * заменить на единый `TaskType.badgeColor` в ui.theme.
- */
 fun taskTypeBadgeColor(type: TaskType): Color = when (type) {
     TaskType.HOMEWORK -> ColorBadgeHW
     TaskType.LAB_WORK -> ColorBadgeLab
@@ -1443,12 +1338,6 @@ fun taskTypeBadgeColor(type: TaskType): Color = when (type) {
     TaskType.DIPLOMA -> ColorBadgeDiploma
 }
 
-/**
- * N18: значок задания на уроке — выразительный (AssignmentLate, не «редактировать»),
- * кликабельный (тап → вкладка заданий, хитбокс ≥44dp как T2 в TasksScreen) и мультицветный:
- * до 3 цветных точек по типам заданий дня. Доминирующий цвет — первый тип; если типов нет
- * (источник не дал тип на урок) — одна точка цвета домашки.
- */
 @Composable
 private fun HomeworkBadge(
     lessonNumber: Int,
@@ -1456,10 +1345,10 @@ private fun HomeworkBadge(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // До 3 разных типов; доминирующий — первый (для основного значка)
+
     val distinctTypes = remember(types) { types.distinct().take(3) }
     val dominant = if (distinctTypes.isNotEmpty()) taskTypeBadgeColor(distinctTypes.first()) else ColorBadgeHW
-    // Хитбокс 44dp (паттерн S2/T2): зона нажатия больше видимого значка
+
     Box(
         modifier =
         modifier
@@ -1486,7 +1375,7 @@ private fun HomeworkBadge(
                     )
                 }
             }
-            // Мультицвет: маленькие точки по типам заданий (читаемый «что задано»)
+
             if (distinctTypes.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(3.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {

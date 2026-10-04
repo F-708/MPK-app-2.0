@@ -54,22 +54,13 @@ import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * V9: рисование поверх страниц PDF/изображений.
- *
- * Штрих хранится в НОРМАЛИЗОВАННЫХ координатах (0..1 от габаритов бокса страницы), поэтому
- * он не зависит ни от разрешения рендера, ни от текущего зума: Canvas слоя лежит ВНУТРИ
- * graphicsLayer страницы и масштабируется вместе с ней (штрих «приклеен» к бумаге).
- *
- * `strokesJson` (колонка material_annotations): {"v":1,"strokes":[{"c":ARGB,"w":dp,"pts":[x1,y1,…]}]}.
- */
 data class Stroke(
     val color: Int,
     val widthDp: Float,
     val pts: List<Offset>,
 ) {
     companion object {
-        /** Чистая функция — покрывается unit-тестом round-trip (см. MaterialAnnotationTest). */
+
         fun serialize(strokes: List<Stroke>): String {
             val arr = JSONArray()
             strokes.forEach { s ->
@@ -83,7 +74,6 @@ data class Stroke(
             return JSONObject().put("v", 1).put("strokes", arr).toString()
         }
 
-        /** Битый/пустой JSON → пустой список: страница остаётся читаемой, а не падает. */
         fun parse(json: String): List<Stroke> =
             runCatching {
                 val arr = JSONObject(json).optJSONArray("strokes") ?: return emptyList()
@@ -100,29 +90,14 @@ data class Stroke(
     }
 }
 
-/** Палитра саб-тулбара: чёрный/красный/синий/зелёный/жёлтый. */
 val ANNOTATION_COLORS = listOf(0xFF000000.toInt(), 0xFFE53935.toInt(), 0xFF1E88E5.toInt(), 0xFF43A047.toInt(), 0xFFFDD835.toInt())
 
-/** Три толщины пера, dp. */
 val ANNOTATION_WIDTHS = listOf(2f, 4f, 8f)
 
-/** Порог добавления точки в нормализованных координатах — дрожащий палец не плодит точки. */
 private const val MIN_POINT_DIST = 0.004f
 
-/** X5: допуск ластика сверх полутолщины штриха, dp — «навёл примерно» тоже считается попаданием. */
 const val ERASER_TOUCH_EXTRA_DP = 8f
 
-/**
- * X5: hit-test ластика — ЧИСТАЯ функция, покрыта unit-тестом (X5X34AnnotationToolsTest).
- *
- * Все координаты нормализованы (0..1 от габаритов бокса страницы). Бокс не квадратный,
- * поэтому вертикаль домножается на aspect = height/width — расстояние считается в
- * изотропном пространстве «ширин страницы». [threshold] — в тех же единицах:
- * (widthDp/2 + ERASER_TOUCH_EXTRA_DP) в px, делённое на ширину бокса в px.
- *
- * Касание считается попаданием, если точка ближе [threshold] к ЛЮБОМУ сегменту полилинии
- * штриха (штрих удаляется ЦЕЛИКОМ). Штрих из одной точки (тычок) — расстояние до точки.
- */
 fun eraserHitTest(
     stroke: Stroke,
     point: Offset,
@@ -136,7 +111,6 @@ fun eraserHitTest(
     return stroke.pts.zipWithNext { a, b -> distPointToSegment(p, iso(a), iso(b)) }.min() <= threshold
 }
 
-/** Расстояние от точки до отрезка (проекция на отрезок, иначе — до ближайшего конца). */
 private fun distPointToSegment(p: Offset, a: Offset, b: Offset): Float {
     val ab = b - a
     val len2 = ab.x * ab.x + ab.y * ab.y
@@ -146,16 +120,6 @@ private fun distPointToSegment(p: Offset, a: Offset, b: Offset): Float {
     return (ap - ab * t).getDistance()
 }
 
-/**
- * Слой рисования. Кладётся ВНУТРИ graphicsLayer страницы (matchParentSize), поверх контента,
- * ПОД кнопками страницы (закладка/номер остаются кликабельными).
- *
- * Поведение по жестам:
- * - drawMode && 1 палец → рисуем, потребляем ВСЕ события (страница не листается);
- * - drawMode && ≥2 пальцев → [transformGestures] (pan, zoom) — зум страницы не выходя из режима;
- * - !drawMode → у Canvas нет pointerInput: слой полностью прозрачен для событий,
- *   зум/скролл страницы работают как раньше.
- */
 @Composable
 fun AnnotationLayer(
     strokes: List<Stroke>,
@@ -169,10 +133,10 @@ fun AnnotationLayer(
     modifier: Modifier = Modifier,
     eraserActive: Boolean = false,
     onEraseAt: ((Offset) -> Unit)? = null,
-    /** Ключ перезапуска жеста для внешних состояний (X34: keepZoom) — иначе closure устаревает. */
+
     transformKey: Any? = null,
 ) {
-    // X5: позиция ластика (нормализованная) — Canvas рисует кружок-радиус под пальцем
+
     var eraserPos by remember { mutableStateOf<Offset?>(null) }
 
     val gestureModifier =
@@ -201,7 +165,7 @@ fun AnnotationLayer(
                     do {
                         val event = awaitPointerEvent()
                         if (event.changes.count { it.pressed } >= 2) {
-                            // ≥2 пальцев — жест страницы (zoom/pan), начатый штрих выбрасываем
+
                             if (!transformed) {
                                 transformed = true
                                 pts = emptyList()
@@ -236,7 +200,7 @@ fun AnnotationLayer(
 
     Canvas(modifier = modifier.then(gestureModifier).testTag("annotation_layer")) {
         (strokes + listOfNotNull(current)).forEach { drawStroke(it) }
-        // X5: курсор-фидбек ластика — кружок радиуса касания (полутолщина + допуск)
+
         if (eraserActive) {
             eraserPos?.let { p ->
                 val r = (strokeWidthDp / 2f + ERASER_TOUCH_EXTRA_DP).dp.toPx()
@@ -248,7 +212,6 @@ fun AnnotationLayer(
     }
 }
 
-/** Сглаживание: квадратичные Безье через середины соседних точек (классический freehand-приём). */
 private fun DrawScope.drawStroke(s: Stroke) {
     if (s.pts.isEmpty()) return
     val pts = s.pts.map { Offset(it.x * size.width, it.y * size.height) }
@@ -256,7 +219,7 @@ private fun DrawScope.drawStroke(s: Stroke) {
         Path().apply {
             moveTo(pts[0].x, pts[0].y)
             if (pts.size == 1) {
-                // точка-тычок
+
                 lineTo(pts[0].x + 0.1f, pts[0].y + 0.1f)
             } else {
                 for (i in 0 until pts.size - 2) {
@@ -273,11 +236,6 @@ private fun DrawScope.drawStroke(s: Stroke) {
     )
 }
 
-/**
- * V9: саб-тулбар рисования (под хедером, пока drawMode). Две строки: палитра+толщины и
- * действия (undo / очистить страницу / выход) — 11 кнопок в одну строку на 360dp не влезают
- * без нарушения 40dp-хитбоксов.
- */
 @Composable
 fun AnnotationToolbar(
     color: Int,
@@ -291,8 +249,7 @@ fun AnnotationToolbar(
     eraserActive: Boolean = false,
     onEraserToggle: () -> Unit = {},
 ) {
-    // X5: корзина требует ДВОЙНОГО нажатия подряд: первое → «Точно?» (подсветка danger,
-    // авто-сброс через 2.5с), второе → очистка. Одиночное случайно не чистит.
+
     var clearConfirm by remember { mutableStateOf(false) }
     LaunchedEffect(clearConfirm) {
         if (clearConfirm) {

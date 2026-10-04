@@ -14,21 +14,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * Ф4.2 (G1): миграция v5 → v6 — «Оценки». Приём из MigrationV4ToV5Test: реальная база v5
- * на диске, открытие боевым getInstance (со сбросом статического INSTANCE рефлекшеном).
- *
- * Зачем: включён `fallbackToDestructiveMigration`, поэтому кривая/отсутствующая миграция
- * тихо стирает ДЗ, материалы и напоминания; плюс Room сверяет схему побайтово — расхождение
- * имён таблиц/колонок = crash у всех обновившихся.
- */
 @RunWith(RobolectricTestRunner::class)
 class MigrationV5ToV6Test {
 
     private val dbName = com.politex.data.local.MpkDatabase.DATABASE_NAME
     private val group = "41О"
 
-    /** Схема v5 в точности как создал бы Room версии 5 (см. app/schemas/…/5.json). */
     private fun createV5Database(context: Context) {
         context.deleteDatabase(dbName)
         val helper = FrameworkSQLiteOpenHelperFactory().create(
@@ -131,13 +122,10 @@ class MigrationV5ToV6Test {
         val context = ApplicationProvider.getApplicationContext<Context>()
         createV5Database(context)
 
-        // INSTANCE — статический singleton: другой миграционный тест в той же JVM мог
-        // закэшировать инстанс на своей базе (обязательный приём из MigrationV3ToV4Test).
         resetSingleton()
 
         val db = com.politex.data.local.MpkDatabase.getInstance(context)
 
-        // Старые данные пережили миграцию
         val tasks = runBlocking { db.taskDao().getAllTasks() }
         assertEquals("ДЗ должно пережить миграцию", 1, tasks.size)
         assertEquals("Лаба по ТОЭ", tasks.first().title)
@@ -146,13 +134,11 @@ class MigrationV5ToV6Test {
         assertEquals("папка материалов должна пережить миграцию", 1, folders.size)
         assertEquals("Лекции", folders.first().name)
 
-        // Новые таблицы созданы (имена Room-генерируемые, сверяем явно)
         val tables = queryNames(db, "SELECT name FROM sqlite_master WHERE type='table'")
         listOf("grade_entries", "grade_config").forEach { expected ->
             assertTrue("таблица $expected должна существовать, есть: $tables", tables.contains(expected))
         }
 
-        // gradeDao работает на мигрированной базе
         val gradeDao = db.gradeDao()
         runBlocking {
             gradeDao.insert(
@@ -180,7 +166,6 @@ class MigrationV5ToV6Test {
         return out
     }
 
-    /** Сброс статического INSTANCE, чтобы getInstance открыл именно нашу свежую v5-базу. */
     private fun resetSingleton() {
         try {
             val cls = Class.forName("com.politex.data.local.MpkDatabase")
@@ -188,7 +173,7 @@ class MigrationV5ToV6Test {
             field.isAccessible = true
             field.set(null, null)
         } catch (_: Exception) {
-            // если поля нет/недоступно — тест упадёт ниже с ясной причиной
+
         }
     }
 }

@@ -7,13 +7,6 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Темы приложения.
- *
- * Главное, что здесь проверяется: тема хранится в настройках по `id` (строке),
- * а не по `name` константы, — поэтому добавление новых тем не ломает сохранённый
- * выбор пользователя, а неизвестный id безопасно откатывается на фирменную.
- */
 class AppThemeTest {
     @Test
     fun `выбор пользователя читается по id`() {
@@ -35,13 +28,11 @@ class AppThemeTest {
         assertEquals("id не должны повторяться", ids.size, ids.toSet().size)
     }
 
-    /** Добавленные темы (Б12) на месте и каждая реально меняет палитру. */
     @Test
     fun `все темы дают отличающиеся палитры`() {
         val added = listOf(AppTheme.INDIGO, AppTheme.AMBER, AppTheme.STEEL)
         added.forEach { assertTrue("${it.title} должна быть в списке", it in AppTheme.entries) }
 
-        // Каждая тема отличается от фирменной хотя бы шапкой и акцентом
         AppTheme.entries.filter { it != AppTheme.COLLEGE }.forEach { theme ->
             assertNotEquals(
                 "${theme.title}: шапка должна отличаться от фирменной",
@@ -56,10 +47,6 @@ class AppThemeTest {
         }
     }
 
-    /**
-     * `brandFill` заливает кнопки под БЕЛЫМ текстом, поэтому обязан оставаться
-     * тёмным — иначе белый текст на кнопке не прочитается.
-     */
     @Test
     fun `заливка кнопок достаточно тёмная для белого текста`() {
         AppTheme.entries.forEach { theme ->
@@ -72,7 +59,6 @@ class AppThemeTest {
         }
     }
 
-    /** Палитра — data class: темы не должны делить один и тот же объект. */
     @Test
     fun `темы не ссылаются на одну палитру`() {
         val palettes: List<MpkPalette> = AppTheme.entries.map { it.palette }

@@ -19,11 +19,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * V9: сохранение рисования. strokesJson обязан переживать round-trip serialize→parse
- * БЕЗ потерь (иначе штрих после перезапуска «поедет»), а upsert — REPLACE по паре
- * (itemId, pageIndex): одна страница = одна строка, повторная запись не плодит дубли.
- */
 @RunWith(RobolectricTestRunner::class)
 class MaterialAnnotationTest {
     private lateinit var db: MpkDatabase
@@ -80,7 +75,6 @@ class MaterialAnnotationTest {
         assertEquals("одна страница — одна строка, повторный upsert заменяет, а не дублирует", 1, rows.size)
         assertEquals(listOf(s1, s2), Stroke.parse(rows[0].strokesJson))
 
-        // соседняя страница — отдельная строка (частичное сохранение не трогает чужие страницы)
         dao.upsertAnnotation(MaterialAnnotationEntity(itemId = id, pageIndex = 3, strokesJson = Stroke.serialize(listOf(s2))))
         val all = dao.getAnnotationsFlow(id).first()
         assertEquals(2, all.size)

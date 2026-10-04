@@ -5,10 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * V23: simplifyRoute — чистка крюков полилинии (дубли, коллинеарные середины, шипы).
- * Числа из спецификации тех-советника.
- */
 class SimplifyRouteTest {
     private fun p(x: Float, y: Float) = MapPoint(x, y)
 
@@ -62,12 +58,11 @@ class SimplifyRouteTest {
     }
 }
 
-/** V25/Y8: чистые функции RouteBuilder — offsetPolyline (greedyOrder удалён вместе с autonav). */
 class RouteBuilderPureTest {
     @Test
     fun `offsetPolyline сдвигает горизонталь вдоль перпендикуляра`() {
         val line = listOf(MapPoint(0f, 0f), MapPoint(1f, 0f))
-        // n = normalize(dy*imgH, -dx*imgW) = (0, -1) → сдвиг на −offsetPx/imgH по y
+
         val out = offsetPolyline(line, imgW = 100f, imgH = 100f, offsetPx = 10f)
         assertEquals(2, out.size)
         assertEquals(0f, out[0].x, 1e-5f)

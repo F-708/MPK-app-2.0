@@ -11,24 +11,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * M1 (Задача 2.2): миграция v4 → v5 — «Материальная база».
- *
- * Зачем отдельный тест: у базы включён `fallbackToDestructiveMigration`, поэтому отсутствующая
- * или кривая миграция НЕ падает, а тихо стирает `student_tasks` (ДЗ, которое студент записал
- * руками) и `task_reminders`. Плюс Room при открытии сверяет фактическую схему с ожидаемой
- * (имена таблиц, колонок, индексов) — расхождение = crash у всех обновившихся.
- *
- * Тест создаёт РЕАЛЬНУЮ базу v4 на диске (приём из MigrationV3ToV4Test), открывает её БОЕВЫМ
- * getInstance и проверяет: старые данные переживают, три новые таблицы и индексы созданы.
- */
 @RunWith(RobolectricTestRunner::class)
 class MigrationV4ToV5Test {
 
     private val dbName = com.politex.data.local.MpkDatabase.DATABASE_NAME
     private val group = "41О"
 
-    /** Схема v4 в точности как создал бы Room версии 4 (см. app/schemas/…/4.json). */
     private fun createV4Database(context: Context) {
         context.deleteDatabase(dbName)
         val helper = FrameworkSQLiteOpenHelperFactory().create(
@@ -100,7 +88,7 @@ class MigrationV4ToV5Test {
                     "teacherFirst, roomSecond, teacherSecond, isSplit, dateString) " +
                     "VALUES ('$group', 3, 1, '08:15', '09:00', 'Математика', '229', 'Иванов И.И.', '', '', 0, '01.10.2026')",
             )
-            // напоминание привязано к ДЗ: если миграция сотрёт student_tasks, оно повиснет в воздухе
+
             db.execSQL("INSERT INTO task_reminders (taskId, triggerAtMillis) VALUES (1, 1759650000000)")
         }
     }
@@ -110,14 +98,10 @@ class MigrationV4ToV5Test {
         val context = ApplicationProvider.getApplicationContext<Context>()
         createV4Database(context)
 
-        // INSTANCE — статический singleton: другой миграционный тест в той же JVM мог
-        // закэшировать инстанс на своей базе. Сбрасываем рефлекшеном, чтобы getInstance
-        // открыл ИМЕННО нашу свежую v4-базу (приём из MigrationV3ToV4Test).
         resetSingleton()
 
         val db = com.politex.data.local.MpkDatabase.getInstance(context)
 
-        // Старые данные пережили миграцию
         val tasks = kotlinx.coroutines.runBlocking { db.taskDao().getAllTasks() }
         assertEquals("ДЗ должно пережить миграцию", 1, tasks.size)
         assertEquals("Лаба по ТОЭ", tasks.first().title)
@@ -131,8 +115,6 @@ class MigrationV4ToV5Test {
         assertEquals("напоминание должно пережить миграцию", 1, reminders.size)
         assertEquals(1L, reminders.first().taskId)
 
-        // Новые таблицы созданы и запросимы (Room не упал на валидации схемы — уже доказательство,
-        // но проверяем и имена явно: падение валидации зависит от порядка открытия)
         val tables = queryNames(db, "SELECT name FROM sqlite_master WHERE type='table'")
         listOf("material_folders", "material_items", "material_bookmarks").forEach { expected ->
             assertTrue("таблица $expected должна существовать, есть: $tables", tables.contains(expected))
@@ -143,7 +125,6 @@ class MigrationV4ToV5Test {
             assertTrue("индекс $expected должен существовать, есть: $indices", indices.contains(expected))
         }
 
-        // materialDao работает на мигрированной базе (вставка + чтение + значения по умолчанию)
         val materialDao = db.materialDao()
         val folderId = kotlinx.coroutines.runBlocking {
             materialDao.insertFolder(
@@ -182,7 +163,6 @@ class MigrationV4ToV5Test {
         return out
     }
 
-    /** Сброс статического INSTANCE, чтобы getInstance открыл именно нашу свежую v4-базу. */
     private fun resetSingleton() {
         try {
             val cls = Class.forName("com.politex.data.local.MpkDatabase")
@@ -190,7 +170,7 @@ class MigrationV4ToV5Test {
             field.isAccessible = true
             field.set(null, null)
         } catch (_: Exception) {
-            // если поля нет/недоступно — тест упадёт ниже с ясной причиной
+
         }
     }
 }

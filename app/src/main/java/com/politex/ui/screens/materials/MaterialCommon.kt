@@ -48,23 +48,10 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.util.bouncyClickable
 
-/**
- * W16: полноэкранный режим чтения PDF. `MaterialBaseScreen` ставит active=true, когда открыт
- * PDF-просмотрщик (и сбрасывает в onDispose), а `MainScreen` прячет баннер и нижнюю навигацию —
- * максимум места для чтения. Глобальный object, а не CompositionLocal: нижняя панель рисуется
- * в MainScreen, читалка — глубоко внутри lessons-вкладки, и тянуть состояние через пять уровней
- * композиции дороже одной строки. Флаг — не rememberSaveable: смерть процесса обязана его
- * сбрасывать (панель обязана вернуться при холодном старте).
- */
 object ViewerMode {
     var active by mutableStateOf(false)
 }
 
-/**
- * M2/M4/M5: общие куски просмотрщиков — тёмная шапка (фирменный ColorTopBar, как в остальном
- * приложении), иконка материала по расширению и «честная плашка» для неподдерживаемых форматов.
- */
-/** M4: иконка материала по расширению (общие куски просмотрщиков описаны выше). */
 fun materialIconFor(item: MaterialItemEntity): ImageVector = when {
     item.ext == "pdf" -> Icons.Default.PictureAsPdf
     item.ext == "doc" || item.ext == "docx" -> Icons.Default.Description
@@ -75,7 +62,6 @@ fun materialIconFor(item: MaterialItemEntity): ImageVector = when {
     else -> Icons.AutoMirrored.Filled.InsertDriveFile
 }
 
-/** M4: цвет иконки по типу — PDF красный, Word синий, таблицы зелёные, изображения фиолетовые. */
 fun materialIconTint(item: MaterialItemEntity): Color = when {
     item.ext == "pdf" -> Color(0xFFDC2626)
     item.ext == "doc" || item.ext == "docx" -> Color(0xFF0072CE)
@@ -84,10 +70,6 @@ fun materialIconTint(item: MaterialItemEntity): Color = when {
     else -> ColorBrandBlue
 }
 
-/**
- * Тёмная шапка просмотрщика: назад + заголовок + действия. Хитбокс кнопки назад 48dp.
- * `onBack = null` — шапка без возврата (не используется, оставлено для симметрии).
- */
 @Composable
 fun MaterialViewerTopBar(
     title: String,
@@ -136,7 +118,6 @@ fun MaterialViewerTopBar(
     }
 }
 
-/** M2: маленькая кнопка-действие в тёмной шапке (хитбокс 44dp, V11: иконка 24dp). */
 @Composable
 fun ViewerAction(
     icon: ImageVector,
@@ -164,14 +145,6 @@ fun ViewerAction(
     }
 }
 
-/**
- * M2: плашка «встроенный просмотрщик этот формат не умеет». Не молчаливая пустота и не краш:
- * материал сохранён, пользователь понимает, что делать дальше.
- *
- * ponytail: .doc (бинарный OLE2) и .xls/.xlsx попадают сюда. Честная поддержка = Apache POI
- * ≈ +10 МБ к APK, при том что в колледже раздают в основном .docx/.pdf. Подключать POI,
- * только если заказчик принесёт реальный поток .doc-файлов.
- */
 @Composable
 fun UnsupportedFormatPlaque(ext: String, fileName: String, modifier: Modifier = Modifier) {
     Box(
@@ -220,7 +193,6 @@ fun UnsupportedFormatPlaque(ext: String, fileName: String, modifier: Modifier = 
     }
 }
 
-/** M4: строка-карточка в стиле проекта (Surface + RoundedCornerShape(2.dp) + тонкая граница). */
 @Composable
 fun MaterialCard(
     modifier: Modifier = Modifier,

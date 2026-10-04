@@ -2,11 +2,6 @@ package com.politex.util
 
 import android.content.Context
 
-/**
- * X9: глобальное включение/отключение весов оценок (SharedPreferences «mpk_prefs»).
- * Единственная точка доступа к ключу — GradesScreen читает, экран Настроек
- * (другой работник) будет писать через те же get/set.
- */
 object GradeSettings {
     private const val PREFS = "mpk_prefs"
     private const val KEY_WEIGHTS_GLOBAL = "grades_weights_global"

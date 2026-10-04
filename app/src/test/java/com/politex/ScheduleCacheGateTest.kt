@@ -9,17 +9,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Б3: два порога — «нужен ли сайт за днём» и «похож ли документ на дневное
- * расписание всего колледжа».
- *
- * Оба нужны, чтобы при недоступном сайте (VPN) приложение жило на том, что уже
- * разобрано, но при этом частичный документ не принимался за полный.
- */
 class ScheduleCacheGateTest {
     private val catalog = 64
-
-    // --- нужен ли поход в сеть ---
 
     @Test
     fun `день, разобранный по большинству групп, сайт не трогает`() {
@@ -29,8 +20,7 @@ class ScheduleCacheGateTest {
 
     @Test
     fun `пара групп из каталога — это ещё не разобранный день`() {
-        // Регрессия: порог был «2 группы», и после ручного теста соединения
-        // (2 группы из 64) кабинет навсегда показывал неполное расписание
+
         assertTrue(shouldFetchDay(alreadyParsedGroups = 2, catalogSize = catalog, force = false))
         assertTrue(shouldFetchDay(alreadyParsedGroups = 31, catalogSize = catalog, force = false))
     }
@@ -51,8 +41,6 @@ class ScheduleCacheGateTest {
         assertFalse(shouldFetchDay(alreadyParsedGroups = 0, catalogSize = 0, force = true))
     }
 
-    // --- можно ли принимать документ за «дневной» ---
-
     @Test
     fun `документ с большинством групп каталога принимается`() {
         assertTrue(isFullDayDocument(groupCount = 44, catalogSize = catalog))
@@ -61,8 +49,7 @@ class ScheduleCacheGateTest {
 
     @Test
     fun `частичный документ не принимается — он затёр бы полные данные`() {
-        // replaceForDate = DELETE(группа, дата) + INSERT: приняв такой документ,
-        // мы бы стёрли уже лежащее полное расписание этих групп
+
         assertFalse(isFullDayDocument(groupCount = 1, catalogSize = catalog))
         assertFalse(isFullDayDocument(groupCount = 2, catalogSize = catalog))
         assertFalse(isFullDayDocument(groupCount = 31, catalogSize = catalog))
@@ -77,8 +64,6 @@ class ScheduleCacheGateTest {
     fun `без каталога ничего не принимается`() {
         assertFalse(isFullDayDocument(groupCount = 44, catalogSize = 0))
     }
-
-    // --- N2: сколько уроков считать в тосте «обновлено (N уроков)» ---
 
     private fun lesson(
         group: String,
@@ -97,7 +82,7 @@ class ScheduleCacheGateTest {
 
     @Test
     fun `N — только уроки своей группы, а не всего документа`() {
-        // Документ разобран по трём группам; пользователь своей — 41О (2 урока)
+
         val doc = listOf(lesson("41О", 1), lesson("41О", 2), lesson("11Э", 1), lesson("31П", 1), lesson("31П", 2))
         assertEquals(2, syncedCountForGroup(doc, "41О"))
         assertEquals(1, syncedCountForGroup(doc, "11Э"))

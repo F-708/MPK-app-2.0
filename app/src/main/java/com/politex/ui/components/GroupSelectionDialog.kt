@@ -126,7 +126,7 @@ fun GroupSelectionDialog(
                 if (showClose) {
                     IconButton(
                         onClick = onDismissRequest,
-                        // D4: хитбокс крестика 48dp
+
                         modifier =
                         Modifier
                             .size(48.dp)
@@ -142,8 +142,7 @@ fun GroupSelectionDialog(
             }
         },
         text = {
-            // D2: вертикальный скролл — при font scale 1.3+ «ВЫБРАТЬ» достижим,
-            // диалог первого запуска не блокируется. Сетка остаётся с heightIn.
+
             Column(
                 modifier =
                 Modifier
@@ -291,10 +290,7 @@ fun GroupSelectionDialog(
                             manualInput = it
                             inputError = null
                         },
-                        // Пример — другая группа колледжа, не та, что видел заказчик (41О): любая
-                        // подсказка с конкретным кодом читается как «тебя уже записали в
-                        // группу X» (жалоба от 2026-09-24). Значение обязано быть
-                        // существующим кодом — иначе пример не проходит свою же валидацию.
+
                         placeholder = { Text("Например: 11А", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(2.dp),

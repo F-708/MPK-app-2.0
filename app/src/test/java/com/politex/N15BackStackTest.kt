@@ -32,15 +32,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * E4/N15-приёмка: цепочки back на РЕАЛЬНОМ NavController с production-паттернами route'ов
- * и production-построителями (buildMapRoute/buildTeacherRoute/buildGroupScheduleRoute).
- * Контент записей — заглушки: проверяется стек и аргументы, а не рендер.
- *
- * Старый баг N15: «расписание группы → группа → кабинет → карта → назад» выбрасывал к
- * ВЫБОРУ группы (самодельный pageStack + navigateDeepEntry теряли глубину). Теперь группа —
- * аргумент записи backstack'а: pop с карты возвращает запись group_schedule?group=X как есть.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w360dp-h720dp")
 class N15BackStackTest {
@@ -119,21 +110,21 @@ class N15BackStackTest {
     @Test
     fun `N15 - расписание группы - кабинет - карта - назад возвращает ТУ ЖЕ группу`() {
         go { navigateToTab(ROUTE_COLLEGE) }
-        go { navigate(buildGroupScheduleRoute(null)) } // меню → выбор группы
-        go { navigate(buildGroupScheduleRoute("41О")) } // выбрана группа 41О
-        go { navigate(buildMapRoute("214", "", false)) } // тап по кабинету → карта с маршрутом
+        go { navigate(buildGroupScheduleRoute(null)) }
+        go { navigate(buildGroupScheduleRoute("41О")) }
+        go { navigate(buildMapRoute("214", "", false)) }
 
         assertEquals(ROUTE_MAP, current()?.destination?.route)
 
-        go { popBackStack() } // системное «назад» с карты
+        go { popBackStack() }
         val restored = current()
         assertEquals(ROUTE_GROUP_SCHEDULE, restored?.destination?.route)
         assertEquals("41О", restored?.arguments?.getString("group"))
 
-        go { popBackStack() } // назад → снова выбор группы
+        go { popBackStack() }
         assertEquals("", current()?.arguments?.getString("group"))
 
-        go { popBackStack() } // назад → меню «Другое»
+        go { popBackStack() }
         assertEquals(ROUTE_COLLEGE, current()?.destination?.route)
     }
 
@@ -157,8 +148,8 @@ class N15BackStackTest {
     @Test
     fun `переключение вкладок не плодит хвост - назад со стартового таба выходит из приложения`() {
         go { navigateToTab(ROUTE_BELLS) }
-        go { navigate(buildMapRoute("214", null, false)) } // глубокий экран с «Звонков»
-        go { navigateToTab(ROUTE_COLLEGE) } // таб гасит map+bells (saveState)
+        go { navigate(buildMapRoute("214", null, false)) }
+        go { navigateToTab(ROUTE_COLLEGE) }
         go { navigateToTab(ROUTE_SCHEDULE) }
 
         assertEquals(scrollRoutePattern(ROUTE_SCHEDULE), current()?.destination?.route)

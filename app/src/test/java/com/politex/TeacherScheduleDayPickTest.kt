@@ -10,11 +10,6 @@ import java.util.Calendar
 import java.util.GregorianCalendar
 import java.util.Locale
 
-/**
- * X42: выбор дня вкладки «Расписание» преподавателя (сегодня/завтра/календарь).
- * Проверяет чистую функцию teacherTargetCalendar и совпадение формата ключа кэша/БД
- * (dd.MM.yyyy) — рассинхрон форматов означал бы «офлайн-кэш не того дня».
- */
 class TeacherScheduleDayPickTest {
     private val base = GregorianCalendar(2027, Calendar.JANUARY, 15, 12, 0, 0)
 
@@ -50,10 +45,8 @@ class TeacherScheduleDayPickTest {
 
     @Test
     fun `ключ дня совпадает с форматом dateString в БД`() {
-        // TeacherScheduleTab строит dateKey через SimpleDateFormat("dd.MM.yyyy"),
-        // ScheduleRepository.formatDate пишет "%02d.%02d.%04d" — должны совпадать
-        // (иначе getTeacherLessonsForDate вечно промахивается мимо кэша).
-        val cal = GregorianCalendar(2027, Calendar.MARCH, 5, 9, 30) // 05.03.2027
+
+        val cal = GregorianCalendar(2027, Calendar.MARCH, 5, 9, 30)
         val uiKey = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(cal.time)
         val dbKey =
             "%02d.%02d.%04d".format(

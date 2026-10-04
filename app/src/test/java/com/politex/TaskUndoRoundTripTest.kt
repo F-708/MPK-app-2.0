@@ -15,11 +15,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * V13: round-trip удаления с undo — ровно цепочка TasksScreen.deleteWithUndo:
- * deleteTask → («ОТМЕНИТЬ» = ActionPerformed) → addTask(copy с ТЕМ ЖЕ id) →
- * список восстановлен одной строкой, id сохранён (напоминания остаются привязаны).
- */
 @RunWith(RobolectricTestRunner::class)
 class TaskUndoRoundTripTest {
     private lateinit var db: MpkDatabase
@@ -59,7 +54,6 @@ class TaskUndoRoundTripTest {
         repo.deleteTask(saved)
         assertTrue("после удаления список пуст", db.taskDao().getAllTasks().isEmpty())
 
-        // «ОТМЕНИТЬ»: deleteWithUndo вставляет копию с тем же id (REPLACE)
         repo.addTask(saved.copy())
 
         val all = db.taskDao().getAllTasks()

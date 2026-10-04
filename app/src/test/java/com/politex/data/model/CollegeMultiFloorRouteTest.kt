@@ -7,11 +7,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Мультиэтажная маршрутизация (Фаза 2.3). Граф синтетический, чтобы не зависеть от
- * vision-разметки реальных планов: каждый этаж — горизонтальный коридор y=0.5, лестницы
- * в одних и тех же x на всех этажах (как в реальном college_map.json, см. MASTER-PLAN).
- */
 class CollegeMultiFloorRouteTest {
     private fun room(
         number: String,
@@ -36,9 +31,6 @@ class CollegeMultiFloorRouteTest {
         links: List<String> = emptyList(),
     ) = MapEntrance(id = id, x = x, y = y, kind = "stairs", dir = 0f, title = "Лестница", links = links)
 
-    // Коридор y=0.5 с точками НА позициях узлов (0.25/0.75) — иначе концы коридора дальше
-    // JOIN_RADIUS от узлов и граф получается несвязным (в реальном college_map.json точки
-    // коридоров совпадают с узлами, см. buildGraph: совпадение координат → одна вершина).
     private fun floor(stairs: List<MapEntrance>) = FloorMap(
         corridors =
         listOf(
@@ -92,7 +84,7 @@ class CollegeMultiFloorRouteTest {
         assertNotNull("маршрут 1→2 должен найтись", r)
         assertTrue(r!!.crossesFloors)
         assertEquals(listOf("1", "2"), r.floorPaths.map { it.floorId })
-        // каждая лестница-точка входит в путь хотя бы одного этажа
+
         assertTrue(r.floorPaths.all { it.points.size >= 2 })
     }
 
@@ -122,7 +114,7 @@ class CollegeMultiFloorRouteTest {
 
     @Test
     fun `аварийная лестница не используется`() {
-        // Единственная лестница на 2 этаже помечена непригодной → маршрута 1→2 нет
+
         val f =
             mapOf(
                 "1" to floor(listOf(stair("s1a", 0.25f, 0.5f))),
@@ -133,7 +125,7 @@ class CollegeMultiFloorRouteTest {
                 room("101", 0.1f, 0.3f),
                 room("205", 0.9f, 0.3f),
                 f,
-                isUsableStair = { it.id != "s2a" }, // лестница 2 этажа аварийная
+                isUsableStair = { it.id != "s2a" },
             )
         assertNull("по аварийной лестнице маршрута быть не должно", r)
     }
@@ -142,12 +134,12 @@ class CollegeMultiFloorRouteTest {
     fun `выбирается ближайшая к старту лестница`() {
         val r =
             CollegeRouteFinder.findMultiFloorRoute(
-                room("101", 0.1f, 0.3f), // близко к x=0.25
+                room("101", 0.1f, 0.3f),
                 room("205", 0.9f, 0.3f),
                 floors(),
             )
         assertNotNull(r)
-        // на 1 этаже путь должен идти к левой лестнице (x≈0.25), не к правой (x≈0.75)
+
         val f1 = r!!.floorPaths.first { it.floorId == "1" }
         val lastOnF1 = f1.points.last()
         assertTrue(
@@ -162,7 +154,7 @@ class CollegeMultiFloorRouteTest {
             CollegeRouteFinder.findMultiFloorRoute(
                 room("101", 0.1f, 0.3f),
                 room("905", 0.9f, 0.3f),
-                floors(), // 9 этаж не в CollegeMap
+                floors(),
             )
         assertNull(r)
     }
@@ -187,9 +179,6 @@ class CollegeMultiFloorRouteTest {
         y: Float,
     ) = MapCorridor(id, listOf(MapPoint(x0, y), MapPoint((x0 + x1) / 2f, y), MapPoint(x1, y)), 0.012f)
 
-    // W39b: на ОДНОМ плане «3-4» лежат РАЗНЫЕ корпуса — прямой путь 331→301 по плану
-    // ложен (сквозь стену); правильный маршрут: вниз → 2 этаж → корпус 1 → вверх.
-    // Лестницы сопряжены ЯВНЫМИ links (W39a).
     @Test
     fun `корпуса на одном плане связаны через другой этаж (331 в 301)`() {
         val floors =
@@ -205,7 +194,7 @@ class CollegeMultiFloorRouteTest {
                     ),
                 "3-4" to
                     FloorMap(
-                        // корпус 2 (слева) и корпус 1 (справа) на плане НЕ связаны
+
                         corridors = listOf(corridor("c2", 0.05f, 0.45f, 0.5f), corridor("c1", 0.55f, 0.95f, 0.5f)),
                         entrances =
                         listOf(
@@ -224,8 +213,6 @@ class CollegeMultiFloorRouteTest {
         assertEquals(listOf("3-4", "2", "3-4"), r!!.floorPaths.map { it.floorId })
     }
 
-    // W39b: 4-й этаж (комнаты 401+) отрезан на плане «3-4» от 3-го; вход — только через
-    // лестницу, связанную links с площадкой 4-го этажа (обе на одной floorId).
     @Test
     fun `вход на 4 этаж только через связанную лестницу (план 3-4)`() {
         val floors =
@@ -247,9 +234,9 @@ class CollegeMultiFloorRouteTest {
                 floors,
             )
         assertNotNull("на 4 этаж должен вести маршрут через лестницу", r)
-        // один план, но сегмента два: подход к лестнице и крыло 4 этажа
+
         assertEquals(listOf("3-4", "3-4"), r!!.floorPaths.map { it.floorId })
-        // путь проходит через ОБЕ сопряжённые лестницы
+
         val all = r.points
         assertTrue("путь должен пройти через лестницу s3", all.any { Math.abs(it.x - 0.25f) < 1e-3f && Math.abs(it.y - 0.5f) < 1e-3f })
         assertTrue("путь должен пройти через лестницу s4", all.any { Math.abs(it.x - 0.75f) < 1e-3f && Math.abs(it.y - 0.2f) < 1e-3f })

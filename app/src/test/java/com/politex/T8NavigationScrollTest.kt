@@ -5,9 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * 8.2/8.3: к какому слоту автопрокручивается список расписания.
- */
 class T8NavigationScrollTest {
     @Test
     fun `идёт урок 3 — скроллим к нему`() {
@@ -36,7 +33,7 @@ class T8NavigationScrollTest {
 
     @Test
     fun `номер урока вне списка но меньше максимума — наверх`() {
-        // группа без 2-го урока: слоты [1, 3, 4], текущий 2 → первый слот
+
         assertEquals(0, autoScrollLessonIndex(listOf(1, 3, 4), 2, true))
     }
 }

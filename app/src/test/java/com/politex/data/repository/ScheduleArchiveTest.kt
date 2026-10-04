@@ -43,22 +43,20 @@ class ScheduleArchiveTest {
         assertFalse(isStaleDate("сегодня", cutoff))
     }
 
-    // --- T1: даты сравниваются по Calendar, не лексикографически ---
-
     @Test
     fun `прошедший тот же день недели не равен текущей неделе`() {
-        // 15.09.2026 — вторник; 08.09.2026 — тоже вторник, но ДРУГАЯ неделя
+
         val past = ms(2026, 9, 8)
         val current = ms(2026, 9, 15)
         assertNotEquals(past, current)
         assertTrue(past < current)
-        // Лексикографически строки совпадают по году/месяцу, но даты обязаны отличаться
+
         assertFalse("08.09.2026" == "15.09.2026")
     }
 
     @Test
     fun `граница месяца и года при штамповке дат`() {
-        // Понедельник 28.09.2026 ( ISO: 2026-09-28 понедельник) — суббота будет 03.10.2026
+
         val monday =
             Calendar.getInstance().apply {
                 clear()
@@ -69,7 +67,6 @@ class ScheduleArchiveTest {
         assertEquals(3, saturday.get(Calendar.DAY_OF_MONTH))
         assertEquals(Calendar.OCTOBER, saturday.get(Calendar.MONTH))
 
-        // Понедельник 28.12.2026 — среда будет 30.12, суббота 02.01.2027 (граница года)
         val decMonday =
             Calendar.getInstance().apply {
                 clear()
@@ -108,11 +105,11 @@ class ScheduleArchiveTest {
 
     @Test
     fun `lexicographic trap - 28 сентября позже 5 октября только по строке`() {
-        // «28.09.2026» > «05.10.2026» лексикографически, но по дате — раньше
+
         val sep = ms(2026, 9, 28)
         val oct = ms(2026, 10, 5)
         assertTrue(sep < oct)
-        assertTrue("28.09.2026" > "05.10.2026") // строковая ловушка
+        assertTrue("28.09.2026" > "05.10.2026")
     }
 
     @Test
@@ -124,7 +121,7 @@ class ScheduleArchiveTest {
                 lesson("", 1, 3),
             )
         val picked = HomeworkMarkers.dedupeByLatestDate(rows)
-        // Поздняя дата — 05.10.2026, а не «28.09» (лексикографический максимум)
+
         assertEquals(setOf("05.10.2026", ""), picked.map { it.dateString }.toSet())
     }
 

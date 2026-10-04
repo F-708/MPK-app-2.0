@@ -6,12 +6,6 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.politex.util.SubjectFormatter
 
-/**
- * D1 (DAT-01): индексы под реальные запросы — таблица держит кэш ВСЕХ групп каталога
- * (тысячи строк), виджет читает её каждую минуту, карта — по кабинетам. Без индексов
- * каждый запрос был full scan. Имена Room генерирует как index_<table>_<col1>_<col2> —
- * MIGRATION_2_3 обязан создать их ПОБАЙТОВО такими же (иначе валидация схемы падает).
- */
 @Entity(
     tableName = "lessons",
     indices = [

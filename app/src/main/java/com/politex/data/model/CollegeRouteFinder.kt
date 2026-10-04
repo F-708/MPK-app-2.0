@@ -6,10 +6,6 @@ object CollegeRouteFinder {
 
     data class Route(val points: List<MapPoint>, val distance: Float)
 
-    /**
-     * Маршрут через несколько этажей. [floorPaths] — путь на каждом этаже по порядку
-     * (для отрисовки: приложение показывает этаж за этажом). [distance] — суммарная длина.
-     */
     data class FloorPath(val floorId: String, val points: List<MapPoint>)
 
     data class MultiFloorRoute(val floorPaths: List<FloorPath>, val distance: Float) {
@@ -19,33 +15,10 @@ object CollegeRouteFinder {
 
     private const val JOIN_RADIUS = 0.05f
 
-    /** Лестницы одного ствола на соседних этажах стоят почти в одной точке (замер: 0.007–0.041). */
     private const val STAIR_PAIR_RADIUS = 0.06f
 
-    /**
-     * Радиус «проекции на коридор»: вершина (узел, конец коридора, лестница, комната) соединяется
-     * с ближайшей точкой ЛЮБОГО сегмента ЛЮБОГО коридора, если перпендикуляр короче этого радиуса.
-     * Коридоры на плане пересекаются крест-накрест без общих точек (разметка рисовалась вручную),
-     * без проекции граф распадался на 2-5 компонент на этаж. Замер по реальным данным: 0.05
-     * связывает 2 этаж полностью, 1 и 3-4 — до 2 компонент.
-     */
     private const val PROJECTION_RADIUS = 0.05f
 
-    /**
-     * Граф этажа: вершины = узлы(nodes) + точки коридоров + проекции; рёбра = links узлов,
-     * соседние точки коридоров, концы коридоров к узлам в радиусе JOIN_RADIUS, и ПРОЕКЦИИ
-     * вершин на сегменты коридоров в радиусе PROJECTION_RADIUS (склейка пересечений).
-     * Y7: проекционное ребро, пробивающее комнату, НЕ создаётся (диагональные склейки
-     * впритирку к углам кабинетов резали их углы — жалоба «маршрут сквозь кабинет»).
-     *
-     * W40a/Y7: [attach] — ЦЕПОЧКИ кандидатов старта/финиша на комнату: дверь ?:
-     * (ближайшая точка контура к коридору, центр). Подключение — ортогональный Г-подход:
-     * проекция q на сегмент коридора + уголок c (сначала по оси двери до оси коридора,
-     * потом вдоль); обе ноги не должны пересекать чужие комнаты (segCrossesRect), точка
-     * подключения скользит вдоль коридора (кандидаты q по возрастанию расстояния), пока
-     * Г не станет чистым. Нет чистого Г — прямая чистая проекция (X26), нет и её —
-     * ближайшая вершина. Возврат: (вершины, рёбра, индексы attach-вершин).
-     */
     private fun buildGraph(
         floor: FloorMap,
         attach: List<List<Pair<Float, Float>>> = emptyList(),
@@ -98,23 +71,17 @@ object CollegeRouteFinder {
             }
         }
 
-        // Y7: rect'ы кабинетов — для проверок «нога не пробивает чужую комнату» (склейка и attach)
         val wallRects = floor.rooms
             .filter { it.status != "nonexistent" && it.status != "passage" && it.w > 0f && it.h > 0f }
             .map { floatArrayOf(it.x - it.w / 2f, it.y - it.h / 2f, it.x + it.w / 2f, it.y + it.h / 2f) }
 
-        // Проекционная склейка: каждая существующая вершина соединяется с ближайшей точкой
-        // каждого сегмента, если перпендикуляр ≤ PROJECTION_RADIUS. Снимок списка вершин
-        // фиксируется до цикла — добавленные проекции сами не проецируются (иначе O(n^3)).
-        // W40b: проекции, лежащие на ОДНОМ сегменте, дополнительно записываются для цепочки.
-        // Y7: склейка, пробивающая комнату (диагональ впритирку к углу кабинета), не создаётся.
-        val onSegment = HashMap<Int, MutableList<Pair<Float, Int>>>() // сегмент → (t, вершина)
+        val onSegment = HashMap<Int, MutableList<Pair<Float, Int>>>()
         val snapshot = vertices.toList()
         for (v in snapshot) {
             for ((si, ab) in segments.withIndex()) {
                 val (a, b) = ab
                 val q = projectOnSegment(v, a, b) ?: continue
-                if (dist(v, q) < 1e-4f) continue // уже на сегменте
+                if (dist(v, q) < 1e-4f) continue
                 if (wallRects.any { r ->
                         !rectContains(r, v.x, v.y) && !rectContains(r, q.x, q.y) &&
                             segCrossesRect(v.x, v.y, q.x, q.y, r)
@@ -124,8 +91,7 @@ object CollegeRouteFinder {
                 }
                 val qv = addVertex(q.x, q.y)
                 link(vertices.indexOfFirst { it === v }, qv)
-                // проекция обязана лежать НА сегменте: addVertex её задедупит с точкой
-                // коридора только при точном совпадении; иначе соединим с концами сегмента
+
                 val ai = vertices.indexOf(a)
                 val bi = vertices.indexOf(b)
                 if (ai >= 0 && vertices[ai] !== q) link(qv, ai)
@@ -134,12 +100,6 @@ object CollegeRouteFinder {
             }
         }
 
-        // W40a/X26/Y7: подключение attach-цепочек (дверь ?: контур ?: центр).
-        // 1) Y7: ортогональный Г-подход: проекция q на сегмент коридора + уголок c — обе ноги
-        //    (точка→c, c→q) не пробивают чужие комнаты; q скользит вдоль коридора по возрастанию
-        //    расстояния, пока Г не станет чистым; кандидаты точки — по цепочке.
-        // 2) X26: нет чистого Г — прямая чистая проекция первой точки цепочки.
-        // 3) Фолбэк — ближайшая «настоящая» вершина (до attach), как раньше.
         val n0 = vertices.size
         val attachIdx = attach.map { chain ->
             val first = chain.first()
@@ -224,11 +184,6 @@ object CollegeRouteFinder {
             rv
         }
 
-        // W40b: проекции одного сегмента — ЦЕПОЧКОЙ по t (a—q1—q2—…—b). Коридоры заказчика
-        // размечены «на глаз» длинными сегментами: без цепочки две двери на одном сегменте
-        // связаны только через его дальние концы — маршрут делает крюк к перекрёстку
-        // (жалоба «из 107 в 123 идёт почти до 115 и обратно»). Цепочка даёт рёбра вдоль
-        // коридора между соседними проекциями.
         onSegment.forEach { (si, list) ->
             val (a, b) = segments[si]
             val chain = mutableListOf(vertices.indexOf(a))
@@ -240,7 +195,6 @@ object CollegeRouteFinder {
         return Triple(vertices, adjacency, attachIdx)
     }
 
-    /** Параметр t точки q, лежащей на отрезке ab (0 = a, 1 = b). */
     private fun tOnSegment(q: Vertex, a: Vertex, b: Vertex): Float {
         val dx = b.x - a.x
         val dy = b.y - a.y
@@ -249,7 +203,6 @@ object CollegeRouteFinder {
         return ((q.x - a.x) * dx + (q.y - a.y) * dy) / len2
     }
 
-    /** Проекция точки p на отрезок ab (t зажат в [0,1]); без ограничения радиуса. */
     private fun projectPointOnSegment(p: Vertex, a: Vertex, b: Vertex): Vertex? {
         val dx = b.x - a.x
         val dy = b.y - a.y
@@ -266,11 +219,9 @@ object CollegeRouteFinder {
         return Vertex(a.x + tc * dx, a.y + tc * dy)
     }
 
-    /** Проекция точки p на отрезок ab; null если перпендикуляр длиннее PROJECTION_RADIUS. */
     private fun projectOnSegment(p: Vertex, a: Vertex, b: Vertex): Vertex? =
         projectPointOnSegment(p, a, b)?.takeIf { dist(p, it) <= PROJECTION_RADIUS }
 
-    /** Путь по графу одного этажа между attach-цепочками: последовательность точек графа (без концов). */
     private fun floorPath(
         floor: FloorMap,
         attach: List<List<Pair<Float, Float>>>,
@@ -281,7 +232,7 @@ object CollegeRouteFinder {
         val out = mutableListOf<MapPoint>()
         path.forEach {
             val p = MapPoint(vertices[it].x, vertices[it].y)
-            if (out.isEmpty() || distP(out.last(), p) > 1e-4f) out.add(p) // без дублей точек
+            if (out.isEmpty() || distP(out.last(), p) > 1e-4f) out.add(p)
         }
         return out
     }
@@ -305,11 +256,6 @@ object CollegeRouteFinder {
         return Route(points, total)
     }
 
-    /**
-     * Y7: цепочка кандидатов attach: дверь (разметка) → ближайшая точка контура комнаты
-     * к коридору (двери нет; НЕ центр — из центра перпендикуляр в коридор длиннее и чаще
-     * задевает соседние кабинеты) → центр (фолбэк, крыло без коридоров рядом).
-     */
     private fun attachCandidates(
         r: MapRoom,
         floor: FloorMap,
@@ -319,7 +265,6 @@ object CollegeRouteFinder {
         return if (contour != null) listOf(contour, r.x to r.y) else listOf(r.x to r.y)
     }
 
-    /** Точка контура комнаты (семплы граней), ближайшая к любому сегменту коридора; null — коридоров нет. */
     private fun nearestContourPoint(
         r: MapRoom,
         floor: FloorMap,
@@ -355,34 +300,8 @@ object CollegeRouteFinder {
         return best
     }
 
-    /**
-     * Подъём лестницы — фиксированная «стоимость» межэтажного перехода. Реальные координаты
-     * сопряжённых лестниц почти совпадают (0.007–0.041), поэтому без стоимости алгоритм мог бы
-     * «дёргаться» между этажами; штраф делает переход осмысленным, но не запрещает его.
-     */
     private const val STAIR_COST = 0.25f
 
-    /**
-     * Мультиэтажный маршрут: ОДИН глобальный граф по ВСЕМ этажам + межэтажные рёбра
-     * лестниц, один Дейкстра A→B (W39b). Раньше строилась цепочка этажей «от from к to» —
-     * на плане «3-4» лежат РАЗНЫЕ корпуса (301–330 корпус 1, 331–348 корпус 2, переход только
-     * через 2 этаж): прямой путь по плану ложен, а «цепочка этажей» не умеет возвращаться
-     * на тот же план через другой корпус. Глобальный граф решает это сам: Дейкстра идёт
-     * вниз по лестнице → 2 этаж → другой корпус → вверх (331→301), а 4-е этажи (401–405)
-     * достигаются только через связанную с ними лестницу.
-     *
-     * Лестницы: только [isUsableStair]. Сопряжение между этажами (W39a):
-     * 1) ЯВНЫЕ entrance.links — пары по id (links заданы вручную заказчиком; могут указывать
-     *    на любой этаж, в т.ч. на ту же floorId — план «3-4» несёт и 3-й, и 4-й этажи);
-     * 2) фолбэк по близости координат (≤ STAIR_PAIR_RADIUS) — только для лестниц БЕЗ links
-     *    на соседних этажах (обратная совместимость старых карт).
-     *
-     * [floorPaths] — сегменты по этажам (для отрисовки); граница сегмента = смена этажа
-     * ИЛИ переход по лестнице (на плане «3-4» это даёт два сегмента с одной floorId —
-     * подход к лестнице у 335 и площадка 4-го этажа).
-     *
-     * @param isUsableStair фильтр пригодных лестниц (заказчик: аварийными не пользуемся).
-     */
     fun findMultiFloorRoute(
         from: MapRoom,
         to: MapRoom,
@@ -395,10 +314,9 @@ object CollegeRouteFinder {
         val order = CollegeMap.Floor.entries.map { it.id }.filter { floors.containsKey(it) }
         if (fromId !in order || toId !in order) return null
 
-        // --- Единый глобальный граф: вершины помечены этажом ---
-        val gVerts = mutableListOf<Triple<String, Float, Float>>() // (floorId, x, y)
+        val gVerts = mutableListOf<Triple<String, Float, Float>>()
         val gAdj = mutableListOf<MutableList<Pair<Int, Float>>>()
-        val stairEdges = HashSet<Long>() // упакованная пара вершин — переходы лестниц
+        val stairEdges = HashSet<Long>()
         fun edgeKey(a: Int, b: Int): Long = if (a < b) a * 1_000_000L + b else b * 1_000_000L + a
 
         fun addV(fid: String, x: Float, y: Float): Int {
@@ -416,15 +334,12 @@ object CollegeRouteFinder {
             gAdj[b].add(a to d)
         }
         fun addStairEdge(a: Int, b: Int) {
-            if (a == b || !stairEdges.add(edgeKey(a, b))) return // links симметричны — не дублируем
+            if (a == b || !stairEdges.add(edgeKey(a, b))) return
             linkV(a, b, STAIR_COST)
         }
 
-        // Этажные подграфы (nodes + corridors, как в buildGraph) и индексы лестниц.
-        // Комнаты старта/финиша подключаются как attach-точки buildGraph (W40a: дверь?:
-        // центр → ПРОЕКЦИЯ на ближайший сегмент коридора, фолбэк — ближайшая вершина).
         val stairVById = HashMap<String, Int>()
-        val stairs = mutableListOf<Triple<String, MapEntrance, Int>>() // (floorId, entrance, vertex)
+        val stairs = mutableListOf<Triple<String, MapEntrance, Int>>()
         var startV = -1
         var finishV = -1
         order.forEach { fid ->
@@ -437,14 +352,12 @@ object CollegeRouteFinder {
             verts.forEach { (x, y) -> addV(fid, x, y) }
             adj.forEachIndexed { i, edges -> edges.forEach { (j, d) -> if (j > i) linkV(base + i, base + j, d) } }
 
-            // Y7: snap лестницы — ближайшая ЧИСТАЯ вершина (ребро не пробивает кабинеты);
-            // грязный снап (впритирку к углу кабинета) резал углы — жалоба «сквозь кабинеты».
             val roomRects = floor.rooms
                 .filter { it.status != "nonexistent" && it.status != "passage" && it.w > 0f && it.h > 0f }
                 .map { floatArrayOf(it.x - it.w / 2f, it.y - it.h / 2f, it.x + it.w / 2f, it.y + it.h / 2f) }
 
             fun snap(x: Float, y: Float): Int {
-                // Ближайшая вершина этажного графа к точке (лестница/комната)
+
                 var best = -1
                 var bd = Float.MAX_VALUE
                 var bestClean = -1
@@ -466,7 +379,6 @@ object CollegeRouteFinder {
                 return if (pick < 0) -1 else base + pick
             }
 
-            // Лестницы этажа → вершины графа (ребро до ближайшей вершины коридора/узла)
             floor.entrances.filter { it.kind == "stairs" && isUsableStair(it) }.forEach { e ->
                 val sv = addV(fid, e.x, e.y)
                 val near = snap(e.x, e.y)
@@ -474,15 +386,12 @@ object CollegeRouteFinder {
                 stairVById[e.id] = sv
                 stairs.add(Triple(fid, e, sv))
             }
-            // Комнаты старта/финиша уже в графе этажа как attach-вершины (индексы совпадают
-            // после слияния: локальный i → глобальный base + i)
+
             attachIdx.forEachIndexed { k, idx ->
                 if (fid == fromId && (fid != toId || k == 0)) startV = base + idx else finishV = base + idx
             }
         }
 
-        // Межэтажные рёбра лестниц. 1) явные links (id → вершина на любом этаже);
-        // 2) фолбэк близости — только пары лестниц БЕЗ links на соседних этажах.
         stairs.filter { it.second.links.isNotEmpty() }.forEach { (_, e, sv) ->
             e.links.forEach { tid ->
                 val tv = stairVById[tid] ?: return@forEach
@@ -502,7 +411,6 @@ object CollegeRouteFinder {
 
         val path = shortestPathGlobal(gAdj, gVerts.size, startV, finishV) ?: return null
 
-        // Разбиение пути на сегменты: граница = смена этажа ИЛИ ребро лестницы
         val result = mutableListOf<FloorPath>()
         var curFloor = gVerts[path.first()].first
         var cur = mutableListOf<MapPoint>()
@@ -520,11 +428,7 @@ object CollegeRouteFinder {
             cur.add(MapPoint(v.second, v.third))
         }
         flush()
-        // X23: центр кабинета дописывается к началу/концу ТОЛЬКО если дверь не размечена
-        // (door == null). Иначе путь стартует/финиширует В ДВЕРИ (attach-точка = дверь) — без
-        // лишнего колена центр→дверь. Когда door == null, attach-точка и есть центр, поэтому
-        // дописка — no-op по distP, но оставлена как гарантия (attach-вершина могла не попасть
-        // в результат, если путь вырожден).
+
         if (result.isNotEmpty()) {
             if (from.door == null) {
                 val first = result[0]
@@ -541,32 +445,14 @@ object CollegeRouteFinder {
         }
         var total = 0f
         result.forEach { fp -> for (i in 1 until fp.points.size) total += distP(fp.points[i - 1], fp.points[i]) }
-        total += STAIR_COST * (result.size - 1) // межэтажные переходы учтены в стоимости, не в геометрии
+        total += STAIR_COST * (result.size - 1)
         return MultiFloorRoute(result, total)
     }
 
-    /**
-     * План-аспект (width/height): все три плана 1376×768. Ортогональность маршрута проверяется
-     * и строится в ЭКРАННЫХ/plan-px (x·aspect, y), а не в нормализованных координатах.
-     */
     const val PLAN_ASPECT = 1376f / 768f
 
-    /**
-     * Y7: «почти осевой» сегмент: min/max отношение сторон в plan-px < [SNAP_RATIO] (~11°) —
-     * дрожание коридоров, размеченных на глаз (замер: ≤0.16); круче — настоящая диагональ
-     * (замер: переходы между коридорами ≥0.24) → L-уголок.
-     */
     private const val SNAP_RATIO = 0.2f
 
-    /**
-     * W39c/Y7: ортогонализация маршрута для отрисовки в plan-px (x·[aspect]). НИ ОДНОЙ диагонали
-     * в итоге: сегмент с дрожанием защёлкивается на доминантную ось (b.y=a.y / b.x=a.x, снап
-     * продолжается по полилинии); настоящая диагональ заменяется L-уголком (x1,y2)/(x2,y1) —
-     * выбирается уголок, чьи ноги НЕ пересекают rect'ы комнат (status != nonexistent/passage;
-     * комнаты концов сегмента не считаются); оба пробивают — уголок с МЕНЬШИМ числом пробоев
-     * (диагональ не оставляем никогда). Уже ортогональные сегменты не трогаются; при равном
-     * выборе продолжается ось предыдущего сегмента (меньше зигзагов).
-     */
     fun orthogonalize(
         points: List<MapPoint>,
         rooms: List<MapRoom>,
@@ -578,7 +464,6 @@ object CollegeRouteFinder {
         fun contains(r: FloatArray, p: MapPoint): Boolean =
             p.x >= r[0] && p.x <= r[2] && p.y >= r[1] && p.y <= r[3]
 
-        // Пересечение ОСЕВОГО отрезка (гор./верт.) с прямоугольником; касание стен не считается
         fun crosses(a: MapPoint, b: MapPoint, r: FloatArray): Boolean {
             val minY = Math.min(a.y, b.y)
             val maxY = Math.max(a.y, b.y)
@@ -594,9 +479,9 @@ object CollegeRouteFinder {
         fun countCross(a: MapPoint, b: MapPoint, rs: List<FloatArray>): Int = rs.count { crosses(a, b, it) }
 
         val out = mutableListOf(points.first())
-        var lastLegHorizontal = false // ось последнего сегмента (для выбора уголка)
+        var lastLegHorizontal = false
         for (i in 1 until points.size) {
-            val a = out.last() // снап предыдущего сегмента продолжает полилинию
+            val a = out.last()
             var b = points[i]
             val dx = Math.abs(b.x - a.x) * aspect
             val dy = Math.abs(b.y - a.y)
@@ -607,23 +492,22 @@ object CollegeRouteFinder {
                 continue
             }
             if (Math.min(dx, dy) / Math.max(dx, dy) < SNAP_RATIO) {
-                // дрожание разметки — защёлка на доминантную ось plan-px, без уголка
+
                 b = if (dx > dy) MapPoint(b.x, a.y) else MapPoint(a.x, b.y)
                 out.add(b)
                 lastLegHorizontal = dx > dy
                 continue
             }
             val active = rects.filter { !contains(it, a) && !contains(it, b) }
-            val c1 = MapPoint(a.x, b.y) // сначала вертикаль, потом горизонталь
-            val c2 = MapPoint(b.x, a.y) // сначала горизонталь, потом вертикаль
+            val c1 = MapPoint(a.x, b.y)
+            val c2 = MapPoint(b.x, a.y)
             val c1Free = !blocked(a, c1, active) && !blocked(c1, b, active)
             val c2Free = !blocked(a, c2, active) && !blocked(c2, b, active)
             val corner = when {
                 c1Free && c2Free -> if (lastLegHorizontal) c2 else c1
                 c1Free -> c1
                 c2Free -> c2
-                // X26/Y7: оба уголка blocked — берём тот, чьи ноги пробивают МЕНЬШЕ комнат;
-                // диагональ НЕ оставляем никогда (заказчик: только параллельно-перпендикулярные).
+
                 else -> {
                     val c1Count = countCross(a, c1, active) + countCross(c1, b, active)
                     val c2Count = countCross(a, c2, active) + countCross(c2, b, active)
@@ -632,22 +516,15 @@ object CollegeRouteFinder {
             }
             out.add(corner)
             out.add(b)
-            lastLegHorizontal = corner == c1 // у c1 последняя нога — горизонталь
+            lastLegHorizontal = corner == c1
         }
         return out
     }
 
-    /** Rect'ы кабинетов-стен (status != nonexistent/passage, ненулевые). */
     private fun roomRects(rooms: List<MapRoom>): List<FloatArray> = rooms
         .filter { it.status != "nonexistent" && it.status != "passage" && it.w > 0f && it.h > 0f }
         .map { floatArrayOf(it.x - it.w / 2f, it.y - it.h / 2f, it.x + it.w / 2f, it.y + it.h / 2f) }
 
-    /**
-     * Y7: гарантия «не сквозь кабинеты» — пост-обработка ортогонализованного пути: осевой
-     * сегмент, всё ещё пробивающий кабинет, обходится сдвигом на ближайшую свободную ось
-     * КОРИДОРА (a→c1→c2→b, все три ноги чистые; оси — параллельные сегменты коридоров по
-     * возрастанию расстояния). Обхода нет — сегмент остаётся (route-check помечает пробой).
-     */
     fun avoidRooms(
         points: List<MapPoint>,
         rooms: List<MapRoom>,
@@ -663,7 +540,6 @@ object CollegeRouteFinder {
         fun clean(a: MapPoint, b: MapPoint, active: List<FloatArray>): Boolean =
             active.none { segCrossesRect(a.x, a.y, b.x, b.y, it) }
 
-        // оси коридоров (средняя координата поперёк хода) параллельно ориентации сегмента
         val hAxes = ArrayList<Float>()
         val vAxes = ArrayList<Float>()
         corridors.forEach { c ->
@@ -672,7 +548,7 @@ object CollegeRouteFinder {
                 val q = c.points[i]
                 val dx = Math.abs(q.x - p.x) * aspect
                 val dy = Math.abs(q.y - p.y)
-                if (dx > 0f && dy > 0f && Math.min(dx, dy) / Math.max(dx, dy) >= SNAP_RATIO) continue // диагональ — не ось
+                if (dx > 0f && dy > 0f && Math.min(dx, dy) / Math.max(dx, dy) >= SNAP_RATIO) continue
                 if (dx > dy) hAxes.add((p.y + q.y) / 2f) else vAxes.add((p.x + q.x) / 2f)
             }
         }
@@ -700,19 +576,11 @@ object CollegeRouteFinder {
                 out.add(detour[0])
                 out.add(detour[1])
             }
-            out.add(b) // обхода нет — оставляем, route-check помечает пробой в отчёте
+            out.add(b)
         }
         return out
     }
 
-    /**
-     * Y7: ЕДИНЫЙ конвейер полилинии отрисовки: чистка крюков графа → ортогонализация в plan-px
-     * (без диагоналей) → обход кабинетов по осям коридоров. Порядок ВАЖЕН: simplify ДО
-     * ортогонализации (после неё коллинеарная чистка съедала защёлки уголков и возвращала
-     * «кривизну»); после avoidRooms полилиния строго осевая и больше не упрощается.
-     * eps чистки ужесточён (1e-4): дефолтный 1e-3 на сыром графе принимал КОРОТКИЕ ПОВОРОТЫ
-     * коридора за коллинеарность и спрямлял зигзаг сквозь кабинеты (255–257, 2 этаж).
-     */
     fun routePolyline(
         points: List<MapPoint>,
         floor: FloorMap,
@@ -726,30 +594,20 @@ object CollegeRouteFinder {
 
     private const val ORTHO_EPS = 1e-4f
 
-    /**
-     * V23: чистка «крюков» полилинии маршрута до фикс-поинта, три правила на проход:
-     * 1) дубли подряд (dist < 1e-4) — убираем;
-     * 2) коллинеарная середина: |cross(b-a, c-b)| < [eps] && dot >= 0 — b убираем;
-     * 3) шип (возврат назад): c между a и b (dist(a,c) < dist(a,b)) и перпендикуляр
-     *    из c к прямой ab < [eps] — b убираем.
-     * Концы пути никогда не удаляются. RDP ([rdpEps]) по умолчанию ВЫКЛЮЧЕН (null) —
-     * поперёк коридора упрощать нельзя, включается явно при необходимости.
-     */
     fun simplifyRoute(points: List<MapPoint>, eps: Float = 1e-3f, rdpEps: Float? = null): List<MapPoint> {
         var pts = if (rdpEps != null) rdp(points, rdpEps) else points
         while (true) {
             val next = simplifyPass(pts, eps)
-            if (next.size == pts.size) return next // только удаления — равный размер = фикс-поинт
+            if (next.size == pts.size) return next
             pts = next
         }
     }
 
     private fun simplifyPass(pts: List<MapPoint>, eps: Float): List<MapPoint> {
-        // 1) дубли подряд
+
         val d = ArrayList<MapPoint>(pts.size)
         for (p in pts) if (d.isEmpty() || distP(d.last(), p) >= 1e-4f) d.add(p)
-        // 2)+3) потоково: каждая новая точка проверяется как «c» против хвоста (a, b) —
-        // удаление b повторно проверяет новый хвост, поэтому каскады схлопываются за проход
+
         val out = ArrayList<MapPoint>(d.size)
         for (p in d) {
             out.add(p)
@@ -771,7 +629,6 @@ object CollegeRouteFinder {
         return out
     }
 
-    /** RDP (Рамер–Дуглас–Пекер), итеративно через стек; вызывается только при явном rdpEps. */
     private fun rdp(pts: List<MapPoint>, eps: Float): List<MapPoint> {
         if (pts.size < 3) return pts
         val keep = BooleanArray(pts.size)
@@ -862,16 +719,9 @@ object CollegeRouteFinder {
 
     private fun dist(a: Vertex, b: Vertex): Float = Math.hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble()).toFloat()
 
-    /** X26: точка (x,y) внутри rect r=[x0,y0,x1,y1] (граница считается внутри). */
     private fun rectContains(r: FloatArray, x: Float, y: Float): Boolean =
         x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]
 
-    /**
-     * X26: пересекает ли отрезок (ax,ay)→(bx,by) прямоугольник r=[x0,y0,x1,y1] — Liang–Barsky.
-     * Прямоугольник сжимается на [eps] с каждой стороны, чтобы касание стены (grazing) не
-     * считалось проходом сквозь комнату. Возвращает true, если непустая часть отрезка лежит
-     * внутри сжатого прямоугольника.
-     */
     internal fun segCrossesRect(
         ax: Float,
         ay: Float,
@@ -895,7 +745,7 @@ object CollegeRouteFinder {
             val pi = p[i]
             val qi = q[i]
             if (Math.abs(pi) < 1e-9f) {
-                if (qi < 0f) return false // параллельно грани и снаружи полосы
+                if (qi < 0f) return false
             } else {
                 val t = qi / pi
                 if (pi < 0f) {

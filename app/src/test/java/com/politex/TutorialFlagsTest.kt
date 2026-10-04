@@ -9,12 +9,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * V14: флаги пройденности туториалов живут в SharedPreferences «mpk_tutorial».
- * Ключевое: флаг ПЕРЕЖИВАЕТ обновление приложения (prefs-файл не стирается при установке
- * APK поверх) и не протекает между фичами — иначе после апдейта снова всплыл бы пройденный
- * туториал, а новый не показался бы.
- */
 @RunWith(RobolectricTestRunner::class)
 class TutorialFlagsTest {
     private val ctx: Context = ApplicationProvider.getApplicationContext()
@@ -29,7 +23,7 @@ class TutorialFlagsTest {
     @Test
     fun `flag survives recreating the prefs object`() {
         TutorialFlags.markDone(ctx, "SCHEDULE_TAP")
-        // «Обновление приложения» = новый процесс читает тот же файл: берём prefs заново.
+
         val fresh = ctx.getSharedPreferences("mpk_tutorial", Context.MODE_PRIVATE)
         assertTrue(fresh.getBoolean("tutorial_done_SCHEDULE_TAP", false))
     }
@@ -43,7 +37,7 @@ class TutorialFlagsTest {
 
     @Test
     fun `resetAll clears every done flag`() {
-        // X37: админ-сброс — round-trip: markDone → isDone → resetAll → снова false
+
         TutorialFlags.markDone(ctx, "TASK_SWIPE")
         TutorialFlags.markDone(ctx, "SCHEDULE_TAP")
         assertTrue(TutorialFlags.isDone(ctx, "TASK_SWIPE"))

@@ -11,7 +11,7 @@ data class TeacherSlot(
     val groups: List<String>,
     val subject: String,
     val room: String,
-    /** День недели 1..6, извлечённый из заголовка документа; 0 = неизвестен. */
+
     val dayOfWeek: Int = 0,
 )
 
@@ -20,25 +20,18 @@ object TeacherScheduleParser {
 
     private val GROUP_REGEX = Regex("^([1-4])([1-9])([\\u0410-\\u042F])$")
 
-    // O7: дата «дд.ММ.гггг» в заголовке документа преподавателей
     private val DATE_DOT_REGEX = Regex("\\d{2}\\.\\d{2}\\.\\d{4}")
 
-    // Сколько верхних строк просматривать в поиске заголовка (шапка + шапка таблицы)
     private const val HEADER_SCAN_LINES = 6
 
     private val ROOM_REGEX = Regex("^([0-9]{1,3}[\\u0430-\\u044Fa-zA-Z]?|СТД)$")
 
-    // O7: было «ПЯТНИЦ[УЕ]» — слово «ПЯТНИЦА» из заголовка документа не распознавалось,
-    // dowFromHeaderText возвращал null, dayOfWeek у слотов оставался 0, и UI (CollegeScreen)
-    // по ветке «docDow == 0 → показать все» показывал пары под ЛЮБОЙ выбранной датой.
-    // Покрываем все падежные формы (ПЯТНИЦА/ПЯТНИЦУ/ПЯТНИЦЕ и т.п.).
     private val HEADER_DOW_REGEX =
         Regex(
             "ПОНЕДЕЛЬНИК|ВТОРНИК|СРЕД[АУЕ]|ЧЕТВЕРГ|ПЯТНИЦ[АУЕ]|СУББОТ",
             RegexOption.IGNORE_CASE,
         )
 
-    /** День недели из строки заголовка вида «║ СРЕДА 16.09.2026 ║». */
     fun dowFromHeaderText(text: String): Int? {
         val word = HEADER_DOW_REGEX.find(text)?.value?.uppercase(Locale.ROOT) ?: return null
         return when {
@@ -52,15 +45,6 @@ object TeacherScheduleParser {
         }
     }
 
-    /**
-     * Строка заголовка документа: сначала строка с «НЕДЕЛЯ»,
-     * иначе — первая из верхних строк, где есть день недели,
-     * иначе — первая из верхних строк с датой «дд.ММ.гггг».
-     *
-     * O7: часть документов приходит без слова «НЕДЕЛЯ» (напр. 03.09.2026 — только «ЧЕТВЕРГ»),
-     * а иногда и вовсе без дня недели, но с датой. День определяем только по самому документу,
-     * никаких догадок о «текущей неделе».
-     */
     fun findHeaderLine(text: String): String? {
         val lines = text.lines()
         lines.firstOrNull { it.contains("НЕДЕЛЯ", ignoreCase = true) }?.let { return it }
@@ -69,30 +53,23 @@ object TeacherScheduleParser {
         return head.firstOrNull { DATE_DOT_REGEX.containsMatchIn(it) }
     }
 
-    /** Дата «дд.ММ.гггг» из строки, либо null. */
     fun dateFromHeaderText(text: String): String? = DATE_DOT_REGEX.find(text)?.value
 
-    /** Дата в формате БД «дд.ММ.гггг» по календарю — для сравнения с датой запрошенного файла. */
     fun dotDate(cal: java.util.Calendar): String = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(cal.time)
 
-    /**
-     * O7: проверка, что скачанный документ — действительно за запрошенную дату.
-     * Документ дня содержит дату в заголовке; если она не совпадает с запрошенной,
-     * показывать его нельзя (иначе под выбранной датой окажутся пары другого дня).
-     */
     fun matchesRequestedDate(
         text: String,
         requested: java.util.Calendar,
     ): Boolean {
         val header = findHeaderLine(text) ?: return false
         val inDocDate = dateFromHeaderText(header)
-        // Точная дата в документе — сверяем по ней (сравнение календарём, не строкой)
+
         if (inDocDate != null) {
             val inDocCal = MpkScheduleParser.parseDotDate(inDocDate) ?: return false
             return inDocCal.get(java.util.Calendar.YEAR) == requested.get(java.util.Calendar.YEAR) &&
                 inDocCal.get(java.util.Calendar.DAY_OF_YEAR) == requested.get(java.util.Calendar.DAY_OF_YEAR)
         }
-        // Даты нет (напр. 03.09.2026) — сверяем хотя бы день недели
+
         val dow = dowFromHeaderText(header) ?: return false
         return dow == MpkScheduleParser.dowOfCalendar(requested)
     }
@@ -122,10 +99,6 @@ object TeacherScheduleParser {
             var subject: String = "",
         )
 
-        // Документ дня содержит заголовок «1 НЕДЕЛЯ ║ СРЕДА 16.09.2026»: помечаем слоты днём.
-        // O7: если день недели в заголовке не распознан (иные падежи/опечатки), берём его из
-        // даты самого документа. Если и даты нет — 0 («неизвестен»), и UI обязан показать
-        // честное пустое состояние, а не пары под произвольной датой.
         val headerLine = findHeaderLine(text)
         val headerDow =
             headerLine?.let { line ->
@@ -137,9 +110,7 @@ object TeacherScheduleParser {
 
         val result = mutableMapOf<String, MutableMap<Int, Cell>>()
         var currentTeacher: String? = null
-        // O7: «строка заголовка пройдена». У этих .doc после таблицы есть дублирующий
-        // блок «║ название таблицы ║» — без отсечки он приклеивался к последнему
-        // преподавателю как лишние пары. Если заголовка в тексте нет вовсе — парсим как раньше.
+
         var headerSeen = headerLine == null
 
         text.lines().forEach { rawLine ->
@@ -203,10 +174,6 @@ object TeacherScheduleParser {
             }.filterValues { it.isNotEmpty() }
     }
 
-    /**
-     * O7: текстовая проекция байтов документа (docx → pseudo-таблица, иначе UTF-16/CP1251).
-     * Нужна вызывающему, чтобы проверить дату заголовка до разбора.
-     */
     fun extractText(bytes: ByteArray): String {
         if (bytes.isEmpty()) return ""
         if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()) {

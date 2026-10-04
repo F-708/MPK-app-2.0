@@ -6,11 +6,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * X1: probe/водопад не должен врать «найдено» для даты без документа.
- * [MpkScheduleParser.documentMatchesDate] сверяет дату заголовка документа с запрошенной,
- * [directUrlHasRequestedDate] — честность probe по прямым URL (дата в имени файла).
- */
 class X1DocumentDateTest {
     private fun liveDocBytes(): ByteArray =
         javaClass.getResourceAsStream("/fixtures/05-10-2026-raspisanie-uchashhihsya.doc")!!.readBytes()

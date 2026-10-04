@@ -12,11 +12,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Calendar
 
-/**
- * V-волна: V2 (единая логика «завтра» с фолбэком суббота→понедельник),
- * V6a (магия байтов документа) и V1 (склонение «урок/урока/уроков»).
- * Даты: 02.10.2026 — пятница, 03.10 — суббота, 04.10 — воскресенье, 05.10 — понедельник.
- */
 class NextSchoolDayFallbackTest {
     private fun cal(
         y: Int,
@@ -35,10 +30,7 @@ class NextSchoolDayFallbackTest {
         )
     }
 
-    /** hasSchedule по набору дат «dd.MM.yyyy». */
     private fun schedule(vararg dates: String): (Calendar) -> Boolean = { cal -> dateStr(cal) in dates }
-
-    // ---------- V2: nextSchoolDayWithFallback ----------
 
     @Test
     fun `V2 пятница, суббота не учебная, но расписание на субботу есть — суббота, «Завтра»`() {
@@ -82,8 +74,6 @@ class NextSchoolDayFallbackTest {
         assertEquals("Завтра", target.label)
     }
 
-    // ---------- V2: nextDayCandidates ----------
-
     @Test
     fun `V2 кандидаты буднего дня — только завтра`() {
         val days = nextDayCandidates(cal(2026, 10, 1), saturdayIsSchoolDay = false)
@@ -108,8 +98,6 @@ class NextSchoolDayFallbackTest {
         assertEquals(listOf("05.10.2026"), nextDayCandidates(cal(2026, 10, 4), saturdayIsSchoolDay = true).map { dateStr(it) })
     }
 
-    // ---------- V6a: looksLikeDocument ----------
-
     @Test
     fun `V6a магия docx (PK zip) и doc (OLE2) распознаётся, HTML — нет`() {
         assertTrue(looksLikeDocument(byteArrayOf(0x50, 0x4B, 0x03, 0x04, 1, 2, 3)))
@@ -118,8 +106,6 @@ class NextSchoolDayFallbackTest {
         assertFalse(looksLikeDocument(byteArrayOf(0x50, 0x4B)))
         assertFalse(looksLikeDocument(ByteArray(0)))
     }
-
-    // ---------- V1: склонение «урок/урока/уроков» ----------
 
     @Test
     fun `V1 lessonsWord склоняется по правилам русского языка`() {

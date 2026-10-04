@@ -77,9 +77,6 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 import androidx.compose.foundation.lazy.grid.items as gridItems
 
-// ---------- Чистая логика экрана (юнит-тесты без Compose) ----------
-
-/** Calendar.DAY_OF_WEEK -> 1..7 (пн..вс), как в ScheduleScreen. */
 internal fun groupScheduleDayOfWeek(cal: Calendar): Int = Dow.of(cal)
 
 internal fun groupScheduleIsSchoolDay(
@@ -87,7 +84,6 @@ internal fun groupScheduleIsSchoolDay(
     saturdayIsSchoolDay: Boolean,
 ): Boolean = dayOfWeek in 1..5 || (dayOfWeek == 6 && saturdayIsSchoolDay)
 
-/** Следующий учебный день после base (клон base не мутируется). */
 internal fun groupScheduleNextSchoolDay(
     base: Calendar,
     saturdayIsSchoolDay: Boolean,
@@ -105,7 +101,6 @@ internal fun groupScheduleDbDate(cal: Calendar): String = "%02d.%02d.%04d".forma
     cal.get(Calendar.YEAR),
 )
 
-/** Строки с точной датой приоритетны; пустой dateString (шаблон дня недели) — фолбэк. */
 internal fun pickForeignGroupLessons(
     rows: List<LessonEntity>,
     dateString: String,
@@ -115,14 +110,6 @@ internal fun pickForeignGroupLessons(
     return rows.filter { it.dateString.isBlank() }
 }
 
-// ---------- Экран «Расписание группы» ----------
-
-/**
- * E4: обёртка route'а group_schedule?group=. Группа — АРГУМЕНТ записи backstack'а, а не
- * remember-состояние: выбор группы пушит новую запись (group=X), поэтому возврат с карты
- * (N15: group_schedule → map → back) попадает В РАСПИСАНИЕ ВЫБРАННОЙ ГРУППЫ, а не к выбору;
- * «СМЕНИТЬ»/«назад» — popBackStack на запись выбора группы (group="), курс в ней сохранён.
- */
 @Composable
 fun GroupScheduleRoute(
     group: String,
@@ -147,13 +134,6 @@ fun GroupScheduleRoute(
     )
 }
 
-/**
- * Просмотр расписания ЛЮБОЙ группы колледжа (курс -> группа из учебного плана,
- * не из базы учащихся). Синхронизация пишет строки в общую БД с ключом groupName
- * и НЕ меняет собственную группу пользователя (selected_group не трогается).
- *
- * E4: selectedGroupName — nav-аргумент (см. GroupScheduleRoute), а не внутреннее состояние.
- */
 @Composable
 fun GroupScheduleScreen(
     scheduleRepository: ScheduleRepository,
@@ -169,7 +149,6 @@ fun GroupScheduleScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // N1: живой статус синхронизации из общей диагностики («Проверяю сайт…» → «Файл найден…»)
     val diagnosticInfo by scheduleRepository.diagnosticInfo.collectAsState()
 
     var selectedCourse by rememberSaveable {
@@ -177,15 +156,12 @@ fun GroupScheduleScreen(
     }
     var selectedSlot by rememberSaveable(selectedGroupName) { mutableIntStateOf(0) }
     var isSyncing by remember { mutableStateOf(false) }
-    // N3: две разные причины держим отдельно. syncError (сеть) уместен и рядом с кэшем;
-    // syncEmptyNotice («нет в опубликованном расписании») — только когда видимый список пуст,
-    // иначе плашка противоречит урокам на экране (данные легли weekly-шаблоном с пустой dateString).
+
     var syncError by remember(selectedGroupName) { mutableStateOf<String?>(null) }
     var syncEmptyNotice by remember(selectedGroupName) { mutableStateOf<String?>(null) }
 
     val foreignInfo = remember(selectedGroupName) { GroupParser.parse(selectedGroupName) }
 
-    // Синхронизация чужой группы: те же строки БД (ключ groupName), своя группа не меняется
     fun syncForeignSchedule(force: Boolean) {
         if (selectedGroupName.isBlank() || isSyncing) return
         val group = selectedGroupName
@@ -197,7 +173,7 @@ fun GroupScheduleScreen(
             isSyncing = false
             result.fold(
                 onSuccess = { outcome ->
-                    // Y1: различимый исход вместо угадывания по строке статуса
+
                     syncEmptyNotice = when (outcome) {
                         is com.politex.data.repository.SyncOutcome.FoundNoGroup ->
                             "Группы $group нет в опубликованном расписании на ${outcome.date}"
@@ -212,7 +188,7 @@ fun GroupScheduleScreen(
     }
 
     LaunchedEffect(selectedGroupName) {
-        // force=false: при наличии кэша на сегодня/завтра сеть не трогается
+
         if (selectedGroupName.isNotBlank()) syncForeignSchedule(force = false)
     }
 
@@ -229,16 +205,9 @@ fun GroupScheduleScreen(
             check
         }
 
-    // SUI-01: «сегодня» с ключом дня и пересчётом на ON_RESUME (прежний remember{} залипал)
     val realNow = rememberToday()
     val realDayOfWeek = groupScheduleDayOfWeek(realNow)
 
-    // N4: ОДИН Flow по всей группе (ключ — только selectedGroupName). Раньше здесь и ниже
-    // были Flow, ключом которых была дата (getLessonsForDateOrDay / getLessonsForDay), и каждый
-    // Flow пересоздавался на каждой рекомпозиции → collectAsState перезапускался → на тап
-    // «Сегодня/Завтра» (activeDateString меняется) подписка рвалась, initial=null → спиннер →
-    // круг в Room. Теперь день фильтруется в памяти (lessonsForDay), подписка одна и живёт
-    // до смены группы. Суббота тоже берётся из этого списка (без отдельного Flow).
     val foreignLessonsFlow =
         remember(selectedGroupName) {
             scheduleRepository.getAllLessonsForGroup(selectedGroupName)
@@ -248,8 +217,6 @@ fun GroupScheduleScreen(
         foreignInfo?.hasSaturdayClasses == true ||
             allForeignLessons?.any { it.dayOfWeek == 6 } == true
 
-    // V2: правый слот — «завтра» с фолбэком суббота→понедельник (как в ScheduleScreen):
-    // на неучебную субботу есть расписание → суббота; нет, а понедельник опубликован → понедельник.
     val daySlots =
         remember(selectedGroupName, saturdayIsSchoolDay, realNow, allForeignLessons) {
             val left =
@@ -271,7 +238,6 @@ fun GroupScheduleScreen(
     val leftCal = daySlots.first
     val rightCal = daySlots.second
 
-    // SUI-01: «завтра» — от наблюдаемого «сегодня»
     val tomorrow = remember(realNow) { (realNow.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) } }
 
     fun sameDay(
@@ -287,7 +253,6 @@ fun GroupScheduleScreen(
     val activeDayOfWeek = groupScheduleDayOfWeek(activeCal)
     val activeDateString = groupScheduleDbDate(activeCal)
 
-    // SUI-03: тикающая минута в ключе — «текущая пара» переезжает на границе урока
     val nowMinutes = rememberNowMinutes()
     val currentLessonNumber =
         remember(nowMinutes, activeDayOfWeek, selectedSlot, leftIsToday) {
@@ -302,15 +267,12 @@ fun GroupScheduleScreen(
             }
         }
 
-    // N4: запрос по реальной дате + фолбэк на день недели — теперь ЧИСТО в памяти из
-    // единственного Flow группы (lessonsForDay: точная дата приоритетнее шаблона дня недели).
     val isInitialLoad = allForeignLessons == null
     val lessons =
         remember(allForeignLessons, activeDateString, activeDayOfWeek) {
             lessonsForDay(allForeignLessons ?: emptyList(), activeDateString, activeDayOfWeek)
         }
 
-    // R2/V21: «сегодня» для старта маршрута — только левый слот и он действительно сегодня
     val todaySlot = selectedSlot == 0 && leftIsToday
 
     Column(
@@ -319,7 +281,7 @@ fun GroupScheduleScreen(
             .fillMaxSize()
             .background(ColorBgMain),
     ) {
-        // Шапка подстраницы: назад + заголовок + обновление
+
         Row(
             modifier =
             Modifier
@@ -415,7 +377,7 @@ fun GroupScheduleScreen(
                 onGroupSelected = { onGroupSelected(it) },
             )
         } else {
-            // Отличительная плашка «чужой» группы — тёмный тон из палитры (ColorTopBar)
+
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 color = ColorTopBar,
@@ -451,7 +413,7 @@ fun GroupScheduleScreen(
                             ),
                             maxLines = 1,
                         )
-                        // Ф14: ярлык «ваша/не ваша группа» убран — осталась только специальность
+
                         val spec = foreignInfo?.let { MpkCurriculum.getSpecialty(it.specialtyCode) }
                         val specText = spec?.shortName.orEmpty()
                         if (specText.isNotBlank()) {
@@ -496,7 +458,6 @@ fun GroupScheduleScreen(
                 }
             }
 
-            // Панель дня «Сегодня / Завтра»
             Row(
                 modifier =
                 Modifier
@@ -541,8 +502,6 @@ fun GroupScheduleScreen(
                     .background(ColorDividerLight),
             )
 
-            // N3: рядом с непустым списком уместно только предупреждение о сбое сети —
-            // «нет в опубликованном расписании» противоречило бы урокам на экране.
             if (syncError != null && lessons.isNotEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -579,7 +538,7 @@ fun GroupScheduleScreen(
                     )
                 }
             } else if (lessons.isEmpty()) {
-                // Честное пустое состояние: причина + повторная попытка
+
                 Box(
                     modifier =
                     Modifier
@@ -611,7 +570,7 @@ fun GroupScheduleScreen(
                         Text(
                             text =
                             when {
-                                // N1: во время синка — живой статус «рукопожатия» с сайтом
+
                                 isSyncing -> diagnosticInfo.statusMessage.ifBlank { "Загружаем расписание…" }
                                 syncError != null -> syncError ?: ""
                                 syncEmptyNotice != null -> syncEmptyNotice ?: ""
@@ -702,8 +661,7 @@ fun GroupScheduleScreen(
                                 isCurrent = lesson.lessonNumber == currentLessonNumber,
                                 onTeacherClick = onTeacherClick,
                                 isTeacherKnown = isTeacherKnown,
-                                // V21: маршрут ВСЕГДА — старт по тапнутому уроку (см. RouteStartResolver).
-                                // "" = от главного входа; непустой fromRoom — маркер «из расписания».
+
                                 onRoomClick = { room ->
                                     onRoomClick(
                                         room,
@@ -726,7 +684,6 @@ private val groupDayNames = listOf("", "ПОНЕДЕЛЬНИК", "ВТОРНИК
 
 private fun dayTitle(cal: Calendar): String = groupDayNames[groupScheduleDayOfWeek(cal)]
 
-/** Выбор курса и группы (учебный план, не база учащихся). */
 @Composable
 private fun GroupSchedulePicker(
     selectedCourse: Int,

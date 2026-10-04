@@ -102,41 +102,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-// ─────────────────────────────────────────────────────────────────────────────
-// M1–M6 + W11–W15: «Материалы» — локальное хранилище раздаточных материалов.
-//
-//  M1 хранение: байты в filesDir/materials, в БД только метаданные
-//  M2 просмотрщики: PDF (PdfRenderer + закладки), DOCX/TXT, изображения (зум + поворот)
-//  M3 импорт: SAF-пикеры → диалог «предмет» (W11: БЕЗ папок)
-//  M4 список: W11: ПРЕДМЕТЫ (пустые скрыты) + Архив секцией внизу; внутри предмета —
-//      переименование/удаление/архив/порядок
-//  M5 поиск: W13: поле в шапке, FuzzySearch под капотом (Даммерау-Левенштейн ≤2),
-//      без тогла «Aa» и пояснительных текстов
-//  M6 навигация: sealed-состояния экранов и СВОЙ back-стек (без Navigation), системный back
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** W11: предмет для материалов, восстановленных из старого (до-v7) Архива без предмета. */
 private const val RESTORED_SUBJECT = "Восстановленные"
 
-/**
- * M6: запись back-стека. Кодирование строкой («s:ТОЭ», «i:7», «a») — чтобы стек переживал
- * смерть процесса через rememberSaveable без кастомного Saver'а: ArrayList<String> в Bundle
- * кладётся штатно, а sealed-класс пришлось бы писать Parcelable/Saver вручную.
- */
 private sealed interface MaterialRoute {
-    /** W11: экран предмета. */
+
     data class SubjectScreen(
         val subjectName: String,
     ) : MaterialRoute {
         override fun toString() = "s:$subjectName"
     }
 
-    /** W11: Архив — спец-секция внизу списка предметов. */
     object ArchiveScreen : MaterialRoute {
         override fun toString() = "a"
     }
 
-    /** Просмотрщик материала. */
     data class Viewer(
         val itemId: Long,
     ) : MaterialRoute {
@@ -154,30 +133,18 @@ private sealed interface MaterialRoute {
     }
 }
 
-/** Набор действий над материалом — передаётся в списки, чтобы не плодить callback-параметры. */
 private class MaterialActions(
     val onOpen: (MaterialItemEntity) -> Unit,
     val onRename: (MaterialItemEntity) -> Unit,
-    /** W11: archived = true — в Архив, false — обратно в предмет. */
+
     val onSetArchived: (MaterialItemEntity, Boolean) -> Unit,
     val onDelete: (MaterialItemEntity) -> Unit,
-    /** list — упорядоченный список того экрана, где лежит item; delta = ±1. */
+
     val onReorder: (List<MaterialItemEntity>, MaterialItemEntity, Int) -> Unit,
-    /**
-     * Размер файлов материала в байтах. Берётся из предпосчитанной карты, а НЕ вызовом
-     * `File.length()` в композиции: stat каждого файла на главном потоке на каждой
-     * строке списка — это дропы кадров и StrictMode-диско-вечеринка.
-     */
+
     val sizeOf: (MaterialItemEntity) -> Long,
 )
 
-/**
- * Ф4/M1+W11: «Материалы».
- *
- * Экран-состояние (корень-предметы / Архив / просмотрщик) с собственным back-стеком:
- * Navigation в проекте не используется, а вкладка «Уроки» живёт внутри LessonsHubScreen,
- * поэтому вложенная навигация сделана как rememberSaveable-стек + системный BackHandler.
- */
 @Composable
 fun MaterialBaseScreen(
     groupInfo: GroupInfo,
@@ -189,8 +156,6 @@ fun MaterialBaseScreen(
 
     val items by dao.getAllItems().collectAsState(initial = emptyList())
 
-    // M4: размеры файлов считаем ВНЕ главного потока — File.length() это дисковый stat,
-    // а строк в списке может быть много. Карта пересчитывается при любом изменении items.
     val sizesState = remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     LaunchedEffect(items) {
         sizesState.value =
@@ -199,8 +164,6 @@ fun MaterialBaseScreen(
             }
     }
 
-    // M6: back-стек одной строкой через «|» (см. KDoc MaterialRoute).
-    // W13/W14: поиск живёт прямо в шапке корня; вход в предмет/архив сбрасывает запрос.
     var query by rememberSaveable { mutableStateOf("") }
     val stackState = rememberSaveable { mutableStateOf("") }
     val stack =
@@ -218,7 +181,6 @@ fun MaterialBaseScreen(
             MpkCurriculum.getSubjects(groupInfo.specialtyCode, groupInfo.course)
         }
 
-    // ── Состояния диалогов импорта/правок ────────────────────────────────────
     var showImportType by remember { mutableStateOf(false) }
     var showTextInput by remember { mutableStateOf(false) }
     var showSubject by remember { mutableStateOf(false) }
@@ -236,9 +198,6 @@ fun MaterialBaseScreen(
         banner = Banner(text, isError = true)
     }
 
-    // ── M3: SAF-пикеры ───────────────────────────────────────────────────────
-    // OpenDocument не умеет «всё, кроме image/*», поэтому одиночные картинки отсекаются
-    // уже в результате — иначе фото доски станет материалом из одной страницы вместо набора.
     val filePicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
@@ -257,7 +216,6 @@ fun MaterialBaseScreen(
             showSubject = true
         }
 
-    // ── Операции над данными ─────────────────────────────────────────────────
     fun importInto(
         subject: String,
         material: PendingMaterial,
@@ -274,14 +232,12 @@ fun MaterialBaseScreen(
 
     fun deleteItem(item: MaterialItemEntity) {
         scope.launch {
-            // M1: копия файла стирается вместе с записью (исходный файл пользователя
-            // не трогается — W15), иначе filesDir обрастает мусором
+
             MaterialImporter.deleteStoredFiles(item)
             dao.deleteItemWithBookmarks(item.id)
         }
     }
 
-    /** W11: перенос в Архив (archived=1) и обратно. Мягкая альтернатива удалению (W15). */
     fun setArchived(
         item: MaterialItemEntity,
         archived: Boolean,
@@ -291,8 +247,7 @@ fun MaterialBaseScreen(
                 dao.setArchived(item.id, true, dao.nextArchiveSortOrder())
                 showOk("Убрано в Архив")
             } else {
-                // Возврат в предмет. Старый (до-v7) Архив терял предмет — такие материалы
-                // собираем в «Восстановленные», чтобы не потерялись молча.
+
                 val subject = item.subjectName.ifBlank { RESTORED_SUBJECT }
                 dao.updateItem(item.copy(subjectName = subject, archived = false, sortOrder = dao.nextItemSortOrder(subject)))
                 showOk("Возвращено в «$subject»")
@@ -316,7 +271,6 @@ fun MaterialBaseScreen(
             )
         }
 
-    // Системный back: сначала выходим из вложенного экрана, и только потом — из раздела
     BackHandler(enabled = stack.isNotEmpty()) { pop() }
 
     val currentRoute = stack.lastOrNull()
@@ -326,16 +280,12 @@ fun MaterialBaseScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             val viewer = currentRoute as? MaterialRoute.Viewer
             if (viewer != null && viewerItem != null) {
-                // V7/V8: полноэкранный режим для ЛЮБОГО просмотрщика (PDF, изображения,
-                // DOCX/текст) — баннер и нижняя навигация скрыты, пока читалка открыта.
-                // onDispose покрывает ЛЮБОЙ выход: back из читалки, системный back, удаление
-                // материала из другого экрана; при смерти процесса object-состояние сбрасывается само.
+
                 DisposableEffect(viewerItem.id) {
                     ViewerMode.active = true
                     onDispose { ViewerMode.active = false }
                 }
-                // W12: роутинг просмотрщика — ЯВНО по kind: TEXT всегда идёт в DocTextViewer
-                // и читает textContent, независимо от ext/папок.
+
                 when (viewerItem.kindEnum) {
                     MaterialKind.IMAGES ->
                         MaterialImageViewer(
@@ -357,10 +307,7 @@ fun MaterialBaseScreen(
                         MaterialDocTextViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
                 }
             } else if (viewer != null) {
-                // W12: материал ещё не доехал из БД (поток Room асинхронный) — показываем
-                // загрузку и проверяем существование ОДНИМ запросом, а не выкидываем
-                // пользователя назад наугад: раньше тут был безусловный pop(), и при
-                // медленной выдаче просмотрщик закрывался сам собой.
+
                 LaunchedEffect(viewer.itemId) {
                     if (dao.getItemById(viewer.itemId) == null) pop()
                 }
@@ -371,7 +318,6 @@ fun MaterialBaseScreen(
                 val subjectRoute = currentRoute as? MaterialRoute.SubjectScreen
                 val archiveRoute = currentRoute as? MaterialRoute.ArchiveScreen
 
-                // W14: шапка — только поиск и «Добавить», в одну строку
                 MaterialHeader(
                     query = query,
                     onQueryChange = { query = it },
@@ -455,7 +401,6 @@ fun MaterialBaseScreen(
         }
     }
 
-    // ── Диалоги ──────────────────────────────────────────────────────────────
     if (showImportType) {
         MaterialImportTypeDialog(
             onDismiss = { showImportType = false },
@@ -487,7 +432,6 @@ fun MaterialBaseScreen(
         )
     }
 
-    // W11: после выбора файла/текста спрашиваем ТОЛЬКО предмет — никаких папок
     if (showSubject) {
         val material = pending
         MaterialSubjectDialog(
@@ -522,7 +466,7 @@ fun MaterialBaseScreen(
     deletingItem?.let { item ->
         MaterialDeleteDialog(
             title = "Удалить материал?",
-            // W15: честно — из приложения убирается копия, исходный файл на устройстве остаётся
+
             message = "«${item.title}» уберётся из приложения. Исходный файл на устройстве останется.",
             softActionText = if (item.archived) "ВЕРНУТЬ ИЗ АРХИВА" else "УБРАТЬ В АРХИВ",
             onSoftAction = {
@@ -538,7 +482,6 @@ fun MaterialBaseScreen(
     }
 }
 
-/** Короткое сообщение об успехе/ошибке вместо SnackbarHost (его в этот экран не передают). */
 private data class Banner(
     val text: String,
     val isError: Boolean,
@@ -550,7 +493,7 @@ private fun MessageBanner(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // M1: само исчезает, чтобы не перекрывать список навсегда
+
     LaunchedEffect(banner) {
         delay(4000)
         onClose()
@@ -580,7 +523,6 @@ private fun MessageBanner(
     }
 }
 
-/** W14: шапка — строка [поиск] + [Добавить], без заголовка/группы/счётчика. */
 @Composable
 private fun MaterialHeader(
     query: String,
@@ -595,7 +537,7 @@ private fun MaterialHeader(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // X14: общий SearchBar (высота = Tokens.SearchHeight = высоте кнопки «Добавить»)
+
         com.politex.ui.components.SearchBar(
             value = query,
             onValueChange = onQueryChange,
@@ -612,11 +554,6 @@ private fun MaterialHeader(
     }
 }
 
-/**
- * W11: корень — список ПРЕДМЕТОВ, у которых есть материалы. Пустые предметы скрыты
- * («если у предмета нет материала — не показываем предмет»). Архив — спец-строка В САМОМ
- * НИЗУ, материалы из него в предметах не видны.
- */
 @Composable
 private fun MaterialRootList(
     items: List<MaterialItemEntity>,
@@ -654,7 +591,6 @@ private fun MaterialRootList(
             )
         }
 
-        // W11: Архив — последняя, спец-секция: показывается только когда есть что показать
         if (archiveCount > 0) {
             item(key = "archive") {
                 MaterialCard(testTag = "material_archive_section", onClick = onOpenArchive) {
@@ -687,7 +623,6 @@ private fun MaterialRootList(
     }
 }
 
-/** W11: строка предмета в корне. Тап открывает материалы только этого предмета. */
 @Composable
 private fun SubjectRow(
     subjectName: String,
@@ -720,10 +655,6 @@ private fun SubjectRow(
     }
 }
 
-/**
- * W11: экран предмета (или Архива, isArchive = true) — список его материалов с кнопками
- * порядка и правкой. У Архива вместо кнопки-архива кнопка восстановления.
- */
 @Composable
 private fun MaterialSubjectContent(
     subjectName: String?,
@@ -813,11 +744,6 @@ private fun MaterialSubjectContent(
     }
 }
 
-/**
- * M5/W13: поиск по всей базе (кроме Архива). Нечётко по `title + textContent`
- * (FuzzySearch: Даммерау-Левенштейн ≤2 для слов от 4 символов, «ё»→«е»), пояснительных
- * текстов и тогла «Aa» больше нет — только поле в шапке и результаты.
- */
 @Composable
 private fun MaterialSearchContent(
     query: String,
@@ -828,8 +754,6 @@ private fun MaterialSearchContent(
 ) {
     val scope = remember(items) { items.filter { !it.archived } }
 
-    // Тяжёлая часть (разбор текста на слова) считается на каждый запрос; для сотен материалов
-    // это доли миллисекунд. См. ponytail-комментарий в FuzzySearch про порог перехода на FTS.
     val hits =
         remember(scope, query) {
             val q = query.trim()
@@ -844,7 +768,7 @@ private fun MaterialSearchContent(
     val queryWords = remember(query) { FuzzySearch.queryWordCount(query) }
 
     if (hits.isEmpty()) {
-        // N12: тупик поиска — подсказка (архив не ищется) + кнопка «Очистить» как выход
+
         MaterialEmptyState(
             title = "Ничего не нашлось",
             hint = "Архив в поиске не участвует",
@@ -881,13 +805,6 @@ private fun MaterialSearchContent(
     }
 }
 
-/**
- * M4: строка материала. Верх — иконка по расширению, название, «тип • размер • страницы»;
- * для набора изображений под названием горизонтальная мини-лента превью.
- * Низ — действия: порядок, переименовать, в Архив/обратно, удалить.
- * Действия отдельной строкой, а не тремя иконками в одну линию: хитбокс каждой кнопки 44dp,
- * иначе на телефоне промахиваешься и случайно удаляешь материал.
- */
 @Composable
 private fun MaterialItemRow(
     item: MaterialItemEntity,
@@ -950,7 +867,6 @@ private fun MaterialItemRow(
                 }
             }
 
-            // M4: мини-лента превью набора изображений — видно, тот ли скан, не открывая
             val paths = item.imagePaths
             if (paths.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -987,9 +903,7 @@ private fun MaterialItemRow(
                 modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
             ) {
                 if (showReorder) {
-                    // M4: кнопки-стрелки вместо drag&drop — порядок сохраняется в sortOrder.
-                    // ponytail: перестановка соседних элементов; drag-reorder добавить, если
-                    // списки станут длинными настолько, что стрелками листать надоест.
+
                     RowIconButton(
                         icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                         description = "Выше",
@@ -1011,7 +925,7 @@ private fun MaterialItemRow(
                     testTag = "material_rename_${item.id}",
                 ) { actions.onRename(item) }
                 if (isArchiveRow) {
-                    // W11: в Архиве кнопка-архив превращается в восстановление
+
                     RowIconButton(
                         icon = Icons.Default.Unarchive,
                         description = "Вернуть из Архива",
@@ -1038,7 +952,6 @@ private fun MaterialItemRow(
     }
 }
 
-/** Подпись строки материала: тип • размер • объём. `sizeBytes` приходит из предпосчитанной карты. */
 private fun materialMeta(
     item: MaterialItemEntity,
     sizeBytes: Long,
@@ -1090,7 +1003,6 @@ private fun RowIconButton(
     }
 }
 
-/** M6: пустое состояние с объяснением «как добавить» — экран не должен выглядеть сломанным. */
 @Composable
 private fun MaterialEmptyState(
     title: String,
@@ -1138,7 +1050,7 @@ private fun MaterialEmptyState(
                     )
                 }
             }
-            // N12: опциональное действие — выход из тупикового пустого состояния
+
             if (action != null) {
                 Spacer(modifier = Modifier.height(16.dp))
                 action()

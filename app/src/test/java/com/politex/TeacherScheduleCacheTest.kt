@@ -6,13 +6,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Офлайн-расписание преподавателей.
- *
- * Документ преподавателей — свой формат (ФИО → слоты), поэтому он кэшируется в
- * отдельную таблицу `teacher_lessons`. Тест фиксирует разбор реального документа
- * и ключ поиска, по которому карточка преподавателя читает базу.
- */
 class TeacherScheduleCacheTest {
     private fun fixture(name: String): ByteArray = javaClass.classLoader!!.getResourceAsStream(name)!!.readBytes()
 
@@ -22,7 +15,6 @@ class TeacherScheduleCacheTest {
         val parsed = TeacherScheduleParser.parse(bytes)
         assertTrue("документ должен разобраться", parsed.isNotEmpty())
 
-        // Каждый преподаватель в документе опознаётся по фамилии — это ключ чтения из базы
         val surnames =
             parsed.keys
                 .map {
@@ -37,11 +29,6 @@ class TeacherScheduleCacheTest {
         )
     }
 
-    /**
-     * Ключ строки базы совпадает с ключом поиска карточки преподавателя: и запись
-     * (syncTeacherScheduleForDate), и чтение (getTeacherLessonsForDate) используют
-     * surnameOf — иначе записанное не нашлось бы.
-     */
     @Test
     fun `ключ строки базы совпадает с ключом поиска`() {
         val full = "Ламкина Ирина Петровна"
@@ -71,18 +58,12 @@ class TeacherScheduleCacheTest {
         assertEquals(listOf("31П", "32П"), row.groups.split(", "))
     }
 
-    /**
-     * День недели слота берётся из заголовка документа. Если он не распознан (0),
-     * репозиторий подставляет день запрошенной даты — иначе строки легли бы под
-     * dayOfWeek = 0 и показывались бы под любой датой (это чинил O7).
-     */
     @Test
     fun `документ даёт распознанный день недели для запрошенной даты`() {
         val bytes = fixture("16.09.2026-raspisanie-prepodavatelej.doc")
         val slots = TeacherScheduleParser.parse(bytes).values.flatten()
         assertTrue("слоты должны разобраться", slots.isNotEmpty())
 
-        // 16.09.2026 — среда (3)
         val recognized = slots.map { it.dayOfWeek }.filter { it != 0 }
         assertTrue("день недели должен распознаваться", recognized.isNotEmpty())
         assertTrue(

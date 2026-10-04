@@ -86,8 +86,7 @@ fun StudentsDatabaseScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    // E2: 800 КБ CSV не парсятся на main-thread — produceState + IO; кэш репозитория
-    // делает повторные входы мгновенными
+
     val students by produceState(initialValue = emptyList<Student>(), key1 = context) {
         value = withContext(Dispatchers.IO) { com.politex.AppGraph.studentsRepository.loadStudents() }
     }
@@ -199,7 +198,7 @@ fun StudentsDatabaseScreen(
         }
 
         if (filtered.isEmpty() && (searchQuery.isNotBlank() || groupFilter.isNotBlank() || courseFilter.isNotBlank())) {
-            // A1: честное пустое состояние фильтра/поиска + сброс
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -314,7 +313,7 @@ private fun StudentRow(student: Student, onClick: () -> Unit) {
         border = BorderStroke(1.dp, ColorBorderLight),
         modifier = Modifier
             .fillMaxWidth()
-            // A2: строка результата 48dp (контент тот же — паддинг добирает высоту)
+
             .heightIn(min = 48.dp)
             .bouncyClickable(onClick = onClick),
     ) {
@@ -371,8 +370,7 @@ fun StudentCardScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    // QA#5: «сегодня»/минуты не замораживаем на время жизни композиции — rememberToday
-    // пересчитывается на ON_RESUME (полуночь/возврат из фона), rememberNowMinutes тикает
+
     val today = rememberToday()
     val dow = remember(today) { Dow.of(today) }
     val minutes = rememberNowMinutes()
@@ -437,7 +435,6 @@ fun StudentCardScreen(
         }
     }
 
-    // E2: парсинг teachers.csv — на IO, не в композиции
     val teachers by produceState(initialValue = emptyList<Teacher>(), key1 = context) {
         value = withContext(Dispatchers.IO) { com.politex.AppGraph.teachersRepository.loadTeachers() }
     }
@@ -838,8 +835,7 @@ fun StudentCardScreen(
                         ) {
                             items(availableDates) { date ->
                                 val selected = date == calendarDate
-                                // N7(44dp): тап-зона чипа ≥44dp (heightIn), сам чип
-                                // визуально компактный (~32dp) — палец не промахивается.
+
                                 Box(
                                     modifier = Modifier
                                         .heightIn(min = 44.dp)

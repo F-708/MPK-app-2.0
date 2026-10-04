@@ -53,7 +53,7 @@ fun SimpleDatePickerDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    // SUI-01: «сегодня» с ключом дня и пересчётом на ON_RESUME (прежний remember{} залипал за полночь)
+
     val today =
         com.politex.ui.util
             .rememberToday()
@@ -183,7 +183,7 @@ private fun ArrowButton(
     Box(
         modifier =
         Modifier
-            // D5: хитбокс стрелки перемотки месяцев 48dp (иконка 18dp та же)
+
             .size(48.dp)
             .bouncyClickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,

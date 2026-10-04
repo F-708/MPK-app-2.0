@@ -12,16 +12,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * Миграция v8 → v9 (X9: grade_config.weightsEnabled DEFAULT 1).
- * Образец: MigrationV7ToV8Test — реальная база v8 на диске, открытие боевым
- * getInstance, сброс статического instance рефлекшеном.
- */
 @RunWith(RobolectricTestRunner::class)
 class MigrationV8ToV9Test {
     private val dbName = com.politex.data.local.MpkDatabase.DATABASE_NAME
 
-    /** Схема v8 (по app/schemas/.../8.json) — вся, Room валидирует побайтово. */
     private fun createV8Database(context: Context) {
         context.deleteDatabase(dbName)
         val helper =
@@ -160,7 +154,6 @@ class MigrationV8ToV9Test {
 
         val db = com.politex.data.local.MpkDatabase.getInstance(context)
 
-        // Старые данные на месте
         val tasks = kotlinx.coroutines.runBlocking { db.taskDao().getAllTasks() }
         assertEquals("ДЗ переживает миграцию", 1, tasks.size)
         val config = kotlinx.coroutines.runBlocking { db.gradeDao().getConfig("ТОЭ") }
@@ -168,17 +161,15 @@ class MigrationV8ToV9Test {
         assertEquals("weightsJson сохранён", "[25,25,50,100]", config?.weightsJson)
         assertEquals("roundingMode сохранён", ".00", config?.roundingMode)
         assertFalse("roundUp сохранён", config?.roundUp ?: true)
-        // X9: новая колонка — у существующей строки дефолт 1 (веса включены)
+
         assertTrue("weightsEnabled дефолт true", config?.weightsEnabled ?: false)
 
-        // Оценки переживают миграцию
         var n = 0
         db.openHelper.readableDatabase
             .query("SELECT COUNT(*) FROM grade_entries WHERE subjectName='ТОЭ'")
             .use { c -> c.moveToFirst(); n = c.getInt(0) }
         assertEquals("оценки на месте", 1, n)
 
-        // weightsEnabled пишется и читается через DAO
         kotlinx.coroutines.runBlocking {
             db.gradeDao().upsertConfig(config!!.copy(weightsEnabled = false))
         }
@@ -192,8 +183,7 @@ class MigrationV8ToV9Test {
             val cls = Class.forName("com.politex.data.local.MpkDatabase")
             val field = cls.getDeclaredField("instance")
             field.isAccessible = true
-            // close() может бросить на уже закрытом/чужом инстансе — поле всё равно
-            // обнуляется, иначе getInstance вернёт закэшированную базу прошлого теста.
+
             try {
                 (field.get(null) as AutoCloseable?)?.close()
             } catch (_: Exception) {

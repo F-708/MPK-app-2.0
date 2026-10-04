@@ -93,15 +93,13 @@ fun CalendarArchiveDialog(
     scheduleRepository: ScheduleRepository,
     onDismiss: () -> Unit,
     onDateSelected: ((dayOfWeek: Int, dateString: String) -> Unit)? = null,
-    // X4: кабинет/преподаватель в архив-режиме кликабельны — те же колбэки, что и у
-    // основного списка. Маршрут из календаря НЕ строится (вызывающая сторона передаёт
-    // from=null, showRoute=false — см. ScheduleScreen).
+
     onOpenRoom: (String) -> Unit = {},
     onOpenTeacher: (String) -> Unit = {},
     isTeacherKnown: (String) -> Boolean = { false },
     modifier: Modifier = Modifier,
 ) {
-    // SUI-01: «сегодня» с ключом дня — иначе открытый ночью диалог подсвечивал вчерашнюю дату
+
     val calendar =
         com.politex.ui.util
             .rememberToday()
@@ -114,9 +112,6 @@ fun CalendarArchiveDialog(
     val savedDates by scheduleRepository.getDistinctDates(groupName).collectAsState(initial = emptyList())
     val allGroupLessons by scheduleRepository.getAllLessonsForGroup(groupName).collectAsState(initial = emptyList())
 
-    // Все сравнения дат — через приведение к dd.MM.yyyy (формат БД), без лексикографии
-
-    // Даты в БД хранятся в формате «дд.ММ.гггг», календарь строит ISO «гггг-ММ-дд» — приводим к dd.MM.yyyy
     val savedDatesDot =
         remember(savedDates) {
             savedDates
@@ -131,13 +126,11 @@ fun CalendarArchiveDialog(
                 }.toSet()
         }
 
-    // Дни недели, у которых есть регулярные пары (dateString пустой) — для точек в календаре
     val weeklyLessonDows =
         remember(allGroupLessons) {
             allGroupLessons.filter { it.dateString.isBlank() }.map { it.dayOfWeek }.toSet()
         }
 
-    // Выбранная дата в формате БД
     val selectedDateDot =
         remember(selectedDateString) {
             if (selectedDateString.isBlank()) {
@@ -153,7 +146,6 @@ fun CalendarArchiveDialog(
             }
         }
 
-    // Строки выбранной даты: только точная дата; недельный шаблон — лишь если дат вообще нет
     val selectedDateLessons =
         remember(selectedDateDot, allGroupLessons) {
             if (selectedDateDot.isBlank()) {
@@ -264,7 +256,7 @@ fun CalendarArchiveDialog(
                     onValueChange = { searchQuery = it },
                     placeholder = {
                         Text(
-                            text = "Поиск: предмет, преподаватель, аудитория...",
+                            text = "Поиск: предмет, преподаватель, кабинет...",
                             style =
                             androidx.compose.ui.text
                                 .TextStyle(fontSize = 13.sp, color = ColorTextMuted),
@@ -593,7 +585,7 @@ fun CalendarArchiveDialog(
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "На этот день в архиве нет занятий",
+                                        text = "На этот день в архиве нет уроков",
                                         style =
                                         androidx.compose.ui.text.TextStyle(
                                             color = ColorTextMuted,

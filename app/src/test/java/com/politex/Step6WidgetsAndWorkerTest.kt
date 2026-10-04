@@ -90,8 +90,6 @@ class Step6WidgetsAndWorkerTest {
         assertEquals("mpk_schedule_check_worker", ScheduleCheckWorker.WORK_NAME)
     }
 
-    // WID-01: виджет «СЕГОДНЯ» не должен показывать чужой день
-
     private fun lesson(
         number: Int,
         date: String,
@@ -112,8 +110,8 @@ class Step6WidgetsAndWorkerTest {
         val all =
             listOf(
                 lesson(1, "21.09.2026"),
-                lesson(2, ""), // недельный шаблон
-                lesson(3, "28.09.2026"), // сегодня
+                lesson(2, ""),
+                lesson(3, "28.09.2026"),
             )
         val result =
             com.politex.widget.WidgetData
@@ -125,8 +123,8 @@ class Step6WidgetsAndWorkerTest {
     fun testFilterTodayLessons_fallsBackToWeeklyTemplate() {
         val all =
             listOf(
-                lesson(2, "21.09.2026"), // только прошлая дата
-                lesson(1, ""), // недельный шаблон
+                lesson(2, "21.09.2026"),
+                lesson(1, ""),
             )
         val result =
             com.politex.widget.WidgetData

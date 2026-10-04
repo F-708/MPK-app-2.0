@@ -107,10 +107,6 @@ import java.io.File
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
 
-/**
- * Ф5: PdfRenderer не смог открыть файл. Это НЕ «формат не поддерживается» — встроенный
- * просмотрщик читает PDF; значит файл повреждён или защищён паролем. Честный текст + «Назад».
- */
 @Composable
 private fun CorruptedPdfPlaque(
     fileName: String,
@@ -178,28 +174,6 @@ private fun CorruptedPdfPlaque(
     }
 }
 
-/**
- * M2: просмотрщик PDF на `android.graphics.pdf.PdfRenderer` (платформа, ноль новых зависимостей).
- *
- * ВЫБОР РАСКЛАДКИ (задание предлагало вертикаль или горизонтальный pager): ВЕРТИКАЛЬНЫЙ LazyColumn.
- * Методичку/конспект листают сверху вниз и читают «по диагонали»; вертикаль даёт непрерывный скролл,
- * а «первая видимая страница» = естественный lastPage. Горизонтальный pager хорош для слайдов,
- * но ломает семантику lastPage и тянет предзагрузку соседей.
- *
- * Рендер: bitmap по мере появления страницы, LruCache на 1/8 кучи (3–5 страниц A4 на типовом
- * телефоне). `PdfRenderer` НЕ потокобезопасен и держит открытой ровно одну страницу — рендер
- * сериализован мьютексом и уходит на Dispatchers.Default.
- *
- * Вытесненные битмапы НЕ `.recycle()`: Compose может ещё рисовать этот ImageBitmap. С Android 8
- * пиксели лежат в native-куче под NativeAllocationRegistry, их забирает GC вместе с записью кэша.
- *
- * `lastPage` пишется на КАЖДОЙ смене первой видимой страницы (distinctUntilChanged), а не «при
- * выходе»: при выходе compose-scope уже отменён и запись могла бы не состояться.
- *
- * Y3: зум ОДИН на весь документ ([DocZoom], session-only, 0.5..4×, двойной тап — сброс).
- * Все страницы имеют ширину container*docZoom и лежат в ОДНОМ общем horizontalScroll —
- * горизонтальный скролл синхронен по всему документу. Per-page zoom/pan и keep-zoom удалены.
- */
 @Composable
 fun MaterialPdfViewer(
     item: MaterialItemEntity,
@@ -210,8 +184,6 @@ fun MaterialPdfViewer(
     val scope = rememberCoroutineScope()
     val file = remember(item.uriPath) { File(item.uriPath) }
 
-    // QA#14 (E2-паттерн): открытие ParcelFileDescriptor + PdfRenderer — дисковая операция,
-    // уходим с main на IO через produceState. null = ещё открывается; Result.failure = Ф5.
     val handleState by produceState<Result<Pair<ParcelFileDescriptor, PdfRenderer>>?>(
         initialValue = null,
         key1 = file,
@@ -233,15 +205,14 @@ fun MaterialPdfViewer(
     }
 
     if (handle == null) {
-        // открытие занимает миллисекунды — пустой экран в цвет фона, без мигания плашкой
+
         Box(modifier = modifier.fillMaxSize().background(ColorSurfaceHighlight))
         return
     }
 
     val opened = handle.getOrNull()
     if (opened == null) {
-        // W16: и в аварийном пути — полноэкранный режим (баннер/навигация уже скрыты),
-        // поэтому шапка обязана сама нарисовать отступ под статусбар
+
         Column(modifier = modifier.fillMaxSize().background(ColorSurfaceHighlight)) {
             PdfReaderBar(
                 title = item.title,
@@ -256,8 +227,7 @@ fun MaterialPdfViewer(
                 onBookmarks = {},
                 onDrawToggle = {},
             )
-            // Ф5: PdfRenderer не открыл файл — это НЕ «формат не поддерживается» (PDF читается),
-            // а повреждённый/защищённый паролем документ. Честная плашка + «Назад».
+
             CorruptedPdfPlaque(
                 fileName = item.fileName.ifBlank { file.name },
                 onBack = onBack,
@@ -280,24 +250,22 @@ fun MaterialPdfViewer(
     var bookmarkDraftPage by remember { mutableStateOf<Int?>(null) }
     var showPageJump by remember { mutableStateOf(false) }
 
-    // ── V9: рисование поверх страниц ──────────────────────────────────────────
     var drawMode by remember { mutableStateOf(false) }
     var drawColor by remember { mutableIntStateOf(ANNOTATION_COLORS.first()) }
     var drawWidth by remember { mutableFloatStateOf(4f) }
-    // X5: ластик — режим саб-тулбара, касание удаляет целый штрих
+
     var eraserActive by remember { mutableStateOf(false) }
 
-    // ── Y3: единый зум документа — session-only, НЕ персистится, сброс двойным тапом ──
     val docZoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
 
     val annotations by dao.getAnnotationsFlow(item.id).collectAsState(initial = emptyList())
-    // Источник истины для рендера: стартует из БД, правки копятся локально и пишутся дебаунсом.
+
     val pageStrokes = remember(item.id) { mutableStateMapOf<Int, List<Stroke>>() }
     val dirtyPages = remember(item.id) { mutableStateListOf<Int>() }
     var saveVersion by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(annotations) {
-        // Грязные страницы НЕ перетираем: эмиссия потока может доехать позже локальной правки.
+
         annotations.forEach { if (it.pageIndex !in dirtyPages) pageStrokes[it.pageIndex] = Stroke.parse(it.strokesJson) }
     }
 
@@ -318,7 +286,6 @@ fun MaterialPdfViewer(
         saveVersion++
     }
 
-    // Дебаунс 500мс: серия штрихов одной страницы — один upsert (unique itemId+pageIndex).
     LaunchedEffect(saveVersion) {
         if (saveVersion == 0) return@LaunchedEffect
         delay(500)
@@ -327,9 +294,6 @@ fun MaterialPdfViewer(
         persistPages(pages)
     }
 
-    // V9/QA#14: flush БЕЗ runBlocking на main — upsert уходит корутиной на IO, выход
-    // сразу после дописи. Флаг flushing держит BackHandler включённым, пока идёт flush:
-    // второй «назад» не pop'нет композицию (и не отменит scope) до записи штрихов.
     var flushing by remember { mutableStateOf(false) }
     val flushAndBack: () -> Unit = {
         if (!flushing) {
@@ -347,7 +311,6 @@ fun MaterialPdfViewer(
     }
     BackHandler(enabled = dirtyPages.isNotEmpty() || flushing) { flushAndBack() }
 
-    // M2: запоминаем первую видимую страницу — «где остановился» переживает смерть процесса.
     LaunchedEffect(listState, item.id) {
         snapshotFlow { listState.firstVisibleItemIndex }
             .distinctUntilChanged()
@@ -357,8 +320,7 @@ fun MaterialPdfViewer(
     val currentPage = listState.firstVisibleItemIndex.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
 
     Column(modifier = modifier.fillMaxSize().background(ColorSurfaceHighlight)) {
-        // W16: сверху ВМЕСТО баннера — синяя строка: назад, «12/340» (тап = переход),
-        // закладки. Она же оставляет место под строку времени/иконок (statusBarsPadding).
+
         PdfReaderBar(
             title = item.title,
             currentPage = currentPage,
@@ -376,7 +338,6 @@ fun MaterialPdfViewer(
             },
         )
 
-        // V9: саб-тулбар рисования — под хедером, пока активен режим
         if (drawMode) {
             AnnotationToolbar(
                 color = drawColor,
@@ -412,17 +373,12 @@ fun MaterialPdfViewer(
             )
         }
 
-        // V9: clipToBounds — контент не налезает на хедер.
-        // Y3: ОДИН зум на документ: ширина страницы = container*docZoom, весь список — в ОДНОМ
-        // общем horizontalScroll (синхронный горизонтальный скролл). Щипок (2 пальца) на всём
-        // viewer меняет docZoom; в draw-режиме щипок перехватывает AnnotationLayer (enabled=false).
         BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f).clipToBounds()) {
             val density = LocalDensity.current
             val containerW = maxWidth
             val docZoom = docZoomState.floatValue
             val pageW = containerW * docZoom
-            // Рендер растра — по КВАНТОВАННОМУ зуму (шаг 0.25): pinch не спамит перерисовки,
-            // между шагами bitmap чуть растягивается FillWidth-ом.
+
             val renderWidthPx =
                 with(density) { (containerW * quantizeRenderZoom(docZoom) - 8.dp).roundToPx() }.coerceIn(320, 2800)
 
@@ -457,8 +413,7 @@ fun MaterialPdfViewer(
                                 renderLock = renderLock,
                                 renderWidthPx = renderWidthPx,
                                 bookmarked = bookmarks.any { it.page == index },
-                                // W16: повторный тап по закрашенной закладке УБИРАЕТ её; по пустой —
-                                // открывает диалог с подписью (как раньше)
+
                                 onBookmarkClick = { bookmarked ->
                                     if (bookmarked) {
                                         scope.launch {
@@ -490,8 +445,6 @@ fun MaterialPdfViewer(
         }
     }
 
-    // M2: закладка сразу с подписью («Формулы», «Определения») — иначе список закладок
-    // превращается в безликие номера страниц.
     bookmarkDraftPage?.let { page ->
         AddBookmarkDialog(
             page = page,
@@ -517,7 +470,6 @@ fun MaterialPdfViewer(
     }
 }
 
-/** Прыжок на страницу: номер приводим к диапазону (битый PDF может дать pageCount = 0). */
 private fun kotlinx.coroutines.CoroutineScope.jumpToPage(
     state: LazyListState,
     page: Int,
@@ -527,32 +479,19 @@ private fun kotlinx.coroutines.CoroutineScope.jumpToPage(
     launch { state.scrollToItem(target) }
 }
 
-/**
- * Y3: единый зум документа (PDF и DOCX). Session-only: не персистится, сброс = [DEFAULT].
- * Чистые функции — покрыты unit-тестом (DocZoomTest).
- */
 internal object DocZoom {
     const val MIN = 0.5f
     const val MAX = 4f
     const val DEFAULT = 1f
 
-    /** Применение pinch-множителя к текущему зуму с клампом в [MIN]..[MAX]. */
     fun apply(current: Float, multiplier: Float): Float = (current * multiplier).coerceIn(MIN, MAX)
 }
 
-/** Квантование зума для рендера растра (шаг 0.25) — pinch не спамит перерисовки PdfRenderer. */
 internal fun quantizeRenderZoom(zoom: Float): Float =
     ((zoom * 4f).roundToInt() / 4f).coerceIn(DocZoom.MIN, DocZoom.MAX)
 
-/** Ключ кэша растров: страница + ширина рендера (разные зумы — разные битмапы). */
 private fun pageCacheKey(pageIndex: Int, widthPx: Int): Long = (pageIndex.toLong() shl 32) or widthPx.toLong()
 
-/**
- * Y3: жесты зума ДОКУМЕНТА на весь viewer: два пальца (Initial pass, consume — список
- * не листается под щипком) меняют [zoomState] с клампом; одиночный палец НЕ трогаем —
- * он уходит в вертикальный LazyColumn и общий horizontalScroll. Двойной тап — сброс к 100%.
- * [enabled]=false в draw-режиме: там щипок обрабатывает AnnotationLayer (transformGestures).
- */
 internal fun Modifier.docZoomGestures(
     zoomState: MutableFloatState,
     enabled: Boolean = true,
@@ -576,15 +515,6 @@ internal fun Modifier.docZoomGestures(
             detectTapGestures(onDoubleTap = { zoomState.floatValue = DocZoom.DEFAULT })
         }
 
-/**
- * W16: синяя строка чтения ВМЕСТО баннера (просмотрщик самодостаточен, баннер и нижняя
- * навигация в MainScreen скрыты). Состав: [стрелка назад 48dp] [«12/340» — тап открывает
- * диалог перехода] … [кнопка списка закладок]. statusBarsPadding оставляет место под строку
- * времени и иконок; высота строки 52dp. pageCount = 0 — аварийный путь (файл не открылся):
- * вместо номера показываем заголовок, закладок нет.
- *
- * Y3: индикатор зума документа («100%»), тап — сброс к 100%.
- */
 @Composable
 private fun PdfReaderBar(
     title: String,
@@ -645,7 +575,7 @@ private fun PdfReaderBar(
                     }
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                // Y3: индикатор зума документа — «140%», тап сбрасывает к 100%
+
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = Color.Transparent,
@@ -666,7 +596,7 @@ private fun PdfReaderBar(
                         )
                     }
                 }
-                // V9: карандаш ПЕРЕД закладками — режим рисования включают чаще, чем список
+
                 ViewerAction(
                     icon = Icons.Default.Edit,
                     description = "Рисование",
@@ -694,11 +624,6 @@ private fun PdfReaderBar(
     }
 }
 
-/**
- * Кэш растров страниц: 1/8 кучи приложения, размер считается в байтах битмапа.
- * Ключ — (страница, ширина рендера): при смене docZoom растр перерисовывается в новом
- * разрешении, старый вытесняется LRU. На типовом телефоне это 3–5 страниц A4 в 1×.
- */
 private fun newPageBitmapCache(): LruCache<Long, Bitmap> {
     val maxBytes = (Runtime.getRuntime().maxMemory() / 8).toInt().coerceAtLeast(4 * 1024 * 1024)
     return object : LruCache<Long, Bitmap>(maxBytes) {
@@ -709,19 +634,6 @@ private fun newPageBitmapCache(): LruCache<Long, Bitmap> {
     }
 }
 
-/**
- * Одна страница: растр из кэша или рендер по мере появления. Плейсхолдер пропорций A4 —
- * иначе высота элемента скачет при дорисовке и список «прыгает» под пальцем.
- *
- * Y3: per-page zoom/pan УДАЛЁН — зум общий на документ (ширину страницы задаёт родитель:
- * container*docZoom), скролл — список + общий horizontalScroll. Растер рендерится под
- * квантованный зум ([renderWidthPx] меняется извне): пока новый растр не готов, показывается
- * прежний (FillWidth слегка растянет его) — без мигания плейсхолдером при щипке.
- *
- * V9: поверх растра — AnnotationLayer (штрихи нормализованы к боксу страницы, поэтому
- * масштабируются вместе с ней). В draw-режиме щипок (2 пальца) через transformGestures
- * меняет docZoom документа; один палец — рисование/ластик.
- */
 @Composable
 private fun PdfPageRow(
     renderer: PdfRenderer,
@@ -744,8 +656,7 @@ private fun PdfPageRow(
     var currentStroke by remember(pageIndex) { mutableStateOf<Stroke?>(null) }
     var boxSize by remember(pageIndex) { mutableStateOf(IntSize.Zero) }
     val density = LocalDensity.current
-    // X5: жестовый closure AnnotationLayer не перезапускается на каждый штрих —
-    // ластик обязан видеть АКТУАЛЬНЫЙ список (rememberUpdatedState).
+
     val latestStrokes by rememberUpdatedState(strokes)
 
     LaunchedEffect(pageIndex, renderer, renderWidthPx) {
@@ -782,9 +693,7 @@ private fun PdfPageRow(
                 modifier = Modifier.fillMaxWidth(),
             )
         } else {
-            // Плейсхолдер пропорций A4 (1:1.414) через aspectRatio, а НЕ «пиксели как dp»:
-            // renderWidthPx — это пиксели, и .dp из него дал бы на плотном экране заглушку
-            // втрое выше настоящей страницы, из-за чего список прыгал бы при дорисовке.
+
             Box(
                 modifier =
                 Modifier
@@ -800,9 +709,6 @@ private fun PdfPageRow(
             }
         }
 
-        // V9: слой рисования — поверх растра, под кнопками страницы. !drawMode — прозрачен
-        // для событий. Y3: штрихи нормализованы к боксу страницы → масштабируются вместе с
-        // ней при любом docZoom. Щипок в draw-режиме = зум ДОКУМЕНТА (pan не нужен).
         AnnotationLayer(
             strokes = strokes,
             current = currentStroke,
@@ -813,8 +719,7 @@ private fun PdfPageRow(
             onStrokeFinished = onStrokeFinished,
             eraserActive = eraserActive,
             onEraseAt = { p ->
-                // X5: hit-test в нормализованных координатах с учётом aspect бокса страницы;
-                // порог на штрих = полутолщина + допуск, dp→px→нормаль по ширине.
+
                 val bw = boxSize.width.toFloat()
                 val bh = boxSize.height.toFloat()
                 if (bw > 1f && bh > 1f) {
@@ -831,8 +736,6 @@ private fun PdfPageRow(
             modifier = Modifier.matchParentSize(),
         )
 
-        // V11: кнопка закладки 26dp (иконка 14dp) в ЛЕВОМ верхнем углу; повторный тап
-        // по закрашенной убирает её (см. onBookmarkClick в MaterialPdfViewer)
         Surface(
             shape = RoundedCornerShape(2.dp),
             color = if (bookmarked) ColorBrandBlue else ColorBgMain.copy(alpha = 0.85f),
@@ -855,7 +758,6 @@ private fun PdfPageRow(
             }
         }
 
-        // Номер страницы — в правом верхнем углу (чтобы не пересекаться с закладкой)
         Surface(
             shape = RoundedCornerShape(2.dp),
             color = ColorBgMain.copy(alpha = 0.85f),
@@ -879,10 +781,6 @@ private fun PdfPageRow(
     }
 }
 
-/**
- * Рендер одной страницы. ВЫЗЫВАТЬ ПОД МЬЮТЕКСОМ: PdfRenderer допускает ровно одну открытую
- * страницу и не потокобезопасен. Сбой страницы (битый PDF) — null, страница останется плейсхолдером.
- */
 private fun renderPageBitmap(
     renderer: PdfRenderer,
     pageIndex: Int,
@@ -898,7 +796,6 @@ private fun renderPageBitmap(
     }
 }.getOrNull()
 
-/** M2: список закладок в top-bar — тап прыгает на страницу, крестик удаляет. */
 @Composable
 private fun BookmarkPanel(
     bookmarks: List<MaterialBookmarkEntity>,

@@ -8,13 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Секунды в отсчёте «до звонка»: формат mm:ss (виджет + уведомление) и флаг
- * посекундного режима BellTimerService (секунды в виджете ИЛИ стиль WITH_SECONDS).
- */
 class BellSecondsTest {
-
-    // ---------- formatSeconds: «0:59» / «4:32» / «1:02:33» ----------
 
     @Test
     fun `59 секунд - MСС без ведущего нуля у минут`() {
@@ -43,13 +37,11 @@ class BellSecondsTest {
         assertEquals("0:00", BellCountdownWidgetProvider.formatSeconds(-45))
     }
 
-    // ---------- formatMinutesSeconds: минуты − текущая секунда ----------
-
     @Test
     fun `минуты досчитываются от секунды календаря`() {
-        // 13:30:45 → до 14:05 = 34 мин 15 с
+
         assertEquals("34:15", BellCountdownNotifier.formatMinutesSeconds(35, 45))
-        // 13:30:00 → ровно 35 мин
+
         assertEquals("35:00", BellCountdownNotifier.formatMinutesSeconds(35, 0))
         assertEquals("0:59", BellCountdownNotifier.formatMinutesSeconds(1, 1))
     }
@@ -58,8 +50,6 @@ class BellSecondsTest {
     fun `нулевые минуты с секундой внутри - не уходим в минус`() {
         assertEquals("0:00", BellCountdownNotifier.formatMinutesSeconds(0, 30))
     }
-
-    // ---------- needSecondTick: включать ли посекундный режим ----------
 
     @Test
     fun `секунды в виджете включают посекундный тик при любом стиле`() {

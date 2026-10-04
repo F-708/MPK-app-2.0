@@ -62,16 +62,13 @@ class WidgetConfigActivity : ComponentActivity() {
         }
 
         val kind = WidgetKind.of(this, appWidgetId)
-        // Ф13: перенастройка = для этого id уже есть сохранённый конфиг. getAppWidgetInfo
-        // не годится как сигнал: он non-null и при первичном добавлении (на нём же держится
-        // WidgetKind.of). Флаг «show_room» пишется при КАЖДОМ сохранении → надёжный маркер.
+
         val isReconfigure = WidgetOptions.isConfigured(this, appWidgetId)
 
         setContent {
             MyApplicationTheme {
                 Surface(color = ColorBgMain, modifier = Modifier.fillMaxSize()) {
-                    // Ф13: стартуем с СОХРАНЁННЫХ значений — дефолты затирали настройку
-                    // существующего виджета при перенастройке
+
                     var style by remember { mutableStateOf(WidgetStyle.load(this@WidgetConfigActivity, appWidgetId)) }
                     var countdownMode by remember { mutableStateOf(CountdownMode.load(this@WidgetConfigActivity, appWidgetId)) }
                     var showRoom by remember { mutableStateOf(WidgetOptions.showRoom(this@WidgetConfigActivity, appWidgetId)) }
@@ -207,8 +204,7 @@ class WidgetConfigActivity : ComponentActivity() {
                                         CountdownMode.save(this@WidgetConfigActivity, appWidgetId, countdownMode)
                                         WidgetOptions.setSeconds(this@WidgetConfigActivity, appWidgetId, showSeconds)
                                     }
-                                    // QA#2: updateOne читает Room — не на main; активити жива,
-                                    // goAsync не нужен, достаточно IO-scope виджетов
+
                                     WidgetUpdateHelper.widgetScope.launch {
                                         WidgetUpdateHelper.updateOne(this@WidgetConfigActivity, appWidgetId)
                                     }
@@ -229,7 +225,7 @@ class WidgetConfigActivity : ComponentActivity() {
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    // Ф13: при перенастройке сохранение, а не «добавление»
+
                                     text = if (isReconfigure) "СОХРАНИТЬ" else "ДОБАВИТЬ ВИДЖЕТ",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
@@ -297,7 +293,6 @@ object WidgetOptions {
         appWidgetId: Int,
     ): Boolean = WidgetUpdateHelper.getPrefs(context).getBoolean(PREF_SHOW_ROOM + appWidgetId, true)
 
-    /** Ф13: был ли виджет уже настроен (конфиг сохранён) — отличает перенастройку от добавления. */
     fun isConfigured(
         context: android.content.Context,
         appWidgetId: Int,
@@ -315,7 +310,6 @@ object WidgetOptions {
             .apply()
     }
 
-    /** Секунды в countdown-виджете: mm:ss вместо «N мин». Default false. */
     fun seconds(
         context: android.content.Context,
         appWidgetId: Int,
@@ -331,7 +325,7 @@ object WidgetOptions {
             .edit()
             .putBoolean(PREF_SECONDS + appWidgetId, value)
             .apply()
-        // настройка изменилась — сервис должен увидеть это сразу, не через 60 с кэша
+
         WidgetUpdateHelper.invalidateSecondsCache()
     }
 }

@@ -39,12 +39,6 @@ import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.util.bouncyClickable
 
-/**
- * Ф4: вкладка «Уроки» — хаб трёх разделов: Материальная база / Задания / Оценки.
- * Переключатель — три чипа в одну строку (паттерн BellScheduleType из BellsScreen):
- * большие хитбоксы 44dp, выбранный залит ColorTopBar, порядок стабилен и подсознателен
- * (материалы → задания → оценки: от «взять» к «сделать» к «проверить»).
- */
 enum class LessonsSection(
     val title: String,
 ) {
@@ -60,7 +54,7 @@ fun LessonsHubScreen(
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState? = null,
 ) {
-    // Задания — привычное место пользователя: стартуем с них, выбор переживает смерть вкладки
+
     var section by rememberSaveable { mutableStateOf(LessonsSection.TASKS) }
 
     Column(
@@ -69,9 +63,7 @@ fun LessonsHubScreen(
             .fillMaxSize()
             .background(ColorBgMain),
     ) {
-        // W10: заголовок «Уроки» убран — чипы сразу после баннера.
-        // V7/V8: в полноэкранном просмотрщике материала чипы скрыты — максимум места для чтения.
-        // V7/V17: чипы хаба скрыты в полноэкранном просмотрщике И в детальном экране оценок
+
         if (!ViewerMode.active && !GradeDetailMode.active) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             Row(
@@ -100,7 +92,7 @@ fun LessonsHubScreen(
                             ) {
                                 Text(
                                     text = s.title,
-                                    // W10: «Материалы» обрезалось — шрифт 11sp и эллипсис вместо обреза
+
                                     softWrap = false,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,

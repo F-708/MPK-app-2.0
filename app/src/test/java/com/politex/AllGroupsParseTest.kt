@@ -5,14 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * O3b: parseFileAllGroups — расписание кабинета по ВСЕМ группам.
- *
- * Функция аддитивная: она перебирает группы через проверенный parseFileRaw,
- * поэтому ядро разбора (parseFile) остаётся неизменным. Этот тест фиксирует
- * главное свойство: перебор даёт НЕ МЕНЬШЕ, чем разбор одной группы, и не
- * ломает одиночный разбор.
- */
 class AllGroupsParseTest {
     private fun fixture(name: String): ByteArray = javaClass.classLoader!!.getResourceAsStream(name)!!.readBytes()
 
@@ -35,7 +27,7 @@ class AllGroupsParseTest {
     fun `результат по всем группам не меньше чем по одной`() {
         val bytes = runCatching { fixture("raspisanie-16.09.2026.doc") }.getOrNull() ?: return
         val one = MpkScheduleParser.parseFile(bytes, "41О", "16.09.2026")
-        if (one.isEmpty()) return // фикстура без этой группы — не наш случай
+        if (one.isEmpty()) return
         val all = MpkScheduleParser.parseFileAllGroups(bytes, "16.09.2026", groups)
         assertTrue(
             "по всем группам (${all.size}) должно быть не меньше, чем по одной (${one.size})",
@@ -45,7 +37,7 @@ class AllGroupsParseTest {
 
     @Test
     fun `одиночный разбор не сломан перебором`() {
-        // parseFileAllGroups не должен менять поведение parseFile
+
         val bytes = runCatching { fixture("raspisanie-16.09.2026.doc") }.getOrNull() ?: return
         val before = MpkScheduleParser.parseFile(bytes, "41О", "16.09.2026")
         MpkScheduleParser.parseFileAllGroups(bytes, "16.09.2026", groups)

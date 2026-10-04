@@ -9,14 +9,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * Интеграционные тесты мультиэтажной маршрутизации НА РЕАЛЬНЫХ ДАННЫХ college_map.json.
- * Ловят: рассинхрон схемы JSON/модели, разрывы графа после мерджа vision-разметки,
- * ошибки usable-фильтра лестниц (список заказчика: 1эт 131/115/136/147, 2эт 241/238/230,
- * 3эт 335/332/301/317, 4эт 401).
- *
- * Robolectric: боевой org.json (в чистом unit-тесте он не замокан) и загрузка из assets.
- */
 @RunWith(RobolectricTestRunner::class)
 class RealMapMultiFloorRouteTest {
     private val mapData: CollegeMapData by lazy {
@@ -32,7 +24,7 @@ class RealMapMultiFloorRouteTest {
 
     @Test
     fun `данные карты загружаются из ассета`() {
-        // CollegeMapData.load глотает исключение → пустая карта; этот тест ловит такой регресс
+
         assertFalse("карта не должна быть пустой (ассет не загрузился?)", mapData.isEmpty)
         assertTrue("на 1 этаже должны быть комнаты", mapData.floor("1").rooms.isNotEmpty())
     }
@@ -42,13 +34,13 @@ class RealMapMultiFloorRouteTest {
         val floors = floorsMap()
         val allStairs = floors.values.flatMap { it.entrances }.filter { it.kind == "stairs" }
         assertTrue("лестниц должно быть несколько", allStairs.size >= 8)
-        // W39a: заказчик разметил РУЧНЫЕ связи лестниц между этажами (entrance.links)
+
         val withLinks = allStairs.filter { it.usable && it.links.isNotEmpty() }
         assertTrue(
             "лестниц с ручными links должно быть большинство (разметка заказчика), было ${withLinks.size}",
             withLinks.size >= 8,
         )
-        // каждый link указывает на существующую лестницу (иначе маршруты тихо теряются)
+
         val ids = allStairs.map { it.id }.toSet()
         val dangling = withLinks.flatMap { it.links }.filter { it !in ids }
         assertTrue("битые links: $dangling", dangling.isEmpty())
@@ -81,10 +73,7 @@ class RealMapMultiFloorRouteTest {
 
     @Test
     fun `маршрут по аварийной лестнице невозможен`() {
-        // 118 (1эт) — ствол D, все три лестницы unusable. Комната 223 — его же ствол на 2 эт.
-        // findMultiFloorRoute должен вернуть null (нет пригодной общей лестницы у этих мест),
-        // либо построить путь через ДРУГУЮ пригодную лестницу — но старт/финиш у аварийного
-        // ствола; проверяем что через сам аварийный ствол путь не идёт.
+
         val r = CollegeRouteFinder.findMultiFloorRoute(room("118"), room("223"), floorsMap())
         if (r != null) {
             val stairsUsed =
@@ -99,18 +88,12 @@ class RealMapMultiFloorRouteTest {
         }
     }
 
-    // W-note: тест межкрыльевых маршрутов 1 этажа УДАЛЁН — карта теперь размечается
-    // заказчиком в редакторе (rect-коридоры/узлы/связи), связность его черновика —
-    // не инвариант приложения. Проверка маршрутов — в редакторе (🧭 превью) и
-    // CollegeMultiFloorRouteTest (синтетический граф).
-
     @Test
     fun `главный вход достижим как точка маршрута`() {
         val f1 = mapData.floor("1")
         val main = f1.entrances.firstOrNull { it.kind == "main" }
         assertNotNull("главный вход должен быть в данных", main)
-        // Маршрут «от главного входа» (фаза 2.3: первая пара) — псевдо-комната с номером
-        // 1-го этажа (floorForRoom по первой цифре) и координатами входа
+
         val startRoom =
             MapRoom(
                 id = "entrance",
@@ -127,27 +110,22 @@ class RealMapMultiFloorRouteTest {
         assertNotNull("маршрут от главного входа до 301 должен строиться", r)
     }
 
-    // W40c: площадка 4-го этажа (каб. 401-405) связана links e_8yy3eev ↔ e_wf8mlfr
-    // (лестница у 335, тот же план «3-4»). Жалоба заказчика: 309 → 405 не находился.
     @Test
     fun `W40c - маршрут 309 на 405 строится через лестницу у 335`() {
         val r = CollegeRouteFinder.findMultiFloorRoute(room("309"), room("405"), floorsMap())
         assertNotNull("309→405 должен строиться (links e_8yy3eev↔e_wf8mlfr)", r)
         assertTrue(r!!.crossesFloors)
-        // вниз на 2 этаж → вверх у 335 (e_wf8mlfr) → площадка 4-го этажа (e_8yy3eev)
+
         assertEquals(listOf("3-4", "2", "3-4", "3-4"), r.floorPaths.map { it.floorId })
     }
 
-    // W40a: подключение комнат ПРОЕКЦИЕЙ двери на коридор. Жалоба заказчика: «из 107 в 123
-    // маршрут идёт почти до 115 и обратно» — крюк к дальнему узлу. После W40a путь вдоль
-    // коридора: длина ~0.13 (было ~0.39), точки идут монотонно по коридору y≈0.49.
     @Test
     fun `W40a - маршрут 107 на 123 идёт вдоль коридора без крюка`() {
         val r = CollegeRouteFinder.findMultiFloorRoute(room("107"), room("123"), floorsMap())
         assertNotNull("107→123 должен строиться", r)
         assertFalse(r!!.crossesFloors)
         assertTrue("длина должна быть ~0.21 без крюка (было ~0.39), получилось ${r.distance}", r.distance < 0.25f)
-        // маршрут держится полосы коридора (y 0.48-0.53), не убегая к дальним узлам
+
         val pts = r.floorPaths[0].points
         assertTrue(pts.size >= 3)
         assertTrue(
@@ -156,7 +134,6 @@ class RealMapMultiFloorRouteTest {
         )
     }
 
-    // W40a: дверь читается из ассета и используется как точка старта маршрута
     @Test
     fun `W40a - дверь комнаты читается из ассета`() {
         val r107 = mapData.floor("1").room("107")
@@ -164,11 +141,6 @@ class RealMapMultiFloorRouteTest {
         assertNotNull("у 107 должна быть дверь в разметке", r107!!.door)
     }
 
-    // X26: чистая проекция attach не рвёт связность — каждая комната БЕЗ двери (её центр
-    // может оказаться за соседним кабинетом) всё равно достижима от главного входа.
-    // (Полный wall-cross=0 на текущем ассете недостижим: «замурованные» комнаты без двери
-    // + коридоры, размеченные впритирку к углам узких комнат, — это данные плана, а не
-    // логика attach; диагностику см. tools/route-check-report.txt «X26 wall-cross».)
     @Test
     fun `X26 - все комнаты без двери достижимы от главного входа`() {
         val floors = floorsMap()
@@ -189,7 +161,6 @@ class RealMapMultiFloorRouteTest {
         }
     }
 
-    // X23: конец маршрута — В ДВЕРИ, если она размечена (без лишнего колена центр→дверь)
     @Test
     fun `X23 - маршрут стартует и финиширует в двери когда она есть`() {
         val floors = floorsMap()
@@ -207,7 +178,6 @@ class RealMapMultiFloorRouteTest {
         assertEquals(to.door!!.y, lastPt.y, 1e-4f)
     }
 
-    // X23: без двери (door==null) маршрут стартует в ЦЕНТРЕ кабинета
     @Test
     fun `X23 - маршрут стартует в центре когда двери нет`() {
         val floors = floorsMap()
@@ -221,8 +191,6 @@ class RealMapMultiFloorRouteTest {
         assertEquals(from.y, firstPt.y, 1e-4f)
     }
 
-    // Y7: ОТРИСОВАННЫЕ полилинии на реальных данных — строго ортогональны в plan-px
-    // (|dx|<eps ИЛИ |dy|<eps) и не пробивают чужие кабинеты (passage = сквозной зал).
     @Test
     fun `Y7 - полилинии маршрутов ортогональны в plan-px и не пробивают кабинеты`() {
         val floors = floorsMap()

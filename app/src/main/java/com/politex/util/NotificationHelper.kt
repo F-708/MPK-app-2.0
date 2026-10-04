@@ -21,8 +21,6 @@ object NotificationHelper {
     const val CHANNEL_NAME = "Обновления расписания МГПК"
     const val NOTIFICATION_ID = 2026
 
-    // H1: отдельный канал напоминаний о заданиях — IMPORTANCE_HIGH (звуковой/heads-up),
-    // чтобы «сдать до завтра» не терялось в бесшумном канале расписания.
     const val REMINDER_CHANNEL_ID = "mpk_reminders"
     const val REMINDER_CHANNEL_NAME = "Напоминания о заданиях"
     private const val REMINDER_NOTIFICATION_BASE = 3000
@@ -75,13 +73,11 @@ object NotificationHelper {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
-        // V1: склонение «урок/урока/уроков» — общая функция (см. lessonsWord внизу файла)
-        // dayTitle приходит в винительном падеже («в среду»); пустая строка — день неизвестен
         val title =
             if (dayTitle.isNotBlank()) {
-                "Занятия в $dayTitle: $lessonCount ${lessonsWord(lessonCount)}"
+                "Уроки в $dayTitle: $lessonCount ${lessonsWord(lessonCount)}"
             } else {
-                "Занятия на завтра: $lessonCount ${lessonsWord(lessonCount)}"
+                "Уроки на завтра: $lessonCount ${lessonsWord(lessonCount)}"
             }
 
         val notification =
@@ -105,7 +101,6 @@ object NotificationHelper {
         }
     }
 
-    /** H1: канал напоминаний — IMPORTANCE_HIGH (heads-up + звук). */
     fun createReminderChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel =
@@ -122,12 +117,6 @@ object NotificationHelper {
         }
     }
 
-    /**
-     * H1: уведомление по напоминанию задания. Текст «Напоминание: <title> (<предмет>)»,
-     * тап открывает вкладку TASKS. Учёт POST_NOTIFICATIONS — как в showScheduleReleaseNotification:
-     * на Android 13+ без выданного разрешения просто выходим (без crash).
-     * id уведомления уникален на напоминание, чтобы несколько напоминаний не перезаписывали друг друга.
-     */
     fun showReminderNotification(
         context: Context,
         task: StudentTaskEntity,
@@ -146,8 +135,7 @@ object NotificationHelper {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra("EXTRA_OPEN_TAB", "TASKS")
             }
-        // QA#19: reminder.id — Long; без modulo переполнение Int дало бы коллизию
-        // notification-id (второе напоминание молча заменило бы первое)
+
         val requestCode = (REMINDER_NOTIFICATION_BASE + reminder.id % 1_000_000L).toInt()
         val pendingIntent =
             PendingIntent.getActivity(
@@ -180,10 +168,6 @@ object NotificationHelper {
     }
 }
 
-/**
- * V1: склонение «урок/урока/уроков» — в колледже занятие называют уроком, а не парой.
- * Top-level: используется и в уведомлении, и в статусах/тостах синка (репозиторий, VM, клиент).
- */
 fun lessonsWord(n: Int): String =
     when {
         n % 10 == 1 && n % 100 != 11 -> "урок"

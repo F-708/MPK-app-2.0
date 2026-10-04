@@ -18,11 +18,6 @@ import java.nio.charset.CodingErrorAction
 import kotlin.coroutines.coroutineContext
 import kotlin.math.max
 
-/**
- * M3: то, что выбрано в диалоге импорта и ещё не положено на диск.
- * SINGLE_FILE — один документ; IMAGES — набор изображений (один материал, несколько страниц);
- * TEXT — текст, набранный в приложении (байтов нет вообще).
- */
 sealed interface PendingMaterial {
     data class SingleFile(
         val uri: Uri,
@@ -37,40 +32,18 @@ sealed interface PendingMaterial {
     ) : PendingMaterial
 }
 
-/**
- * M1/M3: хранение файлов материальной базы.
- *
- * Правило босса: в БД — только метаданные, байты копируются в `filesDir/materials/<itemId>.<ext>`.
- * Отсюда порядок импорта (иначе нечем назвать файл):
- *  1. INSERT строки → получаем `itemId`;
- *  2. копирование InputStream из SAF Uri в `filesDir/materials/<itemId>.<ext>` на Dispatchers.IO;
- *  3. UPDATE строки: путь, число страниц (PDF), извлечённый текст (TXT/DOCX) для поиска.
- * Любой сбой на шагах 2–3 → строка и уже записанные байты удаляются (см. [importMaterial]).
- *
- * Набор изображений — один материал, страницы лежат рядом: `<itemId>-0.jpg`, `<itemId>-1.jpg`, …
- * (порядок в `uriPath` = порядок страниц в просмотрщике).
- */
 object MaterialImporter {
-    /** Подкаталог filesDir, где живут все материалы. */
+
     const val STORAGE_DIR_NAME = "materials"
 
-    /**
-     * Сколько символов извлечённого текста кладём в `textContent`. Хватает и на учебник,
-     * и на поиск; мегабайтный лог в БД тащить незачем — просмотрщик читает файл целиком.
-     *
-     * ponytail: обрезка по символам, а не «умный» индекс. Поднять/снять при переходе на FTS.
-     */
     const val MAX_INDEXED_CHARS = 200_000
 
-    /** Расширения, для которых при импорте извлекается текст (поиск + встроенный просмотр). */
     private val PLAIN_TEXT_EXT = setOf("txt", "md", "markdown", "csv", "log", "json", "xml", "rtf")
 
-    /** Расширения изображений, которые SAF отдаёт по маске image (см. пикер набора изображений). */
     private val IMAGE_EXT = setOf("jpg", "jpeg", "png", "webp", "bmp", "gif", "heic", "heif")
 
     fun storageDir(context: Context): File = File(context.filesDir, STORAGE_DIR_NAME).apply { if (!exists()) mkdirs() }
 
-    /** Имя файла из SAF (DISPLAY_NAME), с откатом на lastPathSegment. */
     fun queryDisplayName(
         context: Context,
         uri: Uri,
@@ -87,13 +60,10 @@ object MaterialImporter {
         return uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "материал"
     }
 
-    /** Расширение без точки, в нижнем регистре. Пустая строка, если имени с точкой нет. */
     fun extOf(fileName: String): String = fileName.substringAfterLast('.', "").lowercase().take(6)
 
-    /** Имя без расширения — заголовок материала по умолчанию. */
     fun titleOf(fileName: String): String = fileName.substringBeforeLast('.', fileName).ifBlank { fileName }
 
-    /** MIME → расширение, когда в имени файла точки нет (SAF такое отдаёт регулярно). */
     fun extFromMime(
         context: Context,
         uri: Uri,
@@ -109,7 +79,6 @@ object MaterialImporter {
         else -> ""
     }
 
-    /** Скопировать байты SAF-Uri в хранилище материалов. Отменяемо, на Dispatchers.IO. */
     suspend fun copyToStorage(
         context: Context,
         uri: Uri,
@@ -133,7 +102,6 @@ object MaterialImporter {
         target
     }
 
-    /** Число страниц PDF (0, если файл не PDF или повреждён — просмотрщик тогда сам разберётся). */
     suspend fun pdfPageCount(file: File): Int = withContext(Dispatchers.IO) {
         runCatching {
             ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
@@ -142,10 +110,6 @@ object MaterialImporter {
         }.getOrDefault(0)
     }
 
-    /**
-     * Прочитать текстовый файл. UTF-8 пробуется СТРОГО: русскоязычные .txt из колледжа сплошь
-     * и рядом в windows-1251, и «прочитать как UTF-8» даёт кашу из U+FFFD — падаем на 1251.
-     */
     suspend fun readTextFile(file: File): String = withContext(Dispatchers.IO) {
         runCatching { decodeSmart(file.readBytes()) }.getOrDefault("")
     }
@@ -167,7 +131,6 @@ object MaterialImporter {
         }.getOrDefault(String(bytes))
     }
 
-    /** Текст DOCX для поиска (пустая строка, если файл не читается). */
     suspend fun readDocxText(file: File): String = withContext(Dispatchers.IO) {
         runCatching {
             DocxTextExtractor.toPlainText(
@@ -176,7 +139,6 @@ object MaterialImporter {
         }.getOrDefault("")
     }
 
-    /** Удалить файлы материала с диска (вызывается вместе с DELETE из БД). */
     fun deleteStoredFiles(item: MaterialItemEntity) {
         if (item.uriPath.isBlank()) return
         item.uriPath.split('\n').forEach { path ->
@@ -184,26 +146,17 @@ object MaterialImporter {
         }
     }
 
-    /** «1,4 МБ» / «320 КБ» — подпись размера в строке материала. */
     fun humanSize(bytes: Long): String = when {
         bytes < 1024 -> "$bytes Б"
         bytes < 1024 * 1024 -> "${max(1, bytes / 1024)} КБ"
         else -> String.format(java.util.Locale.ROOT, "%.1f МБ", bytes / (1024.0 * 1024.0))
     }
 
-    /** Суммарный размер файлов материала (для набора изображений — всех страниц). */
     fun storedSize(item: MaterialItemEntity): Long {
         if (item.uriPath.isBlank()) return 0
         return item.uriPath.split('\n').sumOf { p -> if (p.isBlank()) 0 else runCatching { File(p).length() }.getOrDefault(0) }
     }
 
-    /**
-     * M3/W11: полный импорт выбранного материала в ПРЕДМЕТ. Возвращает id новой строки.
-     *
-     * Ошибка = исключение (IOException/SecurityException); вызывающий показывает сообщение.
-     * Ровно один материал на вызов, кроме [PendingMaterial.Images] — там набор становится
-     * ОДНОЙ строкой, иначе «лекция в 12 фото» рассыпается на 12 материалов в списке.
-     */
     suspend fun importMaterial(
         context: Context,
         dao: MaterialDao,
@@ -301,7 +254,6 @@ object MaterialImporter {
         }
     }
 
-    /** Шаг 2–3 для одиночного файла: копирование + pageCount/textContent, откат при сбое. */
     private suspend fun finalizeFileImport(
         context: Context,
         dao: MaterialDao,
@@ -337,15 +289,8 @@ object MaterialImporter {
         }
     }
 
-    /**
-     * Поиск по набору изображений честным способом невозможен без OCR (ML Kit ≈ +15 МБ),
-     * поэтому индексируем только имя файла («Скан_лекция3.jpg» ищется по «лекция»).
-     *
-     * ponytail: без OCR. Добавить ML Kit Text Recognition, если заказчик попросит поиск по сканам.
-     */
     private fun extractImageSetSearchText(firstName: String): String = titleOf(firstName)
 
-    /** Сбой импорта: стираем строку и уже записанные байты, чтобы не оставлять мусор. */
     private suspend fun rollback(
         dao: MaterialDao,
         itemId: Long,

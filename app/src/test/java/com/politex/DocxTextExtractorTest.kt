@@ -13,18 +13,9 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-/**
- * M2: извлечение текста из DOCX штатным ZipInputStream + XmlPullParser.
- *
- * Фикстура собирается байтами прямо в тесте: настоящий .docx в репозитории — это бинарник,
- * который никто не читает на ревью, а минимальный OOXML-пакет из трёх записей воспроизводит
- * всё, что встречается в реальных файлах Word (стили, ранги с w:b, табы, переводы строк).
- *
- * Robolectric нужен потому, что XmlPullParserFactory в чистом JVM-тесте — заглушка android.jar.
- */
 @RunWith(RobolectricTestRunner::class)
 class DocxTextExtractorTest {
-    /** Собрать байты .docx: обязательный [Content_Types].xml + word/document.xml. */
+
     private fun docxBytes(
         documentXml: String,
         withDocumentEntry: Boolean = true,
@@ -49,12 +40,6 @@ class DocxTextExtractorTest {
         return out.toByteArray()
     }
 
-    /**
-     * Обёртка OOXML-пакета. СОБИРАЕТСЯ КОНКАТЕНАЦИЕЙ, а не raw-строкой с trimIndent:
-     * многострочное тело абзацев уже имеет нулевой отступ, и trimIndent посчитал бы минимальным
-     * общим отступом ноль — тогда перед `<?xml` остались бы пробелы, а XML-декларация обязана
-     * стоять в позиции 0 (иначе «Unexpected token»).
-     */
     private fun wrap(body: String) = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
         "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">" +
         "<w:body>$body</w:body>" +
@@ -120,7 +105,7 @@ class DocxTextExtractorTest {
 
     @Test
     fun `стиль знака заголовка не путается со стилем абзаца`() {
-        // «Heading1Char» — стиль символа (оформление знака абзаца), а не сам заголовок
+
         val paragraphs =
             extract(
                 """<w:p><w:pPr><w:pStyle w:val="Heading1Char"/></w:pPr><w:r><w:t>Просто текст</w:t></w:r></w:p>""",
@@ -205,8 +190,7 @@ class DocxTextExtractorTest {
             runCatching {
                 DocxTextExtractor.extract(ByteArrayInputStream(byteArrayOf(1, 2, 3, 4, 5)))
             }
-        // ZIP-поток на не-ZIP-данных бросает исключение — вызывающий (MaterialImporter)
-        // оборачивает это в runCatching и оставляет textContent пустым. Проверяем договорённость.
+
         val paragraphs = outcome.getOrNull()
         assertTrue("исключение допустимо, пустой список допустим", paragraphs == null || paragraphs.isEmpty())
     }

@@ -88,37 +88,10 @@ import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/**
- * Ф4.2 «Оценки» (агент G, MASTER-PLAN фаза 4.2) + волны W17–W22, V17–V20.
- *
- * V17: средний балл 40sp, пустые секции категорий не рендерятся, EmptyDots в Box 18dp.
- * V18: «НАСТРОИТЬ ВЕС» заменён шестерёнкой в шапке → GradeSubjectSettingsScreen
- *      (принцип счёта: округление 0.1/0.5/целое + «в пользу студента»; веса слайдерами).
- *      Экран дерева с drag&drop (бывший W22 «Как считается балл») удалён — priorityJson
- *      остаётся только как legacy-порядок сворачивания, когда веса не заданы.
- * V19: LAB убран из UI (enum и данные не тронуты): 4 сегмента категорий, без «Зачёт/Незачёт».
- * V20: окошко введённых оценок активной категории между чипами и нампадом (тап = удалить),
- *      счётчик у чипа категории, ЭКЗАМЕН без лимита (всегда insert).
- * Волна X: X6 — секции-списки категорий и мини-дерево убраны с экрана предмета (история
- *      оценок живёт в окошке у нампада); X8 — округление ".0"/".00"/"целое" (HALF_UP),
- *      «в пользу студента» удалено; X9 — дефолт весов 25/25/50/100, шаг слайдера 25,
- *      кастомный Canvas-слайдер, weightsEnabled per-subject + глобально (GradeSettings),
- *      превью-строка весов под средней (по убыванию веса); X10 — блок (средняя+панель)
- *      вертикально центрирован; X16 — категория отображается только один раз.
- *
- * G1: «страницы» без nav-графа (rememberSaveable-строки).
- * Данные — напрямую из GradeDao (паттерн MaterialBaseScreen), без ViewModel.
- */
-
-/**
- * V17: детальный режим оценок (открыт предмет или его настройки) — по образцу ViewerMode.
- * Флаг не rememberSaveable: смерть процесса обязана его сбрасывать.
- */
 object GradeDetailMode {
     var active by mutableStateOf(false)
 }
 
-/** V19: категории в UI — без LAB (enum/данные не трогаем, старые LAB-записи просто не видны). */
 private val UI_CATEGORIES = GradeCategory.values().filter { it != GradeCategory.LAB }
 
 @Composable
@@ -128,14 +101,12 @@ fun GradesScreen(
 ) {
     val context = LocalContext.current
     val dao = remember { MpkDatabase.getInstance(context).gradeDao() }
-    // X9: глобальное отключение весов (prefs «mpk_prefs», пишет экран Настроек через GradeSettings).
-    // ponytail: чтение в композиции без Flow — обновление при рекомпозиции после возврата с Настроек.
+
     val globalWeights = GradeSettings.getGlobalWeightsEnabled(context)
 
     var openSubject by rememberSaveable { mutableStateOf<String?>(null) }
     var settingsSubject by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // V17: хаб-чипы LessonsHub должны гаснуть, когда открыт детальный экран оценок
     val detail = openSubject != null || settingsSubject != null
     DisposableEffect(detail) {
         GradeDetailMode.active = detail
@@ -175,8 +146,6 @@ fun GradesScreen(
     }
 }
 
-// ── Список предметов ─────────────────────────────────────────────────────────
-
 @Composable
 private fun GradeSubjectList(
     groupInfo: GroupInfo,
@@ -200,9 +169,7 @@ private fun GradeSubjectList(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(subjects) { subject ->
-            // G2/G3 + X9: веса из grade_config (пусто = DEFAULT_WEIGHTS); weightsEnabled
-            // (глобально и per-subject) = false → plainAverage
-            // (ponytail: format в списке всегда 1 знак, округление из config — только детальный экран)
+
             val avg =
                 remember(entries, configs, subject, globalWeights) {
                     val config = configs.firstOrNull { it.subjectName == subject }
@@ -231,14 +198,14 @@ private fun GradeSubjectList(
                 ) {
                     Text(
                         text = subject,
-                        maxLines = 2, // W17: длинные названия («физическая культура и…»)
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         style = TextStyle(fontSize = 14.sp, color = ColorTextTitle),
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     if (avg == null) {
-                        // W18: нет оценок — три точки, а не «—» (шижина = сами точки, Row!)
+
                         EmptyDots(modifier = Modifier.width(22.dp).testTag("grades_avg_$subject"))
                     } else {
                         Text(
@@ -258,8 +225,6 @@ private fun GradeSubjectList(
     }
 }
 
-// ── Экран предмета ───────────────────────────────────────────────────────────
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GradeSubjectScreen(
@@ -269,7 +234,7 @@ private fun GradeSubjectScreen(
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    // Y5: системный «назад» из экрана предмета — к списку предметов, не выход из приложения
+
     BackHandler { onBack() }
     val scope = rememberCoroutineScope()
     val today = rememberToday()
@@ -278,12 +243,12 @@ private fun GradeSubjectScreen(
 
     val byCategory = remember(entries) { entries.groupBy({ it.category }) { it.value } }
     val config = remember(configs, subject) { configs.firstOrNull { it.subjectName == subject } }
-    // X9: веса действуют, если включены глобально И у предмета
+
     val weightsEnabled = globalWeights && (config?.weightsEnabled ?: true)
     val ws = remember(config) { parseWeightsList(config?.weightsJson) ?: GradeAggregator.DEFAULT_WEIGHTS }
     val mode = config?.roundingMode ?: ".0"
     val rawAvg = remember(byCategory, config, weightsEnabled) { subjectAverage(byCategory, config, weightsEnabled) }
-    // V18/X8: детальный экран применяет настройку округления предмета (список — всегда 1 знак)
+
     val avg =
         remember(rawAvg, mode) {
             rawAvg?.let { GradeAggregator.roundAvg(it, mode) }
@@ -291,7 +256,6 @@ private fun GradeSubjectScreen(
 
     var activeCategory by rememberSaveable(subject) { mutableStateOf(GradeCategory.REGULAR.name) }
 
-    // W19: быстрый ввод без «+ работу», дата = сегодня. V20: ЭКЗАМЕН без лимита — всегда insert
     fun submit(value: Int) {
         val entry =
             GradeEntryEntity(
@@ -304,8 +268,6 @@ private fun GradeSubjectScreen(
         scope.launch { dao.insert(entry) }
     }
 
-    // Находка 2: удаление оценки больше НЕ мгновенное безвозвратное — тап удаляет и показывает
-    // undo-строку на 5 с; «ОТМЕНИТЬ» вставляет ТУ ЖЕ запись (id сохранён, т.к. строка удалена).
     var lastDeleted by remember { mutableStateOf<GradeEntryEntity?>(null) }
     LaunchedEffect(lastDeleted) {
         if (lastDeleted != null) {
@@ -328,7 +290,7 @@ private fun GradeSubjectScreen(
             .fillMaxSize()
             .testTag("grades_subject_screen"),
     ) {
-        // Шапка (V18): назад + предмет (W17: две строки с многоточием) + шестерёнка справа
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -338,7 +300,7 @@ private fun GradeSubjectScreen(
             }
             Text(
                 text = subject,
-                maxLines = 2, // W17
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
                 modifier =
@@ -362,10 +324,8 @@ private fun GradeSubjectScreen(
             }
         }
 
-        // Y4: средний балл — ближе к вертикальному центру; панель ввода прижата к низу
         Spacer(modifier = Modifier.weight(0.6f))
 
-        // V17/X8: средний балл 40sp в режиме округления предмета
         Box(
             modifier =
             Modifier
@@ -391,7 +351,6 @@ private fun GradeSubjectScreen(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // ── Панель ввода (G4, W20/W21, V19/V20) — прижата к низу экрана (Y4) ──
         Surface(
             shape = RoundedCornerShape(2.dp),
             color = ColorBgMain,
@@ -402,7 +361,7 @@ private fun GradeSubjectScreen(
                 .testTag("grades_input_panel"),
         ) {
             Column(modifier = Modifier.padding(8.dp)) {
-                // W21/V19: 4 сегмента (без LAB), V20: счётчик оценок у чипа
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -419,7 +378,6 @@ private fun GradeSubjectScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // V20: окошко введённых оценок активной категории; тап = удалить без подтверждения
                 val activeEntries = remember(entries, activeCategory) { entries.filter { it.category == activeCategory } }
                 if (activeEntries.isEmpty()) {
                     Box(
@@ -443,10 +401,9 @@ private fun GradeSubjectScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        // ponytail: DAO отдаёт ASC — самая свежая оценка справа без reversed()
-                        // (спека писала «reversed», предполагая DESC-порядок)
+
                         activeEntries.forEach { e ->
-                            // Находка 2: хитбокс 44dp, визуальный квадрат 28dp ВНУТРИ (паттерн HomeworkBadge)
+
                             Box(
                                 modifier =
                                 Modifier
@@ -481,7 +438,6 @@ private fun GradeSubjectScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // W20: нампад 2×5 (1–5 / 6–9 и 10), кнопки ~56dp с weight(1f) — без скролла
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -498,7 +454,6 @@ private fun GradeSubjectScreen(
                     }
                 }
 
-                // Находка 2: undo-строка (5 с) — «Удалено N» + «ОТМЕНИТЬ» возвращает запись
                 lastDeleted?.let { deleted ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Surface(
@@ -544,12 +499,10 @@ private fun GradeSubjectScreen(
             }
         }
 
-        // X10: нижняя половина центровки блока
         Spacer(modifier = Modifier.weight(1f))
     }
 }
 
-/** W20: прямоугольник ~56dp с weight(1f) — нампад 2×5 под большой палец. */
 @Composable
 private fun RowScope.NumberKey(
     value: Int,
@@ -575,7 +528,6 @@ private fun RowScope.NumberKey(
     }
 }
 
-/** W21/V20: сегмент категории — компактная подпись со счётчиком, weight(1f), выбранная залита ColorTopBar. */
 @Composable
 private fun RowScope.CategorySegment(
     category: GradeCategory,
@@ -597,7 +549,7 @@ private fun RowScope.CategorySegment(
         Box(contentAlignment = Alignment.Center) {
             val short = CATEGORY_SHORT[category.name] ?: category.title
             Text(
-                text = if (count > 0) "$short · $count" else short, // V20: счётчик оценок
+                text = if (count > 0) "$short · $count" else short,
                 maxLines = 1,
                 style =
                 TextStyle(
@@ -610,14 +562,6 @@ private fun RowScope.CategorySegment(
     }
 }
 
-// ── Слайдер веса (X9) ─────────────────────────────────────────────────────────
-
-/**
- * X9: кастомный Canvas-слайдер весов — линия-трек 4dp + thumb-круг 16dp, 5 позиций
- * (0..100 с шагом 25, [GradeAggregator.snapWeight]). Material3 Slider анимирует
- * увеличение thumb/track при касании — здесь фидбек drag ТОЛЬКО движение thumb.
- * enabled=false → серый, жесты отключены.
- */
 @Composable
 private fun WeightSlider(
     value: Int,
@@ -625,7 +569,7 @@ private fun WeightSlider(
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // доля по полной ширине: snap в ближайшую из 5 позиций прощает неточность insets
+
     val snap: (Float, Float) -> Int = { x, w ->
         GradeAggregator.snapWeight((x / w).coerceIn(0f, 1f))
     }
@@ -648,7 +592,7 @@ private fun WeightSlider(
                 )
             },
     ) {
-        val pad = 8.dp.toPx() // радиус thumb — трек не вылезает за границы
+        val pad = 8.dp.toPx()
         val y = size.height / 2f
         val trackW = size.width - pad * 2
         val thumbX = pad + trackW * (value / 100f)
@@ -661,7 +605,6 @@ private fun WeightSlider(
     }
 }
 
-/** W18/V17: три наглядные точки — пустое состояние; Box 18dp, вертикально по центру. */
 @Composable
 private fun EmptyDots(modifier: Modifier = Modifier) {
     Box(
@@ -687,12 +630,8 @@ private fun EmptyDots(modifier: Modifier = Modifier) {
     }
 }
 
-// ── Экран настроек предмета (V18, X8/X9) ─────────────────────────────────────
-
-/** X8: «.0» = 1 знак, «.00» = 2 знака, «целое» = 0 знаков (HALF_UP, без «в пользу студента»). */
 private val ROUNDING_MODES = listOf(".0" to ".0", ".00" to ".00", "целое" to "целое")
 
-/** X8: нормализация legacy-режимов v8 ("0.1"/"0.5"/"1") к новым строкам roundAvg. */
 private fun normalizeMode(mode: String?): String =
     when (mode) {
         ".00" -> ".00"
@@ -700,14 +639,6 @@ private fun normalizeMode(mode: String?): String =
         else -> ".0"
     }
 
-/**
- * V18: «Настройки предмета» — принцип счёта (округление) и веса категорий.
- * X9: тумблер весов per-subject (выключены → слайдеры серые, средний = plainAverage),
- * дефолт весов 25/25/50/100, шаг слайдера 25 (кастомный [WeightSlider]).
- * X8: roundUp удалён из UI — при сохранении пишется false (колонка не используется).
- * СОХРАНИТЬ пишет grade_config целиком (upsertConfig = REPLACE), поэтому
- * legacy priorityJson сохраняется как есть.
- */
 @Composable
 private fun GradeSubjectSettingsScreen(
     subject: String,
@@ -715,13 +646,13 @@ private fun GradeSubjectSettingsScreen(
     globalWeights: Boolean,
     onBack: () -> Unit,
 ) {
-    // Y5: «назад» из настроек предмета — в экран предмета
+
     BackHandler { onBack() }
     val scope = rememberCoroutineScope()
     val entries by dao.entriesForSubject(subject).collectAsState(initial = emptyList())
     val byCategory = remember(entries) { entries.groupBy({ it.category }) { it.value } }
 
-    var weights by remember { mutableStateOf<List<Int>?>(null) } // null = загрузка
+    var weights by remember { mutableStateOf<List<Int>?>(null) }
     var priorityJson by remember { mutableStateOf("[]") }
     var roundingMode by remember { mutableStateOf(".0") }
     var weightsEnabled by remember { mutableStateOf(true) }
@@ -740,7 +671,7 @@ private fun GradeSubjectSettingsScreen(
             .fillMaxSize()
             .testTag("grades_settings_screen"),
     ) {
-        // Шапка: back44 + «Настройки предмета» + имя предмета 12sp muted
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -778,7 +709,7 @@ private fun GradeSubjectSettingsScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp),
             ) {
-                // ── Группа 1: ПРИНЦИП СЧЁТА ──
+
                 SectionCaption("ПРИНЦИП СЧЁТА")
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -794,7 +725,7 @@ private fun GradeSubjectSettingsScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                // X9: тумблер весов предмета (стиль прежнего roundUp-ряда)
+
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = if (weightsEnabled) ColorSurfaceHighlight else ColorBgMain,
@@ -823,10 +754,9 @@ private fun GradeSubjectSettingsScreen(
                     }
                 }
 
-                // ── Группа 2: ВЕСА ──
                 Spacer(modifier = Modifier.height(16.dp))
                 SectionCaption("ВЕСА")
-                // X9: глобальное отключение гасит веса всех предметов
+
                 val weightsOn = globalWeights && weightsEnabled
                 val avg =
                     remember(byCategory, ws, roundingMode, weightsOn) {
@@ -863,7 +793,7 @@ private fun GradeSubjectSettingsScreen(
                                 style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold, color = gradeColor(avg)),
                             )
                         }
-                        // X9: строка долей — только при включённых весах; X16: каждая категория один раз
+
                         if (weightsOn) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
@@ -891,7 +821,7 @@ private fun GradeSubjectSettingsScreen(
                             ),
                             modifier = Modifier.width(60.dp),
                         )
-                        // X9: кастомный Canvas-слайдер, шаг 25; веса выключены → серый и неактивный
+
                         WeightSlider(
                             value = ws[i],
                             enabled = weightsOn,
@@ -915,7 +845,6 @@ private fun GradeSubjectSettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // СОХРАНИТЬ: BrandFill 44dp на всю ширину
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 color = ColorBrandFill,
@@ -934,8 +863,8 @@ private fun GradeSubjectSettingsScreen(
                                     priorityJson = priorityJson,
                                     weightsJson = JSONArray(ws).toString(),
                                     roundingMode = roundingMode,
-                                    roundUp = false, // X8: колонка оставлена, но не используется
-                                    weightsEnabled = weightsEnabled, // X9
+                                    roundUp = false,
+                                    weightsEnabled = weightsEnabled,
                                 ),
                             )
                             onBack()
@@ -953,7 +882,6 @@ private fun GradeSubjectSettingsScreen(
     }
 }
 
-/** V18: CAPS-заголовок группы настроек (стиль Tokens.SectionHeader). */
 @Composable
 private fun SectionCaption(text: String) {
     Text(
@@ -963,7 +891,6 @@ private fun SectionCaption(text: String) {
     )
 }
 
-/** V18: сегмент шага округления — ChipForm 32dp, выбранный залит ColorTopBar (как чипы категорий). */
 @Composable
 private fun RowScope.RoundingSegment(
     label: String,
@@ -997,9 +924,6 @@ private fun RowScope.RoundingSegment(
     }
 }
 
-// ── Мелочи ───────────────────────────────────────────────────────────────────
-
-/** G3: ≥7 зелёный, <4 красный, 4–6.9 нейтральный, нет оценок — приглушённый. */
 private fun gradeColor(avg: Double?): Color = when {
     avg == null -> ColorTextMuted
     avg >= 7.0 -> ColorSuccess
@@ -1007,12 +931,6 @@ private fun gradeColor(avg: Double?): Color = when {
     else -> ColorTextTitle
 }
 
-/**
- * X9: средний балл предмета. Веса включены → weightedAverage (пустой weightsJson =
- * DEFAULT_WEIGHTS 25/25/50/100); выключены (глобально или у предмета) → plainAverage:
- * все оценки всех категорий как одна группа. Legacy priorityJson больше не участвует
- * (хранится только для обратной совместимости схемы).
- */
 private fun subjectAverage(
     byCategory: Map<String, List<Int>>,
     config: GradeConfigEntity?,
@@ -1027,7 +945,6 @@ private fun subjectAverage(
         GradeAggregator.plainAverage(byCategory)
     }
 
-/** V18: weightsJson — позиционный JSON-массив по [UI_CATEGORIES]; пусто/бито/не той длины = null. */
 private fun parseWeightsList(json: String?): List<Int>? =
     try {
         if (json.isNullOrBlank()) {
@@ -1046,10 +963,6 @@ private fun parseWeightsList(json: String?): List<Int>? =
 
 private fun weightsMap(weights: List<Int>): Map<String, Int> = UI_CATEGORIES.map { it.name }.zip(weights).toMap()
 
-/**
- * X9/X16: «50% Контр + 25% Обычн + …» — нормализованные доли, сортировка по весу
- * УБЫВАНИЮ (позиция отражает величину), каждая категория ровно один раз.
- */
 private fun weightsPreviewLine(ws: List<Int>): String {
     val total = ws.sum()
     if (total == 0) return "—"
@@ -1059,7 +972,6 @@ private fun weightsPreviewLine(ws: List<Int>): String {
         .joinToString(" + ") { it.second }
 }
 
-/** W21: компактные подписи для сегментов ввода и превью весов. */
 private val CATEGORY_SHORT =
     mapOf(
         GradeCategory.REGULAR.name to "Обычн",

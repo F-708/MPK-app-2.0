@@ -11,24 +11,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * Миграция v2 → v3 (D1/DAT-01: индексы на `lessons`).
- *
- * Зачем: база с `fallbackToDestructiveMigration` — ошибка в миграции (или её отсутствие)
- * не падает, а ТИХО СТИРАЕТ `student_tasks` (ДЗ студента). Плюс Room при открытии сверяет
- * фактическую схему с ожидаемой (включая имена индексов) — расхождение = crash у всех
- * обновившихся. Тест создаёт реальную базу v2, открывает боевым getInstance и проверяет:
- * данные на месте, индексы созданы с Room-именами.
- */
 @RunWith(RobolectricTestRunner::class)
 class MigrationV2ToV3Test {
     private val dbName = com.politex.data.local.MpkDatabase.DATABASE_NAME
 
-    // Общая константа — вставляется в SQL и используется в запросе, чтобы байты совпали
-    // (иначе кириллическая «О» в литерале INSERT и в параметре запроса могут разойтись).
     private val group = "41О"
 
-    /** Схема v2 в точности как создал бы Room версии 2 (lessons БЕЗ индексов + teacher_lessons). */
     private fun createV2Database(context: Context) {
         context.deleteDatabase(dbName)
         val helper =
@@ -101,12 +89,8 @@ class MigrationV2ToV3Test {
         val context = ApplicationProvider.getApplicationContext<Context>()
         createV2Database(context)
 
-        // MpkDatabase.INSTANCE — статический singleton. Другой миграционный тест
-        // (MigrationV1ToV2Test) в той же JVM уже закэшировал инстанс на СВОЕЙ базе,
-        // поэтому getInstance вернул бы её, а не нашу свежую v2. Сбрасываем рефлекшеном.
         resetSingleton()
 
-        // Боевой singleton: Room прогонит MIGRATION_2_3 и сверит схему с @Entity(indices=...)
         val db =
             com.politex.data.local.MpkDatabase
                 .getInstance(context)
@@ -119,7 +103,6 @@ class MigrationV2ToV3Test {
         assertEquals("урок должен пережить миграцию", 1, lessons.size)
         assertEquals("01.10.2026", lessons.first().dateString)
 
-        // Индексы созданы с Room-именами (проверяем через sqlite_master)
         val indexNames = mutableSetOf<String>()
         db.openHelper.readableDatabase
             .query("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='lessons'")
@@ -137,7 +120,6 @@ class MigrationV2ToV3Test {
         }
     }
 
-    /** Сброс статического INSTANCE, чтобы getInstance открыл ИМЕННО нашу свежую v2-базу. */
     private fun resetSingleton() {
         try {
             val cls = Class.forName("com.politex.data.local.MpkDatabase")
@@ -145,7 +127,7 @@ class MigrationV2ToV3Test {
             field.isAccessible = true
             field.set(null, null)
         } catch (_: Exception) {
-            // если поля нет/недоступно — тест и так упадёт на assertEquals ниже с ясной причиной
+
         }
     }
 }

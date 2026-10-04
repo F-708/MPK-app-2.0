@@ -13,13 +13,6 @@ import org.robolectric.RobolectricTestRunner
 import java.util.Calendar
 import java.util.Locale
 
-/**
- * QA#4: форматтеры дат, идущих в БД/сравнения, привязаны к Locale.ROOT —
- * при дефолтной ar-локали (%02d локализует цифры в арабско-индийские) результат
- * остаётся ASCII dd.MM.yyyy. Дефолтная локаль в тесте ставится и возвращается.
- *
- * QA#13: normalize() кэшируется — повторный вызов даёт тот же результат.
- */
 @RunWith(RobolectricTestRunner::class)
 class LocaleRootDateTest {
     private fun withArabicLocale(body: () -> Unit) {
@@ -54,7 +47,7 @@ class LocaleRootDateTest {
         val twice = SubjectFormatter.normalize("ОхрТруда ауд. 305")
         assertEquals(once, twice)
         assertEquals("Охрана труда", once)
-        // кэш не ломает остальные ветки: точное совпадение и неизвестный титул
+
         assertEquals("Информатика", SubjectFormatter.normalize("Информа"))
         assertEquals("Информатика", SubjectFormatter.normalize("Информа"))
         val unknown = "Ыыыыы zzz"

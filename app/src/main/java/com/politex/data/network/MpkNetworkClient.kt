@@ -19,34 +19,16 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-/**
- * N1: результат «рукопожатия» с сайтом — быстрый ответ на вопрос «есть ли вообще
- * файл расписания?», ДО полной загрузки. [Found] — документ доступен (можно качать),
- * [NotFound] — сайт отвечает, но файла нет («расписание ещё не опубликовано», НЕ ошибка
- * сети), [NetworkError] — сайт недоступен (полный путь синка даст честную сетевую ошибку).
- */
 sealed class ProbeResult {
     data class Found(val url: String, val httpCode: Int) : ProbeResult()
     data class NotFound(val lastHttpCode: Int) : ProbeResult()
     object NetworkError : ProbeResult()
 }
 
-/** N1: служебный код «запрос упал с IOException» (отличаем от HTTP-кодов). */
 internal const val PROBE_NET_FAIL = -1
 
-/** N1: чистая часть probe — исход по одному URL из кодов HEAD и (фолбэк) GET-Range. */
 internal data class UrlProbe(val found: Boolean, val code: Int, val networkError: Boolean = false)
 
-/**
- * N1: решение по одному URL. headCode/rangeGetCode — HTTP-коды; [PROBE_NET_FAIL] (-1) —
- * запрос упал с IOException; 0 — запрос не выполнялся.
- *
- * Логика: HEAD 2xx И это не HTML → файл есть. HEAD не 2xx (сайт часто отвечает 405/404
- * на HEAD при живом GET) → доверяем GET-Range: 2xx и не HTML → файл есть. V6a: сайт отдаёт
- * HTML-страницы (event-страница, soft-404) с кодом 200 — Content-Type text/html НЕ считается
- * найденным документом. IOException на любом шаге → сеть недоступна. Иначе → файла нет
- * (запоминаем последний код для диагностики).
- */
 internal fun probeUrlOutcome(
     headCode: Int,
     rangeGetCode: Int,
@@ -60,12 +42,6 @@ internal fun probeUrlOutcome(
     else -> UrlProbe(found = false, code = if (rangeGetCode > 0) rangeGetCode else headCode)
 }
 
-/**
- * X1: содержит ли прямой URL документа ЗАПРОШЕННУЮ дату в имени файла?
- * Имя файла — «dd.MM.yyyy-raspisanie-…» или «dd_MM_yyyy-…». probe честен: [ProbeResult.Found]
- * только по прямым URL, чья дата совпала с запрошенной (event/portal-ветки probe не
- * использует — они отдают свежий документ любой дате, это и был false-positive «найдено»).
- */
 internal fun directUrlHasRequestedDate(url: String, dateDot: String): Boolean {
     if (!Regex("""\d{2}\.\d{2}\.\d{4}""").matches(dateDot)) return false
     val underscore = "${dateDot.substring(0, 2)}_${dateDot.substring(3, 5)}_${dateDot.substring(6, 10)}"
@@ -104,14 +80,6 @@ class MpkNetworkClient {
     private val _diagnosticInfo = MutableStateFlow(SyncDiagnosticInfo())
     val diagnosticInfo: StateFlow<SyncDiagnosticInfo> = _diagnosticInfo.asStateFlow()
 
-    /**
-     * SCH-01: сайт публикует документ в папке месяца ЗАГРУЗКИ (документ на 01.10
-     * доказанно лежал в /2026/09/ с суффиксом коллизии «-1»), поэтому перебираются
-     * месяц целевой даты И предыдущий, суффиксы "", "-1", "-2" и имена dd.MM.yyyy /
-     * dd_MM_yyyy. Первые два кандидата — быстрый путь (точный месяц, без суффикса).
-     *
-     * @param nameBase «raspisanie-uchashhihsya» (учащиеся) или «raspisanie-prepodavatelej»
-     */
     fun generateCandidateDirectUrls(
         calendar: Calendar,
         nameBase: String = "raspisanie-uchashhihsya",
@@ -133,7 +101,6 @@ class MpkNetworkClient {
             if (result.none { it.first == url }) result.add(Pair(url, ddMmYyyy))
         }
 
-        // Быстрый путь: точный месяц, точечное имя, без суффикса
         val (ty, tm) = folders[0]
         add(ty, tm, ddMmYyyy, "", "doc")
         add(ty, tm, ddMmYyyy, "", "docx")
@@ -150,10 +117,6 @@ class MpkNetworkClient {
         return result
     }
 
-    /**
-     * Event-страницы даты (внутри них документ в iframe officeapps). У преподавателей
-     * страница может иметь суффикс коллизии «-2».
-     */
     fun generateCandidateEventUrls(
         calendar: Calendar,
         nameBase: String = "raspisanie-uchashhihsya",
@@ -172,7 +135,6 @@ class MpkNetworkClient {
         }
     }
 
-    /** Ссылки event-страниц конкретной даты из HTML портала. */
     fun extractEventPageUrls(html: String, dateStr: String): List<String> = Regex(
         "(?i)https?://guo-mpk\\.by/(?:raspisanie/)?" + Regex.escape(dateStr) +
             "-raspisanie-(?:uchashhihsya|prepodavatelej)[a-z0-9-]*/?",
@@ -182,18 +144,6 @@ class MpkNetworkClient {
         .distinct()
         .toList()
 
-    /**
-     * SCH-01, общий резолвер документов расписания. Порядок:
-     * (0) W1a: [preferredUrl] — URL, который уже валидировал probeDocument, пробуем
-     *     ПЕРВЫМ, без перебора кандидатов (это и убирает «очень долго»: раньше синк
-     *     заново гонял весь водопад, хотя probe уже знал точный адрес);
-     * (а) прямые имена (месяц даты и предыдущий, суффиксы коллизий);
-     * (б) event-страницы даты — документ внутри в iframe officeapps;
-     * (в) портал — event-страницы нужной даты из него, затем прямые .doc-ссылки портала.
-     *
-     * [visit] получает каждый URL документа по приоритету; true от него — «документ
-     * принят», дальше не идём (остальные фазы и их запросы не выполняются).
-     */
     suspend fun forEachDocumentUrl(
         calendar: Calendar,
         nameBase: String = "raspisanie-uchashhihsya",
@@ -210,7 +160,6 @@ class MpkNetworkClient {
             return false
         }
 
-        // W1a: URL от probe — первым; не подошёл (не скачался/не разобрался) — обычный порядок
         if (preferredUrl != null && phaseUrls(listOf(preferredUrl))) return@withContext
 
         suspend fun phaseEventPages(pages: List<String>): Boolean {
@@ -222,10 +171,8 @@ class MpkNetworkClient {
             return false
         }
 
-        // (а) быстрый путь: предсказуемые имена
         if (phaseUrls(generateCandidateDirectUrls(calendar, nameBase).map { it.first })) return@withContext
 
-        // Портал нужен и для event-страниц нужной даты, и для прямых .doc-ссылок
         val dd = SimpleDateFormat("dd", Locale.ROOT).format(calendar.time)
         val mm = SimpleDateFormat("MM", Locale.ROOT).format(calendar.time)
         val yyyy = SimpleDateFormat("yyyy", Locale.ROOT).format(calendar.time)
@@ -237,7 +184,6 @@ class MpkNetworkClient {
             portalEventPages += extractEventPageUrls(html, "$dd-$mm-$yyyy")
         }
 
-        // (б) event-страницы даты — сгенерированные и найденные на портале
         if (phaseEventPages(
                 generateCandidateEventUrls(calendar, nameBase).map { it.first } + portalEventPages,
             )
@@ -245,7 +191,6 @@ class MpkNetworkClient {
             return@withContext
         }
 
-        // (в) прямые .doc-ссылки портала (нестандартные имена документов)
         phaseUrls(portalDocs)
     }
 
@@ -295,18 +240,14 @@ class MpkNetworkClient {
 
         for (attempt in 1..maxRetries) {
             try {
-                // SCH-01: единый резолвер — прямые имена (текущий+предыдущий месяц,
-                // суффиксы коллизий), затем event-страницы даты (документ в iframe
-                // officeapps), затем прямые ссылки портала. Остановка — на первом
-                // документе, где группа нашлась. W1a: preferredUrl (от probe) — первым.
+
                 forEachDocumentUrl(targetCalendar, preferredUrl = preferredUrl) { url ->
                     lastCheckedUrl = url
                     val docBytes = downloadFileBytes(url)
                     if (docBytes == null || docBytes.isEmpty()) {
                         false
                     } else if (!MpkScheduleParser.documentMatchesDate(docBytes, dateDotStr)) {
-                        // X1: документ другой даты (водопад отдаёт свежий документ любой
-                        // дате) не принимаем — продолжаем водопад за документом нужной даты.
+
                         false
                     } else {
                         totalBytesReceived += docBytes.size
@@ -413,16 +354,12 @@ class MpkNetworkClient {
 
         try {
             var accepted: Map<String, List<TeacherSlot>>? = null
-            // SCH-01: тот же резолвер, что у учащихся — прямые имена (в т.ч. прошлый
-            // месяц и суффиксы), event-страницы преподавателей (могут иметь «-2»), портал
+
             forEachDocumentUrl(targetCalendar, "raspisanie-prepodavatelej") { url ->
                 lastUrl = url
                 val bytes = downloadFileBytes(url)
                 if (bytes == null || bytes.isEmpty()) return@forEachDocumentUrl false
 
-                // O7: показываем только документ, реально относящийся к запрошенной дате.
-                // Если файл подменён/битый (дата в заголовке не совпала с именем файла),
-                // это ошибка, а не повод показать чужой день.
                 val text = TeacherScheduleParser.extractText(bytes)
                 if (text.isNotBlank() && !TeacherScheduleParser.matchesRequestedDate(text, targetCalendar)) {
                     val inDoc = TeacherScheduleParser.dateFromHeaderText(
@@ -465,7 +402,6 @@ class MpkNetworkClient {
         return client.newCall(request).execute()
     }
 
-    /** N1: HEAD-запрос (дёшево, без тела). Некоторые серверы не любят HEAD — см. probeDocument. */
     private fun executeHead(url: String): Response = client.newCall(
         Request.Builder().url(url).head()
             .header("User-Agent", USER_AGENT)
@@ -473,7 +409,6 @@ class MpkNetworkClient {
             .build(),
     ).execute()
 
-    /** N1: GET первого байта (Range) — фолбэк, когда HEAD не дал внятного ответа. */
     private fun executeRangeGet(url: String): Response = client.newCall(
         Request.Builder().url(url).get()
             .header("User-Agent", USER_AGENT)
@@ -482,41 +417,25 @@ class MpkNetworkClient {
             .build(),
     ).execute()
 
-    /** N1/V6a: (HTTP-код, Content-Type) запроса; [PROBE_NET_FAIL] и пустой тип при IOException. */
     private fun safeHeadInfo(block: () -> Response): Pair<Int, String> = try {
         block().use { it.code to (it.header("Content-Type") ?: "") }
     } catch (_: IOException) {
         PROBE_NET_FAIL to ""
     }
 
-    /**
-     * N1: «рукопожатие» — есть ли вообще файл расписания, БЕЗ полной загрузки.
-     * Быстрый HEAD-проход ТОЛЬКО по предсказуемым прямым URL (generateCandidateDirectUrls).
-     * V6a: event-страницы убраны из кандидатов — сайт отвечает на них 200 text/html всегда,
-     * это был false-positive «документ найден»; event-страницы остались в полном водопаде
-     * forEachDocumentUrl как фолбэк. Валидация по Content-Type: 2xx c text/html — НЕ документ.
-     * Для каждого URL — HEAD; если сайт не отвечает на HEAD внятно (не 2xx), фолбэк —
-     * GET Range первого байта. Первый 2xx-не-HTML → [ProbeResult.Found]; IOException → ранний
-     * [ProbeResult.NetworkError] (сайт недоступен); все 404/405/HTML → [ProbeResult.NotFound].
-     *
-     * ponytail: probe НЕ ходит на портал (тяжело и это уже полный резолвер). Документ только
-     * с нестандартной ссылкой с портала даст NotFound — но V6a убрал ранний выход по NotFound,
-     * поэтому полный водопад (event+портал) всё равно отрабатывает.
-     */
     suspend fun probeDocument(
         calendar: Calendar,
         nameBase: String = "raspisanie-uchashhihsya",
     ): ProbeResult = withContext(Dispatchers.IO) {
         val dateDot = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT).format(calendar.time)
-        // X1: probe идёт ТОЛЬКО по прямым URL, чьё имя содержит запрошенную дату —
-        // Found не может родиться из адреса, указывающего на документ другой даты.
+
         val candidates = generateCandidateDirectUrls(calendar, nameBase)
             .map { it.first }
             .filter { directUrlHasRequestedDate(it, dateDot) }
         var lastCode = 0
         for (url in candidates) {
             val (head, headType) = safeHeadInfo { executeHead(url) }
-            // HEAD 2xx — файл есть; HEAD упал (-1) — сеть; иначе — дешёвый GET Range
+
             val (range, rangeType) =
                 if (head == PROBE_NET_FAIL || head in 200..299) 0 to "" else safeHeadInfo { executeRangeGet(url) }
             val outcome = probeUrlOutcome(
@@ -534,11 +453,6 @@ class MpkNetworkClient {
         ProbeResult.NotFound(lastCode)
     }
 
-    /**
-     * N1: дать репозиторию управлять статусом синхронизации. [ScheduleRepository] ведёт
-     * сценарий «Проверяю сайт… → Файл найден, загружаю…», но _diagnosticInfo приватен
-     * для клиента — поэтому статус пишется через этот метод (null-поле не меняем).
-     */
     fun publishStatus(statusMessage: String? = null, isSyncing: Boolean? = null) {
         val current = _diagnosticInfo.value
         _diagnosticInfo.value = current.copy(

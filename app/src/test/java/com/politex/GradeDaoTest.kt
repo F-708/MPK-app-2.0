@@ -17,10 +17,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * Ф4.2 (G1): GradeDao. Ключевое, что ломается незаметно: «EXAM — одна активная запись»
- * (upsert обязан стирать прежнюю), сортировка по дате и REPLACE конфига приоритета.
- */
 @RunWith(RobolectricTestRunner::class)
 class GradeDaoTest {
     private lateinit var db: MpkDatabase
@@ -74,7 +70,7 @@ class GradeDaoTest {
     fun `upsertExam оставляет ровно одну запись экзамена`() = runBlocking {
         dao.upsertExam(entry(category = "EXAM", value = 5, dateIso = "2026-06-20"))
         dao.upsertExam(entry(category = "EXAM", value = 9, dateIso = "2026-06-25"))
-        dao.insert(entry(category = "REGULAR", value = 8)) // экзамен не трогает другие категории
+        dao.insert(entry(category = "REGULAR", value = 8))
 
         val exams = dao.entriesForSubject("ТОЭ").first().filter { it.category == "EXAM" }
         assertEquals(1, exams.size)
@@ -112,7 +108,6 @@ class GradeDaoTest {
             dao.getConfig("ТОЭ")?.priorityJson,
         )
 
-        // повторная запись того же предмета заменяет строку, а не плодит дубли
         dao.upsertConfig(GradeConfigEntity("ТОЭ", """["REGULAR","EXAM"]"""))
         assertEquals(1, dao.allConfigs().first().size)
         assertEquals("""["REGULAR","EXAM"]""", dao.getConfig("ТОЭ")?.priorityJson)

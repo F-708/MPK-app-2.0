@@ -80,27 +80,15 @@ import com.politex.ui.screens.materials.ViewerMode
 import kotlinx.coroutines.flow.collectLatest
 import java.net.URLEncoder
 
-// ---------- E4: построители route-строк (чистые функции — см. NavRouteTest) ----------
-
-// URLEncoder — form-encoding (пробел → «+»), но Navigation трактует «+» буквально и не
-// декодирует его в пробел. Для query-компонента URI правильный пробел — «%20»: докодируем.
-// (Критично для ФИО преподавателей с пробелами: иначе surnameOf не сматчит → onNotFound.)
 private fun enc(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
-/** Паттерн вкладки с одноразовым scroll-аргументом: «schedule» → «schedule?scroll={scroll}». */
 fun scrollRoutePattern(base: String): String = "$base?$ARG_SCROLL={$ARG_SCROLL}"
 
-/** Конкретный route вкладки: scrollTarget null/пуст → базовый route без аргумента. */
 fun buildScrollRoute(
     base: String,
     scrollTarget: String?,
 ): String = if (scrollTarget.isNullOrBlank()) base else "$base?$ARG_SCROLL=${enc(scrollTarget)}"
 
-/**
- * Route карты. Семантика R1 сохранена: from != null (включая "") = «показать маршрут»
- * ("" — старт от главного входа); from == null — просто кабинет без маршрута.
- * route=true — явный запрос маршрута (виджет NowNext, N8).
- */
 fun buildMapRoute(
     room: String?,
     from: String?,
@@ -123,15 +111,8 @@ fun buildGroupScheduleRoute(group: String?): String {
     return if (group.isNullOrBlank()) base else "$base?group=${enc(group)}"
 }
 
-/** X7: действие системной «назад» на КОРНЕ вкладки (глубокие экраны — системный popBackStack). */
 enum class BackAction { EXIT, TO_SCHEDULE, NONE }
 
-/**
- * X7: чистая функция выбора действия системной «назад» по текущему route (см. NavRouteTest).
- * Корень вкладки (query отбрасывается): «college» → переход на «schedule»; «schedule/lessons/
- * bells» → выход из приложения. Глубокие экраны (map/teacher/group/settings/…) и null → NONE,
- * тогда BackHandler не активен и «назад» отрабатывает системным popBackStack.
- */
 fun backAction(route: String?): BackAction =
     when (route?.substringBefore("?")) {
         ROUTE_COLLEGE -> BackAction.TO_SCHEDULE
@@ -139,13 +120,6 @@ fun backAction(route: String?): BackAction =
         else -> BackAction.NONE
     }
 
-/**
- * W2: тап по вкладке ВСЕГДА открывает КОРЕНЬ вкладки — без saveState/restoreState.
- * Заказчик: «если я перехожу на вкладку — меня должно перекинуть на её обычное состояние,
- * а не на карту/расписание чужой группы, которые я открывал раньше». Глубокое состояние
- * сохраняет ТОЛЬКО системная кнопка «назад» (backstack не трогаем): повторный тап по
- * активной вкладке из глубокого экрана pop'ает стек до корня вкладки.
- */
 fun NavController.navigateToTab(route: String) {
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { inclusive = false }
@@ -153,12 +127,6 @@ fun NavController.navigateToTab(route: String) {
     }
 }
 
-/**
- * E4/N15: NavHost вместо when(currentTab) (ARC-01). Поддерево вкладки больше не уничтожается
- * при переключении — записи табов сохраняются паттерном navigateToTab, глубокие экраны
- * (карта/преподаватель/расписание группы/…) — обычные записи backstack'а НАД вкладками,
- * поэтому системное «назад» всегда возвращает ровно на предыдущий экран (корень N15 устранён).
- */
 @Composable
 fun MainScreen(
     viewModel: AppViewModel,
@@ -192,10 +160,6 @@ fun MainScreen(
         )
     }
 
-    // Подсветка вкладки: на глубоких экранах (карта/преподаватель/расписание группы)
-    // подсвечен таб, ИЗ которого пришли — их route не совпадает ни с одним табом, поэтому
-    // selectedTab просто не меняется при переходе вглубь. rememberSaveable переживает
-    // поворот/смерть процесса; currentBackStackEntryAsState — публичный API (в отличие от currentBackStack).
     var selectedTab by rememberSaveable { mutableStateOf(AppTab.SCHEDULE) }
     val backStackEntry by navController.currentBackStackEntryAsState()
     LaunchedEffect(backStackEntry) {
@@ -203,9 +167,6 @@ fun MainScreen(
         AppTab.entries.firstOrNull { it.route == base }?.let { selectedTab = it }
     }
 
-    // X7: системная «назад» на КОРНЕ вкладки — выход из приложения (schedule/lessons/bells)
-    // или переход на расписание (college). На глубоких экранах (карта/преподаватель/группа/…)
-    // BackHandler не активен → работает системный popBackStack (возврат на предыдущий экран).
     val backAct = backAction(backStackEntry?.destination?.route)
     BackHandler(enabled = backAct != BackAction.NONE) {
         when (backAct) {
@@ -215,13 +176,10 @@ fun MainScreen(
         }
     }
 
-    // V14: корневой Box — хост оверлея интерактивных туториалов поверх всего контента.
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            // W16: в режиме чтения PDF баннер и нижняя навигация скрыты — сверху остаётся синяя
-            // строка самого просмотрщика (она же рисует отступ под статусбар), снизу — текст.
-            // Scaffold пересчитает innerPadding, контент растягивается на весь экран.
+
             topBar = {
                 if (!ViewerMode.active) MainTopBar()
             },
@@ -261,8 +219,7 @@ fun MainScreen(
                                 },
                                 label = {
                                     Text(
-                                        // N1: без капса — меньше букв, влезает при +15% шрифта;
-                                        // Ellipsis вместо тихой обрезки по букве
+
                                         text = tab.title,
                                         softWrap = false,
                                         maxLines = 1,
@@ -289,8 +246,7 @@ fun MainScreen(
                 }
             },
             snackbarHost = {
-                // V13: фирменный undo-снекбар с полосой-таймером 5 с. Показ идёт с Indefinite
-                // (в SnackbarDuration нет «5 с») — по исчерпании полосы гасим хост сами.
+
                 SnackbarHost(hostState = snackbarHostState) { data ->
                     UndoSnackbar(data, onExpire = { snackbarHostState.currentSnackbarData?.dismiss() })
                 }
@@ -313,12 +269,10 @@ fun MainScreen(
                     )
 
                 composable(scrollRoutePattern(ROUTE_SCHEDULE), arguments = scrollArg) { entry ->
-                    // C3: расписание и домашка читаются из VM (кэш переживает смену вкладок);
-                    // чтение внутри записи — эмиссии Room не рекомпозировали поддеревья других табов.
+
                     val groupLessons by viewModel.groupLessons.collectAsState()
                     val pendingTasks by viewModel.pendingTasks.collectAsState()
-                    // O1/D: выбранный день — rememberSaveable записи: saveState/restoreState
-                    // паттерна вкладок возвращает его при возврате на таб.
+
                     var scheduleSlot by rememberSaveable { mutableIntStateOf(0) }
                     var scheduleDate by rememberSaveable { mutableStateOf("") }
                     val scrollRequest = rememberScrollRequest(entry)
@@ -328,10 +282,10 @@ fun MainScreen(
                         pendingTasksFromVm = pendingTasks,
                         scheduleRepository = viewModel.scheduleRepository,
                         onSyncRequest = { viewModel.syncSchedule() },
-                        // SUI-02: сетевой сбой не должен маскироваться под «не опубликовано»
+
                         hasSyncError = uiState.hasSyncError,
                         isSyncing = uiState.isSyncing,
-                        // N18: тап по значку домашки открывает вкладку заданий
+
                         onOpenTasks = { navController.navigateToTab(ROUTE_LESSONS) },
                         onTeacherClick = { name -> navController.navigate(buildTeacherRoute(name)) },
                         onRoomClick = { room, fromRoom ->
@@ -351,7 +305,7 @@ fun MainScreen(
                         groupInfo = currentGroupInfo,
                         taskRepository = viewModel.taskRepository,
                         modifier = Modifier.fillMaxSize(),
-                        // T1: undo-снекбар удаления задания — хост уже висит в Scaffold
+
                         snackbarHostState = snackbarHostState,
                     )
                 }
@@ -440,7 +394,7 @@ fun MainScreen(
                 ) { entry ->
                     CollegeMapScreen(
                         initialRoom = entry.arguments?.getString("room"),
-                        // "" (не null!) = маршрут от главного входа — см. buildMapRoute/R1
+
                         fromRoom = entry.arguments?.getString("from"),
                         showRoute = entry.arguments?.getBoolean("route") == true,
                         onBack = { navController.popBackStack() },
@@ -465,8 +419,7 @@ fun MainScreen(
                         onGroupPicked = { group ->
                             navController.navigate(buildGroupScheduleRoute(group))
                         },
-                        // N15: «СМЕНИТЬ» и системное «назад» — popBackStack на запись выбора
-                        // группы (group="), состояние курса в ней сохранено (rememberSaveable).
+
                         onChangeGroup = { navController.popBackStack() },
                         onTeacherClick = { name -> navController.navigate(buildTeacherRoute(name)) },
                         onRoomClick = { room, fromRoom ->
@@ -480,7 +433,7 @@ fun MainScreen(
                         groupInfo = currentGroupInfo,
                         onGroupChanged = { newGroup -> viewModel.setGroup(newGroup) },
                         onRunConnectionTest = { viewModel.syncSchedule() },
-                        // Ф4: «Проверить соединение» показывает спиннер и ✓/✗ по состоянию VM
+
                         isSyncing = uiState.isSyncing,
                         hasSyncError = uiState.hasSyncError,
                         onBack = { navController.popBackStack() },
@@ -496,19 +449,10 @@ fun MainScreen(
             }
         }
 
-        // V14: интерактивный туториал — затемнение с «дыркой» вокруг цели, демо-жест и
-        // ожидание повторения. Координаты цели — boundsInWindow, совпадают с этим Box.
         TutorialOverlay()
     }
 }
 
-/**
- * E4/шаг 6: одноразовый запрос автопрокрутки из виджета (EXTRA_SCROLL_TARGET).
- * Механика SavedStateHandle: аргумент route'а — только начальное значение, экран-потребитель
- * гасит запрос (onScrollToCurrentConsumed → handle["scroll"]=""), поэтому ни повторная
- * композиция, ни restoreState при возврате на таб повторно не скроллят. Тёплый повторный
- * тап виджета MainActivity пишет напрямую в handle той же записи — StateFlow эмитит снова.
- */
 @Composable
 private fun rememberScrollRequest(entry: NavBackStackEntry): String {
     val argScroll = entry.arguments?.getString(ARG_SCROLL).orEmpty()

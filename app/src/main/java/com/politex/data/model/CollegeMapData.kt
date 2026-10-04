@@ -19,10 +19,7 @@ data class MapRoom(
     val y: Float,
     val w: Float,
     val h: Float,
-    /**
-     * W40a: точка двери комнаты [x, y] из разметки заказчика (null — дверь не размечена).
-     * Маршрут стартует/финишрует от двери (центр — только для отрисовки начала линии).
-     */
+
     val door: MapPoint? = null,
 )
 
@@ -62,18 +59,9 @@ data class MapEntrance(
     val kind: String,
     val dir: Float,
     val title: String,
-    /**
-     * Для лестниц (kind="stairs"): пригодна ли для маршрута. Заказчик дал точный список
-     * пригодных лестниц (1эт 131/115/136/147, 2эт 241/238/230, 3эт 335/332/301/317, 4эт 401);
-     * остальные — аварийные, маршруты по ним не строим. Для входов (kind="main") всегда true.
-     */
+
     val usable: Boolean = true,
-    /**
-     * W39a: ручные связи лестницы с лестницами на ДРУГИХ этажах (id entrances, разметка
-     * заказчика). Сопряжение стволов по links — основной механизм; близость координат —
-     * фолбэк для старых карт без links. План «3-4» несёт 3-й и 4-й этажи, поэтому links
-     * могут указывать и на лестницу того же floorId (площадка 4-го этажа у 335).
-     */
+
     val links: List<String> = emptyList(),
 )
 
@@ -181,9 +169,9 @@ class CollegeMapData(
                                 kind = o.optString("kind", "backup").ifBlank { "backup" },
                                 dir = o.optDouble("dir", 0.0).toFloat(),
                                 title = o.optString("title"),
-                                // Лестница без явного usable считается пригодной (обратная совместимость)
+
                                 usable = o.optBoolean("usable", true),
-                                // W39a: ручные связи лестниц между этажами (id entrances)
+
                                 links = o.optJSONArray("links").mapStrings(),
                             )
                         },

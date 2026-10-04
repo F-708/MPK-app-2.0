@@ -9,24 +9,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
-/**
- * Y1: честность формулировок статуса синка по сценариям.
- *  - probe 404 / чужой документ (date-mismatch) → «Расписание ещё не опубликовано»;
- *  - документ принят, но группы пользователя нет → «опубликовано, но вашей группы … нет»;
- *  - ok → «обновлено / загружено N уроков».
- *
- * `documentFound` в [resolveSyncOutcome] — это «принят документ, ПРОШЕДШИЙ date-валидацию»
- * (`MpkScheduleParser.documentMatchesDate`), поэтому чужой/просроченный документ даёт
- * documentFound=false → NotFound, а не ложное «найдено».
- */
 class SyncOutcomeStatusTest {
     private val date = "06.10.2026"
     private val group = "41О"
 
     private fun liveDocBytes(): ByteArray =
         javaClass.getResourceAsStream("/fixtures/05-10-2026-raspisanie-uchashhihsya.doc")!!.readBytes()
-
-    // --- сигналы → исход ---
 
     @Test
     fun `probe 404 - ни документа ни уроков - NotFound`() {
@@ -38,8 +26,7 @@ class SyncOutcomeStatusTest {
 
     @Test
     fun `чужой документ date-mismatch - не принимается - NotFound`() {
-        // Реальный документ 05.10 НЕ проходит date-валидацию для 06.10 → водопад его
-        // отклоняет → documentFound=false → «не опубликовано», а не «найдено».
+
         assertFalse(MpkScheduleParser.documentMatchesDate(liveDocBytes(), date))
         assertEquals(
             SyncOutcome.NotFound,
@@ -62,8 +49,6 @@ class SyncOutcomeStatusTest {
         assertEquals(5, outcome.count)
     }
 
-    // --- строки статуса (diagnosticInfo / empty-state) ---
-
     @Test
     fun `статус NotFound - ещё не опубликовано`() {
         assertEquals("Расписание ещё не опубликовано", statusMessageFor(SyncOutcome.NotFound))
@@ -83,8 +68,6 @@ class SyncOutcomeStatusTest {
         assertEquals("Расписание загружено (1 урок)", statusMessageFor(SyncOutcome.Ok(1)))
         assertEquals("Расписание загружено (3 урока)", statusMessageFor(SyncOutcome.Ok(3)))
     }
-
-    // --- строки тоста (AppViewModel) ---
 
     @Test
     fun `тост Ok - обновлено N уроков`() {

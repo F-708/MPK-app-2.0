@@ -17,14 +17,13 @@ class RouteStartResolverTest {
         dayOfWeek = 1,
         lessonNumber = n,
         timeStart = start,
-        timeEnd = start, // для «начался ли» важен только старт
+        timeEnd = start,
         subjectRaw = "Математика",
         roomFirst = room,
         teacherFirst = "",
         roomSecond = room2,
     )
 
-    // Пн: 1-й 08:30, 2-й 09:25, 3-й 10:35 (реальные звоны колледжа)
     private val lessons =
         listOf(
             lesson(1, "08:30", "118"),
@@ -73,8 +72,6 @@ class RouteStartResolverTest {
         val noRoom = listOf(lesson(1, "08:30", " "))
         assertNull(RouteStartResolver.previousRoomNow(noRoom, at(9, 0)))
     }
-
-    // ---------- V21: startForLesson — маршрут всегда, для любого дня ----------
 
     @Test
     fun `V21 сегодня, ничего не началось — пустая строка (от главного входа)`() {

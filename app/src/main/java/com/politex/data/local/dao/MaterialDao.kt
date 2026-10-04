@@ -12,17 +12,8 @@ import com.politex.data.local.entity.MaterialFolderEntity
 import com.politex.data.local.entity.MaterialItemEntity
 import kotlinx.coroutines.flow.Flow
 
-/**
- * M1/W11: DAO материальной базы. Только метаданные — байты файлов живут в filesDir
- * (util/MaterialImporter), поэтому `deleteItem` ОБЯЗАТЕЛЬНО сопровождается удалением файла
- * на стороне вызывающего (UI делает это в одном coroutine-блоке).
- *
- * W11: материал принадлежит ПРЕДМЕТУ (`subjectName`), архив — флаг `archived`.
- * Запросы по папкам помечены @Deprecated и UI больше не вызывает; таблица остаётся в БД.
- */
 @Dao
 interface MaterialDao {
-    // ── Папки (W11: выпилены из UI, оставлены для совместимости таблицы) ─────────
 
     @Deprecated("W11: папки удалены из UI")
     @Query("SELECT * FROM material_folders ORDER BY sortOrder ASC, id ASC")
@@ -56,12 +47,9 @@ interface MaterialDao {
     @Query("DELETE FROM material_folders WHERE id = :folderId")
     suspend fun deleteFolderById(folderId: Long)
 
-    // ── Материалы ────────────────────────────────────────────────────────────
-
     @Query("SELECT * FROM material_items ORDER BY sortOrder ASC, id ASC")
     fun getAllItems(): Flow<List<MaterialItemEntity>>
 
-    /** W11: материалы предмета (или Архива, если archived = true). */
     @Query(
         "SELECT * FROM material_items WHERE subjectName = :subject AND archived = :archived " +
             "ORDER BY sortOrder ASC, id ASC",
@@ -74,11 +62,9 @@ interface MaterialDao {
     @Query("SELECT * FROM material_items WHERE id = :itemId")
     suspend fun getItemById(itemId: Long): MaterialItemEntity?
 
-    /** W11: следующий порядок в предмете (не-архивные материалы предмета). */
     @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM material_items WHERE subjectName = :subject AND archived = 0")
     suspend fun nextItemSortOrder(subject: String): Int
 
-    /** W11: следующий порядок в Архиве (архивные материалы всех предметов). */
     @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM material_items WHERE archived = 1")
     suspend fun nextArchiveSortOrder(): Int
 
@@ -99,7 +85,6 @@ interface MaterialDao {
         sortOrder: Int,
     )
 
-    /** W11: перенос в Архив и обратно. sortOrder задаётся вызывающим (конец списка приёмника). */
     @Query("UPDATE material_items SET archived = :archived, sortOrder = :sortOrder WHERE id = :itemId")
     suspend fun setArchived(
         itemId: Long,
@@ -125,14 +110,11 @@ interface MaterialDao {
         deg: Int,
     )
 
-    /** M4: порядок страниц набора изображений — список путей обратно в `uriPath`. */
     @Query("UPDATE material_items SET uriPath = :uriPath WHERE id = :itemId")
     suspend fun setImagePaths(
         itemId: Long,
         uriPath: String,
     )
-
-    // ── Переупорядочивание ───────────────────────────────────────────────────
 
     @Query("UPDATE material_items SET sortOrder = :sortOrder WHERE id = :itemId")
     suspend fun updateSortOrder(
@@ -140,15 +122,6 @@ interface MaterialDao {
         sortOrder: Int,
     )
 
-    /**
-     * M4: перестановка соседних материалов (кнопки-стрелки в строке материала).
-     * W11: sortOrder уникален внутри (предмет + не-архив) или Архива — вставка всегда берёт
-     * MAX+1, поэтому обмен значениями корректен. Транзакция — иначе читатель увидит две
-     * строки с одним порядком.
-     *
-     * ponytail: обмен двух соседей вместо drag&drop-переноса на произвольную позицию;
-     * если понадобится drag — тот же sortOrder, только пересчёт всего хвоста списка.
-     */
     @Transaction
     suspend fun swapSortOrder(
         itemIdA: Long,
@@ -160,8 +133,6 @@ interface MaterialDao {
         updateSortOrder(itemIdA, b.sortOrder)
         updateSortOrder(itemIdB, a.sortOrder)
     }
-
-    // ── Закладки ─────────────────────────────────────────────────────────────
 
     @Query("SELECT * FROM material_bookmarks WHERE itemId = :itemId ORDER BY page ASC, id ASC")
     suspend fun getBookmarksForItem(itemId: Long): List<MaterialBookmarkEntity>
@@ -175,11 +146,8 @@ interface MaterialDao {
     @Query("DELETE FROM material_bookmarks WHERE id = :bookmarkId")
     suspend fun deleteBookmarkById(bookmarkId: Long)
 
-    /** Закладки удаляются вместе с материалом — иначе остаются строки-сироты. */
     @Query("DELETE FROM material_bookmarks WHERE itemId = :itemId")
     suspend fun deleteBookmarksForItem(itemId: Long)
-
-    // ===== V9: аннотации (рисование поверх страниц) =====
 
     @Query("SELECT * FROM material_annotations WHERE itemId = :itemId")
     fun getAnnotationsFlow(itemId: Long): Flow<List<MaterialAnnotationEntity>>
@@ -187,7 +155,6 @@ interface MaterialDao {
     @Query("SELECT * FROM material_annotations WHERE itemId = :itemId AND pageIndex = :pageIndex")
     suspend fun getAnnotation(itemId: Long, pageIndex: Int): MaterialAnnotationEntity?
 
-    /** REPLACE по unique-индексу (itemId, pageIndex) — частичное сохранение страницы. */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAnnotation(annotation: MaterialAnnotationEntity)
 
@@ -197,16 +164,9 @@ interface MaterialDao {
     @Query("DELETE FROM material_annotations WHERE itemId = :itemId")
     suspend fun deleteAnnotationsForItem(itemId: Long)
 
-    // ===== V10: правка текста материала =====
-
-    /** Правка живёт в БД (textContent) + флаг textEdited; файл на диске не трогаем. */
     @Query("UPDATE material_items SET textContent = :text, textEdited = 1 WHERE id = :id")
     suspend fun updateTextContent(id: Long, text: String)
 
-    /**
-     * M2: удаление материала целиком — записи + закладки + аннотации одной транзакцией.
-     * Файл стирает вызывающий (у DAO нет Context).
-     */
     @Transaction
     suspend fun deleteItemWithBookmarks(itemId: Long) {
         deleteBookmarksForItem(itemId)

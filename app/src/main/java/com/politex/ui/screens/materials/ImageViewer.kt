@@ -65,32 +65,6 @@ import java.io.File
 import kotlin.math.max
 import kotlin.math.min
 
-/**
- * M4: просмотрщик набора изображений — HorizontalPager + Coil AsyncImage (обе зависимости
- * уже в проекте), зум/пан (1…4×), поворот на 90° кнопкой.
- *
- * ПОВОРОТ делается `graphicsLayer { rotationZ }` плюс вписывающий масштаб min(w/h, h/w) при
- * повороте на 90/270: без него повёрнутое полотно вылезает за границы бокса и обрезается.
- * (Coil-трансформацией не вышло — в coil-base 2.7 есть только CircleCrop и RoundedCorners.)
- *
- * `rotationDeg` хранится в строке материала и применяется ко ВСЕМ страницам набора. Так сделано
- * осознанно: реалистичный сценарий — преподаватель скинул 12 фото доски, снятых одним и тем же
- * «боком», и крутить каждое отдельно смысла нет. Листание поворот не сбрасывает (состояние живёт
- * вне страницы), а вот зум/пан при смене страницы обнуляются — рассматривали одну страницу,
- * следующую хотим видеть целиком.
- *
- * ponytail: per-image поворот потребовал бы отдельной таблицы/JSON-колонки на страницу;
- * добавить, если наборы окажутся разноориентированными.
- *
- * V8 (свайп): detectTransformGestures заменён на awaitEachGesture — прежний жест потреблял
- * ЛЮБОЙ одиночный свайп и pager было не листнуть. Теперь handled = zoom>1.05f (рассматриваем —
- * одиночный палец двигает картинку) ИЛИ пальцев ≥2; при zoom==1 одиночный свайп НЕ потребляем
- * и его забирает HorizontalPager. На границе пана события тоже не потребляем — листание доступно.
- *
- * V9 (рисование): AnnotationLayer внутри graphicsLayer страницы — штрихи в нормализованных
- * координатах 0..1 переживают зум/поворот и листание; сохранение — как в PdfViewer (дебаунс
- * 500мс + синхронный flush перед выходом).
- */
 @Composable
 fun MaterialImageViewer(
     item: MaterialItemEntity,
@@ -106,7 +80,7 @@ fun MaterialImageViewer(
         Column(modifier = modifier.fillMaxSize().background(ColorSurfaceHighlight)) {
             MaterialViewerTopBar(title = item.title, testTag = "image_top_bar", onBack = onBack)
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                // N12: не тупик — выходы «Назад» и «Удалить запись» (запись есть, файлы пропали)
+
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(24.dp),
@@ -143,17 +117,15 @@ fun MaterialImageViewer(
     var pan by remember(item.id) { mutableStateOf(Offset.Zero) }
     val pagerState = rememberPagerState(pageCount = { paths.size })
 
-    // Листнули страницу — рассматривание предыдущей не переносим на следующую.
     LaunchedEffect(pagerState.currentPage) {
         zoom = 1f
         pan = Offset.Zero
     }
 
-    // ── V9: рисование (тот же механизм, что в PdfViewer) ─────────────────────
     var drawMode by remember { mutableStateOf(false) }
     var drawColor by remember { mutableIntStateOf(ANNOTATION_COLORS.first()) }
     var drawWidth by remember { mutableFloatStateOf(4f) }
-    // X5: ластик — касание удаляет ЦЕЛЫЙ штрих (hit-test в AnnotationOverlay)
+
     var eraserActive by remember { mutableStateOf(false) }
 
     val annotations by dao.getAnnotationsFlow(item.id).collectAsState(initial = emptyList())
@@ -191,9 +163,7 @@ fun MaterialImageViewer(
     }
 
     val currentPage = pagerState.currentPage
-    // QA#14: flush БЕЗ runBlocking на main — upsert уходит корутиной на IO, выход сразу
-    // после дописи. Флаг flushing держит BackHandler включённым, пока идёт flush:
-    // второй «назад» не pop'нет композицию (и не отменит scope) до записи штрихов.
+
     var flushing by remember { mutableStateOf(false) }
     val flushAndBack: () -> Unit = {
         if (!flushing) {
@@ -217,7 +187,7 @@ fun MaterialImageViewer(
             testTag = "image_top_bar",
             onBack = flushAndBack,
         ) {
-            // V9: карандаш ПЕРЕД кнопкой поворота
+
             ViewerAction(
                 icon = Icons.Default.Edit,
                 description = "Рисование",
@@ -258,7 +228,6 @@ fun MaterialImageViewer(
             }
         }
 
-        // V9: саб-тулбар рисования — под хедером, пока активен режим
         if (drawMode) {
             AnnotationToolbar(
                 color = drawColor,
@@ -302,12 +271,7 @@ fun MaterialImageViewer(
                 val boxW = with(density) { maxWidth.toPx() }
                 val boxH = with(density) { maxHeight.toPx() }
                 var currentStroke by remember(page) { mutableStateOf<Stroke?>(null) }
-                // M4: поворот через graphicsLayer + вписывающий масштаб.
-                //
-                // Просто `rotationZ` крутит уже свёрстанное полотно: портретный кадр в альбомном
-                // боксе после поворота на 90° вылезает за границы и обрезается. Поэтому при
-                // повороте на 90/270 дополнительно умножаем масштаб на min(w/h, h/w) — повёрнутая
-                // картинка гарантированно влезает в бокс.
+
                 val fit =
                     if (rotation % 180 != 0 && boxW > 0f && boxH > 0f) {
                         min(boxW / boxH, boxH / boxW)
@@ -319,8 +283,7 @@ fun MaterialImageViewer(
                     Modifier
                         .fillMaxSize()
                         .pointerInput(page) {
-                            // V8: одиночный палец при zoom==1 НЕ потребляем — pager листает набор;
-                            // при zoom>1.05 или ≥2 пальцев жест наш (пан/зум картинки).
+
                             awaitEachGesture {
                                 awaitFirstDown(requireUnconsumed = false)
                                 var handled = zoom > 1.05f
@@ -338,8 +301,7 @@ fun MaterialImageViewer(
                                     val newY = (pan.y + panChange.y).coerceIn(-maxY, maxY)
                                     val movedY = newY != pan.y
                                     val zoomed = newZoom > 1.01f
-                                    // Границы пана: не двигаем картинку — не потребляем,
-                                    // свайп утекает в pager; горизонталь при зуме — всегда наша.
+
                                     if (zooming || movedY || (zoomed && panChange.x != 0f)) {
                                         event.changes.forEach { if (it.positionChanged()) it.consume() }
                                         if (newZoom < 1.05f) {
@@ -366,8 +328,7 @@ fun MaterialImageViewer(
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
                     )
-                    // V9: слой рисования внутри graphicsLayer — штрихи масштабируются/крутятся
-                    // вместе со страницей; pageIndex = страница pager'а.
+
                     AnnotationLayer(
                         strokes = pageStrokes[page].orEmpty(),
                         current = currentStroke,
@@ -382,9 +343,7 @@ fun MaterialImageViewer(
                         eraserActive = eraserActive,
                         transformKey = rotation,
                         onEraseAt = { p ->
-                            // X5: hit-test в нормализованных координатах бокса страницы
-                            // (координаты жеста приходят уже в повёрнутом/нескалированном
-                            // пространстве слоя — там же, где живут штрихи).
+
                             if (boxW > 1f && boxH > 1f) {
                                 val aspect = boxH / boxW
                                 val current = pageStrokes[page].orEmpty()
@@ -400,9 +359,7 @@ fun MaterialImageViewer(
                             }
                         },
                         transformGestures = { panChange, zoomChange ->
-                            // X32: слой внутри graphicsLayer (rotation + scale=zoom*fit) —
-                            // локальный panChange пальца переводим в экранный сдвиг:
-                            // повернуть на rotation и умножить на суммарный масштаб.
+
                             val scale = zoom * fit
                             val rad = Math.toRadians(rotation.toDouble())
                             val cs = kotlin.math.cos(rad).toFloat()
@@ -433,7 +390,6 @@ fun MaterialImageViewer(
             }
         }
 
-        // Двойной тап не используем: сброс зума — кнопкой, она заметнее жеста
         if (zoom > 1.01f) {
             Surface(
                 shape =

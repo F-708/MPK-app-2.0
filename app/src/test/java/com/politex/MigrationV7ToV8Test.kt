@@ -11,16 +11,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * Миграция v7 → v8 (V9 аннотации + V10 textEdited + V18 веса/округление).
- * Образец: MigrationV6ToV7Test — реальная база v7 на диске, открытие боевым
- * getInstance, сброс статического INSTANCE рефлекшеном.
- */
 @RunWith(RobolectricTestRunner::class)
 class MigrationV7ToV8Test {
     private val dbName = com.politex.data.local.MpkDatabase.DATABASE_NAME
 
-    /** Схема v7: только то, что миграция v8 расширяет + минимум для открытия. */
     private fun createV7Database(context: Context) {
         context.deleteDatabase(dbName)
         val helper =
@@ -147,17 +141,15 @@ class MigrationV7ToV8Test {
 
         val db = com.politex.data.local.MpkDatabase.getInstance(context)
 
-        // Старые данные на месте
         val tasks = kotlinx.coroutines.runBlocking { db.taskDao().getAllTasks() }
         assertEquals("ДЗ переживает миграцию", 1, tasks.size)
         val config = kotlinx.coroutines.runBlocking { db.gradeDao().getConfig("ТОЭ") }
         assertEquals("priorityJson сохранён", "[\"REGULAR\",\"PRACTICAL\"]", config?.priorityJson)
-        // Новые колонки grade_config с дефолтами
+
         assertEquals("roundingMode дефолт", "0.1", config?.roundingMode)
         assertEquals("weightsJson дефолт", "", config?.weightsJson)
         assertEquals("roundUp дефолт", false, config?.roundUp)
 
-        // material_items.textEdited: старая строка = 0, правка пишется флагом 1
         kotlinx.coroutines.runBlocking { db.materialDao().updateTextContent(1, "новый текст") }
         db.openHelper.readableDatabase
             .query("SELECT textEdited, textContent FROM material_items WHERE id = 1")
@@ -167,7 +159,6 @@ class MigrationV7ToV8Test {
                 assertEquals("новый текст", c.getString(1))
             }
 
-        // material_annotations: таблица + unique-индекс работают (upsert REPLACE по паре)
         kotlinx.coroutines.runBlocking {
             db.materialDao().upsertAnnotation(
                 com.politex.data.local.entity.MaterialAnnotationEntity(

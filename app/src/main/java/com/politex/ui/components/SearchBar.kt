@@ -35,12 +35,6 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.Tokens
 
-/**
- * X14: единое поле поиска дизайн-системы «Мой Политех» — скругление 2dp,
- * фон ColorSurfaceVariantLight, высота Tokens.SearchHeight, иконка поиска слева
- * и крестик-очистка (хитбокс Tokens.IconHit) при непустом значении.
- * testTag вешается на само поле ввода — performTextInput работает напрямую.
- */
 @Composable
 fun SearchBar(
     value: String,

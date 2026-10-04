@@ -156,7 +156,7 @@ class TeacherInsightsTest {
         val ti = insights(lessons)
         assertTrue(ti.isActive("Мешалкина Ирина Владимировна"))
         assertEquals(1, ti.lessonCount("Мешалкина Ирина Владимировна"))
-        // QA#15: lastDate теперь выводится из max epoch в каноническом dd.MM.yyyy
+
         assertEquals("15.09.2026", ti.lastSeenDate("Мешалкина Ирина Владимировна"))
     }
 
@@ -167,7 +167,7 @@ class TeacherInsightsTest {
                 lesson(teacherFirst = "Зыбин О.Л.", date = "30.09.2026"),
                 lesson(teacherFirst = "Зыбин О.Л.", date = "01.10.2026"),
             )
-        // лексикографически «30.09.2026» > «01.10.2026» — старый код брал сентябрь
+
         assertEquals("01.10.2026", insights(lessons).lastSeenDate("Зыбин Олег Львович"))
     }
 
@@ -188,8 +188,6 @@ class TeacherInsightsTest {
         assertNotNull(ti.rooms("Купрейчик Наталья Андреевна"))
     }
 
-    // ===== W28: свежесть шильдика «Ведёт у вас» =====
-
     @Test
     fun `W28 недельный шаблон держит шильдик без дат`() {
         val ti = TeacherInsights(base, listOf(lesson(teacherFirst = "Зыбин О.Л.", date = "")), nowMillis = 1_800_000_000_000L)
@@ -198,7 +196,7 @@ class TeacherInsightsTest {
 
     @Test
     fun `W28 датированный урок в пределах порога держит шильдик`() {
-        val now = 1_800_000_000_000L // ~2027-01-15
+        val now = 1_800_000_000_000L
         val ti = TeacherInsights(base, listOf(lesson(teacherFirst = "Зыбин О.Л.", date = "10.01.2027")), nowMillis = now)
         assertTrue("дата 5 дней назад — активен", ti.isActive("Зыбин Олег Львович"))
     }

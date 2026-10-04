@@ -13,14 +13,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.Calendar
 
-/**
- * SUI-01: «сегодня» с ключом календарного дня.
- *
- * `remember { Calendar.getInstance() }` вычислялся один раз на время жизни композиции:
- * приложение, пережившее полночь в фоне, утром показывало вчерашний день под заголовком
- * «СЕГОДНЯ». Ключ — номер дня [dayKeyOf], он пересчитывается на каждом ON_RESUME, поэтому
- * после полуночи и после возврата из фона «сегодня» обновляется, а внутри сессии — стабилен.
- */
 @Composable
 fun rememberToday(): Calendar {
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -36,20 +28,10 @@ fun rememberToday(): Calendar {
     return remember(dayKey) { Calendar.getInstance() }
 }
 
-/**
- * SUI-01: однозначный номер календарного дня (год + день года). Одинаков для любого времени
- * суток одного дня и различается у соседних дней — ровно то, что нужно ключом remember.
- * Чистая функция ради юнит-теста.
- */
 internal fun dayKeyOf(cal: Calendar): Long = cal.get(Calendar.YEAR) * 1000L + cal.get(Calendar.DAY_OF_YEAR)
 
-/**
- * SUI-03: минуты от начала суток. Ключ поминутного тика — с ним «текущая пара» и
- * «уроки кончились» пересчитываются на границе урока без переоткрытия экрана.
- */
 internal fun minutesOfDay(cal: Calendar = Calendar.getInstance()): Int = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
 
-/** SUI-03: тикающая «текущая минута» (раз в минуту), ключ для remember «идущего урока». */
 @Composable
 fun rememberNowMinutes(): Int {
     var nowMinutes by remember { mutableIntStateOf(minutesOfDay()) }

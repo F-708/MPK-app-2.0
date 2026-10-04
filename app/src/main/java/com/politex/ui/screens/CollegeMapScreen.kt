@@ -128,30 +128,20 @@ private val DEAD_COLOR = Color(0xFFC0392B)
 fun CollegeMapScreen(
     initialRoom: String?,
     onBack: () -> Unit,
-    // Т6: переход к карточке преподавателя из расписания кабинета
+
     onOpenTeacher: (String) -> Unit = { },
-    // R1: точка входа маршрута из расписания/виджета. НЕ null (включая "") = запрос
-    // пришёл «показать маршрут»: "" — старт от главного входа, "214" — старт от кабинета.
-    // Обычный вход с карты/меню — null, маршрута нет.
+
     fromRoom: String? = null,
-    // R1: явный запрос маршрута (виджет NowNext). E4: приходит nav-аргументом route=
-    // (buildMapRoute) вместо одноразового флага AppUiState.showRouteOnMap.
+
     showRoute: Boolean = false,
-    // E4: экран — запись backstack'а Navigation-Compose. Выбранный кабинет живёт в
-    // rememberSaveable записи: переход в карточку преподавателя и «назад» восстанавливают
-    // его же (Б8/N15 без подъёма onRoomChanged в родителя — аргумент room стабилен в записи).
+
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val mapData = remember { CollegeMapData.load(context) }
 
-    // Т5/Б3/E1: репозиторий — единый из AppGraph (каталог + teacherLessonDao + общий кэш),
-    // вместо локального создания без teacherLessonDao (офлайн-преподаватели не работали)
     val scheduleRepository = remember { com.politex.AppGraph.scheduleRepository }
-    // MAP-05: ключ по номеру дня — если экран пережил полночь, следующая recomposition
-    // перечитает «сегодня» (раньше remember{Calendar.getInstance()} навсегда застревал на дне
-    // открытия экрана). Calendar вместо java.time — minSdk 24 без desugaring.
-    // ponytail: перечёт по recomposition, не по таймеру; ON_RESUME-обсервер — если карта будет висеть через полночь
+
     val dayKey = Calendar.getInstance().let { it.get(Calendar.YEAR) * 1000 + it.get(Calendar.DAY_OF_YEAR) }
     val today = remember(dayKey) { Calendar.getInstance() }
     val todayDateString =
@@ -170,23 +160,16 @@ fun CollegeMapScreen(
     var query by rememberSaveable { mutableStateOf(initialRoom?.trim().orEmpty()) }
 
     var searchFailed by rememberSaveable { mutableStateOf(false) }
-    // MAP-01: target — ЕДИНСТВЕННЫЙ источник истины на экране. initialRoom читаем только
-    // в инициализаторе. E4: rememberSaveable — состояние выбранного кабинета/этажа живёт
-    // в saved-state записи backstack'а: map → teacher → back восстанавливает тот же кабинет
-    // (приёмка N15) без эха onRoomChanged родителю.
+
     var target by rememberSaveable { mutableStateOf(initialRoom?.trim().orEmpty()) }
     var floorId by rememberSaveable {
         mutableStateOf(CollegeMap.floorForRoom(initialRoom.orEmpty())?.id ?: "1")
     }
 
-    // Т6: расписание выбранного кабинета
     var roomScheduleFor by remember { mutableStateOf<String?>(null) }
-    // Б8: диалог кабинета показывает сегодня или завтра — по умолчанию сегодня
+
     var roomDialogTomorrow by remember { mutableStateOf(false) }
-    // O3b: в БД лежат уроки только выбранной группы, поэтому расписание кабинета по всем
-    // группам появится лишь после догрузки дня целиком. Делаем это один раз на сессию
-    // экрана, не блокируя открытие диалога: сначала показываем что есть, потом дополняем.
-    // Б8: догрузка дня по всем группам — отдельно для сегодня и для завтра
+
     var syncedToday by remember { mutableStateOf(false) }
     var syncedTomorrow by remember { mutableStateOf(false) }
     var roomReloadTick by remember { mutableIntStateOf(0) }
@@ -208,23 +191,19 @@ fun CollegeMapScreen(
             Dow.of(tomorrowCal)
         }
 
-    // Активная дата диалога: завтра — когда переключатель в положении «Завтра»
     val dialogDateString = if (roomDialogTomorrow) tomorrowDateString else todayDateString
     val dialogDow = if (roomDialogTomorrow) tomorrowDow else todayDow
 
     LaunchedEffect(roomScheduleFor, roomDialogTomorrow, syncedToday, syncedTomorrow) {
-        // W6: гейт каталога (catalogCodes из поиска групп удалён) — заменён на проверку
-        // самого каталога репозитория: пустой = синк кабинета не имеет смысла
+
         if (roomScheduleFor == null || scheduleRepository.catalog().isEmpty()) {
             return@LaunchedEffect
         }
         val alreadySynced = if (roomDialogTomorrow) syncedTomorrow else syncedToday
         if (alreadySynced) return@LaunchedEffect
-        // Б3: force=true — кабинет открывают вручную, и пользователь ждёт ПОЛНОЕ
-        // расписание кабинета, а не «что успело попасть в базу». Если день уже разобран
-        // по большинству групп, сеть не понадобится.
+
         runCatching { scheduleRepository.syncDayAllGroupsCached(dialogDateString, dialogDow, force = true) }
-        roomReloadTick++ // перечитать Flow кабинета с догруженными группами
+        roomReloadTick++
         if (roomDialogTomorrow) syncedTomorrow = true else syncedToday = true
     }
 
@@ -239,7 +218,7 @@ fun CollegeMapScreen(
             scheduleRepository.getLessonsForRoomOnDate(room, dialogDateString, dialogDow)
         }.getOrNull()?.collect { value = it }
     }
-    // O3-b2: текущая минута тикает раз в минуту — метка «СЕЙЧАС» переезжает на новую пару без переоткрытия диалога
+
     var nowMinutes by remember {
         mutableStateOf(
             Calendar.getInstance().let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) },
@@ -254,7 +233,7 @@ fun CollegeMapScreen(
                     .let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) }
         }
     }
-    // «СЕЙЧАС» — только для сегодняшнего дня: у завтра идущего урока быть не может
+
     val roomScheduleCurrentLesson =
         remember(nowMinutes, dialogDow, roomDialogTomorrow) {
             if (roomDialogTomorrow) null else currentRoomLessonNumber(nowMinutes, dialogDow)
@@ -268,16 +247,6 @@ fun CollegeMapScreen(
         CollegeMap.floorForRoom(target)?.let { floorId = it.id }
     }
 
-    // R1: режим маршрута. Запрос «показать маршрут» приходит nav-аргументами (E4):
-    //  - route=true (виджет NowNext → MainActivity → buildMapRoute(showRoute=true));
-    //  - непустой/пустой from (!= null): тап по кабинету в расписании, "" = от главного входа.
-    // showRoute читается прямо из аргумента записи backstack'а (одноразовый VM-флаг удалён).
-    // W36: глобальный тогл «Маршруты по карте» (настройки): выкл = кнопки кабинетов
-    // открывают карту без построения пути (сам кабинет выбирается как раньше)
-    // V21/V24: перечитываем на ON_RESUME — remember{} без ключа застревал навсегда, и тогл
-    // из настроек применялся только к переоткрытой карте. routeActive — единственное
-    // choke-point авто-маршрутов (V24): route и всё производное гейтятся им; ручной
-    // RouteBuilder (V25) тоглом НЕ гейтится.
     var routesTick by remember { mutableIntStateOf(0) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -293,12 +262,10 @@ fun CollegeMapScreen(
             com.politex.widget.WidgetUpdateHelper.getPrefs(context)
                 .getBoolean("map_routes_enabled", true)
         }
-    // Y10: «Отменить маршрут» гасит АВТО-запрос (расписание/виджет) до переоткрытия экрана
+
     var autoCancelled by rememberSaveable { mutableStateOf(false) }
     val autoActive = routesEnabled && !autoCancelled && (showRoute || fromRoom != null)
 
-    // R1: мультиэтажный маршрут (CollegeRouteFinder на реальных данных). Ключи — только
-    // входы маршрута: пан/зум пересчёта не вызывают.
     val floors = remember(mapData) { CollegeMap.Floor.entries.associate { it.id to mapData.floor(it.id) } }
     val route =
         remember(autoActive, target, fromRoom, mapData, floors) {
@@ -317,34 +284,29 @@ fun CollegeMapScreen(
                 }
             }
         }
-    // V25/Y8: конструктор маршрута = ТОЛЬКО две точки (А и Б): панель builderActive, поля
-    // pairA/pairB, построенная пара — manualA/manualB (rememberSaveable записи backstack'а).
+
     var builderActive by rememberSaveable { mutableStateOf(false) }
     var pairA by rememberSaveable { mutableStateOf("") }
     var pairB by rememberSaveable { mutableStateOf("") }
     var manualA by rememberSaveable { mutableStateOf<String?>(null) }
     var manualB by rememberSaveable { mutableStateOf<String?>(null) }
-    // 6.2: глобальный режим конструктора — MainScreen прячет нижнюю навигацию, пока активен
+
     DisposableEffect(builderActive) {
         RouteBuilderMode.active = builderActive
         onDispose { RouteBuilderMode.active = false }
     }
-    // Кэш маршрутов пар: Дейкстра на пару считается один раз
+
     val routeCache = remember { HashMap<Pair<String, String>, CollegeRouteFinder.MultiFloorRoute?>() }
 
-    // Y8: ручной маршрут А→Б через тот же кэш; null — пара не задана
     val manualRoute =
         remember(manualA, manualB, mapData, floors, routeCache) {
             if (manualA == null || manualB == null) null else cachedRoute(manualA!!, manualB!!, mapData, floors, routeCache)
         }
-    // Y10: маршрут активен — авто (расписание/виджет) ИЛИ построен в конструкторе
+
     val routeActive = autoActive || manualA != null
-    // Единый активный маршрут: ручной замещает авто
+
     val activeRoute = manualRoute ?: route
 
-    // W39c/Y7: полилинии маршрута на ТЕКУЩЕМ этаже — ЕДИНЫЙ конвейер routePolyline
-    // (ортогонализация в plan-px без диагоналей → обход кабинетов → чистка крюков).
-    // Полилиний может быть несколько: сегмент «3-4» рвётся на переходе по лестнице.
     val routePoints =
         remember(activeRoute, floorId, floor) {
             activeRoute
@@ -353,20 +315,19 @@ fun CollegeMapScreen(
                 ?.map { CollegeRouteFinder.routePolyline(it.points, floor) }
                 ?.takeIf { it.isNotEmpty() }
         }
-    // X36: сдвиг полос маршрута текущего этажа в экранных dp — laneOffsetDp по индексу
-    // полилинии (0, +6, −6, +12, …), чтобы смежные/встречные линии не слипались.
+
     val routeOffsetsDp =
         remember(routePoints) { routePoints?.mapIndexed { i, _ -> laneOffsetDp(i) } ?: emptyList() }
     val routeFinishHere =
         remember(activeRoute, floorId) { activeRoute?.floorPaths?.lastOrNull()?.floorId == floorId }
-    // Y8: межэтажный маршрут — ОДНА строка «через этажи …» поверх карты (этапы-чипы удалены)
+
     val routeBanner =
         remember(activeRoute) {
             val fps = activeRoute?.takeIf { it.crossesFloors }?.floorPaths ?: return@remember null
             val via = fps.map { CollegeMap.Floor.from(it.floorId).title }.distinct().drop(1)
             if (via.isEmpty()) null else "через ${via.joinToString(", ")}"
         }
-    // Сегменты маршрута по этажам (точки-кнопки переключения)
+
     val routeSegments =
         remember(activeRoute) { activeRoute?.takeIf { it.crossesFloors }?.floorPaths?.map { it.floorId } ?: emptyList() }
 
@@ -376,8 +337,7 @@ fun CollegeMapScreen(
             .fillMaxSize()
             .background(ColorBgMain),
     ) {
-        // 6.1: компактная строка «назад + поиск + НАЙТИ» вместо шапки с подзаголовком —
-        // освобождает вертикаль под карту.
+
         Row(
             modifier =
             Modifier
@@ -418,7 +378,7 @@ fun CollegeMapScreen(
                     .bouncyClickable {
                         val found = query.trim()
                         if (found.isNotBlank()) {
-                            manualA = null // Y8: новый кабинет замещает ручной маршрут
+                            manualA = null
                             manualB = null
                             target = found
                             searchFailed = findRoomEverywhere(mapData, found) == null
@@ -434,11 +394,7 @@ fun CollegeMapScreen(
                 )
             }
         }
-        // W6: поиск по ГРУППЕ убран с карты (для этого есть вкладка «Расписание
-        // группы» — заказчик). Освободившееся место отдаётся карте.
 
-        // Y10: маршрут активен → «ОТМЕНИТЬ МАРШРУТ» (нейтральная); иначе «ПРОЛОЖИТЬ МАРШРУТ»
-        // (открывает 2-точечный конструктор, Y8)
         Spacer(modifier = Modifier.height(6.dp))
         RouteActionButton(active = routeActive) {
             if (routeActive) {
@@ -467,10 +423,9 @@ fun CollegeMapScreen(
             floorId = floorId,
             floor = floor,
             targetRoom = targetRoom,
-            // O3-d/Y8: тап по кабинету — тот же путь, что ввод номера в поиск;
-            // в конструкторе тапы точки НЕ добавляют (конструктор = два поля ввода)
+
             onRoomTap = { room ->
-                manualA = null // Y8: новый кабинет замещает ручной маршрут
+                manualA = null
                 manualB = null
                 searchFailed = false
                 target = room.number
@@ -481,7 +436,7 @@ fun CollegeMapScreen(
             routeBanner = routeBanner,
             routeSegments = routeSegments,
             onSelectRouteSegment = { floorId = it },
-            // Y8: «Применить» убран — построил пара = маршрут активен; крестик закрывает конструктор
+
             showCancel = builderActive,
             onCancel = { builderActive = false },
             modifier =
@@ -512,7 +467,7 @@ fun CollegeMapScreen(
                             if (r == null) {
                                 Toast.makeText(context, "${rb.number} недоступен из ${if (a.isEmpty()) "главного входа" else a}", Toast.LENGTH_SHORT).show()
                             } else {
-                                // Y8: построил — маршрут активен сразу, без «Завершить»
+
                                 manualA = keyA
                                 manualB = rb.number
                                 builderActive = false
@@ -531,15 +486,14 @@ fun CollegeMapScreen(
         }
     }
 
-    // Т6: расписание кабинета на сегодня
     roomScheduleFor?.let { roomNumber ->
         RoomScheduleDialog(
             roomNumber = roomNumber,
-            // O3-b: в заголовке — сама дата и день недели (без версии APK из строкового ресурса)
+
             dateTitle = "$dialogDateString, ${roomDayTitle(dialogDow)}",
             lessons = filterRoomLessonsForDate(roomScheduleLessons, roomNumber, dialogDateString),
             currentLessonNumber = roomScheduleCurrentLesson,
-            // Б8: заказчик — «нужно посмотреть на сегодня, так и на завтра»
+
             tomorrowSelected = roomDialogTomorrow,
             onDayChange = { roomDialogTomorrow = it },
             onTeacherClick = onOpenTeacher,
@@ -624,7 +578,6 @@ private fun RoomPanel(
             }
         }
 
-        // Т6: подробнее — расписание кабинета на сегодня
         Surface(
             shape = RoundedCornerShape(2.dp),
             border = BorderStroke(1.dp, ColorBrandBlue),
@@ -675,8 +628,6 @@ internal fun findRoomEverywhere(
     number: String,
 ): MapRoom? = listOf("1", "2", "3-4").firstNotNullOfOrNull { mapData.floor(it).room(number) }
 
-// Y10: кнопка под поиском. Маршрут активен (авто ИЛИ построен) — «ОТМЕНИТЬ МАРШРУТ»
-// (нейтральная); не активен — «ПРОЛОЖИТЬ МАРШРУТ» (открывает 2-точечный конструктор, Y8).
 @Composable
 private fun RouteActionButton(
     active: Boolean,
@@ -703,7 +654,6 @@ private fun RouteActionButton(
     }
 }
 
-// День недели подписью — в заголовок диалога кабинета (dayOfWeek 1=Пн..7=Вс)
 private fun roomDayTitle(dayOfWeek: Int): String = when (dayOfWeek) {
     1 -> "понедельник"
     2 -> "вторник"
@@ -714,18 +664,10 @@ private fun roomDayTitle(dayOfWeek: Int): String = when (dayOfWeek) {
     else -> "воскресенье"
 }
 
-// O3-d: тап по карте. Координаты нормализованы (0..1, как MapRoom.x/y) — на экране их
-// получаем обратным преобразованием graphicsLayer: (screen - offset) / scale / размер картинки.
 private const val TAP_SLOP_PX = 24f
 
-// N11: запас панорамирования — по 25% размера вида с каждой стороны (~1.5× свободы),
-// чтобы крайние кабинеты не упирались в край экрана и их не закрывали иконки зума.
 private const val PAN_MARGIN = 0.25f
 
-/**
- * O3-d: кабинет под точкой тапа. Сначала точное попадание в прямоугольник, затем — ближайший
- * кабинет в радиусе допуска (тап пальцем редко попадает в мелкий прямоугольник).
- */
 fun hitTestRoom(
     floor: FloorMap,
     xNorm: Float,
@@ -746,22 +688,17 @@ fun hitTestRoom(
             yNorm >= t &&
             yNorm <= t + r.h + slop * 2f
     }
-    // точное попадание (если прямоугольников несколько — берём меньший, он «сверху»)
+
     rooms
         .filter { inside(it, 0f) }
         .minByOrNull { it.w * it.h }
         ?.let { return it }
-    // промах пальцем: ближайший кабинет в радиусе допуска
+
     return rooms
         .filter { inside(it, slopNorm) }
         .minByOrNull { r -> (xNorm - r.x) * (xNorm - r.x) + (yNorm - r.y) * (yNorm - r.y) }
 }
 
-/**
- * MAP-02: чистая функция hit-test тапа. Принимает ЦЕЛЕВЫЕ (покойные) значения зума/смещения,
- * а не анимируемые `.value`, — поэтому клик попадает даже во время зум-анимации. Нормализованные
- * координаты: (pos - offset) / scale / размер_картинки, как в обратном преобразовании graphicsLayer.
- */
 fun mapTapToRoom(
     pos: Offset,
     targetScale: Float,
@@ -778,7 +715,6 @@ fun mapTapToRoom(
     return hitTestRoom(floor, xNorm, yNorm, slop)
 }
 
-// Т5: где группа сейчас. isNow=false → следующая пара («к N уроку»)
 data class GroupRoomResult(
     val room: String,
     val lessonNumber: Int,
@@ -797,7 +733,6 @@ fun findGroupRoomNow(
             .sortedBy { it.lessonNumber }
     if (withRoom.isEmpty()) return null
 
-    // Текущий слот по звонкам (dayOfWeek — 1..7, как в ScheduleScreen)
     val slot =
         CollegeBellSchedule
             .getBellsForDay(dayOfWeek)
@@ -807,14 +742,13 @@ fun findGroupRoomNow(
     val current = slot?.let { s -> withRoom.firstOrNull { it.lessonNumber == s.lessonNumber } }
     if (current != null) {
         return GroupRoomResult(
-            // ponytail: подгруппу split-пары не определяем — берём roomFirst (потолок: не в 2 кабинетах сразу)
+
             room = current.roomFirst.ifBlank { current.roomSecond },
             lessonNumber = current.lessonNumber,
             isNow = true,
         )
     }
 
-    // Следующая пара: по звонкам, фолбэк — timeStart строки
     val endOfCurrent = slot?.endMinutes ?: currentMinutes
     val next =
         withRoom.firstOrNull { l ->
@@ -889,7 +823,7 @@ private fun SearchField(
                 )
             }
             if (value.isNotBlank()) {
-                // M6: крестик 18dp в зоне 48dp
+
                 Box(
                     modifier =
                     Modifier
@@ -909,8 +843,6 @@ private fun SearchField(
     }
 }
 
-// Т5: поиск по группе. Запрашивает сегодняшие пары, считает «где группа сейчас»
-// и открывает карту на этом кабинете; результат — либо кабинет, либо сообщение.
 @Composable
 private fun FloorRow(
     current: String,
@@ -958,18 +890,15 @@ private fun MapCanvas(
     floorId: String,
     floor: FloorMap,
     targetRoom: MapRoom?,
-    // O3-d: тап по кабинету = тот же выбор, что ввод в поиск
+
     onRoomTap: (MapRoom) -> Unit = {},
-    // R1: путь маршрута на ТЕКУЩЕМ этаже (null — этаж без пути), пульс точки финиша,
-    // плашка подъёма по лестнице и сегменты-этажи (точки-кнопки переключения).
-    // W39c: полилинии текущего этажа (сегмент «3-4» рвётся на переходе по лестнице)
+
     routePoints: List<List<MapPoint>>? = null,
     routeFinishHere: Boolean = false,
     routeBanner: String? = null,
     routeSegments: List<String> = emptyList(),
     onSelectRouteSegment: (String) -> Unit = {},
-    // X36: сдвиг каждой полилинии в экранных dp (laneOffsetDp — полосы не слипаются);
-    // Y8: крестик поверх карты закрывает конструктор («Применить» убран — построил = активен)
+
     routeOffsetsDp: List<Float> = emptyList(),
     showCancel: Boolean = false,
     onCancel: () -> Unit = {},
@@ -995,8 +924,6 @@ private fun MapCanvas(
         label = "пульс",
     )
 
-    // Y9: фаза «бегущих» стрелок: за цикл (STEP_PX / SPEED = 2 с) сетка сдвигается ровно на
-    // один шаг — постоянная СКОРОСТЬ в экранных px/сек по всей полилинии (одно общее смещение).
     val arrowPhase by rememberInfiniteTransition(label = "стрелки").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
@@ -1011,7 +938,7 @@ private fun MapCanvas(
     BoxWithConstraints(
         modifier =
         modifier
-            // N9: фон карты однороден с фоном вкладки (раньше Color(0xFFEDF2F7) отличался от ColorBgMain)
+
             .clipToBounds()
             .background(ColorBgMain),
     ) {
@@ -1020,8 +947,6 @@ private fun MapCanvas(
         val imgW = viewW
         val imgH = imgW / aspect
 
-        // MAP-03: свежие размеры — через State, чтобы детекторы жестов НЕ держали их в ключах
-        // pointerInput (иначе смена высоты при показе RoomPanel перезапускала детектор и тап терялся).
         val viewWState = rememberUpdatedState(viewW)
         val viewHState = rememberUpdatedState(viewH)
         val imgWState = rememberUpdatedState(imgW)
@@ -1047,9 +972,6 @@ private fun MapCanvas(
                 }
             }
 
-        // MAP-03/N11: читаем размеры через State — функции захватываются детекторами жестов,
-        // которые больше не перезапускаются при смене размера (значит замыкание должно быть свежим).
-        // N11: pannable-область расширена на margin с каждой стороны (~1.5× свободы).
         fun clampX(
             v: Float,
             s: Float,
@@ -1074,8 +996,6 @@ private fun MapCanvas(
 
         fun restZoom(): Float = (viewHState.value / imgHState.value * 0.72f).coerceIn(1f, 2.2f)
 
-        // X19: viewW/viewH НЕ в ключах зума — смена высоты карты (показ RoomPanel/панели
-        // конструктора) больше не перезапускает анимацию «к кабинету». Размеры читаем через State.
         LaunchedEffect(floorId, targetRoom?.id) {
             val vw = viewWState.value
             val vh = viewHState.value
@@ -1093,13 +1013,12 @@ private fun MapCanvas(
             val px = room.x * iw
             val py = room.y * ih
             val zoom = 2.6f
-            // N10: тап по кабинету приближает к нему и ОСТАЁТСЯ приближённым (убран отъезд обратно)
+
             scope.launch { scale.animateTo(zoom, tween(420, easing = LinearOutSlowInEasing)) }
             scope.launch { offsetX.animateTo(clampX(vw / 2f - px * zoom, zoom), tween(420, easing = LinearOutSlowInEasing)) }
             scope.launch { offsetY.animateTo(clampY(vh / 2f - py * zoom, zoom), tween(420, easing = LinearOutSlowInEasing)) }
         }
-        // X19: смена ТОЛЬКО размеров (панель показала/скрыла карту) — перезажать смещение,
-        // чтобы край плана не уехал за экран; без анимации (snapTo).
+
         LaunchedEffect(viewW, viewH) {
             offsetX.snapTo(clampX(offsetX.value, scale.value))
             offsetY.snapTo(clampY(offsetY.value, scale.value))
@@ -1109,14 +1028,10 @@ private fun MapCanvas(
             modifier =
             Modifier
                 .fillMaxSize()
-                // O3-d: тап рядом с жестами (не взамен) — иначе сломается зум/пан.
-                // detectTapGestures ждёт проигрыша соседних детекторов, поэтому пан/зум не страдают.
-                // MAP-03: viewW/viewH убраны из ключей — детектор НЕ перезапускается при показе
-                // RoomPanel (смена высоты), тап больше не теряется. Размеры читаем через State внутри.
+
                 .pointerInput(floorId) {
                     detectTapGestures { pos ->
-                        // MAP-02: hit-test по ЦЕЛЕВЫМ (покойным) значениям зума/смещения, а не
-                        // анимируемым `.value` — клик попадает даже во время зум-анимации.
+
                         mapTapToRoom(
                             pos = pos,
                             targetScale = scale.targetValue,
@@ -1176,8 +1091,7 @@ private fun MapCanvas(
                         minScreenPxPerDp = with(density) { 1.dp.toPx() },
                         baseFontPx = baseFontPx,
                     )
-                    // R1: маршрут поверх плана; толщины/размеры компенсируют зум (экранные).
-                    // W39c: полилиний может быть несколько (разрыв на лестнице внутри этажа 3-4)
+
                     val polylines = routePoints
                     if (!polylines.isNullOrEmpty()) {
                         drawRoutePath(
@@ -1196,8 +1110,6 @@ private fun MapCanvas(
             }
         }
 
-        // 6.9: «+»/«−» убраны — оставлен только «вписать в вид» (ZoomOutMap): щипок-зум
-        // работает, а кнопки съедали вертикаль у края карты.
         Column(
             modifier =
             Modifier
@@ -1215,8 +1127,6 @@ private fun MapCanvas(
             }
         }
 
-        // Y8: только «Отменить» (Close) — закрывает конструктор; «Применить» убран:
-        // построенная пара сразу делает маршрут активным. Видимые 32dp, зона 44dp (M2).
         if (showCancel) {
             Row(
                 modifier =
@@ -1234,8 +1144,6 @@ private fun MapCanvas(
             }
         }
 
-        // R1: межэтажный маршрут — плашка «Этаж N: подъем по лестнице у каб. X»
-        // и точки-кнопки сегментов (переключение этажа по сегментам пути)
         if (routeBanner != null || routeSegments.isNotEmpty()) {
             Column(
                 modifier =
@@ -1310,7 +1218,7 @@ private fun ZoomButton(
         border = BorderStroke(1.dp, ColorBorderLight),
         modifier =
         Modifier
-            // M2: зона 48dp, видимый квадрат 42dp — кнопки-«подушки» растут наружу
+
             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
             .bouncyClickable(onClick = onClick),
     ) {
@@ -1325,7 +1233,6 @@ private fun ZoomButton(
     }
 }
 
-/** 6.5: круглая кнопка действия поверх карты (видимая 32dp в touch-зоне 44dp, M2). */
 @Composable
 private fun MapRoundAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -1405,7 +1312,6 @@ private fun DrawScope.drawMap(
         )
     }
 
-    // Кабинеты: единый масштаб цифр в пределах этажа + белый ореол (читаемость поверх стен)
     val rawFits = HashMap<String, Float>()
     floor.rooms.forEach { r ->
         val layout = numberLayouts[r.id] ?: return@forEach
@@ -1427,8 +1333,6 @@ private fun DrawScope.drawMap(
     val sortedFits = rawFits.values.toFloatArray().also { it.sort() }
     val medianFit = if (sortedFits.isEmpty()) 1f else sortedFits[sortedFits.size / 2]
 
-    // C1: минимум читаемости цифры (в экранных px изображения). Ниже — номер не рисуем
-    // вовсе: лучше пусто, чем каша за рамкой. Раньше этот порог наоборот РАЗДУВАЛ цифру.
     val minNumberPx = minScreenPxPerDp * 10f
 
     floor.rooms.forEach { r ->
@@ -1436,9 +1340,6 @@ private fun DrawScope.drawMap(
         if (r.number.isBlank()) return@forEach
         val raw = rawFits[r.id] ?: return@forEach
 
-        // C1: единый размер по этажу, никогда не больше влезающего (raw).
-        // Раньше loFit = maxOf(median*0.70, minFit) мог превышать raw, и coerceIn
-        // принудительно раздувал цифру — она вылезала за рамку кабинета.
         val fit =
             roomNumberFit(
                 raw = raw,
@@ -1456,8 +1357,7 @@ private fun DrawScope.drawMap(
             scale(fit, fit, Offset(cx, cy))
         }) {
             val topLeft = Offset(cx - layout.size.width / 2f, cy - layout.size.height / 2f)
-            // O3-a: ореол тонкий (0.14 вместо 0.22) и совсем отключается у самых мелких цифр —
-            // иначе он съедает просветы между штрихами, и номер выглядит «жирным курсивом»
+
             if (layout.size.height * fit >= minNumberPx * 1.25f) {
                 drawText(
                     textLayoutResult = layout,
@@ -1475,21 +1375,6 @@ private fun DrawScope.drawMap(
     }
 }
 
-/**
- * C1: размер номера кабинета.
- *
- * Заказчик: цифры были разнокалиберные и вылезали за рамки кабинетов, а после первой
- * правки — пропали почти везде. Номер обязан быть ВИДЕН всегда: пустой кабинет хуже
- * мелкой цифры, поэтому null здесь только при нулевом запасе места.
- *
- * Правила:
- *  - [raw] — максимальный размер, при котором цифра ВЛЕЗАЕТ в кабинет (жёсткий потолок);
- *  - база — [median] (единый размер по этажу), но не больше [raw] — отсюда единообразие;
- *  - крупные кабинеты получают «немножечко больше» (до 115% медианы, всё ещё в пределах raw);
- *  - мелкие — ужимаются ровно до [raw], оставаясь видимыми;
- *  - [minReadable] — желаемый минимум, но он НИКОГДА не поднимает размер выше [raw]
- *    (иначе цифра вылезала бы за рамку — исходный баг).
- */
 internal fun roomNumberFit(
     raw: Float,
     median: Float,
@@ -1497,15 +1382,10 @@ internal fun roomNumberFit(
 ): Float? {
     if (raw <= 0f) return null
     val base = minOf(median * 1.15f, raw)
-    // Минимум читаемости поднимает мелкую цифру, но строго в пределах влезающего размера
+
     return minOf(maxOf(base, minReadable), raw)
 }
 
-/**
- * R1: старт маршрута без fromRoom — главный вход 1 этажа (entrance kind="main",
- * координаты 0.481/0.203). Псевдо-кабинет "100": CollegeMap.floorForRoom("100")
- * даёт этаж 1, как требует findMultiFloorRoute.
- */
 internal fun mainEntranceRoom(mapData: CollegeMapData): MapRoom? = mapData
     .floor(CollegeMap.Floor.FIRST.id)
     .entrances
@@ -1524,28 +1404,10 @@ internal fun mainEntranceRoom(mapData: CollegeMapData): MapRoom? = mapData
         )
     }
 
-/**
- * Y9: стрелки направления — сетка каждые [ROUTE_ARROW_STEP_PX] ЭКРАННЫХ px вдоль ВСЕГО пути
- * (одно общее смещение, без переноса между сегментами); течение — [ROUTE_ARROW_SPEED_PX_PER_SEC]
- * px/сек постоянно на всей полилинии (фаза 0..1 за STEP/SPEED сек). Размер стрелки — dp (Y9: 6→9).
- */
 private const val ROUTE_ARROW_STEP_PX = 48f
 private const val ROUTE_ARROW_SPEED_PX_PER_SEC = 24f
 private const val ROUTE_ARROW_SIZE_DP = 9f
 
-/**
- * R1: линия маршрута поверх плана. Всё рисуется внутри graphicsLayer (план масштабирован),
- * поэтому толщины/радиусы умножаются на 1/zoom — на экране они постоянны (~4dp линия).
- * W39c: [polylines] — уже ортогонализованные линии CollegeRouteFinder.orthogonalize
- * (диагонали заменены L-уголками мимо комнат); полилиний несколько, когда сегмент этажа
- * разорван переходом по лестнице. X24: стрелки-треугольники направления — каждые
- * ROUTE_ARROW_STEP_DP экранных dp вдоль screen-точек полилинии; пульсирующая точка — на
- * финише (когда текущий этаж несёт конец маршрута).
- * V22: [arrowPhase] (0..1) — сетка стрелок течёт вдоль обхода пути (бегущие стрелки).
- * X36: [offsetsDp] — сдвиг каждой полилинии перпендикулярно ходу в ЭКРАННЫХ dp
- * (laneOffsetDp — полосы не слипаются); сдвиг через offsetPolyline, стрелки — по
- * сдвинутым точкам.
- */
 private fun DrawScope.drawRoutePath(
     polylines: List<List<MapPoint>>,
     imgW: Float,
@@ -1561,15 +1423,14 @@ private fun DrawScope.drawRoutePath(
     val unit = 1f / zoom
     val color = ColorBrandBlue
     var finish: MapPoint? = null
-    // Y9: ОДНО общее смещение сетки стрелок на весь путь (все полилинии): абсолютная
-    // позиция очередной стрелки в px вдоль суммарной длины; carry не нужен.
+
     val step = ROUTE_ARROW_STEP_PX * unit
     val s = ROUTE_ARROW_SIZE_DP * pxPerDp * unit
     var arrowPos = arrowPhase * step
 
     for ((pi, raw) in polylines.withIndex()) {
         if (raw.size < 2) continue
-        // экранные dp → px плана: на экране сдвиг постоянен при любом зуме
+
         val off = (offsetsDp.getOrNull(pi) ?: 0f) * pxPerDp * unit
         val points = if (off != 0f) offsetPolyline(raw, imgW, imgH, off) else raw
         finish = points.last()
@@ -1587,8 +1448,6 @@ private fun DrawScope.drawRoutePath(
             style = Stroke(width = 4f * pxPerDp * unit, cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
 
-        // Y9: стрелки текут с постоянной СКОРОСТЬЮ: arrowPos — абсолют вдоль всего пути,
-        // шаг фиксированный в экранных px; у краёв сегментов (±1.5s) стрелку не рисуем.
         var acc = 0f
         for (i in 1 until screen.size) {
             val a = screen[i - 1]
@@ -1629,7 +1488,6 @@ private fun DrawScope.drawRoutePath(
     }
 }
 
-/** Треугольник-стрелка: вершина в направлении [angle] (рад), размер — экранный (уже с unit). */
 private fun DrawScope.drawArrowHead(
     center: Offset,
     angle: Float,

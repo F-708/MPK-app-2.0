@@ -42,8 +42,6 @@ class BellsWidgetProvider : AppWidgetProvider() {
             val now = WidgetData.minuteOfDay(context)
             val dow = WidgetData.dayOfWeek(context)
 
-            // W1: воскресенье — звонки понедельника БЕЗ подсветки «сейчас/прошло»
-            // (ложный «идёт урок» в вс обесценивает доверие к виджету)
             val isSunday = dow == 7
             val bells = CollegeBellSchedule.getBellsForDay(if (isSunday) 1 else dow)
 
@@ -85,8 +83,7 @@ class BellsWidgetProvider : AppWidgetProvider() {
                     context,
                     appWidgetId,
                     Intent(context, com.politex.MainActivity::class.java)
-                        // CLEAR_TOP|SINGLE_TOP: тёплый тап по виджету доходит до onNewIntent,
-                        // а не плодит копии активити
+
                         .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                         .putExtra("EXTRA_OPEN_TAB", "BELLS")
                         .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_BELL"),

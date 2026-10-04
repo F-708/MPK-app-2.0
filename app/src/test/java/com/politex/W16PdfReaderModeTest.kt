@@ -23,16 +23,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
 
-/**
- * W16/V7-V8: полноэкранный режим чтения. Любой Материал-route (PDF, изображения, текст)
- * обязан включать ViewerMode (MainScreen по нему прячет баннер и нижнюю навигацию), а любой
- * выход из просмотрщика — системный back, стрелка «назад» — обязан флаг СБРАСЫВАТЬ, иначе
- * панель пропадёт на всём приложении.
- *
- * PdfRenderer в Robolectric не работает (native) — файл-пустышка уводит просмотрщик в
- * аварийный путь с плашкой, но Lifecycle флага от этого не меняется: DisposableEffect
- * ставится в MaterialBaseScreen ДО композиции MaterialPdfViewer.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w360dp-h720dp")
 class W16PdfReaderModeTest {
@@ -63,7 +53,6 @@ class W16PdfReaderModeTest {
         ViewerMode.active = false
     }
 
-    /** Вставка в БД → перекомпозиция списка идёт через асинхронный Flow Room: ждём узел явно. */
     private fun waitForNode(tag: String) {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
@@ -72,8 +61,7 @@ class W16PdfReaderModeTest {
 
     @Test
     fun `открытие pdf включает ViewerMode а стрелка назад сбрасывает`() {
-        // «битый» PDF: PdfRenderer его не откроет — просмотрщик покажет аварийную шапку,
-        // но DisposableEffect флага уже сработал (он в MaterialBaseScreen)
+
         val badPdf = File(context.filesDir, "w16_bad.pdf").apply { writeBytes(byteArrayOf(0x25, 0x50, 0x44, 0x46, 0x21)) }
         val id = runBlocking {
             db.materialDao().insertItem(
@@ -98,17 +86,11 @@ class W16PdfReaderModeTest {
         composeRule.onNodeWithTag("material_item_$id").performClick()
         composeRule.waitForIdle()
 
-        // W16: синяя строка читалки на месте (вместо баннера), режим включён.
-        // Битый файл → аварийный путь: та же синяя строка (с заголовком вместо номера) + плашка.
-        // Ф5: для повреждённого/защищённого PDF — СВОЯ плашка (не «формат не поддерживается»).
         waitForNode("pdf_top_bar")
         composeRule.onNodeWithTag("pdf_top_bar_back").assertExists()
         composeRule.onNodeWithTag("corrupted_pdf_plaque").assertExists()
         assertTrue("W16: ViewerMode должен включаться на PDF-просмотрщике", ViewerMode.active)
 
-        // Стрелка «назад» в синей строке возвращает к списку и СБРАСЫВАЕТ режим.
-        // Системный back использует тот же pop() (BackHandler в MaterialBaseScreen),
-        // поэтому механизм сброса (onDispose DisposableEffect) покрыт этим же нажатием.
         composeRule.onNodeWithTag("pdf_top_bar_back").performClick()
         composeRule.waitForIdle()
         assertFalse("W16: ViewerMode обязан сбрасываться при выходе из читалки", ViewerMode.active)
@@ -138,16 +120,12 @@ class W16PdfReaderModeTest {
         composeRule.waitForIdle()
         waitForNode("doc_top_bar")
 
-        // V7/V8: полноэкранный режим теперь для ЛЮБОГО просмотрщика — текст тоже прячет
-        // баннер и нижнюю навигацию (DisposableEffect вынесен на уровень «viewer открыт»)
         assertTrue("V7/V8: DocTextViewer обязан включать ViewerMode", ViewerMode.active)
 
-        // Выход сбрасывает флаг (onDispose покрывает любой выход)
         composeRule.onNodeWithTag("doc_top_bar_back").performClick()
         composeRule.waitForIdle()
         assertFalse("V7/V8: ViewerMode обязан сбрасываться при выходе", ViewerMode.active)
-        // даём списку материалов перевыпуститься и успокоиться до tearDown (иначе getAllItems
-        // гонит запрос в уже закрытый пул соединений)
+
         waitForNode("material_item_$id")
     }
 

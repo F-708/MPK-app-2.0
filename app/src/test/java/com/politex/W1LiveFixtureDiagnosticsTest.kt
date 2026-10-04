@@ -5,12 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * W1: регресс на ЖИВОЙ фикстуре 05.10.2026 — реальный бинарный .doc (OLE2, d0cf11e0)
- * с сайта, документ понедельника, который заказчик видит, а синк раньше не запрашивал.
- * Гипотеза «парсер не знает новый формат» опровергнута этим тестом: документ парсится
- * проверенной стратегией grid (doc-utf16).
- */
 class W1LiveFixtureDiagnosticsTest {
     private fun liveDocBytes(): ByteArray =
         javaClass.getResourceAsStream("/fixtures/05-10-2026-raspisanie-uchashhihsya.doc")!!.readBytes()
@@ -21,12 +15,12 @@ class W1LiveFixtureDiagnosticsTest {
         for ((group, count) in expected) {
             val lessons = MpkScheduleParser.parseFile(liveDocBytes(), targetGroup = group, targetDate = "05.10.2026")
             assertEquals("group=$group stats=${MpkScheduleParser.lastParseStats}", count, lessons.size)
-            // Заголовок «РАСПИСАНИЕ на 05.10.2026 г. ПОНЕДЕЛЬНИК» — строки штампуются понедельником
+
             assertTrue(lessons.all { it.dateString == "05.10.2026" })
             assertTrue(lessons.all { it.dayOfWeek == 1 })
             assertTrue(lessons.all { it.timeStart.isNotBlank() })
         }
-        // Проверенная стратегия не деградировала
+
         assertEquals("grid", MpkScheduleParser.lastParseStats.strategy)
         assertEquals("doc-utf16", MpkScheduleParser.lastParseStats.format)
     }

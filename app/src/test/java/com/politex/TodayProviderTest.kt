@@ -7,10 +7,6 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import java.util.Calendar
 
-/**
- * SUI-01/SUI-03: чистые функции «дня» и «минуты», на которых держатся ключи remember.
- * «Сегодня» обязано пересчитываться на границе дня, а «текущая пара» — на границе минуты.
- */
 class TodayProviderTest {
     private fun at(
         year: Int,

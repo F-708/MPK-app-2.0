@@ -39,16 +39,12 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.util.bouncyClickable
 import kotlin.math.hypot
 
-// ---------- V25: ручной мультимаршрут. Чистые функции тестируются без Compose ----------
-
-/** Точка маршрута: key — номер кабинета / id лестницы / [MAIN_ENTRANCE_KEY] для входа. */
 data class Waypoint(
     val key: String,
     val label: String,
     val isEntrance: Boolean = false,
 )
 
-/** Перегон между двумя waypoint'ами; route == null — недостижимо. */
 data class RouteLeg(
     val from: Waypoint,
     val to: Waypoint,
@@ -56,31 +52,18 @@ data class RouteLeg(
     val isReturn: Boolean = false,
 )
 
-/** Ключ waypoint'а главного входа = номер псевдо-комнаты mainEntranceRoom. */
 const val MAIN_ENTRANCE_KEY = "100"
 
-/**
- * 6.2: глобальный режим конструктора маршрута. MainScreen прячет нижнюю навигацию, пока
- * конструктор активен (как ViewerMode для PDF). Object, а не CompositionLocal: панель рисуется
- * в MainScreen, конструктор — глубоко в карте. Флаг не rememberSaveable — смерть процесса
- * обязана его сбрасывать (панель возвращается при холодном старте).
- */
 object RouteBuilderMode {
     var active by mutableStateOf(false)
 }
 
-/** Номер ближайшего реального кабинета к точке плана (подпись лестницы, pseudo-room). */
 fun nearestRoomNumber(floor: FloorMap, x: Float, y: Float): String? =
     floor.rooms
         .filter { it.number.isNotBlank() && it.status != "nonexistent" }
         .minByOrNull { (it.x - x) * (it.x - x) + (it.y - y) * (it.y - y) }
         ?.number
 
-/**
- * Waypoint → MapRoom для findMultiFloorRoute: кабинет — поиск по всем этажам; главный
- * вход — псевдо-комната «100»; лестница — псевдо-комната с координатами лестницы и номером
- * ближайшего кабинета (floorForRoom по номеру даёт нужный этаж, в т.ч. «3-4»).
- */
 fun resolveWaypointRoom(wp: Waypoint, mapData: CollegeMapData): MapRoom? {
     if (!wp.isEntrance) return findRoomEverywhere(mapData, wp.key)
     if (wp.key == MAIN_ENTRANCE_KEY) return mainEntranceRoom(mapData)
@@ -97,11 +80,6 @@ fun resolveWaypointRoom(wp: Waypoint, mapData: CollegeMapData): MapRoom? {
     return null
 }
 
-/**
- * Маршрут пары ключей через кэш (Dijkstra недешёвая). null кэшируется тоже.
- * Кэш живёт в remember экрана и читается и из композиции, и из Dispatchers.Default
- * (автонавигация) — поэтому synchronized.
- */
 fun cachedRoute(
     aKey: String,
     bKey: String,
@@ -118,17 +96,11 @@ fun cachedRoute(
     return r
 }
 
-// обратный путь key → Waypoint для resolve: key кабинета = номер; иначе ищем лестницу/вход
 private fun cacheWaypoint(key: String, mapData: CollegeMapData): MapRoom? {
     findRoomEverywhere(mapData, key)?.let { return it }
     return resolveWaypointRoom(Waypoint(key, "", isEntrance = true), mapData)
 }
 
-/**
- * Перегоны мультимаршрута: пары соседних точек. X19: глобальный дедуп — ключ встречается
- * в пути максимум один раз (последовательный дубль схлопывается, A,B,A не даёт петли).
- * Edge: 1 точка — маршрут от главного входа.
- */
 fun buildLegs(
     wps: List<Waypoint>,
     mapData: CollegeMapData,
@@ -153,21 +125,9 @@ fun buildLegs(
     return legs
 }
 
-/**
- * X36: сдвиг полосы маршрута в экранных dp. Первая линия (i=0) идёт по центру (0), остальные
- * раскладываются ±6,±12,±18… попарно (нечётные в +, чётные в −), чтобы встречные/параллельные
- * полилинии одного этажа не слипались в одну линию.
- */
 internal fun laneOffsetDp(i: Int): Float =
     if (i == 0) 0f else ((i + 1) / 2) * 6f * if (i % 2 == 1) 1f else -1f
 
-// ---------- UI конструктора (Y8: ровно две точки А и Б) ----------
-
-/**
- * Y8: панель конструктора = два цифровых поля номера кабинета (А и Б) + «ПОСТРОИТЬ».
- * Построил — маршрут сразу активен; сброс — кнопка «Отменить маршрут» под поиском (Y10).
- * Список waypoints, drag-reorder, autonav и «Очистить» удалены по ТЗ заказчика.
- */
 @Composable
 fun RoutePairPanel(
     valueA: String,
@@ -206,7 +166,6 @@ fun RoutePairPanel(
     }
 }
 
-/** Y8: цифровое поле номера кабинета конструктора (как SearchField, без крестика). */
 @Composable
 private fun PairField(
     label: String,
@@ -237,11 +196,6 @@ private fun PairField(
     }
 }
 
-/**
- * Сдвиг полилинии перпендикулярно ходу на [offsetPx] px ПРОСТРАНСТВА ПЛАНА (экран px ×
- * img-коэф): n = normalize(dy·imgH, −dx·imgW); вершина получает усреднённую нормаль
- * соседних сегментов.
- */
 fun offsetPolyline(points: List<MapPoint>, imgW: Float, imgH: Float, offsetPx: Float): List<MapPoint> {
     if (points.size < 2 || offsetPx == 0f || imgW <= 0f || imgH <= 0f) return points
     val out = ArrayList<MapPoint>(points.size)
@@ -268,5 +222,3 @@ fun offsetPolyline(points: List<MapPoint>, imgW: Float, imgH: Float, offsetPx: F
     }
     return out
 }
-
-

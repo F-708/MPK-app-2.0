@@ -36,11 +36,6 @@ object MpkScheduleParser {
     @Volatile
     var lastParseStats: ParseStats = ParseStats()
 
-    /**
-     * QA#3: lastParseStats жил read-modify-write копиями (`lastParseStats = lastParseStats.copy(…)`)
-     * из нескольких параллельных IO-синков — гонка теряла/смешивала поля. Все мутации теперь
-     * атомарны под одним замком: RMW целиком внутри synchronized.
-     */
     private val statsLock = Any()
 
     private fun mutateStats(block: (ParseStats) -> ParseStats) {
@@ -83,10 +78,6 @@ object MpkScheduleParser {
         "([0-3]?[0-9])[.\\-/]([0-1]?[0-9])[.\\-/](20[0-9]{2})",
     )
 
-    /**
-     * «15.09.2026» / «15-09-2026» / ISO «2026-09-15» -> Calendar (приведённая дата).
-     * Все сравнения дат в приложении идут через этот разбор, не по строкам.
-     */
     fun parseDotDate(date: String): java.util.Calendar? {
         val iso = Regex("\\s*(20[0-9]{2})-([0-1]?[0-9])-([0-3]?[0-9])\\s*").find(date)
         if (iso != null) {
@@ -104,20 +95,12 @@ object MpkScheduleParser {
 
     fun dowOfCalendar(cal: java.util.Calendar): Int = com.politex.util.Dow.of(cal)
 
-    /**
-     * Реальная дата каждой строки: anchor + (dayOfWeek − anchorDow) дней.
-     * Документ сайта содержит заголовок «РАСПИСАНИЕ на ДД.ММ.ГГГГ <день>» — дата
-     * заголовка приоритетнее запрошенной (портал может отдать другой документ),
-     * anchorDow при этом — день из заголовка. Без даты в заголовке anchor = запрошенная
-     * дата, anchorDow = её день недели (пн = target − (targetDow−1)).
-     */
     internal fun restampByDow(
         lessons: List<LessonEntity>,
         anchorCal: java.util.Calendar,
         anchorDow: Int,
     ): List<LessonEntity> {
-        // QA#3: SimpleDateFormat НЕ потокобезопасен — общий static давал битые dateString
-        // при параллельных IO-синках. Локальный экземпляр на вызов, гонка невозможна.
+
         val dotFormat = java.text.SimpleDateFormat("dd.MM.yyyy", Locale.ROOT)
         return lessons.map { lesson ->
             val cal = (anchorCal.clone() as java.util.Calendar)
@@ -230,17 +213,6 @@ object MpkScheduleParser {
         return applyHeaderDate(parsed, bytes, targetDate)
     }
 
-    /**
-     * O3b: разбор того же документа по ВСЕМ группам — для «Подробнее — расписание кабинета»
-     * (в БД иначе лежат уроки только выбранной группы, и показать кабинет по всем группам нечем).
-     *
-     * Реализация намеренно НЕ трогает ядро разбора: для каждой известной группы вызывается
-     * проверенный [parseFileRaw], результат складывается и дедуплицируется. Так основной путь
-     * синка (одна группа) остаётся бит-в-бит прежним — это критично, он кормит всё приложение.
-     *
-     * [candidateGroups] — группы для перебора (обычно каталог колледжа). Перебор ограничен,
-     * поэтому лишних обращений к тяжёлому разбору нет: пустой результат по группе отсекается.
-     */
     fun parseFileAllGroups(
         bytes: ByteArray,
         targetDate: String = "",
@@ -253,7 +225,7 @@ object MpkScheduleParser {
             val lessons = runCatching { parseFileRaw(bytes, group, targetDate) }.getOrDefault(emptyList())
             for (lesson in lessons) {
                 if (lesson.groupName.isBlank()) continue
-                // Ключ — то, что делает строку уникальной в БД: группа + день + пара + дата
+
                 val key = "${lesson.groupName}_${lesson.dayOfWeek}_${lesson.lessonNumber}_${lesson.dateString}"
                 out.putIfAbsent(key, lesson)
             }
@@ -261,7 +233,6 @@ object MpkScheduleParser {
         return applyHeaderDate(out.values.toList(), bytes, targetDate)
     }
 
-    /** parseFile без перештамповки дат — для тестов стратегий по отдельности. */
     fun parseFileRaw(
         bytes: ByteArray,
         targetGroup: String,
@@ -315,11 +286,6 @@ object MpkScheduleParser {
             .getOrDefault(emptyList())
     }
 
-    /**
-     * Захват даты заголовка («РАСПИСАНИЕ на 15.09.2026 г. ВТОРНИК») и перештамповка:
-     * строки получают дату своего дня недели относительно даты заголовка.
-     * Без даты в заголовке anchor = запрошенная дата. Если и её нет — как было.
-     */
     private fun applyHeaderDate(
         lessons: List<LessonEntity>,
         bytes: ByteArray,
@@ -336,12 +302,11 @@ object MpkScheduleParser {
             dowOfCalendar(anchor)
         }
         val stamped = restampByDow(lessons, anchor, anchorDow)
-        // Строка могла прийти уже с корректной датой — не двигаем её, если совпала
+
         if (stamped.map { it.dateString }.toSet() == lessons.map { it.dateString }.toSet()) return lessons
         return stamped
     }
 
-    /** Текст заголовка: первые распознанные текстовые прогоны документа. */
     private fun extractHeaderText(bytes: ByteArray): String {
         val fromZip = if (bytes.size >= 4 &&
             bytes[0] == 0x50.toByte() &&
@@ -401,20 +366,6 @@ object MpkScheduleParser {
         }
     }
 
-    /**
-     * X1: относится ли документ к ЗАПРОШЕННОЙ дате [dateDot] («dd.MM.yyyy»)?
-     * Дата заголовка («РАСПИСАНИЕ на DD.MM.YYYY …») сравнивается с запрошенной:
-     *  - дата заголовка найдена и НЕ равна запрошенной → false (чужой документ — НЕ
-     *    принимается как «найденный для этой даты»);
-     *  - равна → true;
-     *  - даты в заголовке нет (или байты не документ/HTML) → true — не опровергли,
-     *    парсер сам отвергнет HTML, а [applyHeaderDate] откатится к запрошенной дате.
-     *
-     * Root cause бага «Найдено, скачиваю» для даты без документа: водопад/event-iframe
-     * отдаёт СВЕЖИЙ документ любой дате, поэтому дату документа сверяем с запрошенной
-     * на этапе ПРИНЯТИЯ (в [com.politex.data.repository.ScheduleRepository] и
-     * [MpkNetworkClient.fetchScheduleForGroup]).
-     */
     fun documentMatchesDate(bytes: ByteArray, dateDot: String): Boolean {
         val headerDate = extractHeaderDate(extractHeaderText(bytes)) ?: return true
         val doc = parseDotDate(headerDate) ?: return true
@@ -458,8 +409,6 @@ object MpkScheduleParser {
             if (cp1251Lessons.isNotEmpty()) return cp1251Lessons
         }
 
-        // QA#3: read-check-write целиком под замком — иначе параллельный синк мог
-        // вклиниться между проверкой и присвоением, и «откат к utf16Stats» затирал его stats.
         synchronized(statsLock) {
             lastParseStats = if (lastParseStats.parseError.isBlank() && lastParseStats.textPreview.isBlank()) {
                 utf16Stats

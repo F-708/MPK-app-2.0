@@ -57,14 +57,6 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.util.bouncyClickable
 
-/**
- * M3: диалоги материальной базы — выбор типа импорта, «куда положить», набор текста,
- * переименование и подтверждение удаления. Стиль тот же, что у TaskEditDialog:
- * RoundedCornerShape(2.dp), ColorBgMain, хитбоксы ≥ 44dp, тап вне диалога не закрывает
- * (набранный текст не должен теряться от случайного касания).
- */
-
-/** M3: шаг 1 импорта — что именно загружаем. */
 @Composable
 fun MaterialImportTypeDialog(
     onDismiss: () -> Unit,
@@ -108,7 +100,6 @@ fun MaterialImportTypeDialog(
     )
 }
 
-/** M3: шаг 2 — ввод текста материала. */
 @Composable
 fun MaterialTextDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var text by remember { mutableStateOf("") }
@@ -150,11 +141,6 @@ fun MaterialTextDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     )
 }
 
-/**
- * W11: шаг 2 импорта — ТОЛЬКО предмет. Список: справочник MpkCurriculum для
- * специальности/курса группы + предметы, в которых уже есть материалы, + «Другое…»
- * (своё название, текстовое поле). Никаких папок — их больше не существует.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MaterialSubjectDialog(
@@ -250,7 +236,6 @@ fun MaterialSubjectDialog(
     )
 }
 
-/** M4: переименование материала или папки. */
 @Composable
 fun MaterialRenameDialog(
     initial: String,
@@ -288,11 +273,6 @@ fun MaterialRenameDialog(
     )
 }
 
-/**
- * M4/W15: подтверждение удаления. Удаляется только копия в приложении — исходный файл
- * на устройстве остаётся (так и работает: байты копируются в filesDir при импорте).
- * `softActionText`/`onSoftAction` — мягкий путь: убрать в Архив вместо удаления.
- */
 @Composable
 fun MaterialDeleteDialog(
     title: String,
@@ -329,8 +309,6 @@ fun MaterialDeleteDialog(
         },
     )
 }
-
-// ── Мелкие строительные блоки диалогов ───────────────────────────────────────
 
 @Composable
 private fun DialogTitle(text: String, onClose: () -> Unit) {
@@ -431,7 +409,6 @@ private fun DialogButton(
     }
 }
 
-/** Кнопка-подложка фирменного цвета (используется в шапке раздела). */
 @Composable
 fun BrandActionButton(
     icon: ImageVector,

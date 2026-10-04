@@ -18,10 +18,6 @@ object HomeworkMarkers {
 
     fun dayIsoOf(cal: Calendar): String = isoFormat.format(cal.time)
 
-    /**
-     * Строки «шаблона недели» (пустая дата) плюс строки с самой поздней датой
-     * (сравнение дат через Calendar, не по строкам). Пустая dateString — старый формат.
-     */
     fun dedupeByLatestDate(lessons: List<LessonEntity>): List<LessonEntity> {
         val latestMillis =
             lessons
@@ -30,16 +26,10 @@ object HomeworkMarkers {
         return lessons.filter { it.dateString.isBlank() || dateToMillis(it.dateString) == latestMillis }
     }
 
-    /** dd.MM.yyyy / ISO -> epoch; некорректная дата -> 0 (считается «самой ранней»). */
     internal fun dateToMillis(date: String): Long = com.politex.data.network.MpkScheduleParser
         .parseDotDate(date)
         ?.timeInMillis ?: 0L
 
-    /**
-     * N18: для каждого урока (по номеру) с домашкой — СПИСОК типов заданий на этот день.
-     * Собирает [TaskType] для цветных бейджей (домашка/лаба/курсовая…). Типы внутри урока
-     * дедуплицируются.
-     */
     fun markerLessonTypes(
         dayLessons: List<LessonEntity>,
         day: DayContext,
