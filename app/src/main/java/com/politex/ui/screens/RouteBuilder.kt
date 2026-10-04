@@ -177,18 +177,18 @@ private fun PairField(
         shape = RoundedCornerShape(3.dp),
         color = ColorSurfaceVariantLight,
         border = androidx.compose.foundation.BorderStroke(1.dp, ColorBorderLight),
-        modifier = modifier.height(46.dp),
+        modifier = modifier.height(com.politex.ui.theme.Tokens.SearchHeight),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
             verticalArrangement = Arrangement.Center,
         ) {
-            Text(text = label, style = TextStyle(fontSize = 10.sp, color = ColorTextMuted), maxLines = 1)
+            Text(text = label, style = TextStyle(fontSize = 9.sp, color = ColorTextMuted), maxLines = 1)
             BasicTextField(
                 value = value,
                 onValueChange = { input -> onValueChange(input.filter { it.isDigit() || it.isLetter() }.take(6)) },
                 singleLine = true,
-                textStyle = TextStyle(fontSize = 15.sp, color = ColorTextTitle),
+                textStyle = TextStyle(fontSize = 16.sp, color = ColorTextTitle),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
             )

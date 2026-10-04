@@ -154,7 +154,8 @@ fun BellsScreen(
         }
     }
 
-    val isTodaySelected = selectedScheduleType == todayType
+    // Z5: в воскресенье уроков нет — не показывать «идёт урок» понедельника
+    val isTodaySelected = selectedScheduleType == todayType && todayDow != 7
     val activeSlot =
         remember(currentTimeMinutes, selectedScheduleType, isTodaySelected) {
             if (!isTodaySelected) {
