@@ -184,9 +184,8 @@ class SyncCacheFirstTest {
             candidates.forEach { cal -> (1..5).forEach { add(lesson(group, cal, it)) } }
         }
         val sat = saturdayIsSchoolDayFor(group, rows.any { it.dayOfWeek == 6 })
-        val todayDow = Dow.of(today)
-        val todayIsSchoolDay = todayDow in 1..5 || (todayDow == 6 && sat)
-        val expected = SyncOutcome.Ok(5 + if (todayIsSchoolDay) 3 else 0)
+        // BB14: исход — про ЦЕЛЕВУЮ дату (первый кандидат), счёт только её уроков
+        val expected = SyncOutcome.Ok(5, fmt(nextDayCandidates(today, sat).first()))
 
         val client = CountingNetworkClient()
         val result = repo(rows, client).syncScheduleDetailed(group)
@@ -230,11 +229,15 @@ class SyncCacheFirstTest {
 
     @Test
     fun `пустой кэш — сеть вызывается и статус финальный честный`() = runBlocking {
+        val today = Calendar.getInstance()
+        val sat = saturdayIsSchoolDayFor(group, false)
+        val targetDate = fmt(nextDayCandidates(today, sat).last())
+
         val client = CountingNetworkClient()
         val result = repo(emptyList(), client).syncScheduleDetailed(group)
 
         assertTrue(client.networkCalls > 0)
-        assertEquals(SyncOutcome.NotFound, result.getOrNull())
-        assertEquals("Расписание ещё не опубликовано", client.diagnosticInfo.value.statusMessage)
+        assertEquals(SyncOutcome.NotFound(targetDate), result.getOrNull())
+        assertEquals("Расписание на $targetDate ещё не опубликовано", client.diagnosticInfo.value.statusMessage)
     }
 }

@@ -74,6 +74,8 @@ import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.model.GroupInfo
 import com.politex.data.model.TaskType
 import com.politex.data.repository.ScheduleRepository
+import com.politex.data.repository.checkingStatusFor
+import com.politex.data.repository.emptyStateText
 import com.politex.ui.components.CalendarArchiveDialog
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBadgeCourse
@@ -118,7 +120,8 @@ private fun knownTeacherSurnames(context: android.content.Context): Set<String> 
 fun ScheduleScreen(
     groupInfo: GroupInfo,
     scheduleRepository: ScheduleRepository,
-    onSyncRequest: () -> Unit,
+    // BB14: колбэк получает дату видимого слота — ручное обновление синкает именно её
+    onSyncRequest: (String) -> Unit,
     isSyncing: Boolean = false,
 
     hasSyncError: Boolean = false,
@@ -140,8 +143,6 @@ fun ScheduleScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-
-    val diagnosticInfo by scheduleRepository.diagnosticInfo.collectAsState()
 
     val isTeacherKnown: (String) -> Boolean =
         remember(context) {
@@ -530,7 +531,7 @@ fun ScheduleScreen(
                 modifier =
                 Modifier
                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    .bouncyClickable(onClick = onSyncRequest)
+                    .bouncyClickable(onClick = { onSyncRequest(activeDateString) })
                     .testTag("sync_button"),
                 contentAlignment = Alignment.Center,
             ) {
@@ -689,11 +690,13 @@ fun ScheduleScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
+                            // BB14: статус всегда про ЭТУ дату — глобальный diagnosticInfo.statusMessage
+                            // здесь больше не показывается, он мог быть про другой день (противоречие)
                             text =
                             when {
-                                isSyncing -> diagnosticInfo.statusMessage.ifBlank { "Проверяю расписание…" }
+                                isSyncing -> checkingStatusFor(activeDateString)
                                 hasSyncError -> "Не удалось обновить расписание"
-                                else -> diagnosticInfo.statusMessage.ifBlank { "Расписание ещё не опубликовано" }
+                                else -> emptyStateText(activeDateString)
                             },
                             style =
                             androidx.compose.ui.text.TextStyle(
@@ -704,25 +707,28 @@ fun ScheduleScreen(
                             textAlign = TextAlign.Center,
                         )
 
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Text(
-                            text =
+                        val emptyStateSubtitle =
                             when {
                                 isSyncing -> "Проверяем расписание на сайте guo-mpk.by…"
                                 hasSyncError -> "Проверьте подключение к интернету и попробуйте ещё раз."
                                 selectedDateString.isNotBlank() ->
                                     "Нет данных за $selectedDateString. Расписание за прошедшие дни хранится в архиве только после синхронизации."
-                                else -> "Для группы ${groupInfo.canonicalName} на этот день уроков пока нет в базе колледжа."
-                            },
-                            style =
-                            androidx.compose.ui.text.TextStyle(
-                                fontSize = 13.sp,
-                                color = ColorTextMuted,
-                            ),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                        )
+                                else -> ""
+                            }
+                        if (emptyStateSubtitle.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Text(
+                                text = emptyStateSubtitle,
+                                style =
+                                androidx.compose.ui.text.TextStyle(
+                                    fontSize = 13.sp,
+                                    color = ColorTextMuted,
+                                ),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(20.dp))
 
@@ -741,7 +747,7 @@ fun ScheduleScreen(
                                 modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .bouncyClickable(onClick = onSyncRequest)
+                                    .bouncyClickable(onClick = { onSyncRequest(activeDateString) })
                                     .testTag("empty_state_sync_btn"),
                             ) {
                                 Row(

@@ -55,7 +55,10 @@ import androidx.compose.ui.unit.sp
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.repository.ScheduleRepository
+import com.politex.data.repository.SyncOutcome
 import com.politex.data.repository.TeacherInsights
+import com.politex.data.repository.checkingStatusFor
+import com.politex.data.repository.emptyStateText
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -197,8 +200,6 @@ fun GroupScheduleScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val diagnosticInfo by scheduleRepository.diagnosticInfo.collectAsState()
-
     var selectedCourse by rememberSaveable {
         mutableIntStateOf(GroupParser.parse(ownGroupName)?.course ?: 1)
     }
@@ -207,33 +208,10 @@ fun GroupScheduleScreen(
 
     var syncError by remember(selectedGroupName) { mutableStateOf<String?>(null) }
     var syncEmptyNotice by remember(selectedGroupName) { mutableStateOf<String?>(null) }
+    // BB14: последний исход синка с его датой — empty-state показывает его только для своего слота
+    var lastOutcome by remember(selectedGroupName) { mutableStateOf<SyncOutcome?>(null) }
 
     val foreignInfo = remember(selectedGroupName) { GroupParser.parse(selectedGroupName) }
-
-    fun syncForeignSchedule(force: Boolean) {
-        if (selectedGroupName.isBlank() || isSyncing) return
-        val group = selectedGroupName
-        isSyncing = true
-        syncError = null
-        syncEmptyNotice = null
-        scope.launch {
-            val result = scheduleRepository.syncScheduleDetailed(group, force = force)
-            isSyncing = false
-            result.fold(
-                onSuccess = { outcome ->
-
-                    syncEmptyNotice = when (outcome) {
-                        is com.politex.data.repository.SyncOutcome.FoundNoGroup ->
-                            "Группы $group нет в опубликованном расписании на ${outcome.date}"
-                        com.politex.data.repository.SyncOutcome.NotFound ->
-                            "Расписание ещё не опубликовано на ближайшие даты"
-                        is com.politex.data.repository.SyncOutcome.Ok -> null
-                    }
-                },
-                onFailure = { syncError = "Не удалось загрузить расписание: проверьте интернет" },
-            )
-        }
-    }
 
     val isTeacherKnown: (String) -> Boolean =
         remember(context) {
@@ -292,6 +270,41 @@ fun GroupScheduleScreen(
     val leftIsToday = sameDay(leftCal, realNow)
     val rightIsTomorrow = sameDay(rightCal, tomorrow)
 
+    val activeCal = if (selectedSlot == 0) leftCal else rightCal
+    val activeDayOfWeek = groupScheduleDayOfWeek(activeCal)
+    val activeDateString = groupScheduleDbDate(activeCal)
+
+    fun syncForeignSchedule(force: Boolean) {
+        if (selectedGroupName.isBlank() || isSyncing) return
+        val group = selectedGroupName
+        isSyncing = true
+        syncError = null
+        syncEmptyNotice = null
+        scope.launch {
+            // BB14: ручное обновление синкает дату ВИДИМОГО слота; авто-синк при входе —
+            // прежний охват «сегодня + завтра», чтобы оба слота заполнялись без тапов
+            val result = scheduleRepository.syncScheduleDetailed(
+                group,
+                force = force,
+                targetDate = if (force) activeDateString else null,
+            )
+            isSyncing = false
+            result.fold(
+                onSuccess = { outcome ->
+                    lastOutcome = outcome
+                    syncEmptyNotice = when (outcome) {
+                        is SyncOutcome.FoundNoGroup ->
+                            "Группы $group нет в опубликованном расписании на ${outcome.date}"
+                        is SyncOutcome.NotFound ->
+                            "Расписание на ${outcome.date} ещё не опубликовано"
+                        is SyncOutcome.Ok -> null
+                    }
+                },
+                onFailure = { syncError = "Не удалось загрузить расписание: проверьте интернет" },
+            )
+        }
+    }
+
     // Кэш-первым: уроки выбранной группы уже лежат в БД (файл разобран на вкладке расписания) —
     // авто-синк не дёргает сеть/probe; сеть только при пустом результате или явном нажатии кнопки
     var autoCheckDone by remember(selectedGroupName) { mutableStateOf(false) }
@@ -304,10 +317,6 @@ fun GroupScheduleScreen(
         }
         if (needsFetch(hasCachedLessons = hasCached, userForced = false)) syncForeignSchedule(force = false)
     }
-
-    val activeCal = if (selectedSlot == 0) leftCal else rightCal
-    val activeDayOfWeek = groupScheduleDayOfWeek(activeCal)
-    val activeDateString = groupScheduleDbDate(activeCal)
 
     val nowMinutes = rememberNowMinutes()
     val currentLessonNumber =
@@ -625,14 +634,17 @@ fun GroupScheduleScreen(
                             )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
+                        // BB14: уведомление синка показываем только если оно про текущий слот,
+                        // иначе короткий честный ответ про эту дату (без «загружено» про чужой день)
+                        val noticeForActiveDate = syncEmptyNotice?.takeIf { lastOutcome?.date == activeDateString }
                         Text(
                             text =
                             when {
 
-                                isSyncing -> diagnosticInfo.statusMessage.ifBlank { "Проверяю расписание…" }
+                                isSyncing -> checkingStatusFor(activeDateString)
                                 syncError != null -> syncError ?: ""
-                                syncEmptyNotice != null -> syncEmptyNotice ?: ""
-                                else -> "Нет данных — расписание ещё не синхронизировано"
+                                noticeForActiveDate != null -> noticeForActiveDate
+                                else -> emptyStateText(activeDateString, lastOutcome?.date ?: "", lastOutcome)
                             },
                             style =
                             androidx.compose.ui.text.TextStyle(
@@ -642,17 +654,19 @@ fun GroupScheduleScreen(
                             ),
                             textAlign = TextAlign.Center,
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Расписание группы $selectedGroupName появится после синхронизации с сайтом guo-mpk.by",
-                            style =
-                            androidx.compose.ui.text.TextStyle(
-                                fontSize = 13.sp,
-                                color = ColorTextMuted,
-                            ),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                        )
+                        if (!isSyncing && syncError == null && noticeForActiveDate == null && lastOutcome == null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Расписание группы $selectedGroupName появится после синхронизации с сайтом guo-mpk.by",
+                                style =
+                                androidx.compose.ui.text.TextStyle(
+                                    fontSize = 13.sp,
+                                    color = ColorTextMuted,
+                                ),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            )
+                        }
                         if (!isSyncing) {
                             Spacer(modifier = Modifier.height(20.dp))
                             Surface(

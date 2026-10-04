@@ -40,34 +40,39 @@ internal fun cachedOutcomeForDate(
     catalogSize: Int,
     date: String,
 ): SyncOutcome? = when {
-    groupLessons > 0 -> SyncOutcome.Ok(groupLessons)
+    groupLessons > 0 -> SyncOutcome.Ok(groupLessons, date)
     isFullDayDocument(parsedGroups, catalogSize) -> SyncOutcome.FoundNoGroup(date)
     else -> null
 }
 
+// BB14: гейт «всё в кэше — сеть не нужна»; возвращаем исход ЦЕЛЕВОЙ даты (первый),
+// а не сумму двух дней: статус называет свою дату, и чужие уроки в счёт не идут.
 internal fun combineCachedOutcomes(outcomes: List<SyncOutcome?>): SyncOutcome? {
     if (outcomes.isEmpty() || outcomes.any { it == null }) return null
-    val total = outcomes.filterIsInstance<SyncOutcome.Ok>().sumOf { it.count }
-    return if (total > 0) SyncOutcome.Ok(total) else outcomes.filterIsInstance<SyncOutcome.FoundNoGroup>().first()
+    return outcomes.first()
 }
 
 internal fun syncedCountForGroup(
     finalLessons: List<LessonEntity>,
     groupName: String,
-): Int = finalLessons.count { it.groupName == groupName }
+    date: String,
+): Int = finalLessons.count { it.groupName == groupName && (it.dateString == date || it.dateString.isBlank()) }
 
 sealed class SyncOutcome {
     abstract val count: Int
 
-    object NotFound : SyncOutcome() {
+    // BB14: каждый исход знает свою дату — статусы и тосты не врут, про какой они день
+    abstract val date: String
+
+    data class NotFound(override val date: String) : SyncOutcome() {
         override val count = 0
     }
 
-    data class FoundNoGroup(val date: String) : SyncOutcome() {
+    data class FoundNoGroup(override val date: String) : SyncOutcome() {
         override val count = 0
     }
 
-    data class Ok(override val count: Int) : SyncOutcome()
+    data class Ok(override val count: Int, override val date: String) : SyncOutcome()
 }
 
 internal fun resolveSyncOutcome(
@@ -75,22 +80,40 @@ internal fun resolveSyncOutcome(
     documentFound: Boolean,
     targetDate: String,
 ): SyncOutcome = when {
-    groupLessons > 0 -> SyncOutcome.Ok(groupLessons)
+    groupLessons > 0 -> SyncOutcome.Ok(groupLessons, targetDate)
     documentFound -> SyncOutcome.FoundNoGroup(targetDate)
-    else -> SyncOutcome.NotFound
+    else -> SyncOutcome.NotFound(targetDate)
 }
 
 internal fun statusMessageFor(outcome: SyncOutcome): String = when (outcome) {
-    is SyncOutcome.Ok -> "Расписание загружено (${outcome.count} ${lessonsWord(outcome.count)})"
+    is SyncOutcome.Ok -> "Расписание на ${outcome.date} загружено (${outcome.count} ${lessonsWord(outcome.count)})"
     is SyncOutcome.FoundNoGroup -> "Расписание на ${outcome.date} опубликовано, но вашей группы в нём пока нет"
-    SyncOutcome.NotFound -> "Расписание ещё не опубликовано"
+    is SyncOutcome.NotFound -> "Расписание на ${outcome.date} ещё не опубликовано"
 }
 
 internal fun toastFor(outcome: SyncOutcome, group: String): String = when (outcome) {
-    is SyncOutcome.Ok -> "Расписание группы $group обновлено (${outcome.count} ${lessonsWord(outcome.count)})"
+    is SyncOutcome.Ok -> "Расписание группы $group на ${outcome.date} обновлено (${outcome.count} ${lessonsWord(outcome.count)})"
     is SyncOutcome.FoundNoGroup -> "Расписание на ${outcome.date} опубликовано, но вашей группы ($group) в нём пока нет"
-    SyncOutcome.NotFound -> "Расписание ещё не опубликовано"
+    is SyncOutcome.NotFound -> "Расписание на ${outcome.date} ещё не опубликовано"
 }
+
+internal fun checkingStatusFor(date: String): String = "Проверяю расписание на $date…"
+
+// BB14: empty-state слота не цитирует глобальный статус синка — тот может быть про другую дату
+// («Расписание загружено (8 уроков)» про понедельник над пустым вторником — то самое противоречие).
+// Статусы теперь называют свою дату, а слот без уроков всегда получает короткий честный ответ про себя.
+internal fun emptyStateText(
+    forDate: String,
+    lastOutcomeDate: String = "",
+    outcome: SyncOutcome? = null,
+): String =
+    if (outcome is SyncOutcome.Ok && outcome.count > 0 && lastOutcomeDate == forDate) {
+        // уроки именно этой даты только что записаны в БД и список вот-вот заполнится —
+        // не показывать на долю секунды «расписания нет» рядом с тостом «загружено»
+        "Расписание на $forDate загружено"
+    } else {
+        "Расписания на этот день нет"
+    }
 
 internal fun isStaleDate(
     date: String,
@@ -260,6 +283,8 @@ class ScheduleRepository(
     suspend fun syncScheduleDetailed(
         groupName: String,
         force: Boolean = false,
+        // BB14: дата видимого слота из UI; null — прежнее поведение «today + следующий учебный»
+        targetDate: String? = null,
     ): Result<SyncOutcome> = withContext(Dispatchers.IO) {
         val today = Calendar.getInstance()
 
@@ -267,7 +292,8 @@ class ScheduleRepository(
             groupName,
             lessonDao.getAllLessonsForGroup(groupName).first().any { it.dayOfWeek == 6 },
         )
-        val candidates = nextDayCandidates(today, saturdaySchool)
+        val targetCal = targetDate?.let { parseCalendarDate(it) }
+        val candidates = targetCal?.let { listOf(it) } ?: nextDayCandidates(today, saturdaySchool)
         val todayStr = formatDate(today)
 
         // Кэш-первым: данные целевых дат уже разобраны в БД — ответ без сети и без «Проверяю…»
@@ -276,7 +302,7 @@ class ScheduleRepository(
             if (candidateOutcome != null) {
                 val todayDow = Dow.of(today)
                 val todayIsSchoolDay = todayDow in 1..5 || (todayDow == 6 && saturdaySchool)
-                val todayOutcome = if (todayIsSchoolDay) cachedDateOutcome(groupName, today) else SyncOutcome.Ok(0)
+                val todayOutcome = if (todayIsSchoolDay) cachedDateOutcome(groupName, today) else SyncOutcome.Ok(0, todayStr)
                 val cached = combineCachedOutcomes(listOf(candidateOutcome, todayOutcome))
                 if (cached != null) {
                     networkClient.publishStatus(statusMessageFor(cached), isSyncing = false)
@@ -285,7 +311,7 @@ class ScheduleRepository(
             }
         }
 
-        networkClient.publishStatus(statusMessage = MpkNetworkClient.STATUS_CHECKING, isSyncing = true)
+        networkClient.publishStatus(statusMessage = checkingStatusFor(formatDate(candidates.first())), isSyncing = true)
         var probed: Calendar? = candidates.firstOrNull { !force && cachedDateOutcome(groupName, it) != null }
         var probeNetworkError = false
 
@@ -312,10 +338,14 @@ class ScheduleRepository(
         val fetched = mutableListOf<LessonEntity>()
         var fetchFailed = false
         var documentFound = false
+        // BB14: документ ИМЕННО целевой даты — «опубликовано» в статусе не может быть про другой день
+        var targetDocumentFound = false
 
         val allGroups = (catalog() + groupName).distinct()
         val useCatalog = catalog().isNotEmpty()
-        val days = listOf(tomorrow to needTomorrow, today to needToday).filter { it.second }
+        val days = listOf(tomorrow to needTomorrow, today to needToday)
+            .filter { it.second }
+            .distinctBy { formatDate(it.first) }
 
         if (useCatalog) {
             for ((calendar, _) in days) {
@@ -323,7 +353,10 @@ class ScheduleRepository(
 
                 runCatching {
                     fetchAllGroupsForDate(calendar, date, allGroups, probeFoundUrl[date]) { found ->
-                        if (found) documentFound = true
+                        if (found) {
+                            documentFound = true
+                            if (date == tomorrowStr) targetDocumentFound = true
+                        }
                     }
                 }
                     .onSuccess { dayLessons ->
@@ -340,7 +373,7 @@ class ScheduleRepository(
                     .onSuccess { fetched += it }
                     .onFailure { fetchFailed = true }
             }
-            if (needToday) {
+            if (needToday && todayStr != tomorrowStr) {
                 networkClient
 
                     .fetchScheduleForGroup(groupName, today, preferredUrl = probeFoundUrl[todayStr])
@@ -360,7 +393,7 @@ class ScheduleRepository(
                     .onSuccess { fetched += it }
                     .onFailure { fetchFailed = true }
             }
-            if (needToday) {
+            if (needToday && todayStr != tomorrowStr) {
                 networkClient
                     .fetchScheduleForGroup(groupName, today, preferredUrl = probeFoundUrl[todayStr])
                     .onSuccess { fetched += it }
@@ -379,11 +412,13 @@ class ScheduleRepository(
             pruneOldLessons()
         }
 
-        val groupCount = syncedCountForGroup(finalLessons, groupName)
-        val outcome = resolveSyncOutcome(groupCount, documentFound, tomorrowStr)
+        // BB14: счёт и «опубликовано» — только про целевую дату, иначе статус приписывает
+        // вторнику уроки, скачанные для понедельника (исходный баг «загружено (8)» над пустым днём)
+        val groupCount = syncedCountForGroup(finalLessons, groupName, tomorrowStr)
+        val outcome = resolveSyncOutcome(groupCount, targetDocumentFound, tomorrowStr)
         return@withContext if (outcome is SyncOutcome.NotFound && fetchFailed) {
 
-            networkClient.publishStatus(statusMessage = "Не удалось получить расписание", isSyncing = false)
+            networkClient.publishStatus(statusMessage = "Не удалось получить расписание на $tomorrowStr", isSyncing = false)
             Result.failure(IOException("Не удалось получить расписание"))
         } else {
             networkClient.publishStatus(statusMessage = statusMessageFor(outcome), isSyncing = false)

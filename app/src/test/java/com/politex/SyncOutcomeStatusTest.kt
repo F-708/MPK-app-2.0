@@ -3,11 +3,14 @@ package com.politex
 import com.politex.data.network.MpkNetworkClient
 import com.politex.data.network.MpkScheduleParser
 import com.politex.data.repository.SyncOutcome
+import com.politex.data.repository.checkingStatusFor
+import com.politex.data.repository.emptyStateText
 import com.politex.data.repository.resolveSyncOutcome
 import com.politex.data.repository.statusMessageFor
 import com.politex.data.repository.toastFor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
@@ -19,9 +22,9 @@ class SyncOutcomeStatusTest {
         javaClass.getResourceAsStream("/fixtures/05-10-2026-raspisanie-uchashhihsya.doc")!!.readBytes()
 
     @Test
-    fun `probe 404 - ни документа ни уроков - NotFound`() {
+    fun `probe 404 - ни документа ни уроков - NotFound с датой`() {
         assertEquals(
-            SyncOutcome.NotFound,
+            SyncOutcome.NotFound(date),
             resolveSyncOutcome(groupLessons = 0, documentFound = false, targetDate = date),
         )
     }
@@ -31,7 +34,7 @@ class SyncOutcomeStatusTest {
 
         assertFalse(MpkScheduleParser.documentMatchesDate(liveDocBytes(), date))
         assertEquals(
-            SyncOutcome.NotFound,
+            SyncOutcome.NotFound(date),
             resolveSyncOutcome(groupLessons = 0, documentFound = false, targetDate = date),
         )
     }
@@ -45,15 +48,16 @@ class SyncOutcomeStatusTest {
     }
 
     @Test
-    fun `документ разобран и группа есть - Ok с числом уроков`() {
+    fun `документ разобран и группа есть - Ok с числом уроков и датой`() {
         val outcome = resolveSyncOutcome(groupLessons = 5, documentFound = true, targetDate = date)
-        assertEquals(SyncOutcome.Ok(5), outcome)
+        assertEquals(SyncOutcome.Ok(5, date), outcome)
         assertEquals(5, outcome.count)
+        assertEquals(date, outcome.date)
     }
 
     @Test
-    fun `статус NotFound - ещё не опубликовано`() {
-        assertEquals("Расписание ещё не опубликовано", statusMessageFor(SyncOutcome.NotFound))
+    fun `статус NotFound - ещё не опубликовано, с датой`() {
+        assertEquals("Расписание на $date ещё не опубликовано", statusMessageFor(SyncOutcome.NotFound(date)))
     }
 
     @Test
@@ -65,17 +69,22 @@ class SyncOutcomeStatusTest {
     }
 
     @Test
-    fun `статус Ok - загружено N уроков (склонение)`() {
-        assertEquals("Расписание загружено (5 уроков)", statusMessageFor(SyncOutcome.Ok(5)))
-        assertEquals("Расписание загружено (1 урок)", statusMessageFor(SyncOutcome.Ok(1)))
-        assertEquals("Расписание загружено (3 урока)", statusMessageFor(SyncOutcome.Ok(3)))
+    fun `статус Ok - загружено N уроков, с датой (склонение)`() {
+        assertEquals("Расписание на $date загружено (5 уроков)", statusMessageFor(SyncOutcome.Ok(5, date)))
+        assertEquals("Расписание на $date загружено (1 урок)", statusMessageFor(SyncOutcome.Ok(1, date)))
+        assertEquals("Расписание на $date загружено (3 урока)", statusMessageFor(SyncOutcome.Ok(3, date)))
     }
 
     @Test
-    fun `тост Ok - обновлено N уроков`() {
+    fun `промежуточный статус - Проверяю, с датой`() {
+        assertEquals("Проверяю расписание на $date…", checkingStatusFor(date))
+    }
+
+    @Test
+    fun `тост Ok - обновлено N уроков, с датой`() {
         assertEquals(
-            "Расписание группы $group обновлено (5 уроков)",
-            toastFor(SyncOutcome.Ok(5), group),
+            "Расписание группы $group на $date обновлено (5 уроков)",
+            toastFor(SyncOutcome.Ok(5, date), group),
         )
     }
 
@@ -88,24 +97,56 @@ class SyncOutcomeStatusTest {
     }
 
     @Test
-    fun `тост NotFound - ещё не опубликовано`() {
-        assertEquals("Расписание ещё не опубликовано", toastFor(SyncOutcome.NotFound, group))
+    fun `тост NotFound - ещё не опубликовано, с датой`() {
+        assertEquals("Расписание на $date ещё не опубликовано", toastFor(SyncOutcome.NotFound(date), group))
     }
 
     @Test
-    fun `единственный промежуточный статус - Проверяю расписание`() {
+    fun `единственный промежуточный статус-константа - Проверяю расписание`() {
         assertEquals("Проверяю расписание…", MpkNetworkClient.STATUS_CHECKING)
+    }
+
+    @Test
+    fun `BB14 - статус про понедельник и empty-state про вторник не противоречат`() {
+        val monday = "05.10.2026"
+        val tuesday = "06.10.2026"
+
+        // статус называет СВОЮ дату и только её
+        val mondayStatus = statusMessageFor(SyncOutcome.Ok(8, monday))
+        assertEquals("Расписание на 05.10.2026 загружено (8 уроков)", mondayStatus)
+        assertTrue(mondayStatus.contains(monday))
+        assertFalse(mondayStatus.contains(tuesday))
+
+        // empty-state вторника не цитирует статус про понедельник — короткое честное «нет»
+        val tuesdayEmpty = emptyStateText(tuesday, monday, SyncOutcome.Ok(8, monday))
+        assertEquals("Расписания на этот день нет", tuesdayEmpty)
+        assertFalse(tuesdayEmpty.contains(monday))
+        assertFalse(tuesdayEmpty.contains("загружено"))
+        assertFalse(tuesdayEmpty.contains("базе колледжа"))
+    }
+
+    @Test
+    fun `BB14 - empty-state про дату свежей загрузки не говорит нет`() {
+        assertEquals("Расписание на $date загружено", emptyStateText(date, date, SyncOutcome.Ok(5, date)))
+    }
+
+    @Test
+    fun `BB14 - empty-state для NotFound и FoundNoGroup этой даты - короткое нет`() {
+        assertEquals("Расписания на этот день нет", emptyStateText(date, date, SyncOutcome.NotFound(date)))
+        assertEquals("Расписания на этот день нет", emptyStateText(date, date, SyncOutcome.FoundNoGroup(date)))
+        assertEquals("Расписания на этот день нет", emptyStateText(date))
     }
 
     @Test
     fun `ни один финальный статус или тост не обещает скачивание`() {
         val messages = listOf(
-            statusMessageFor(SyncOutcome.Ok(5)),
+            statusMessageFor(SyncOutcome.Ok(5, date)),
             statusMessageFor(SyncOutcome.FoundNoGroup(date)),
-            statusMessageFor(SyncOutcome.NotFound),
-            toastFor(SyncOutcome.Ok(5), group),
+            statusMessageFor(SyncOutcome.NotFound(date)),
+            toastFor(SyncOutcome.Ok(5, date), group),
             toastFor(SyncOutcome.FoundNoGroup(date), group),
-            toastFor(SyncOutcome.NotFound, group),
+            toastFor(SyncOutcome.NotFound(date), group),
+            checkingStatusFor(date),
         )
         messages.forEach {
             assertFalse(it, it.contains("скачиваю", ignoreCase = true))
@@ -113,6 +154,20 @@ class SyncOutcomeStatusTest {
             assertFalse(it, it.contains("загружаем", ignoreCase = true))
             assertFalse(it, it.contains("обновляем", ignoreCase = true))
         }
+    }
+
+    @Test
+    fun `все статусы и тосты содержат дату`() {
+        val messages = listOf(
+            statusMessageFor(SyncOutcome.Ok(5, date)),
+            statusMessageFor(SyncOutcome.FoundNoGroup(date)),
+            statusMessageFor(SyncOutcome.NotFound(date)),
+            toastFor(SyncOutcome.Ok(5, date), group),
+            toastFor(SyncOutcome.FoundNoGroup(date), group),
+            toastFor(SyncOutcome.NotFound(date), group),
+            checkingStatusFor(date),
+        )
+        messages.forEach { assertTrue(it, it.contains(date)) }
     }
 
     @Test
@@ -127,6 +182,7 @@ class SyncOutcomeStatusTest {
             assertFalse(rel, text.contains("скачиваю", ignoreCase = true))
             assertFalse(rel, text.contains("Ищу на портале", ignoreCase = true))
             assertFalse(rel, text.contains("уже загружено", ignoreCase = true))
+            assertFalse(rel, text.contains("в базе колледжа", ignoreCase = true))
         }
     }
 

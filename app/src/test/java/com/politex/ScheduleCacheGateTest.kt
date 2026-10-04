@@ -88,22 +88,28 @@ class ScheduleCacheGateTest {
     fun `N — только уроки своей группы, а не всего документа`() {
 
         val doc = listOf(lesson("41О", 1), lesson("41О", 2), lesson("11Э", 1), lesson("31П", 1), lesson("31П", 2))
-        assertEquals(2, syncedCountForGroup(doc, "41О"))
-        assertEquals(1, syncedCountForGroup(doc, "11Э"))
-        assertEquals(2, syncedCountForGroup(doc, "31П"))
+        assertEquals(2, syncedCountForGroup(doc, "41О", "01.10.2026"))
+        assertEquals(1, syncedCountForGroup(doc, "11Э", "01.10.2026"))
+        assertEquals(2, syncedCountForGroup(doc, "31П", "01.10.2026"))
     }
 
     @Test
     fun `группы нет в документе — N=0 (тост «новых данных пока нет», а не «N уроков»)`() {
         val doc = listOf(lesson("11Э", 1), lesson("31П", 1))
-        assertEquals(0, syncedCountForGroup(doc, "41О"))
-        assertEquals(0, syncedCountForGroup(emptyList(), "41О"))
+        assertEquals(0, syncedCountForGroup(doc, "41О", "01.10.2026"))
+        assertEquals(0, syncedCountForGroup(emptyList(), "41О", "01.10.2026"))
+    }
+
+    @Test
+    fun `N — только уроки целевой даты, чужой день не приписывается`() {
+        val doc = listOf(lesson("41О", 1), lesson("41О", 2).copy(dateString = "02.10.2026"))
+        assertEquals(1, syncedCountForGroup(doc, "41О", "01.10.2026"))
     }
 
     @Test
     fun `кэш даты — уроки группы дают Ok без сети`() {
         assertEquals(
-            SyncOutcome.Ok(4),
+            SyncOutcome.Ok(4, "05.10.2026"),
             cachedOutcomeForDate(groupLessons = 4, parsedGroups = 0, catalogSize = catalog, date = "05.10.2026"),
         )
     }
@@ -123,18 +129,25 @@ class ScheduleCacheGateTest {
     }
 
     @Test
-    fun `комбинация кэшей — сумма Ok, иначе FoundNoGroup первой даты, null тянет в сеть`() {
-        assertEquals(SyncOutcome.Ok(8), combineCachedOutcomes(listOf(SyncOutcome.Ok(5), SyncOutcome.Ok(3))))
-        assertEquals(SyncOutcome.Ok(5), combineCachedOutcomes(listOf(SyncOutcome.Ok(5), SyncOutcome.Ok(0))))
+    fun `комбинация кэшей — исход целевой (первой) даты при полном кэше, null тянет в сеть`() {
+        // BB14: без суммы двух дней — статус называет дату первого исхода и счёт только про неё
+        assertEquals(
+            SyncOutcome.Ok(5, "05.10.2026"),
+            combineCachedOutcomes(listOf(SyncOutcome.Ok(5, "05.10.2026"), SyncOutcome.Ok(3, "04.10.2026"))),
+        )
+        assertEquals(
+            SyncOutcome.Ok(5, "05.10.2026"),
+            combineCachedOutcomes(listOf(SyncOutcome.Ok(5, "05.10.2026"), SyncOutcome.Ok(0, "04.10.2026"))),
+        )
         assertEquals(
             SyncOutcome.FoundNoGroup("05.10.2026"),
-            combineCachedOutcomes(listOf(SyncOutcome.FoundNoGroup("05.10.2026"), SyncOutcome.Ok(0))),
+            combineCachedOutcomes(listOf(SyncOutcome.FoundNoGroup("05.10.2026"), SyncOutcome.Ok(0, "04.10.2026"))),
         )
         assertEquals(
             SyncOutcome.FoundNoGroup("05.10.2026"),
             combineCachedOutcomes(listOf(SyncOutcome.FoundNoGroup("05.10.2026"), SyncOutcome.FoundNoGroup("04.10.2026"))),
         )
-        assertNull(combineCachedOutcomes(listOf(SyncOutcome.Ok(5), null)))
+        assertNull(combineCachedOutcomes(listOf(SyncOutcome.Ok(5, "05.10.2026"), null)))
         assertNull(combineCachedOutcomes(emptyList()))
     }
 }

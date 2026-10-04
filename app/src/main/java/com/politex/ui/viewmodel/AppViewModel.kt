@@ -130,7 +130,11 @@ class AppViewModel(
         }
     }
 
-    fun syncSchedule(isAutoSync: Boolean = false) {
+    // BB14: targetDate — дата видимого слота (dd.MM.yyyy) при ручном обновлении из экрана расписания
+    fun syncSchedule(
+        isAutoSync: Boolean = false,
+        targetDate: String? = null,
+    ) {
         if (_uiState.value.isSyncing) return
 
         val targetGroup = _uiState.value.currentGroupName
@@ -140,7 +144,7 @@ class AppViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true, hasSyncError = false) }
 
-            val result = scheduleRepository.syncScheduleDetailed(targetGroup, force = !isAutoSync)
+            val result = scheduleRepository.syncScheduleDetailed(targetGroup, force = !isAutoSync, targetDate = targetDate)
 
             result.fold(
                 onSuccess = { outcome ->
