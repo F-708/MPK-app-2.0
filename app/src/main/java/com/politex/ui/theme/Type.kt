@@ -146,6 +146,16 @@ val TextStylePageTitle: TextStyle
             letterSpacing = (-0.5).sp,
         )
 
+val TextStyleSubPageTitle: TextStyle
+    @Composable get() =
+        TextStyle(
+            fontFamily = FontFamily.Default,
+            fontWeight = FontWeight.Bold,
+            fontSize = 24.sp,
+            color = ColorTextTitle,
+            letterSpacing = (-0.5).sp,
+        )
+
 val TextStyleCalendarMonth: TextStyle
     @Composable get() =
         TextStyle(

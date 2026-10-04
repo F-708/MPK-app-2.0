@@ -1,11 +1,9 @@
 package com.politex.widget
 
-import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.widget.RemoteViews
 import com.politex.R
 import com.politex.data.local.entity.LessonEntity
@@ -30,6 +28,10 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onEnabled(context: Context) = WidgetAlarm.scheduleNext(context)
+
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        appWidgetIds.forEach { WidgetPrefs.clear(context, it) }
+    }
 
     companion object {
         private const val MAX_ROWS = 12
@@ -71,8 +73,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             if (lessons.isEmpty()) {
                 views.setViewVisibility(R.id.tv_today_empty, android.view.View.VISIBLE)
                 // CC9: idle-анимация в пустом состоянии (AVD автостартует в ImageView, API24+)
-                views.setImageViewResource(R.id.iv_idle, R.drawable.anim_idle)
-                views.setViewVisibility(R.id.iv_idle, android.view.View.VISIBLE)
+                WidgetUpdateHelper.showIdle(views)
             } else {
                 views.setViewVisibility(R.id.tv_today_empty, android.view.View.GONE)
                 views.setViewVisibility(R.id.iv_idle, android.view.View.GONE)
@@ -92,15 +93,11 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             }
 
             val open =
-                PendingIntent.getActivity(
+                WidgetUpdateHelper.openAppIntent(
                     context,
-                    appWidgetId,
-                    Intent(context, com.politex.MainActivity::class.java)
-
-                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        .putExtra("EXTRA_OPEN_TAB", "SCHEDULE")
-                        .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_LESSON"),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                    4_000_000 + appWidgetId,
+                    "SCHEDULE",
+                    scrollTarget = "CURRENT_LESSON",
                 )
             views.setOnClickPendingIntent(R.id.today_root, open)
             return views
@@ -159,20 +156,14 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 // уроках) — цифры клиппились. 2dp keeps chip ≈ высоте текста строки.
                 val pv = (2 * d + 0.5f).toInt()
                 row.setViewPadding(R.id.row_room, ph, pv, ph, pv)
-                val intent =
-                    Intent(context, com.politex.MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        .putExtra("EXTRA_OPEN_TAB", "MAP")
-                        .putExtra("EXTRA_ROOM", room)
-
-                        .putExtra("EXTRA_SHOW_ROUTE", true)
                 row.setOnClickPendingIntent(
                     R.id.row_room,
-                    PendingIntent.getActivity(
+                    WidgetUpdateHelper.openAppIntent(
                         context,
-                        appWidgetId * 100 + lesson.lessonNumber,
-                        intent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                        2_000_000 + appWidgetId * 100 + lesson.lessonNumber,
+                        "MAP",
+                        room = room,
+                        showRoute = true,
                     ),
                 )
             } else {

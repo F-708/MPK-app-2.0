@@ -1,11 +1,9 @@
 package com.politex.widget
 
-import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.widget.RemoteViews
 import com.politex.R
 import com.politex.data.model.CollegeBellSchedule
@@ -21,6 +19,10 @@ class BellsWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onEnabled(context: Context) = WidgetAlarm.scheduleNext(context)
+
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        appWidgetIds.forEach { WidgetPrefs.clear(context, it) }
+    }
 
     companion object {
         fun updateAll(context: Context) {
@@ -79,15 +81,11 @@ class BellsWidgetProvider : AppWidgetProvider() {
             }
 
             val open =
-                PendingIntent.getActivity(
+                WidgetUpdateHelper.openAppIntent(
                     context,
-                    appWidgetId,
-                    Intent(context, com.politex.MainActivity::class.java)
-
-                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        .putExtra("EXTRA_OPEN_TAB", "BELLS")
-                        .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_BELL"),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                    4_000_000 + appWidgetId,
+                    "BELLS",
+                    scrollTarget = "CURRENT_BELL",
                 )
             views.setOnClickPendingIntent(R.id.bells_root, open)
             return views

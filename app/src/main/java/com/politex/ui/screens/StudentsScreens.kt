@@ -55,6 +55,11 @@ import com.politex.data.repository.ScheduleRepository
 import com.politex.data.repository.Student
 import com.politex.data.repository.Teacher
 import com.politex.data.repository.TeacherInsights
+import com.politex.ui.components.AppCard
+import com.politex.ui.components.AppDivider
+import com.politex.ui.components.BackButton
+import com.politex.ui.components.SearchEmptyState
+import com.politex.ui.components.SubPageHeader
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -64,7 +69,7 @@ import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
-import com.politex.ui.theme.TextStylePageTitle
+import com.politex.ui.theme.TextStyleSubPageTitle
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberNowMinutes
@@ -135,7 +140,7 @@ fun StudentsDatabaseScreen(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "База данных учащихся",
-                        style = TextStylePageTitle.copy(fontSize = 22.sp),
+                        style = TextStyleSubPageTitle,
                         maxLines = 1,
                     )
                 }
@@ -150,12 +155,7 @@ fun StudentsDatabaseScreen(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ColorDividerLight),
-        )
+        AppDivider()
 
         OutlinedTextField(
             value = searchQuery,
@@ -198,50 +198,17 @@ fun StudentsDatabaseScreen(
         }
 
         if (filtered.isEmpty() && (searchQuery.isNotBlank() || groupFilter.isNotBlank() || courseFilter.isNotBlank())) {
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "Ничего не найдено по запросу «${searchQuery.trim()}»",
-                        style = androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = ColorTextTitle,
-                        ),
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBrandFill,
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .bouncyClickable {
-                                searchQuery = ""
-                                groupFilter = ""
-                                courseFilter = ""
-                            }
-                            .testTag("students_reset_filters_btn"),
-                    ) {
-                        Text(
-                            text = "СБРОСИТЬ ФИЛЬТРЫ",
-                            softWrap = false,
-                            maxLines = 1,
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                color = Color.White,
-                            ),
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        )
-                    }
-                }
-            }
+            SearchEmptyState(
+                query = searchQuery,
+                modifier = Modifier.fillMaxSize(),
+                onReset = {
+                    searchQuery = ""
+                    groupFilter = ""
+                    courseFilter = ""
+                },
+                resetLabel = "Сбросить фильтры",
+                resetTestTag = "students_reset_filters_btn",
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -307,10 +274,7 @@ private fun FilterDropdown(
 
 @Composable
 private fun StudentRow(student: Student, onClick: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorBgMain,
-        border = BorderStroke(1.dp, ColorBorderLight),
+    AppCard(
         modifier = Modifier
             .fillMaxWidth()
 
@@ -461,76 +425,50 @@ fun StudentCardScreen(
             .fillMaxSize()
             .background(ColorBgMain),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BackButton(onBack)
-            Spacer(modifier = Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = student.fullName,
-                    style = TextStylePageTitle.copy(fontSize = 19.sp),
-                    maxLines = 2,
-                )
-                Text(
-                    text = listOf(
-                        "Группа ${student.group}",
-                        if (student.course.isNotBlank()) "${student.course} курс" else "",
-                    ).filter { it.isNotBlank() }.joinToString(" • "),
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp,
-                        color = ADMIN_ACCENT,
-                    ),
-                    maxLines = 1,
-                )
-            }
-
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                border = BorderStroke(1.dp, ADMIN_ACCENT),
-                color = ColorBgMain,
-                modifier = Modifier
-                    .size(Tokens.IconHit)
-                    .bouncyClickable { loadSchedule() },
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            color = ADMIN_ACCENT,
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Обновить расписание группы",
-                            tint = ADMIN_ACCENT,
-                            modifier = Modifier.size(18.dp),
-                        )
+        SubPageHeader(
+            title = student.fullName,
+            subtitle = listOf(
+                "Группа ${student.group}",
+                if (student.course.isNotBlank()) "${student.course} курс" else "",
+            ).filter { it.isNotBlank() }.joinToString(" • "),
+            accent = ADMIN_ACCENT,
+            titleMaxLines = 2,
+            onBack = onBack,
+            actions = {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, ADMIN_ACCENT),
+                    color = ColorBgMain,
+                    modifier = Modifier
+                        .size(Tokens.IconHit)
+                        .bouncyClickable { loadSchedule() },
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                color = ADMIN_ACCENT,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Обновить расписание группы",
+                                tint = ADMIN_ACCENT,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
                     }
                 }
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ColorDividerLight),
+            },
         )
 
         if (loadMessage.isNotBlank()) {
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorSurfaceVariantLight,
-                border = BorderStroke(1.dp, ColorBorderLight),
+            AppCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp),
+                color = ColorSurfaceVariantLight,
             ) {
                 Text(
                     text = loadMessage,
@@ -546,10 +484,7 @@ fun StudentCardScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -693,10 +628,7 @@ fun StudentCardScreen(
                 items(insights.activeNames.sorted()) { teacherName ->
                     val rooms = insights.rooms(teacherName)
                     val subjects = insights.subjects(teacherName)
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBgMain,
-                        border = BorderStroke(1.dp, ColorBorderLight),
+                    AppCard(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
@@ -746,11 +678,9 @@ fun StudentCardScreen(
                     )
                 }
                 items(subjects) { subject ->
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorSurfaceVariantLight,
-                        border = BorderStroke(1.dp, ColorBorderLight),
+                    AppCard(
                         modifier = Modifier.fillMaxWidth(),
+                        color = ColorSurfaceVariantLight,
                     ) {
                         Text(
                             text = subject,
@@ -815,11 +745,9 @@ fun StudentCardScreen(
             if (dayMode == DayMode.CALENDAR) {
                 if (availableDates.isEmpty()) {
                     item {
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            color = ColorSurfaceVariantLight,
-                            border = BorderStroke(1.dp, ColorBorderLight),
+                        AppCard(
                             modifier = Modifier.fillMaxWidth(),
+                            color = ColorSurfaceVariantLight,
                         ) {
                             Text(
                                 text = "Архив расписания группы пуст — нажмите «Обновить» справа сверху",
@@ -867,11 +795,9 @@ fun StudentCardScreen(
             val displayLessons = lessons
             if (displayLessons.isEmpty()) {
                 item {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorSurfaceVariantLight,
-                        border = BorderStroke(1.dp, ColorBorderLight),
+                    AppCard(
                         modifier = Modifier.fillMaxWidth(),
+                        color = ColorSurfaceVariantLight,
                     ) {
                         Text(
                             text = when {
@@ -887,11 +813,9 @@ fun StudentCardScreen(
                 }
             } else {
                 items(displayLessons) { lesson ->
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorSurfaceVariantLight,
-                        border = BorderStroke(1.dp, ColorBorderLight),
+                    AppCard(
                         modifier = Modifier.fillMaxWidth(),
+                        color = ColorSurfaceVariantLight,
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -930,27 +854,6 @@ private enum class DayMode(val title: String) {
     TODAY("Сегодня"),
     TOMORROW("Завтра"),
     CALENDAR("Календарь"),
-}
-
-@Composable
-private fun BackButton(onBack: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorBgMain,
-        border = BorderStroke(1.dp, ColorBorderLight),
-        modifier = Modifier
-            .size(Tokens.IconHit)
-            .bouncyClickable(onClick = onBack),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Назад",
-                tint = ColorBrandBlue,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-    }
 }
 
 @Composable

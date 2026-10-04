@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.sp
 import com.politex.data.model.BellItem
 import com.politex.data.model.BellScheduleType
 import com.politex.data.model.CollegeBellSchedule
+import com.politex.ui.components.AppCard
+import com.politex.ui.components.AppDivider
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
@@ -331,14 +333,7 @@ fun BellsScreen(
             }
         }
 
-        Box(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 5.dp)
-                .height(1.dp)
-                .background(ColorDividerLight),
-        )
+        AppDivider(modifier = Modifier.fillMaxWidth().padding(top = 5.dp))
 
         if (isTodaySelected && bells.isNotEmpty()) {
             val breakIdx =
@@ -640,11 +635,9 @@ private fun LessonBellCard(
                 }
             }
 
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                border = BorderStroke(1.dp, ColorBorderLight),
-                color = ColorSurfaceVariantLight,
+            AppCard(
                 modifier = Modifier.wrapContentWidth(),
+                color = ColorSurfaceVariantLight,
             ) {
                 Text(
                     text = item.displayRange,

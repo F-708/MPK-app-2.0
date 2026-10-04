@@ -97,9 +97,11 @@ import com.politex.data.model.FloorMap
 import com.politex.data.model.MapPoint
 import com.politex.data.model.MapRoom
 import com.politex.data.repository.ScheduleRepository
+import com.politex.ui.components.AppCard
 import com.politex.ui.components.RoomScheduleDialog
 import com.politex.ui.components.currentRoomLessonNumber
 import com.politex.ui.components.filterRoomLessonsForDate
+import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -109,6 +111,7 @@ import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.Dow
 import kotlinx.coroutines.flow.first
@@ -119,7 +122,7 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
-private val HIGHLIGHT_COLOR = Color(0xFF0072CE)
+private val HIGHLIGHT_COLOR = ColorActiveBlue
 private val ROOM_FILL = Color(0x331976D2)
 private val ROOM_BORDER = Color(0xFF0057A8)
 private val DEAD_COLOR = Color(0xFFC0392B)
@@ -378,11 +381,11 @@ fun CollegeMapScreen(
                 modifier = Modifier.weight(1f),
             )
             Surface(
-                shape = RoundedCornerShape(3.dp),
+                shape = RoundedCornerShape(2.dp),
                 color = ColorBrandFill,
                 modifier =
                 Modifier
-                    .height(46.dp)
+                    .height(Tokens.ButtonHeight)
                     .bouncyClickable {
                         val found = query.trim()
                         if (found.isNotBlank()) {
@@ -536,11 +539,9 @@ private fun RoomPanel(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (room == null) {
-            Surface(
-                shape = RoundedCornerShape(3.dp),
-                color = ColorSurfaceVariantLight,
-                border = BorderStroke(1.dp, ColorBorderLight),
+            AppCard(
                 modifier = Modifier.fillMaxWidth(),
+                color = ColorSurfaceVariantLight,
             ) {
                 Text(
                     text = "Выберите этаж или введите номер кабинета — покажем, где он находится.",
@@ -551,10 +552,7 @@ private fun RoomPanel(
             return@Column
         }
 
-        Surface(
-            shape = RoundedCornerShape(3.dp),
-            color = ColorBgMain,
-            border = BorderStroke(1.dp, ColorBorderLight),
+        AppCard(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Row(
@@ -562,7 +560,7 @@ private fun RoomPanel(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Surface(
-                    shape = RoundedCornerShape(3.dp),
+                    shape = RoundedCornerShape(2.dp),
                     color = ColorBrandFill,
                     modifier = Modifier.size(52.dp),
                 ) {
@@ -627,11 +625,9 @@ private fun RoomPanel(
         }
 
         if (room.note.isNotBlank()) {
-            Surface(
-                shape = RoundedCornerShape(3.dp),
-                color = ColorSurfaceVariantLight,
-                border = BorderStroke(1.dp, ColorBorderLight),
+            AppCard(
                 modifier = Modifier.fillMaxWidth(),
+                color = ColorSurfaceVariantLight,
             ) {
                 Text(
                     text = room.note,
@@ -654,7 +650,7 @@ private fun RouteActionButton(
     onClick: () -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(3.dp),
+        shape = RoundedCornerShape(2.dp),
         color = if (active) ColorSurfaceVariantLight else ColorBrandFill,
         border = BorderStroke(1.dp, if (active) ColorBorderLight else ColorBrandFill),
         modifier =
@@ -793,14 +789,14 @@ private fun SearchField(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        shape = RoundedCornerShape(3.dp),
+        shape = RoundedCornerShape(2.dp),
         color = if (notFound) Color(0xFFFDECEC) else ColorSurfaceVariantLight,
         border =
         BorderStroke(
             if (notFound) 2.dp else 1.dp,
             if (notFound) DEAD_COLOR else ColorBorderLight,
         ),
-        modifier = modifier.height(46.dp),
+        modifier = modifier.height(Tokens.ButtonHeight),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp),
@@ -847,7 +843,7 @@ private fun SearchField(
                 Box(
                     modifier =
                     Modifier
-                        .size(48.dp)
+                        .size(Tokens.HitTarget)
                         .bouncyClickable { onValueChange("") },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -876,9 +872,9 @@ private fun FloorRow(
         CollegeMap.Floor.entries.forEach { f ->
             val selected = current == f.id
             Surface(
-                shape = RoundedCornerShape(3.dp),
-                color = if (selected) ColorBrandFill else ColorBgMain,
-                border = BorderStroke(1.dp, if (selected) ColorBrandFill else ColorBorderLight),
+                shape = RoundedCornerShape(2.dp),
+                color = if (selected) ColorTopBar else ColorBgMain,
+                border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
                 modifier =
                 Modifier
                     .weight(1f)
@@ -984,7 +980,7 @@ private fun MapCanvas(
                             TextStyle(
                                 fontSize = with(density) { baseFontPx.toSp() },
                                 fontWeight = FontWeight.Normal,
-                                color = Color(0xFF0B3564),
+                                color = ColorBrandBlue,
                             ),
                             maxLines = 1,
                         )
@@ -1184,7 +1180,7 @@ private fun MapCanvas(
                         ),
                         modifier =
                         Modifier
-                            .height(32.dp)
+                            .height(Tokens.ChipScreen)
                             .bouncyClickable { onSelectStage(i) },
                     ) {
                         Box(
@@ -1215,12 +1211,8 @@ private fun ZoomButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
 ) {
-    Surface(
-        shape = RoundedCornerShape(3.dp),
-        color = ColorBgMain,
-        border = BorderStroke(1.dp, ColorBorderLight),
-        modifier =
-        Modifier
+    AppCard(
+        modifier = Modifier
 
             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
             .bouncyClickable(onClick = onClick),
@@ -1321,7 +1313,7 @@ private fun DrawScope.drawMap(
         val cx = r.x * imgW
         val cy = r.y * imgH
         val vertical = r.h > r.w * 1.6f
-        val color = if (r.status == "nonexistent") DEAD_COLOR else Color(0xFF0B3564)
+        val color = if (r.status == "nonexistent") DEAD_COLOR else ColorBrandBlue
 
         withTransform({
             if (vertical) rotate(90f, Offset(cx, cy))

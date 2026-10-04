@@ -93,7 +93,9 @@ import com.politex.data.local.entity.TaskReminderEntity
 import com.politex.data.model.GroupInfo
 import com.politex.data.model.TaskType
 import com.politex.data.repository.TaskRepository
-import com.politex.ui.screens.materials.BrandActionButton
+import com.politex.ui.components.AppCard
+import com.politex.ui.components.AppDivider
+import com.politex.ui.components.BrandActionButton
 import com.politex.ui.theme.ColorBadgeCourse
 import com.politex.ui.theme.ColorBadgeDiploma
 import com.politex.ui.theme.ColorBadgeExam
@@ -266,14 +268,7 @@ fun TasksScreen(
                 }
             }
 
-            Box(
-                modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
-                    .height(1.dp)
-                    .background(ColorDividerLight),
-            )
+            AppDivider(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
 
             if (visibleTasks.isEmpty()) {
 
@@ -967,8 +962,8 @@ fun TaskEditDialog(
                         val isSelected = selectedType == type
                         Surface(
                             shape = RoundedCornerShape(2.dp),
-                            border = BorderStroke(1.dp, if (isSelected) ColorBrandBlue else ColorBorderLight),
-                            color = if (isSelected) ColorBrandBlue else ColorBgMain,
+                            border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
+                            color = if (isSelected) ColorTopBar else ColorBgMain,
                             contentColor = if (isSelected) Color.White else ColorTextBody,
                             modifier =
                             Modifier
@@ -998,8 +993,8 @@ fun TaskEditDialog(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, if (!isCustomSubject) ColorBrandBlue else ColorBorderLight),
-                        color = if (!isCustomSubject) ColorBrandBlue else ColorBgMain,
+                        border = BorderStroke(1.dp, if (!isCustomSubject) ColorTopBar else ColorBorderLight),
+                        color = if (!isCustomSubject) ColorTopBar else ColorBgMain,
                         contentColor = if (!isCustomSubject) Color.White else ColorTextBody,
                         modifier =
                         Modifier
@@ -1019,8 +1014,8 @@ fun TaskEditDialog(
                     }
                     Surface(
                         shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, if (isCustomSubject) ColorBrandBlue else ColorBorderLight),
-                        color = if (isCustomSubject) ColorBrandBlue else ColorBgMain,
+                        border = BorderStroke(1.dp, if (isCustomSubject) ColorTopBar else ColorBorderLight),
+                        color = if (isCustomSubject) ColorTopBar else ColorBgMain,
                         contentColor = if (isCustomSubject) Color.White else ColorTextBody,
                         modifier =
                         Modifier
@@ -1342,8 +1337,8 @@ private fun TimeChip(
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, if (selected) ColorBrandBlue else ColorBorderLight),
-        color = if (selected) ColorBrandBlue else ColorBgMain,
+        border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
+        color = if (selected) ColorTopBar else ColorBgMain,
         contentColor = if (selected) Color.White else ColorTextBody,
         modifier =
         Modifier
@@ -1391,12 +1386,8 @@ private fun ReminderComposer(
             modifier = Modifier.padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorBgMain,
-                border = BorderStroke(1.dp, ColorBorderLight),
-                modifier =
-                Modifier
+            AppCard(
+                modifier = Modifier
                     .fillMaxWidth()
                     .bouncyClickable { showDatePicker = true },
             ) {

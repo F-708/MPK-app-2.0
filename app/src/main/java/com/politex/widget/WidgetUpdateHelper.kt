@@ -1,9 +1,16 @@
 package com.politex.widget
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.os.Build
+import android.widget.RemoteViews
+import com.politex.MainActivity
+import com.politex.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -96,5 +103,75 @@ object WidgetUpdateHelper {
             WidgetKind.TODAY -> TodayScheduleWidgetProvider.updateAll(context)
             WidgetKind.BELLS -> BellsWidgetProvider.updateAll(context)
         }
+    }
+
+    // D1: общий «exact если можно, иначе inexact while-idle» для всех будильников приложения.
+    // Используется в WidgetAlarm.scheduleNext, BellTimerService.scheduleFallbackAlarm.
+    fun setExactOrIdle(
+        context: Context,
+        triggerAt: Long,
+        pi: PendingIntent,
+    ) {
+        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
+        try {
+            if (canExact) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC, triggerAt, pi)
+            } else {
+                am.setAndAllowWhileIdle(AlarmManager.RTC, triggerAt, pi)
+            }
+        } catch (_: SecurityException) {
+            am.setAndAllowWhileIdle(AlarmManager.RTC, triggerAt, pi)
+        }
+    }
+
+    // D3: единый PendingIntent «открыть приложение» для всех виджетов (тап по корню/чипу).
+    // code — из неймспейсов SRED11, extras собираются только когда нужны (семантика прежняя).
+    fun openAppIntent(
+        context: Context,
+        code: Int,
+        tab: String,
+        scrollTarget: String? = null,
+        room: String? = null,
+        showRoute: Boolean = false,
+        fromRoom: String? = null,
+    ): PendingIntent {
+        val intent =
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra("EXTRA_OPEN_TAB", tab)
+        if (scrollTarget != null) intent.putExtra("EXTRA_SCROLL_TARGET", scrollTarget)
+        if (room != null) intent.putExtra("EXTRA_ROOM", room)
+        if (showRoute) intent.putExtra("EXTRA_SHOW_ROUTE", true)
+        if (!fromRoom.isNullOrBlank()) intent.putExtra("EXTRA_FROM_ROOM", fromRoom)
+        return PendingIntent.getActivity(
+            context,
+            code,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    // D5: показать idle-колокольчик (AVD) в пустом состоянии виджета.
+    fun showIdle(
+        views: RemoteViews,
+        id: Int = R.id.iv_idle,
+    ) {
+        views.setImageViewResource(id, R.drawable.anim_idle)
+        views.setViewVisibility(id, android.view.View.VISIBLE)
+    }
+}
+
+// SRED9: очистка per-widget настроек при удалении виджета, иначе ключи текут навсегда.
+object WidgetPrefs {
+    private val PREFIXES = listOf("widget_style_", "countdown_mode_", "widget_show_room_", "widget_seconds_")
+
+    fun clear(
+        context: Context,
+        appWidgetId: Int,
+    ) {
+        val editor = WidgetUpdateHelper.getPrefs(context).edit()
+        PREFIXES.forEach { editor.remove(it + appWidgetId) }
+        editor.apply()
     }
 }

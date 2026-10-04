@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import com.politex.ui.components.AppCard
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -55,6 +56,8 @@ import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
+import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 
 @Composable
@@ -131,7 +134,7 @@ fun MaterialTextDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
             }
         },
         confirmButton = {
-            DialogButton(text = "СОХРАНИТЬ", color = ColorBrandBlue, enabled = text.isNotBlank(), testTag = "material_text_save") {
+            DialogButton(text = "СОХРАНИТЬ", color = ColorBrandFill, enabled = text.isNotBlank(), testTag = "material_text_save") {
                 onConfirm(text)
             }
         },
@@ -223,7 +226,7 @@ fun MaterialSubjectDialog(
         confirmButton = {
             DialogButton(
                 text = "ПОЛОЖИТЬ",
-                color = ColorBrandBlue,
+                color = ColorBrandFill,
                 enabled = canConfirm,
                 testTag = "dest_confirm_btn",
             ) {
@@ -263,7 +266,7 @@ fun MaterialRenameDialog(
             )
         },
         confirmButton = {
-            DialogButton(text = "СОХРАНИТЬ", color = ColorBrandBlue, enabled = value.isNotBlank(), testTag = "rename_confirm_btn") {
+            DialogButton(text = "СОХРАНИТЬ", color = ColorBrandFill, enabled = value.isNotBlank(), testTag = "rename_confirm_btn") {
                 onConfirm(value.trim())
             }
         },
@@ -293,7 +296,7 @@ fun MaterialDeleteDialog(
                 if (softActionText != null && onSoftAction != null) {
                     DialogButton(
                         text = softActionText,
-                        color = ColorBrandBlue,
+                        color = ColorBrandFill,
                         testTag = "delete_soft_btn",
                         onClick = onSoftAction,
                         modifier = Modifier.fillMaxWidth(),
@@ -318,7 +321,7 @@ private fun DialogTitle(text: String, onClose: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = ColorTextTitle))
-        IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
+        IconButton(onClick = onClose, modifier = Modifier.size(Tokens.HitTarget)) {
             Icon(imageVector = Icons.Default.Close, contentDescription = "Закрыть", tint = ColorTextMuted)
         }
     }
@@ -332,15 +335,13 @@ private fun DialogActionRow(
     testTag: String,
     onClick: () -> Unit,
 ) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, ColorBorderLight),
-        color = ColorSurfaceVariantLight,
+    AppCard(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
+            .heightIn(min = Tokens.ButtonHeight)
             .bouncyClickable(onClick = onClick)
             .testTag(testTag),
+        color = ColorSurfaceVariantLight,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -365,11 +366,11 @@ private fun DialogActionRow(
 private fun ToggleChip(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, if (selected) ColorBrandBlue else ColorBorderLight),
-        color = if (selected) ColorBrandBlue else ColorBgMain,
+        border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
+        color = if (selected) ColorTopBar else ColorBgMain,
         contentColor = if (selected) Color.White else ColorTextBody,
         modifier = modifier
-            .heightIn(min = 36.dp)
+            .heightIn(min = Tokens.ChipForm)
             .bouncyClickable(onClick = onClick),
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
@@ -417,38 +418,13 @@ fun BrandActionButton(
     filled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, ColorBrandBlue),
-        color = if (filled) ColorBrandFill else ColorBgMain,
-        modifier = Modifier
-            .heightIn(min = 44.dp)
-            .bouncyClickable(onClick = onClick)
-            .testTag(testTag),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = if (filled) Color.White else ColorBrandBlue,
-                modifier = Modifier.size(16.dp),
-            )
-            if (label.isNotEmpty()) {
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = label.uppercase(),
-                    maxLines = 1,
-                    softWrap = false,
-                    style = TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = if (filled) Color.White else ColorBrandBlue,
-                    ),
-                )
-            }
-        }
-    }
+    // R4 §10: реализация перенесена в ui.components.BrandActionButton.
+    // ponytail: форвардер нужен, пока ImageViewer.kt (чужая PDF-волна) не получит import — удалить после.
+    com.politex.ui.components.BrandActionButton(
+        icon = icon,
+        label = label,
+        testTag = testTag,
+        filled = filled,
+        onClick = onClick,
+    )
 }

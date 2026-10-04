@@ -113,7 +113,7 @@ fun LessonsHubScreen(
                                 .width(28.dp)
                                 .height(3.dp)
                                 .background(
-                                    if (isSelected) ColorBrandBlue else Color.Transparent,
+                                    if (isSelected) ColorTopBar else Color.Transparent,
                                     RoundedCornerShape(2.dp),
                                 ),
                         )

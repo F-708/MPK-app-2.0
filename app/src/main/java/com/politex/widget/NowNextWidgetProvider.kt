@@ -1,11 +1,9 @@
 package com.politex.widget
 
-import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.widget.RemoteViews
 import com.politex.R
 import com.politex.data.local.entity.LessonEntity
@@ -34,6 +32,10 @@ class NowNextWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onEnabled(context: Context) = WidgetAlarm.scheduleNext(context)
+
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        appWidgetIds.forEach { WidgetPrefs.clear(context, it) }
+    }
 
     companion object {
         fun updateAll(context: Context) {
@@ -98,8 +100,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(it, android.view.View.GONE)
                 }
                 // CC9: idle-анимация в пустом состоянии (AVD автостартует в ImageView, API24+)
-                views.setImageViewResource(R.id.iv_idle, R.drawable.anim_idle)
-                views.setViewVisibility(R.id.iv_idle, android.view.View.VISIBLE)
+                WidgetUpdateHelper.showIdle(views)
             } else if (current != null) {
                 views.setTextViewText(R.id.tv_now_label, "СЕЙЧАС")
                 views.setTextViewText(R.id.tv_now_subject, SubjectFormatter.getShortName(current.subjectRaw))
@@ -139,15 +140,11 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             }
 
             val open =
-                PendingIntent.getActivity(
+                WidgetUpdateHelper.openAppIntent(
                     context,
-                    appWidgetId,
-                    Intent(context, com.politex.MainActivity::class.java)
-
-                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        .putExtra("EXTRA_OPEN_TAB", "SCHEDULE")
-                        .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_LESSON"),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                    4_000_000 + appWidgetId,
+                    "SCHEDULE",
+                    scrollTarget = "CURRENT_LESSON",
                 )
             views.setOnClickPendingIntent(R.id.now_next_root, open)
             return views
@@ -178,22 +175,15 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(viewId, "каб. $room")
             views.setViewVisibility(viewId, android.view.View.VISIBLE)
 
-            val intent =
-                Intent(context, com.politex.MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra("EXTRA_OPEN_TAB", "SCHEDULE")
-                    .putExtra("EXTRA_ROOM", room)
-
-                    .putExtra("EXTRA_SHOW_ROUTE", true)
-
-            if (!fromRoom.isNullOrBlank()) intent.putExtra("EXTRA_FROM_ROOM", fromRoom)
             views.setOnClickPendingIntent(
                 viewId,
-                PendingIntent.getActivity(
+                WidgetUpdateHelper.openAppIntent(
                     context,
-                    appWidgetId * 10 + if (slot == "now") 1 else 2,
-                    intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                    1_000_000 + appWidgetId * 10 + if (slot == "now") 1 else 2,
+                    "SCHEDULE",
+                    room = room,
+                    showRoute = true,
+                    fromRoom = fromRoom,
                 ),
             )
         }
@@ -201,10 +191,10 @@ class NowNextWidgetProvider : AppWidgetProvider() {
 }
 
 object WidgetData {
-    fun minuteOfDay(context: Context): Int {
-        val cal = java.util.Calendar.getInstance()
-        return cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
-    }
+    // D6: единый источник «минуты суток» — вместо инлайн HOUR*60+MIN по всему коду.
+    fun minuteOfDay(cal: java.util.Calendar): Int = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+
+    fun minuteOfDay(context: Context): Int = minuteOfDay(java.util.Calendar.getInstance())
 
     fun dayOfWeek(context: Context): Int = Dow.of(java.util.Calendar.getInstance())
 

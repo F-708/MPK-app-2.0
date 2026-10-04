@@ -55,6 +55,7 @@ import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.GroupParser
 import com.politex.util.MpkCurriculum
@@ -129,7 +130,7 @@ fun GroupSelectionDialog(
 
                         modifier =
                         Modifier
-                            .size(48.dp)
+                            .size(Tokens.HitTarget)
                             .bouncyClickable(onClick = onDismissRequest),
                     ) {
                         Icon(
@@ -173,7 +174,7 @@ fun GroupSelectionDialog(
                             modifier =
                             Modifier
                                 .weight(1f)
-                                .height(36.dp)
+                                .height(Tokens.ChipForm)
                                 .bouncyClickable { selectedCourse = course },
                         ) {
                             Box(
@@ -225,7 +226,7 @@ fun GroupSelectionDialog(
                                 border =
                                 BorderStroke(
                                     1.dp,
-                                    if (isCurrent) ColorBrandBlue else ColorBorderLight,
+                                    if (isCurrent) ColorTopBar else ColorBorderLight,
                                 ),
                                 modifier =
                                 Modifier
@@ -309,7 +310,7 @@ fun GroupSelectionDialog(
                         contentColor = Color.White,
                         modifier =
                         Modifier
-                            .height(54.dp)
+                            .height(Tokens.ButtonHeight)
                             .bouncyClickable {
                                 val parsed = GroupParser.parse(manualInput)
                                 if (parsed != null) {

@@ -41,6 +41,7 @@ import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorDividerLight
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import java.util.Calendar
 import java.util.Locale
@@ -83,12 +84,8 @@ fun SimpleDatePickerDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Surface(
-            shape = RoundedCornerShape(2.dp),
-            color = ColorBgMain,
-            border = BorderStroke(1.dp, ColorBorderLight),
-            modifier =
-            Modifier
+        AppCard(
+            modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .fillMaxWidth(),
         ) {
@@ -146,13 +143,7 @@ fun SimpleDatePickerDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Box(
-                    modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(ColorDividerLight),
-                )
+                AppDivider()
 
                 Spacer(modifier = Modifier.height(10.dp))
 
@@ -184,7 +175,7 @@ private fun ArrowButton(
         modifier =
         Modifier
 
-            .size(48.dp)
+            .size(Tokens.HitTarget)
             .bouncyClickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

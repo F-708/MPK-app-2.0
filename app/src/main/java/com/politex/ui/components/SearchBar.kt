@@ -45,13 +45,11 @@ fun SearchBar(
     testTag: String? = null,
     keyboardType: KeyboardType = KeyboardType.Text,
 ) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorSurfaceVariantLight,
-        border = BorderStroke(1.dp, ColorBorderLight),
+    AppCard(
         modifier = modifier
             .fillMaxWidth()
             .height(Tokens.SearchHeight),
+        color = ColorSurfaceVariantLight,
     ) {
         Row(
             modifier = Modifier

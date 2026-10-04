@@ -7,7 +7,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.widget.RemoteViews
 import com.politex.R
 import com.politex.data.model.BellItem
@@ -36,7 +35,16 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onDisabled(context: Context) {
-        WidgetAlarm.cancel(context)
+        // CRIT2: отменяем будильник, только если виджетов не осталось ВООБЩЕ
+        // (hasWork проверяет все 4 провайдера) — иначе удаление одного виджета
+        // глушило минутный тик для остальных.
+        WidgetAlarm.cancelIfNoWork(context)
+    }
+
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        // SRED9: чистим per-widget настройки удалённого инстанса
+        appWidgetIds.forEach { WidgetPrefs.clear(context, it) }
+        WidgetUpdateHelper.invalidateSecondsCache()
     }
 
     companion object {
@@ -69,7 +77,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
         ): Triple<Long, String, Int>? {
             val cal = java.util.Calendar.getInstance()
             val dow = Dow.of(cal)
-            val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+            val minutes = WidgetData.minuteOfDay(cal)
             val bells = CollegeBellSchedule.getBellsForDay(dow)
 
             val lastGroupLesson = if (mode == CountdownMode.GROUP_LESSONS) {
@@ -230,7 +238,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             val mode = CountdownMode.load(context, appWidgetId)
             val cal = java.util.Calendar.getInstance()
             val dow = Dow.of(cal)
-            val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+            val minutes = WidgetData.minuteOfDay(cal)
             val bells = CollegeBellSchedule.getBellsForDay(dow)
 
             val lastGroupLesson = if (mode == CountdownMode.GROUP_LESSONS && dow in 1..6) {
@@ -273,12 +281,12 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                         dow in 1..6 && mode == CountdownMode.GROUP_LESSONS && lastGroupLesson == null -> {
                             views.setTextViewText(R.id.tv_countdown_label, "Уроков нет")
                             views.setViewVisibility(R.id.tv_countdown_value, android.view.View.GONE)
-                            showIdleAnimation(views)
+                            WidgetUpdateHelper.showIdle(views)
                         }
                         dow in 1..6 && mode == CountdownMode.ALL_BELLS && bells.isEmpty() -> {
                             views.setTextViewText(R.id.tv_countdown_label, "Звонков сегодня нет")
                             views.setViewVisibility(R.id.tv_countdown_value, android.view.View.GONE)
-                            showIdleAnimation(views)
+                            WidgetUpdateHelper.showIdle(views)
                         }
                         else -> {
 
@@ -289,24 +297,14 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 }
             }
 
-            val openIntent = PendingIntent.getActivity(
+            val openIntent = WidgetUpdateHelper.openAppIntent(
                 context,
-                appWidgetId,
-                Intent(context, com.politex.MainActivity::class.java)
-
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra("EXTRA_OPEN_TAB", "BELLS")
-                    .putExtra("EXTRA_SCROLL_TARGET", "CURRENT_BELL"),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                4_000_000 + appWidgetId,
+                "BELLS",
+                scrollTarget = "CURRENT_BELL",
             )
             views.setOnClickPendingIntent(R.id.widget_countdown_root, openIntent)
             return views
-        }
-
-        // CC9: idle-анимация в ветках «нет таймера» (AVD автостартует в ImageView, API24+)
-        private fun showIdleAnimation(views: RemoteViews) {
-            views.setImageViewResource(R.id.iv_idle, R.drawable.anim_idle)
-            views.setViewVisibility(R.id.iv_idle, android.view.View.VISIBLE)
         }
 
         fun formatMinutes(totalMinutes: Long): String {
@@ -457,35 +455,32 @@ object WidgetAlarm {
 
     fun scheduleNext(context: Context) {
         if (!hasWork(context)) return
-        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val cal = Calendar.getInstance()
-        val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+        val minutes = WidgetData.minuteOfDay(cal)
+        val now = System.currentTimeMillis()
 
+        // SRED13: в учебное окно — ровно следующая минутная граница (тик не дрейфует).
         val triggerAt = if (minutes in SCHOOL_START until SCHOOL_END) {
-            System.currentTimeMillis() + 60_000L
+            now + (60_000L - now % 60_000L)
         } else {
-
             (cal.clone() as Calendar).apply {
                 set(Calendar.HOUR_OF_DAY, 7)
                 set(Calendar.MINUTE, 0)
                 set(Calendar.SECOND, 0)
                 set(Calendar.MILLISECOND, 0)
-                if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
+                if (timeInMillis <= now) add(Calendar.DAY_OF_YEAR, 1)
             }.timeInMillis
         }
 
-        val pi = pendingIntent(context)
+        // D1: общее exact-или-idle планирование (WatchdogWorker/AlarmReceiver/scheduleNext)
+        WidgetUpdateHelper.setExactOrIdle(context, triggerAt, pendingIntent(context))
+    }
 
-        val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
-        try {
-            if (canExact) {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC, triggerAt, pi)
-            } else {
-                am.setAndAllowWhileIdle(AlarmManager.RTC, triggerAt, pi)
-            }
-        } catch (_: SecurityException) {
-            am.setAndAllowWhileIdle(AlarmManager.RTC, triggerAt, pi)
-        }
+    // CRIT2: отменять будильник можно, только когда не осталось НИ ОДНОГО виджета.
+    internal fun shouldCancelAlarm(hasWork: Boolean): Boolean = !hasWork
+
+    fun cancelIfNoWork(context: Context) {
+        if (shouldCancelAlarm(hasWork(context))) cancel(context)
     }
 
     fun cancel(context: Context) {
@@ -521,11 +516,24 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
                     }
                 }
             }
-            Intent.ACTION_BOOT_COMPLETED -> {
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            -> {
+                // SRED4: после загрузки и после обновления приложения системные будильники
+                // сброшены — перепланируем тик, поднимаем сервис и обновляем все виджеты.
                 WidgetAlarm.scheduleNext(context)
 
                 if (com.politex.util.BellCountdownNotifier.isEnabled(context)) {
                     com.politex.util.BellTimerService.start(context)
+                }
+
+                val pending = goAsync()
+                WidgetUpdateHelper.widgetScope.launch {
+                    try {
+                        WidgetUpdateHelper.updateAllWidgets(context)
+                    } finally {
+                        pending.finish()
+                    }
                 }
             }
         }

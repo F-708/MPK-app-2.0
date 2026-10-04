@@ -312,21 +312,12 @@ fun CalendarArchiveDialog(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     if (searchResults.isEmpty()) {
-                        Box(
-                            modifier =
-                            Modifier
+                        SearchEmptyState(
+                            query = searchQuery,
+                            modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = "Ничего не найдено по запросу «$searchQuery»",
-                                style =
-                                androidx.compose.ui.text
-                                    .TextStyle(color = ColorTextMuted, fontSize = 14.sp),
-                                textAlign = TextAlign.Center,
-                            )
-                        }
+                        )
                     } else {
                         LazyColumn(
                             modifier =
@@ -352,12 +343,8 @@ fun CalendarArchiveDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            border = BorderStroke(1.dp, ColorBorderLight),
-                            color = ColorBgMain,
-                            modifier =
-                            Modifier
+                        AppCard(
+                            modifier = Modifier
                                 .bouncyClickable {
                                     if (displayedMonth == 0) {
                                         displayedMonth = 11
@@ -385,12 +372,8 @@ fun CalendarArchiveDialog(
                             textAlign = TextAlign.Center,
                         )
 
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            border = BorderStroke(1.dp, ColorBorderLight),
-                            color = ColorBgMain,
-                            modifier =
-                            Modifier
+                        AppCard(
+                            modifier = Modifier
                                 .bouncyClickable {
                                     if (displayedMonth == 11) {
                                         displayedMonth = 0
@@ -432,13 +415,7 @@ fun CalendarArchiveDialog(
                         }
                     }
 
-                    Box(
-                        modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(ColorDividerLight),
-                    )
+                    AppDivider()
 
                     Spacer(modifier = Modifier.height(4.dp))
 
@@ -539,13 +516,7 @@ fun CalendarArchiveDialog(
                         }
                     }
 
-                    Box(
-                        modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(ColorDividerLight),
-                    )
+                    AppDivider()
 
                     Spacer(modifier = Modifier.height(8.dp))
 

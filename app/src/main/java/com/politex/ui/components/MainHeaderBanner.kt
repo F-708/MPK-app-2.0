@@ -65,13 +65,7 @@ fun MainHeaderBanner(modifier: Modifier = Modifier) {
             )
         }
 
-        Box(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ColorDividerLight),
-        )
+        AppDivider()
     }
 }
 

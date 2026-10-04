@@ -45,6 +45,14 @@ class ScheduleCheckWorker(
             return prefs.getBoolean("notified_${groupName}_$ds", false) ||
                 prefs.getBoolean("checked_${groupName}_$ds", false)
         }
+
+        // SRED10: пишем отметку и заодно чистим notified_/checked_ ключи старше 7 дней,
+        // иначе SharedPreferences бесконечно растёт по одной паре ключей на день.
+        fun mark(key: String) {
+            val editor = prefs.edit().putBoolean(key, true)
+            staleMarkKeys(prefs.all.keys, System.currentTimeMillis()).forEach { editor.remove(it) }
+            editor.apply()
+        }
         val live = nextDayCandidates(calendar, saturdayIsSchoolDay = isFirstCourse).filterNot { marked(it) }
         if (live.isEmpty()) {
             return@withContext Result.success()
@@ -105,14 +113,14 @@ class ScheduleCheckWorker(
                             targetDate = targetDateString,
                         )
 
-                        prefs.edit().putBoolean(prefKey, true).apply()
+                        mark(prefKey)
                     } else {
 
-                        prefs.edit().putBoolean(checkedKey, true).apply()
+                        mark(checkedKey)
                     }
                 } else {
 
-                    prefs.edit().putBoolean(checkedKey, true).apply()
+                    mark(checkedKey)
                 }
                 Result.success()
             },
@@ -125,5 +133,24 @@ class ScheduleCheckWorker(
 
     companion object {
         const val WORK_NAME = "mpk_schedule_check_worker"
+
+        private val DATE_IN_KEY = Regex("""\d{2}\.\d{2}\.\d{4}""")
+
+        // SRED10: notified_/checked_ ключи, чья дата (dd.MM.yyyy) старше keepDays дней.
+        // Чистая функция — тестируется без SharedPreferences.
+        internal fun staleMarkKeys(
+            allKeys: Set<String>,
+            nowMillis: Long,
+            keepDays: Int = 7,
+        ): List<String> {
+            val fmt = SimpleDateFormat("dd.MM.yyyy", Locale.ROOT)
+            val cutoff = nowMillis - keepDays * 24L * 60 * 60 * 1000
+            return allKeys.filter { key ->
+                (key.startsWith("notified_") || key.startsWith("checked_")) &&
+                    DATE_IN_KEY.find(key)?.value?.let { ds ->
+                        runCatching { fmt.parse(ds)?.time }.getOrNull()?.let { it < cutoff } ?: false
+                    } ?: false
+            }
+        }
     }
 }

@@ -59,6 +59,9 @@ import com.politex.data.repository.SyncOutcome
 import com.politex.data.repository.TeacherInsights
 import com.politex.data.repository.checkingStatusFor
 import com.politex.data.repository.emptyStateText
+import com.politex.ui.components.AppCard
+import com.politex.ui.components.AppDivider
+import com.politex.ui.components.CenteredLoader
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -72,6 +75,7 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStylePageTitle
+import com.politex.ui.theme.TextStyleSubPageTitle
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberNowMinutes
@@ -368,13 +372,9 @@ fun GroupScheduleScreen(
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorBgMain,
-                border = BorderStroke(1.dp, ColorBorderLight),
-                modifier =
-                Modifier
-                    .size(36.dp)
+            AppCard(
+                modifier = Modifier
+                    .size(Tokens.IconHit)
                     .bouncyClickable(onClick = onBack),
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -390,7 +390,7 @@ fun GroupScheduleScreen(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Расписание группы",
-                    style = TextStylePageTitle.copy(fontSize = 24.sp),
+                    style = TextStyleSubPageTitle,
                     maxLines = 1,
                 )
                 Text(
@@ -416,7 +416,7 @@ fun GroupScheduleScreen(
                     border = BorderStroke(1.dp, ColorBorderLight),
                     modifier =
                     Modifier
-                        .size(36.dp)
+                        .size(Tokens.HitTarget)
                         .bouncyClickable { syncForeignSchedule(force = true) }
                         .testTag("group_schedule_sync_button"),
                 ) {
@@ -440,13 +440,7 @@ fun GroupScheduleScreen(
             }
         }
 
-        Box(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ColorDividerLight),
-        )
+        AppDivider()
 
         if (selectedGroupName.isBlank()) {
             // ponytail: GroupCatalog.load читает asset 310B на main thread — ничтожно; кэш, если каталог вырастет
@@ -517,7 +511,7 @@ fun GroupScheduleScreen(
                         color = Color.White.copy(alpha = 0.14f),
                         modifier =
                         Modifier
-                            .heightIn(min = 48.dp)
+                            .heightIn(min = Tokens.ButtonHeight)
                             .bouncyClickable { onChangeGroup() }
                             .testTag("group_schedule_change_button"),
                     ) {
@@ -530,7 +524,7 @@ fun GroupScheduleScreen(
                                 style =
                                 androidx.compose.ui.text.TextStyle(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
+                                    fontSize = Tokens.ButtonText,
                                     color = Color.White,
                                 ),
                             )
@@ -574,24 +568,14 @@ fun GroupScheduleScreen(
                 )
             }
 
-            Box(
-                modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
-                    .height(1.dp)
-                    .background(ColorDividerLight),
-            )
+            AppDivider(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
 
             if (syncError != null && lessons.isNotEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorSurfaceVariantLight,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier =
-                    Modifier
+                AppCard(
+                    modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 6.dp),
+                    color = ColorSurfaceVariantLight,
                 ) {
                     Text(
                         text = syncError ?: "",
@@ -604,20 +588,7 @@ fun GroupScheduleScreen(
             }
 
             if (isInitialLoad) {
-                Box(
-                    modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(
-                        color = ColorBrandBlue,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(28.dp),
-                    )
-                }
+                CenteredLoader(modifier = Modifier.fillMaxWidth().weight(1f))
             } else if (lessons.isEmpty()) {
 
                 Box(
@@ -663,7 +634,7 @@ fun GroupScheduleScreen(
                             style =
                             androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
+                                fontSize = 18.sp,
                                 color = ColorTextTitle,
                             ),
                             textAlign = TextAlign.Center,
@@ -690,7 +661,7 @@ fun GroupScheduleScreen(
                                 modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 48.dp)
+                                    .heightIn(min = Tokens.ButtonHeight)
                                     .bouncyClickable { syncForeignSchedule(force = true) }
                                     .testTag("group_schedule_retry_button"),
                             ) {
@@ -948,7 +919,7 @@ private fun GroupSchedulePicker(
             modifier =
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = 48.dp)
+                .heightIn(min = Tokens.ButtonHeight)
                 .bouncyClickable(enabled = inCatalog) { code?.let(onGroupSelected) }
                 .testTag("group_picker_open_button"),
         ) {
@@ -1040,7 +1011,7 @@ private fun GroupDaySlotCell(
         color = if (selected) ColorTopBar else ColorBgMain,
         modifier =
         modifier
-            .height(52.dp)
+            .height(Tokens.ChipScreen)
             .bouncyClickable(onClick = onClick),
     ) {
         Column(

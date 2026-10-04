@@ -64,6 +64,7 @@ import com.politex.data.local.dao.GradeDao
 import com.politex.data.local.entity.GradeConfigEntity
 import com.politex.data.local.entity.GradeEntryEntity
 import com.politex.data.model.GroupInfo
+import com.politex.ui.components.AppCard
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
@@ -77,6 +78,7 @@ import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberToday
 import com.politex.util.GradeAggregator
@@ -202,12 +204,8 @@ private fun GradeSubjectList(
                         weightsEnabled = globalWeights && (config?.weightsEnabled ?: true),
                     )
                 }
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorBgMain,
-                border = BorderStroke(1.dp, ColorBorderLight),
-                modifier =
-                Modifier
+            AppCard(
+                modifier = Modifier
                     .fillMaxWidth()
                     .testTag("grades_subject_row_$subject")
                     .bouncyClickable { onOpenSubject(subject) },
@@ -338,7 +336,7 @@ private fun GradeSubjectScreen(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("grades_back")) {
+            IconButton(onClick = onBack, modifier = Modifier.size(Tokens.HitTarget).testTag("grades_back")) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад", tint = ColorTextTitle)
             }
             Text(
@@ -396,12 +394,8 @@ private fun GradeSubjectScreen(
         Spacer(modifier = Modifier.weight(1f))
 
         // Нижняя панель прижата к низу контента (последний элемент Column, без weight)
-        Surface(
-            shape = RoundedCornerShape(2.dp),
-            color = ColorBgMain,
-            border = BorderStroke(1.dp, ColorBorderLight),
-            modifier =
-            Modifier
+        AppCard(
+            modifier = Modifier
                 .fillMaxWidth()
                 .testTag("grades_input_panel"),
         ) {
@@ -409,15 +403,12 @@ private fun GradeSubjectScreen(
 
                 // CC1: undo-плашка НАД строкой оценок (панель растёт вверх, средний балл не сдвигает)
                 lastDeleted?.let { deleted ->
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorSurfaceHighlight,
-                        border = BorderStroke(1.dp, ColorBorderLight),
-                        modifier =
-                        Modifier
+                    AppCard(
+                        modifier = Modifier
                             .fillMaxWidth()
-                            .height(32.dp)
+                            .height(Tokens.HitTarget)
                             .testTag("grades_undo_row"),
+                        color = ColorSurfaceHighlight,
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -559,12 +550,8 @@ private fun RowScope.NumberKey(
     value: Int,
     onSubmit: (Int) -> Unit,
 ) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorBgMain,
-        border = BorderStroke(1.dp, ColorBorderLight),
-        modifier =
-        Modifier
+    AppCard(
+        modifier = Modifier
             .weight(1f)
             .height(56.dp)
             .testTag("grades_num_$value")
@@ -593,7 +580,7 @@ private fun RowScope.CategorySegment(
         modifier =
         Modifier
             .weight(1f)
-            .height(32.dp)
+            .height(Tokens.ChipForm)
             .testTag("grades_chip_${category.name}")
             .bouncyClickable(onClick = onClick),
     ) {
@@ -780,7 +767,7 @@ private fun GradeSubjectSettingsScreen(
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = if (weightsEnabled) ColorSurfaceHighlight else ColorBgMain,
-                    border = BorderStroke(1.dp, if (weightsEnabled) ColorBrandBlue else ColorBorderLight),
+                    border = BorderStroke(1.dp, if (weightsEnabled) ColorTopBar else ColorBorderLight),
                     modifier =
                     Modifier
                         .fillMaxWidth()
@@ -819,14 +806,11 @@ private fun GradeSubjectSettingsScreen(
                             }
                         raw?.let { GradeAggregator.roundAvg(it, roundingMode) }
                     }
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorSurfaceHighlight,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier =
-                    Modifier
+                AppCard(
+                    modifier = Modifier
                         .fillMaxWidth()
                         .testTag("grades_weight_preview"),
+                    color = ColorSurfaceHighlight,
                 ) {
                     Column(
                         modifier =
@@ -956,7 +940,7 @@ private fun RowScope.RoundingSegment(
         modifier =
         Modifier
             .weight(1f)
-            .height(32.dp)
+            .height(Tokens.ChipForm)
             .testTag(tag)
             .bouncyClickable(onClick = onClick),
     ) {

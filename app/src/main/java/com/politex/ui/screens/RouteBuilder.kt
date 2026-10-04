@@ -140,7 +140,7 @@ fun RoutePairPanel(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        shape = RoundedCornerShape(3.dp),
+        shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
         border = androidx.compose.foundation.BorderStroke(1.dp, ColorBorderLight),
         modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp),
@@ -151,7 +151,7 @@ fun RoutePairPanel(
                 PairField(placeholder = "Куда", value = valueB, onValueChange = onValueB, modifier = Modifier.weight(1f))
             }
             Surface(
-                shape = RoundedCornerShape(3.dp),
+                shape = RoundedCornerShape(2.dp),
                 color = ColorBrandFill,
                 modifier = Modifier.fillMaxWidth().bouncyClickable(onClick = onBuild),
             ) {
@@ -176,7 +176,7 @@ private fun PairField(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        shape = RoundedCornerShape(3.dp),
+        shape = RoundedCornerShape(2.dp),
         color = ColorSurfaceVariantLight,
         border = androidx.compose.foundation.BorderStroke(1.dp, ColorBorderLight),
         modifier = modifier.height(com.politex.ui.theme.Tokens.SearchHeight),

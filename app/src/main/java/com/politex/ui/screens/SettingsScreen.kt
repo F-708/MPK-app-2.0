@@ -67,6 +67,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.politex.BuildConfig
 import com.politex.data.model.GroupInfo
+import com.politex.ui.components.AppCard
 import com.politex.ui.components.GroupSelectionDialog
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
@@ -80,6 +81,7 @@ import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
+import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.ColorWarning
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.AppThemeStore
@@ -221,10 +223,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
@@ -302,10 +301,7 @@ fun SettingsScreen(
 
             item { SectionHeader("УПРАВЛЕНИЕ") }
             item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
@@ -328,10 +324,7 @@ fun SettingsScreen(
 
             item { SectionHeader("РАСПИСАНИЕ И УВЕДОМЛЕНИЯ") }
             item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -425,10 +418,7 @@ fun SettingsScreen(
                             .getBoolean("map_routes_enabled", true),
                     )
                 }
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                AppCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("map_routes_toggle"),
@@ -485,10 +475,7 @@ fun SettingsScreen(
                 var weightsEnabled by remember {
                     mutableStateOf(GradeSettings.getGlobalWeightsEnabled(context))
                 }
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                AppCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("grades_weights_toggle"),
@@ -549,7 +536,7 @@ fun SettingsScreen(
                             color = ColorBgMain,
                             border = BorderStroke(
                                 if (isSelected) 2.dp else 1.dp,
-                                if (isSelected) ColorBrandBlue else ColorBorderLight,
+                                if (isSelected) ColorTopBar else ColorBorderLight,
                             ),
                             modifier = Modifier.bouncyClickable { onThemePicked(theme) },
                         ) {
@@ -593,10 +580,7 @@ fun SettingsScreen(
 
             item { SectionHeader("ДАННЫЕ") }
             item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -652,10 +636,7 @@ fun SettingsScreen(
             // демо-задание и пульс кабинетов вернутся при следующем входе
             if (BuildConfig.FLAVOR == "admin") {
                 item {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBgMain,
-                        border = BorderStroke(1.dp, ColorBorderLight),
+                    AppCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("reset_hints_card"),
@@ -701,10 +682,7 @@ fun SettingsScreen(
 
             item { SectionHeader("О ПРИЛОЖЕНИИ") }
             item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
@@ -717,10 +695,7 @@ fun SettingsScreen(
             }
 
             item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -754,10 +729,7 @@ fun SettingsScreen(
             }
 
             item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
@@ -871,10 +843,7 @@ private fun BellCountdownNotificationCard() {
         }
     }
 
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorBgMain,
-        border = BorderStroke(1.dp, ColorBorderLight),
+    AppCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("bell_notification_card"),
@@ -1037,7 +1006,7 @@ private fun BellCountdownNotificationCard() {
                     val isSelected = selectedStyle == style
                     Surface(
                         shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, if (isSelected) ColorBrandBlue else ColorBorderLight),
+                        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
                         color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1096,7 +1065,7 @@ private fun BellCountdownNotificationCard() {
                     val isSelected = selectedTheme == theme
                     Surface(
                         shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, if (isSelected) ColorBrandBlue else ColorBorderLight),
+                        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
                         color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1151,7 +1120,7 @@ private fun BellCountdownNotificationCard() {
                     val isSelected = selectedScope == scope
                     Surface(
                         shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, if (isSelected) ColorBrandBlue else ColorBorderLight),
+                        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
                         color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
                         modifier = Modifier
                             .fillMaxWidth()

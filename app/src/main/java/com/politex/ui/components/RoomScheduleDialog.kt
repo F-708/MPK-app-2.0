@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -45,6 +46,8 @@ import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
+import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 
 fun filterRoomLessonsForDate(
@@ -118,7 +121,7 @@ fun RoomScheduleDialog(
                     IconButton(
                         onClick = onDismissRequest,
 
-                        modifier = Modifier.size(48.dp).testTag("room_close"),
+                        modifier = Modifier.size(Tokens.HitTarget).testTag("room_close"),
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -209,8 +212,8 @@ private fun DayToggle(
             val selected = tomorrowSelected == isTomorrow
             Surface(
                 shape = RoundedCornerShape(2.dp),
-                color = if (selected) ColorBrandFill else ColorBgMain,
-                border = BorderStroke(1.dp, if (selected) ColorBrandFill else ColorBorderLight),
+                color = if (selected) ColorTopBar else ColorBgMain,
+                border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
                 modifier =
                 Modifier
                     .heightIn(min = 32.dp)
@@ -240,36 +243,15 @@ private fun DayToggle(
 
 @Composable
 private fun RoomScheduleEmptyContent(tomorrow: Boolean) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = ColorSurfaceHighlight,
-            modifier = Modifier.size(56.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.EventBusy,
-                    contentDescription = null,
-                    tint = ColorBrandBlue,
-                    modifier = Modifier.size(28.dp),
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text =
-            if (tomorrow) {
-                "Нет уроков в этом кабинете завтра"
-            } else {
-                "Нет уроков в этом кабинете сегодня"
-            },
-            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-    }
+    EmptyState(
+        icon = Icons.Default.EventBusy,
+        title =
+        if (tomorrow) {
+            "Нет уроков в этом кабинете завтра"
+        } else {
+            "Нет уроков в этом кабинете сегодня"
+        },
+    )
 }
 
 @Composable

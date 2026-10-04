@@ -8,20 +8,8 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <!-- Виджеты рабочего стола МГПК -->
-    <color name="widget_bg_light">#FFFFFFFF</color>
-    <color name="widget_bg_border">#E2E8F0</color>
-    <color name="widget_primary">#FF1565C0</color>
-    <color name="widget_primary_container">#FFE3F2FD</color>
-    <color name="widget_primary_dark">#FF0D47A1</color>
-    <color name="widget_text_title">#FF0F172A</color>
-    <color name="widget_text_secondary">#FF475569</color>
-    <color name="widget_text_tertiary">#FF64748B</color>
-    <color name="widget_accent_green">#FF2E7D32</color>
-    <color name="widget_accent_green_bg">#FFE8F5E9</color>
-    <color name="widget_accent_orange">#FFE65100</color>
-    <color name="widget_accent_orange_bg">#FFFFF3E0</color>
+    <!-- Виджеты рабочего стола МГПК. R4 §12: мёртвые widget_* удалены,
+         widget_primary приведён к бренду (#0072CE = ColorActiveBlue). -->
+    <color name="widget_primary">#FF0072CE</color>
     <color name="widget_row_bg">#FFF8FAFC</color>
-    <color name="widget_subgroup_1">#FF1E88E5</color>
-    <color name="widget_subgroup_2">#FFF57C00</color>
 </resources>

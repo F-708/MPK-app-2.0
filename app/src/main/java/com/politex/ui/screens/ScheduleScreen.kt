@@ -81,7 +81,10 @@ import com.politex.data.model.TaskType
 import com.politex.data.repository.ScheduleRepository
 import com.politex.data.repository.checkingStatusFor
 import com.politex.data.repository.emptyStateText
+import com.politex.ui.components.AppCard
+import com.politex.ui.components.AppDivider
 import com.politex.ui.components.CalendarArchiveDialog
+import com.politex.ui.components.CenteredLoader
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBadgeCourse
 import com.politex.ui.theme.ColorBadgeDiploma
@@ -102,6 +105,7 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStylePageTitle
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberNowMinutes
 import com.politex.ui.util.rememberToday
@@ -553,7 +557,7 @@ fun ScheduleScreen(
             Box(
                 modifier =
                 Modifier
-                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .sizeIn(minWidth = Tokens.HitTarget, minHeight = Tokens.HitTarget)
                     .bouncyClickable(onClick = { onSyncRequest(activeDateString) })
                     .testTag("sync_button"),
                 contentAlignment = Alignment.Center,
@@ -619,13 +623,9 @@ fun ScheduleScreen(
                 modifier = Modifier.weight(1f),
             )
 
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                border = BorderStroke(1.dp, ColorBorderLight),
-                color = ColorBgMain,
-                modifier =
-                Modifier
-                    .size(width = 56.dp, height = 52.dp)
+            AppCard(
+                modifier = Modifier
+                    .size(Tokens.HitTarget)
                     .bouncyClickable { showArchiveDialog = true }
                     .testTag("calendar_archive_button"),
             ) {
@@ -640,14 +640,7 @@ fun ScheduleScreen(
             }
         }
 
-        Box(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
-                .height(1.dp)
-                .background(ColorDividerLight),
-        )
+        AppDivider(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
 
         AnimatedContent(
 
@@ -658,20 +651,7 @@ fun ScheduleScreen(
             modifier = Modifier.weight(1f),
         ) { _ ->
             if (isInitialLoad) {
-                Box(
-                    modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    androidx.compose.material3.CircularProgressIndicator(
-                        color = ColorBrandBlue,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(28.dp),
-                    )
-                }
+                CenteredLoader(modifier = Modifier.fillMaxWidth().weight(1f))
             } else if (lessons.isEmpty()) {
                 Box(
                     modifier =
@@ -869,15 +849,12 @@ private fun SplitRouteOption(
     label: String,
     onClick: () -> Unit,
 ) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, ColorBorderLight),
-        color = ColorSurfaceHighlight,
-        modifier =
-        Modifier
+    AppCard(
+        modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 44.dp)
             .bouncyClickable(onClick = onClick),
+        color = ColorSurfaceHighlight,
     ) {
         Box(
             contentAlignment = Alignment.CenterStart,
@@ -1111,14 +1088,11 @@ fun LessonCard(
                                 .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(2.dp),
-                                border = BorderStroke(1.dp, ColorBorderLight),
-                                color = ColorSurfaceHighlight,
-                                modifier =
-                                Modifier
+                            AppCard(
+                                modifier = Modifier
                                     .pulseHalo(pulse)
                                     .wrapContentWidth(),
+                                color = ColorSurfaceHighlight,
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -1271,14 +1245,11 @@ private fun SubgroupPane(
                         .bouncyClickable(scaleDown = 0.97f) { onRoomClick(room) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, ColorBorderLight),
-                        color = ColorSurfaceHighlight,
-                        modifier =
-                        Modifier
+                    AppCard(
+                        modifier = Modifier
                             .pulseHalo(pulse)
                             .wrapContentWidth(),
+                        color = ColorSurfaceHighlight,
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1351,7 +1322,7 @@ private fun DaySlotCell(
         color = if (selected) ColorTopBar else ColorBgMain,
         modifier =
         modifier
-            .height(52.dp)
+            .height(Tokens.ChipScreen)
             .bouncyClickable(onClick = onClick),
     ) {
         Column(

@@ -57,7 +57,12 @@ import com.politex.data.repository.ScheduleRepository
 import com.politex.data.repository.Student
 import com.politex.data.repository.Teacher
 import com.politex.data.repository.TeacherInsights
+import com.politex.ui.components.AppCard
+import com.politex.ui.components.AppDivider
+import com.politex.ui.components.BackButton
 import com.politex.ui.components.SearchBar
+import com.politex.ui.components.SearchEmptyState
+import com.politex.ui.components.SubPageHeader
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
@@ -250,13 +255,7 @@ private fun OtherMenu(
                     )
                 }
                 item {
-                    Box(
-                        modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(ColorDividerLight),
-                    )
+                    AppDivider()
                 }
             }
 
@@ -312,12 +311,8 @@ private fun MenuCard(
     subtitle: String,
     onClick: () -> Unit,
 ) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorBgMain,
-        border = BorderStroke(1.dp, ColorBorderLight),
-        modifier =
-        Modifier
+    AppCard(
+        modifier = Modifier
             .fillMaxWidth()
             .bouncyClickable(onClick = onClick),
     ) {
@@ -451,39 +446,10 @@ private fun SettingsPage(
     onBack: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SubPageBackButton(onBack)
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = "Настройки",
-                    style = TextStylePageTitle.copy(fontSize = 24.sp),
-                    maxLines = 1,
-                )
-                Text(
-                    text = "Параметры и диагностика приложения",
-                    style =
-                    androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp,
-                        color = ColorBrandBlue,
-                    ),
-                )
-            }
-        }
-
-        Box(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ColorDividerLight),
+        SubPageHeader(
+            title = "Настройки",
+            subtitle = "Параметры и диагностика приложения",
+            onBack = onBack,
         )
 
         SettingsScreen(
@@ -511,40 +477,10 @@ private fun MySpecialtyPage(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SubPageBackButton(onBack)
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = "Моя специальность",
-                    style = TextStylePageTitle.copy(fontSize = 24.sp),
-                    maxLines = 1,
-                )
-                Text(
-                    text = "Группа ${groupInfo.canonicalName}",
-                    style =
-                    androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp,
-                        color = ColorBrandBlue,
-                    ),
-                    maxLines = 1,
-                )
-            }
-        }
-
-        Box(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ColorDividerLight),
+        SubPageHeader(
+            title = "Моя специальность",
+            subtitle = "Группа ${groupInfo.canonicalName}",
+            onBack = onBack,
         )
 
         LazyColumn(
@@ -560,12 +496,8 @@ private fun MySpecialtyPage(
             }
 
             item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
-                    modifier =
-                    Modifier
+                AppCard(
+                    modifier = Modifier
                         .fillMaxWidth()
                         .testTag("specialty_card"),
                 ) {
@@ -634,11 +566,9 @@ private fun MySpecialtyPage(
             if (specialty.workerProfessions.isNotEmpty()) {
                 item { SectionLabel("РАБОЧИЕ ПРОФЕССИИ") }
                 items(specialty.workerProfessions) { profession ->
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorSurfaceVariantLight,
-                        border = BorderStroke(1.dp, ColorBorderLight),
+                    AppCard(
                         modifier = Modifier.fillMaxWidth(),
+                        color = ColorSurfaceVariantLight,
                     ) {
                         Text(
                             text = profession,
@@ -707,11 +637,9 @@ private fun MySpecialtyPage(
             val isIncomplete = selectedCourse in specialty.incompleteCourses
             if (isIncomplete) {
                 item {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorSurfaceVariantLight,
-                        border = BorderStroke(1.dp, ColorBorderLight),
+                    AppCard(
                         modifier = Modifier.fillMaxWidth(),
+                        color = ColorSurfaceVariantLight,
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
@@ -749,11 +677,9 @@ private fun MySpecialtyPage(
                     )
                 }
                 items(subjects) { subject ->
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorSurfaceVariantLight,
-                        border = BorderStroke(1.dp, ColorBorderLight),
+                    AppCard(
                         modifier = Modifier.fillMaxWidth(),
+                        color = ColorSurfaceVariantLight,
                     ) {
                         Text(
                             text = subject,
@@ -838,40 +764,10 @@ private fun TeachersPage(
         }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SubPageBackButton(onBack)
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = "Преподаватели",
-                    style = TextStylePageTitle.copy(fontSize = 22.sp),
-                    maxLines = 1,
-                )
-                Text(
-                    text = "${teachers.size} сотрудников • ${insights.activeNames.size} ведут у ${groupInfo.canonicalName}",
-                    style =
-                    androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp,
-                        color = ColorBrandBlue,
-                    ),
-                    maxLines = 1,
-                )
-            }
-        }
-
-        Box(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ColorDividerLight),
+        SubPageHeader(
+            title = "Преподаватели",
+            subtitle = "${teachers.size} сотрудников • ${insights.activeNames.size} ведут у ${groupInfo.canonicalName}",
+            onBack = onBack,
         )
 
         SearchBar(
@@ -885,47 +781,12 @@ private fun TeachersPage(
         )
 
         if (rows.isEmpty()) {
-            Box(
-                modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "Ничего не найдено по запросу «$searchQuery»",
-                        style =
-                        androidx.compose.ui.text
-                            .TextStyle(fontSize = 14.sp, color = ColorTextMuted),
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBrandFill,
-                        modifier =
-                        Modifier
-                            .heightIn(min = Tokens.ButtonHeight)
-                            .bouncyClickable { searchQuery = "" }
-                            .testTag("teachers_reset_btn"),
-                    ) {
-                        Text(
-                            text = "СБРОСИТЬ",
-                            softWrap = false,
-                            maxLines = 1,
-                            style =
-                            androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                color = Color.White,
-                            ),
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        )
-                    }
-                }
-            }
+            SearchEmptyState(
+                query = searchQuery,
+                modifier = Modifier.fillMaxSize(),
+                onReset = { searchQuery = "" },
+                resetTestTag = "teachers_reset_btn",
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -1238,7 +1099,7 @@ private fun TeacherCardPage(
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SubPageBackButton(onBack)
+            BackButton(onBack)
             Spacer(modifier = Modifier.width(10.dp))
             TeacherAvatar(teacher = teacher, size = 52.dp, highlight = isActive)
             Spacer(modifier = Modifier.width(10.dp))
@@ -1271,13 +1132,7 @@ private fun TeacherCardPage(
             }
         }
 
-        Box(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ColorDividerLight),
-        )
+        AppDivider()
 
         androidx.compose.foundation.lazy.LazyRow(
             modifier = Modifier.fillMaxWidth(),
@@ -1325,13 +1180,7 @@ private fun TeacherCardPage(
             }
         }
 
-        Box(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ColorDividerLight),
-        )
+        AppDivider()
 
         when (tab) {
             0 ->
@@ -1413,10 +1262,7 @@ private fun AboutTeacherTab(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorBgMain,
-                border = BorderStroke(1.dp, ColorBorderLight),
+            AppCard(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
@@ -1464,10 +1310,7 @@ private fun AboutTeacherTab(
         }
 
         item {
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorBgMain,
-                border = BorderStroke(1.dp, ColorBorderLight),
+            AppCard(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
@@ -1505,11 +1348,9 @@ private fun AboutTeacherTab(
                     .map { it.trim() }
                     .filter { it.isNotBlank() }
             items(list) { subject ->
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorSurfaceVariantLight,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
+                    color = ColorSurfaceVariantLight,
                 ) {
                     Text(
                         text = subject,
@@ -1525,10 +1366,7 @@ private fun AboutTeacherTab(
         val hasContacts = teacher.room.isNotBlank() || teacher.phone.isNotBlank() || teacher.email.isNotBlank()
         if (hasContacts) {
             item {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                AppCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -1762,7 +1600,7 @@ private fun TeacherScheduleTab(
                 color = if (customDate != null) ColorTopBar else ColorBgMain,
                 modifier =
                 Modifier
-                    .size(38.dp)
+                    .size(Tokens.IconHit)
                     .bouncyClickable { showCalendar = true },
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -1837,10 +1675,7 @@ private fun TeacherScheduleTab(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     items(slots) { slot ->
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            color = ColorBgMain,
-                            border = BorderStroke(1.dp, ColorBorderLight),
+                        AppCard(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Row(
@@ -1905,9 +1740,7 @@ private fun TeacherScheduleTab(
                                             .bouncyClickable(scaleDown = 0.97f) { onOpenRoom(slot.room) },
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        Surface(
-                                            shape = RoundedCornerShape(2.dp),
-                                            border = BorderStroke(1.dp, ColorBorderLight),
+                                        AppCard(
                                             color = ColorSurfaceHighlight,
                                         ) {
                                             Row(
@@ -1955,7 +1788,7 @@ private fun DayChip(
         color = if (selected) ColorTopBar else ColorBgMain,
         modifier =
         modifier
-            .height(38.dp)
+            .height(Tokens.ChipScreen)
             .bouncyClickable(onClick = onClick),
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -1970,51 +1803,6 @@ private fun DayChip(
                 ),
             )
         }
-    }
-}
-
-@Composable
-private fun SubPageBackButton(onBack: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorBgMain,
-        border = BorderStroke(1.dp, ColorBorderLight),
-        modifier =
-        Modifier
-
-            .size(Tokens.IconHit)
-            .bouncyClickable(onClick = onBack),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Назад",
-                tint = ColorBrandBlue,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun SubPageHeader(
-    title: String,
-    onBack: () -> Unit,
-) {
-    Row(
-        modifier =
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SubPageBackButton(onBack)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = title,
-            style = TextStylePageTitle,
-            maxLines = 2,
-        )
     }
 }
 
@@ -2097,11 +1885,9 @@ private fun InfoRow(
 
 @Composable
 private fun EmptyCard(text: String) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorSurfaceVariantLight,
-        border = BorderStroke(1.dp, ColorBorderLight),
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
+        color = ColorSurfaceVariantLight,
     ) {
         Text(
             text = text,

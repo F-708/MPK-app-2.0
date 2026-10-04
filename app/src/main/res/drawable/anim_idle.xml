@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- CC9: idle-анимация виджетов «нет уроков/нет таймера» — колокольчик покачивается
-     бесконечно (цикл 2.4с: 1200мс туда + reverse). AnimatedVectorDrawable
-     автостартует в ImageView виджета на API 24+ (minSdk 24).
+     несколько раз и замирает (repeatCount=3, цикл 1200мс туда + reverse). Конечный
+     repeat вместо infinite — иначе AVD крутился бы вечно и жрал батарею (МЕЛОЧ20);
+     после проигрывания остаётся статичный кадр, idle-визуал сохранён.
+     AnimatedVectorDrawable автостартует в ImageView виджета на API 24+ (minSdk 24).
      Цвет нейтральный серо-голубой — читается на всех 4 темах виджетов. -->
 <animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt">
@@ -32,7 +34,7 @@
                 android:duration="1200"
                 android:valueType="floatType"
                 android:interpolator="@android:anim/accelerate_decelerate_interpolator"
-                android:repeatCount="infinite"
+                android:repeatCount="3"
                 android:repeatMode="reverse" />
         </aapt:attr>
     </target>

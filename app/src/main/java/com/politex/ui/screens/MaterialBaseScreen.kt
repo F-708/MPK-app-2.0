@@ -67,7 +67,11 @@ import com.politex.data.local.MpkDatabase
 import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.data.local.entity.MaterialKind
 import com.politex.data.model.GroupInfo
-import com.politex.ui.screens.materials.BrandActionButton
+import com.politex.ui.components.AppCard
+import com.politex.ui.components.AppDivider
+import com.politex.ui.components.EmptyState
+import com.politex.ui.components.SearchEmptyState
+import com.politex.ui.components.BrandActionButton
 import com.politex.ui.screens.materials.MaterialCard
 import com.politex.ui.screens.materials.MaterialDeleteDialog
 import com.politex.ui.screens.materials.MaterialDocTextViewer
@@ -91,6 +95,7 @@ import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.FuzzySearch
 import com.politex.util.MaterialImporter
@@ -101,6 +106,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+
+private const val MATERIAL_STORAGE_NOTE = "Материалы хранятся только на этом телефоне"
 
 private const val RESTORED_SUBJECT = "Восстановленные"
 
@@ -399,7 +406,8 @@ fun MaterialBaseScreen(
 
         if (importing) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)), contentAlignment = Alignment.Center) {
-                Surface(shape = RoundedCornerShape(2.dp), color = ColorBgMain, border = BorderStroke(1.dp, ColorBorderLight)) {
+                AppCard(
+                ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(16.dp),
@@ -596,12 +604,14 @@ private fun MaterialRootList(
             return
         }
         MaterialListUi.EMPTY -> {
-            MaterialEmptyState(
+            EmptyState(
                 title = "Материалов пока нет",
                 hint =
                 "Нажмите «ДОБАВИТЬ» и выберите файл, набор изображений или текст. " +
                     "Материал ляжет в предмет — потом его можно переименовать, " +
                     "перенести в Архив и читать прямо в приложении.",
+                note = MATERIAL_STORAGE_NOTE,
+                hintTestTag = "material_empty_hint",
                 modifier = modifier,
             )
             return
@@ -704,7 +714,7 @@ private fun MaterialSubjectContent(
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp),
         ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag(if (isArchive) "archive_back_btn" else "subject_back_btn")) {
+            IconButton(onClick = onBack, modifier = Modifier.size(Tokens.HitTarget).testTag(if (isArchive) "archive_back_btn" else "subject_back_btn")) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад", tint = ColorTextTitle)
             }
             if (isArchive) {
@@ -730,14 +740,7 @@ private fun MaterialSubjectContent(
             }
         }
 
-        Box(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-                .height(1.dp)
-                .background(ColorDividerLight),
-        )
+        AppDivider(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp))
 
         // CC7: три фазы — placeholder до загрузки, empty-state только когда реально пусто
         when (materialListUi(loaded, items.size)) {
@@ -745,7 +748,7 @@ private fun MaterialSubjectContent(
                 MaterialLoadingPlaceholder(Modifier.weight(1f))
 
             MaterialListUi.EMPTY ->
-                MaterialEmptyState(
+                EmptyState(
                     title = if (isArchive) "В Архиве пусто" else "Материалов пока нет",
                     hint =
                     if (isArchive) {
@@ -753,6 +756,8 @@ private fun MaterialSubjectContent(
                     } else {
                         "Нажмите «ДОБАВИТЬ» на главном экране материалов и выберите этот предмет."
                     },
+                    note = MATERIAL_STORAGE_NOTE,
+                    hintTestTag = "material_empty_hint",
                     modifier = Modifier.weight(1f),
                 )
 
@@ -828,20 +833,15 @@ private fun MaterialSearchContent(
 
     if (hits.isEmpty()) {
 
-        MaterialEmptyState(
-            title = "Ничего не нашлось",
+        SearchEmptyState(
+            query = query,
             hint = "Архив в поиске не участвует",
-            showStorageNote = false,
+            onReset = onClear,
+            resetLabel = "Очистить",
+            resetTestTag = "material_search_clear",
+            resetFilled = false,
+            hintTestTag = "material_empty_hint",
             modifier = modifier,
-            action = {
-                BrandActionButton(
-                    icon = Icons.Default.Close,
-                    label = "Очистить",
-                    testTag = "material_search_clear",
-                    filled = false,
-                    onClick = onClear,
-                )
-            },
         )
         return
     }
@@ -1062,58 +1062,3 @@ private fun RowIconButton(
     }
 }
 
-@Composable
-private fun MaterialEmptyState(
-    title: String,
-    hint: String,
-    modifier: Modifier = Modifier,
-    showStorageNote: Boolean = true,
-    action: (@Composable () -> Unit)? = null,
-) {
-    Box(
-        modifier = modifier.fillMaxWidth().padding(24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Box(
-                modifier =
-                Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(ColorSurfaceHighlight),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Inventory2,
-                    contentDescription = null,
-                    tint = ColorBrandBlue,
-                    modifier = Modifier.size(28.dp),
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(title, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = ColorTextTitle))
-            if (hint.isNotBlank()) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = hint,
-                    textAlign = TextAlign.Center,
-                    style = TextStyle(fontSize = 13.sp, color = ColorTextMuted),
-                    modifier = Modifier.padding(horizontal = 12.dp).testTag("material_empty_hint"),
-                )
-                if (showStorageNote) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Материалы хранятся только на этом телефоне",
-                        style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                    )
-                }
-            }
-
-            if (action != null) {
-                Spacer(modifier = Modifier.height(16.dp))
-                action()
-            }
-        }
-    }
-}

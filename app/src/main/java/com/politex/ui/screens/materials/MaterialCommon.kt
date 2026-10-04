@@ -44,13 +44,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.local.entity.MaterialItemEntity
+import com.politex.ui.components.AppCard
+import com.politex.ui.theme.ColorActiveBlue
+import com.politex.ui.theme.ColorBadgeLab
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
+import com.politex.ui.theme.ColorDangerFill
+import com.politex.ui.theme.ColorSuccess
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 
 object ViewerMode {
@@ -68,10 +74,10 @@ fun materialIconFor(item: MaterialItemEntity): ImageVector = when {
 }
 
 fun materialIconTint(item: MaterialItemEntity): Color = when {
-    item.ext == "pdf" -> Color(0xFFDC2626)
-    item.ext == "doc" || item.ext == "docx" -> Color(0xFF0072CE)
-    item.ext == "xls" || item.ext == "xlsx" -> Color(0xFF16A34A)
-    item.imagePaths.isNotEmpty() -> Color(0xFF8B5CF6)
+    item.ext == "pdf" -> ColorDangerFill
+    item.ext == "doc" || item.ext == "docx" -> ColorActiveBlue
+    item.ext == "xls" || item.ext == "xlsx" -> ColorSuccess
+    item.imagePaths.isNotEmpty() -> ColorBadgeLab
     else -> ColorBrandBlue
 }
 
@@ -108,7 +114,7 @@ fun MaterialViewerTopBar(
                 IconButton(
                     onClick = onBack,
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(Tokens.HitTarget)
                         .testTag("${testTag}_back"),
                 ) {
                     Icon(
@@ -142,7 +148,7 @@ fun ViewerAction(
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        color = if (active) ColorBrandBlue else Color.Transparent,
+        color = if (active) ColorTopBar else Color.Transparent,
         modifier = Modifier
             .size(44.dp)
             .bouncyClickable(onClick = onClick)
@@ -167,10 +173,7 @@ fun UnsupportedFormatPlaque(ext: String, fileName: String, modifier: Modifier = 
             .padding(16.dp),
         contentAlignment = Alignment.TopCenter,
     ) {
-        Surface(
-            shape = RoundedCornerShape(2.dp),
-            border = BorderStroke(1.dp, ColorBorderLight),
-            color = ColorBgMain,
+        AppCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("unsupported_plaque"),
@@ -219,10 +222,7 @@ fun MaterialCard(
         .heightIn(min = 44.dp)
         .let { if (testTag != null) it.testTag(testTag) else it }
         .let { if (onClick != null) it.bouncyClickable(onClick = onClick) else it }
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, ColorBorderLight),
-        color = ColorBgMain,
+    AppCard(
         modifier = base,
     ) {
         Box(

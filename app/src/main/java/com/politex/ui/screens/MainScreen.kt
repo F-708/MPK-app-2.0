@@ -66,6 +66,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.politex.data.model.GroupInfo
+import com.politex.ui.components.AppDivider
 import com.politex.ui.components.MainTopBar
 import com.politex.ui.components.UndoSnackbar
 import com.politex.ui.theme.ColorBgMain
@@ -73,6 +74,7 @@ import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorDividerLight
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextMuted
+import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.viewmodel.ARG_SCROLL
 import com.politex.ui.viewmodel.AppTab
 import com.politex.ui.viewmodel.AppViewModel
@@ -260,13 +262,7 @@ fun MainScreen(
             },
             bottomBar = {
                 if (!ViewerMode.active && !RouteBuilderMode.active) Column(modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(ColorDividerLight),
-                    )
+                    AppDivider()
                     NavigationBar(
                         containerColor = ColorBgMain,
                         tonalElevation = 0.dp,
@@ -310,8 +306,8 @@ fun MainScreen(
                                 },
                                 colors =
                                 NavigationBarItemDefaults.colors(
-                                    selectedIconColor = ColorBrandBlue,
-                                    selectedTextColor = ColorBrandBlue,
+                                    selectedIconColor = ColorTopBar,
+                                    selectedTextColor = ColorTopBar,
                                     indicatorColor = ColorSurfaceHighlight,
                                     unselectedIconColor = ColorTextMuted,
                                     unselectedTextColor = ColorTextMuted,
