@@ -190,6 +190,9 @@ fun TasksScreen(
         }
         if (isDemoTask(task.id)) return // демо не в БД — просто исчезает из списка
         coroutineScope.launch {
+            // R2#7: deleteTask удаляет напоминания каскадом — перед удалением снимаем
+            // снимок, undo восстанавливает его вместе с заданием
+            val remindersSnapshot = reminderDao.getForTask(task.id)
             taskRepository.deleteTask(task)
             if (snackbarHostState == null) return@launch
             val result =
@@ -200,6 +203,7 @@ fun TasksScreen(
                 )
             if (result == SnackbarResult.ActionPerformed && !isDemoTask(task.id)) {
                 taskRepository.addTask(task.copy())
+                if (remindersSnapshot.isNotEmpty()) reminderDao.insertAll(remindersSnapshot)
             }
         }
     }
@@ -256,6 +260,7 @@ fun TasksScreen(
                         isSelected = selectedFilter == null,
                         index = 0,
                         offsets = chipOffsets,
+                        tag = "task_filter_all",
                         onClick = { selectedFilter = null },
                     )
                     availableTypes.forEachIndexed { i, type ->
@@ -264,6 +269,7 @@ fun TasksScreen(
                             isSelected = selectedFilter == type,
                             index = i + 1,
                             offsets = chipOffsets,
+                            tag = "task_filter_${type.name.lowercase()}",
                             onClick = { selectedFilter = type },
                         )
                     }
@@ -560,7 +566,8 @@ fun TaskItemCard(
                 modifier =
                 Modifier
                     .size(Tokens.IconHit)
-                    .bouncyClickable(onClick = onToggleCompleted),
+                    .bouncyClickable(onClick = onToggleCompleted)
+                    .testTag("task_check_${task.id}"),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -683,6 +690,7 @@ private fun TaskFilterChip(
     isSelected: Boolean,
     index: Int,
     offsets: MutableMap<Int, Pair<Int, Int>>,
+    tag: String,
     onClick: () -> Unit,
 ) {
     Surface(
@@ -693,7 +701,8 @@ private fun TaskFilterChip(
         Modifier
             .height(Tokens.ChipScreen)
             .onGloballyPositioned { offsets[index] = it.positionInParent().x.toInt() to it.size.width }
-            .bouncyClickable(onClick = onClick),
+            .bouncyClickable(onClick = onClick)
+            .testTag(tag),
     ) {
         Box(
             contentAlignment = Alignment.Center,

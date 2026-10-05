@@ -99,5 +99,3 @@ private fun paletteWithAccents(
 fun applyAppTheme(theme: AppTheme) {
     paletteState = theme.palette
 }
-
-val currentAppTheme: AppTheme get() = AppTheme.entries.firstOrNull { it.palette == paletteState } ?: AppTheme.COLLEGE

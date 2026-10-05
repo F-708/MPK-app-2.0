@@ -125,13 +125,10 @@ fun GroupSelectionDialog(
                     )
                 }
                 if (showClose) {
+                    // R2#20: IconButton сам обрабатывает клик — bouncyClickable дубль убран
                     IconButton(
                         onClick = onDismissRequest,
-
-                        modifier =
-                        Modifier
-                            .size(Tokens.HitTarget)
-                            .bouncyClickable(onClick = onDismissRequest),
+                        modifier = Modifier.size(Tokens.HitTarget),
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,

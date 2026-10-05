@@ -269,7 +269,7 @@ class PromoShotsTest {
 
     @Test
     fun shotTasks() = shoot("shot_tasks", tab = 1, interact = { waitForText("Параграф 12") }) {
-        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao()))
+        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao(), db.taskReminderDao()))
     }
 
     @Test
@@ -281,7 +281,7 @@ class PromoShotsTest {
             waitForTag("material_subject_Математика")
         },
     ) {
-        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao()))
+        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao(), db.taskReminderDao()))
     }
 
     @Test
@@ -298,7 +298,7 @@ class PromoShotsTest {
             waitForText("4.2")
         },
     ) {
-        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao()))
+        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao(), db.taskReminderDao()))
     }
 
     @Test

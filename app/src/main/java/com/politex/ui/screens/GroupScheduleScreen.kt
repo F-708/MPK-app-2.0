@@ -56,12 +56,13 @@ import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.repository.ScheduleRepository
 import com.politex.data.repository.SyncOutcome
-import com.politex.data.repository.TeacherInsights
 import com.politex.data.repository.checkingStatusFor
 import com.politex.data.repository.emptyStateText
 import com.politex.ui.components.AppCard
 import com.politex.ui.components.AppDivider
 import com.politex.ui.components.CenteredLoader
+import com.politex.ui.components.DaySlotCell
+import com.politex.ui.components.NoLessonCard
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -105,11 +106,7 @@ internal fun groupScheduleNextSchoolDay(
     return cal
 }
 
-internal fun groupScheduleDbDate(cal: Calendar): String = "%02d.%02d.%04d".format(
-    cal.get(Calendar.DAY_OF_MONTH),
-    cal.get(Calendar.MONTH) + 1,
-    cal.get(Calendar.YEAR),
-)
+internal fun groupScheduleDbDate(cal: Calendar): String = com.politex.util.DateFormats.dotDate(cal)
 
 internal fun pickForeignGroupLessons(
     rows: List<LessonEntity>,
@@ -231,21 +228,10 @@ fun GroupScheduleScreen(
 
     val foreignInfo = remember(selectedGroupName) { GroupParser.parse(selectedGroupName) }
 
-    val isTeacherKnown: (String) -> Boolean =
-        remember(context) {
-            val known =
-                com.politex.AppGraph.teachersRepository
-                    .loadTeachers()
-                    .map { TeacherInsights.surnameOf(it.name) }
-                    .toHashSet()
-            val check: (String) -> Boolean = { name ->
-                TeacherInsights.surnameOf(name) in known
-            }
-            check
-        }
+    // R2#8: общая асинхронная загрузка + кэш с инвалидацией (см. util/KnownTeachers.kt)
+    val isTeacherKnown: (String) -> Boolean = com.politex.ui.util.rememberIsTeacherKnown()
 
     val realNow = rememberToday()
-    val realDayOfWeek = groupScheduleDayOfWeek(realNow)
 
     val foreignLessonsFlow =
         remember(selectedGroupName) {
@@ -256,23 +242,14 @@ fun GroupScheduleScreen(
         foreignInfo?.hasSaturdayClasses == true ||
             allForeignLessons?.any { it.dayOfWeek == 6 } == true
 
+    // R2-дубль3: общий хелпер слотов «сегодня/завтра» (util/DaySlots.kt)
     val daySlots =
         remember(selectedGroupName, saturdayIsSchoolDay, realNow, allForeignLessons) {
-            val left =
-                (realNow.clone() as Calendar).apply {
-                    when (realDayOfWeek) {
-                        6 -> if (!saturdayIsSchoolDay) add(Calendar.DAY_OF_YEAR, 2)
-                        7 -> add(Calendar.DAY_OF_YEAR, 1)
-                    }
-                }
-            val foreign = allForeignLessons ?: emptyList()
-            val target =
-                com.politex.data.repository.nextSchoolDayWithFallback(left, saturdayIsSchoolDay) { cal ->
-                    val ds = groupScheduleDbDate(cal)
-                    val dow = groupScheduleDayOfWeek(cal)
-                    foreign.any { it.dateString == ds || (it.dateString.isBlank() && it.dayOfWeek == dow) }
-                }
-            left to (target.date ?: groupScheduleNextSchoolDay(left, saturdayIsSchoolDay))
+            com.politex.ui.util.daySlots(realNow, saturdayIsSchoolDay) { cal ->
+                val ds = groupScheduleDbDate(cal)
+                val dow = groupScheduleDayOfWeek(cal)
+                allForeignLessons.orEmpty().any { it.dateString == ds || (it.dateString.isBlank() && it.dayOfWeek == dow) }
+            }
         }
     val leftCal = daySlots.first
     val rightCal = daySlots.second
@@ -540,7 +517,7 @@ fun GroupScheduleScreen(
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                GroupDaySlotCell(
+                DaySlotCell(
                     title = if (leftIsToday) "СЕГОДНЯ" else dayTitle(leftCal),
                     subtitle =
                     String.format(
@@ -553,7 +530,7 @@ fun GroupScheduleScreen(
                     onClick = { selectedSlot = 0 },
                     modifier = Modifier.weight(1f),
                 )
-                GroupDaySlotCell(
+                DaySlotCell(
                     title = if (rightIsTomorrow) "ЗАВТРА" else dayTitle(rightCal),
                     subtitle =
                     String.format(
@@ -692,16 +669,8 @@ fun GroupScheduleScreen(
                     }
                 }
             } else {
-                val slots =
-                    remember(lessons) {
-                        if (lessons.isEmpty()) {
-                            emptyList()
-                        } else {
-                            val byNumber = lessons.associateBy { it.lessonNumber }
-                            (1..lessons.maxOf { it.lessonNumber })
-                                .map { number -> number to byNumber[number] }
-                        }
-                    }
+                // R2-дубль4: общий билдер слотов (ScheduleScreen + GroupScheduleScreen)
+                val slots = remember(lessons) { lessonSlots(lessons) }
 
                 LazyColumn(
                     modifier =
@@ -728,7 +697,7 @@ fun GroupScheduleScreen(
                                 },
                             )
                         } else {
-                            GroupNoLessonCard(number)
+                            NoLessonCard(number)
                         }
                     }
                 }
@@ -997,97 +966,3 @@ private fun PickerChip(
     }
 }
 
-@Composable
-private fun GroupDaySlotCell(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
-        color = if (selected) ColorTopBar else ColorBgMain,
-        modifier =
-        modifier
-            .height(Tokens.ChipScreen)
-            .bouncyClickable(onClick = onClick),
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            Text(
-                text = title,
-                softWrap = false,
-                maxLines = 1,
-                style =
-                androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = if (selected) Color.White else ColorTextBody,
-                ),
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                softWrap = false,
-                maxLines = 1,
-                style =
-                androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 11.sp,
-                    color = if (selected) Color.White else ColorTextMuted,
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun GroupNoLessonCard(lessonNumber: Int) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorSurfaceVariantLight,
-        border = BorderStroke(1.dp, ColorDividerLight),
-        shadowElevation = 0.dp,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorSurfaceHighlight,
-                border = BorderStroke(1.dp, ColorDividerLight),
-                modifier = Modifier.size(24.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "$lessonNumber",
-                        style =
-                        androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = ColorTextMuted,
-                        ),
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Урока нет",
-                style =
-                androidx.compose.ui.text.TextStyle(
-                    fontSize = 13.sp,
-                    color = ColorTextMuted,
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}

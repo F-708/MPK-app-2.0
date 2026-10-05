@@ -61,6 +61,7 @@ import com.politex.ui.components.AppCard
 import com.politex.ui.components.AppDivider
 import com.politex.ui.components.BackButton
 import com.politex.ui.components.SearchBar
+import com.politex.ui.components.SectionCaption
 import com.politex.ui.components.SearchEmptyState
 import com.politex.ui.components.SubPageHeader
 import com.politex.ui.theme.ColorActiveBlue
@@ -153,19 +154,21 @@ internal fun TeacherCardRoute(
 ) {
     var teacher by remember(teacherName) { mutableStateOf<Teacher?>(null) }
     LaunchedEffect(teacherName) {
-
+        // R2#8: общий кэш + загрузка вне main thread
         teacher =
-            kotlinx.coroutines
-                .withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    com.politex.AppGraph.teachersRepository
-                        .loadTeachers()
-                }.firstOrNull {
+            com.politex.ui.util.TeachersCache
+                .load()
+                .firstOrNull {
                     TeacherInsights.surnameOf(it.name) == TeacherInsights.surnameOf(teacherName)
                 }
         if (teacher == null) onNotFound()
     }
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
-        teacher?.let { found ->
+        val found = teacher
+        if (found == null) {
+            // R2#19: пока карточка грузится (и до popBackStack при onNotFound) — лоадер, не пустой экран
+            com.politex.ui.components.CenteredLoader(modifier = Modifier.fillMaxSize())
+        } else {
             TeacherCardPageWrapper(
                 teacher = found,
                 groupInfo = groupInfo,
@@ -181,19 +184,12 @@ internal fun TeacherCardRoute(
 internal fun SettingsRoute(
     groupInfo: GroupInfo,
     onGroupChanged: (String) -> Unit,
-    onRunConnectionTest: () -> Unit,
-
-    isSyncing: Boolean,
-    hasSyncError: Boolean,
     onBack: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
         SettingsPage(
             groupInfo = groupInfo,
             onGroupChanged = onGroupChanged,
-            onRunConnectionTest = onRunConnectionTest,
-            isSyncing = isSyncing,
-            hasSyncError = hasSyncError,
             onBack = onBack,
         )
     }
@@ -440,9 +436,6 @@ private fun AdminMenuCard(
 private fun SettingsPage(
     groupInfo: GroupInfo,
     onGroupChanged: (String) -> Unit,
-    onRunConnectionTest: () -> Unit,
-    isSyncing: Boolean,
-    hasSyncError: Boolean,
     onBack: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -455,9 +448,6 @@ private fun SettingsPage(
         SettingsScreen(
             groupInfo = groupInfo,
             onGroupChanged = onGroupChanged,
-            onRunConnectionTest = onRunConnectionTest,
-            isSyncing = isSyncing,
-            hasSyncError = hasSyncError,
         )
     }
 }
@@ -564,7 +554,7 @@ private fun MySpecialtyPage(
             }
 
             if (specialty.workerProfessions.isNotEmpty()) {
-                item { SectionLabel("РАБОЧИЕ ПРОФЕССИИ") }
+                item { SectionCaption("РАБОЧИЕ ПРОФЕССИИ") }
                 items(specialty.workerProfessions) { profession ->
                     AppCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -583,7 +573,7 @@ private fun MySpecialtyPage(
                 }
             }
 
-            item { SectionLabel("ПРЕДМЕТЫ ПО КУРСАМ") }
+            item { SectionCaption("ПРЕДМЕТЫ ПО КУРСАМ") }
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -716,8 +706,8 @@ private fun TeachersPage(
 ) {
     val context = LocalContext.current
 
-    val repository = com.politex.AppGraph.teachersRepository
-    val teachers = remember { repository.loadTeachers() }
+    // R2#8: асинхронная загрузка базы преподавателей (была синхронно в композиции)
+    val teachers = com.politex.ui.util.rememberTeachers()
 
     val allLessons by scheduleRepository
         .getAllLessonsForGroup(groupInfo.canonicalName)
@@ -976,8 +966,8 @@ private fun TeacherCardPageWrapper(
 ) {
     val context = LocalContext.current
 
-    val repository = com.politex.AppGraph.teachersRepository
-    val teachers = remember { repository.loadTeachers() }
+    // R2#8: асинхронная загрузка базы преподавателей (была синхронно в композиции)
+    val teachers = com.politex.ui.util.rememberTeachers()
     val allLessons by scheduleRepository
         .getAllLessonsForGroup(groupInfo.canonicalName)
         .collectAsState(initial = emptyList())
@@ -1314,7 +1304,7 @@ private fun AboutTeacherTab(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    SectionLabel("О ПРЕПОДАВАТЕЛЕ")
+                    SectionCaption("О ПРЕПОДАВАТЕЛЕ")
                     Spacer(modifier = Modifier.height(6.dp))
                     if (teacher.position.isNotBlank()) InfoRow("Должность", teacher.position)
                     if (teacher.department.isNotBlank()) InfoRow("Подразделение", teacher.department)
@@ -1338,7 +1328,7 @@ private fun AboutTeacherTab(
             }
         }
 
-        item { SectionLabel("ПРЕПОДАВАЕМЫЕ ДИСЦИПЛИНЫ") }
+        item { SectionCaption("ПРЕПОДАВАЕМЫЕ ДИСЦИПЛИНЫ") }
         if (teacher.subjects.isBlank()) {
             item { EmptyCard(text = "Перечень дисциплин в базе не заполнен") }
         } else {
@@ -1370,7 +1360,7 @@ private fun AboutTeacherTab(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        SectionLabel("КОНТАКТЫ")
+                        SectionCaption("КОНТАКТЫ")
                         Spacer(modifier = Modifier.height(6.dp))
                         if (teacher.room.isNotBlank()) {
                             InfoRow(
@@ -1403,7 +1393,7 @@ private fun AboutTeacherTab(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        SectionLabel("ВЕДЁТ У ВАШЕЙ ГРУППЫ")
+                        SectionCaption("ВЕДЁТ У ВАШЕЙ ГРУППЫ")
                         Spacer(modifier = Modifier.height(6.dp))
                         if (lessonsWithGroup > 0) InfoRow("Уроков в базе", "$lessonsWithGroup")
                         if (roomsFromSchedule.isNotEmpty()) {
@@ -1507,11 +1497,10 @@ private fun TeacherScheduleTab(
                 .dowOfCalendar(targetCalendar)
         }
 
-    LaunchedEffect(teacher.name, dayOffset, customDate) {
-        val dateKey =
-            java.text
-                .SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT)
-                .format(targetCalendar.time)
+    // R2#18: ключ today — после полуночи (rememberToday обновляется) расписание перечитывается,
+    // «СЕГОДНЯ» не показывает вчерашний день; R2-дубль7: dd.MM.yyyy через общий DateFormats
+    LaunchedEffect(teacher.name, dayOffset, customDate, today) {
+        val dateKey = com.politex.util.DateFormats.dotDate(targetCalendar)
 
         // AA5: loading под try/finally — ни отмена эффекта (смена дня), ни исключение
         // больше не оставляют вечный спиннер; ошибка сети становится честным текстом.
@@ -1584,6 +1573,7 @@ private fun TeacherScheduleTab(
                     customDate = null
                 },
                 modifier = Modifier.weight(1f),
+                tag = "teacher_day_today",
             )
             DayChip(
                 title = "ЗАВТРА",
@@ -1593,6 +1583,7 @@ private fun TeacherScheduleTab(
                     customDate = null
                 },
                 modifier = Modifier.weight(1f),
+                tag = "teacher_day_tomorrow",
             )
             Surface(
                 shape = RoundedCornerShape(2.dp),
@@ -1781,6 +1772,7 @@ private fun DayChip(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    tag: String = "",
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
@@ -1789,7 +1781,8 @@ private fun DayChip(
         modifier =
         modifier
             .height(Tokens.ChipScreen)
-            .bouncyClickable(onClick = onClick),
+            .bouncyClickable(onClick = onClick)
+            .testTag(tag),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
@@ -1828,19 +1821,6 @@ private fun Header(
             maxLines = 1,
         )
     }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        style =
-        androidx.compose.ui.text.TextStyle(
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            color = ColorBrandBlue,
-        ),
-    )
 }
 
 @Composable

@@ -328,7 +328,8 @@ fun MainScreen(
                 WidgetUpdateHelper.getPrefs(context).getBoolean("swipe_tabs_enabled", true)
             }
             val curIdx = ownerTabIndex(backStackEntry?.destination?.route)
-            val gestureActive = swipeEnabled && curIdx >= 0 && !ViewerMode.active && !RouteBuilderMode.active
+            // R2#4: деталь оценок (GradeDetailMode) гасит свайп — иначе жест уносит из раскрытой оценки
+            val gestureActive = swipeEnabled && curIdx >= 0 && !ViewerMode.active && !RouteBuilderMode.active && !GradeDetailMode.active
             Box(
                 modifier =
                 if (gestureActive) {
@@ -544,10 +545,6 @@ fun MainScreen(
                     SettingsRoute(
                         groupInfo = currentGroupInfo,
                         onGroupChanged = { newGroup -> viewModel.setGroup(newGroup) },
-                        onRunConnectionTest = { viewModel.syncSchedule() },
-
-                        isSyncing = uiState.isSyncing,
-                        hasSyncError = uiState.hasSyncError,
                         onBack = { navController.popBackStack() },
                     )
                 }

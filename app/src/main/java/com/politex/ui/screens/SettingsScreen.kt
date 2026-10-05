@@ -69,6 +69,7 @@ import com.politex.BuildConfig
 import com.politex.data.model.GroupInfo
 import com.politex.ui.components.AppCard
 import com.politex.ui.components.GroupSelectionDialog
+import com.politex.ui.components.SectionCaption
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
@@ -98,18 +99,25 @@ import kotlinx.coroutines.withContext
 fun SettingsScreen(
     groupInfo: GroupInfo,
     onGroupChanged: (String) -> Unit,
-    // CC11: рудименты удалённой карточки «Проверить соединение» —
-    // цепочка SettingsRoute/SettingsPage живёт в CollegeScreen.kt (запрещён в этой волне),
-    // поэтому параметры остаются, но не используются. Убрать вместе с ней.
-    onRunConnectionTest: () -> Unit = {},
-    isSyncing: Boolean = false,
-    hasSyncError: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var showGroupDialog by remember { mutableStateOf(false) }
     var isNotificationEnabled by remember {
         mutableStateOf(WidgetUpdateHelper.isNotificationEnabled(context))
+    }
+
+    // R2#11: разрешение на уведомления могли отозвать в системных настройках —
+    // перечитываем флаг на ON_RESUME (тот же паттерн, что для canExactAlarms ниже)
+    val settingsLifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(settingsLifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isNotificationEnabled = WidgetUpdateHelper.isNotificationEnabled(context)
+            }
+        }
+        settingsLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { settingsLifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -299,7 +307,7 @@ fun SettingsScreen(
                 }
             }
 
-            item { SectionHeader("УПРАВЛЕНИЕ") }
+            item { SectionCaption("УПРАВЛЕНИЕ", Modifier.padding(top = 4.dp)) }
             item {
                 AppCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -322,7 +330,7 @@ fun SettingsScreen(
                 }
             }
 
-            item { SectionHeader("РАСПИСАНИЕ И УВЕДОМЛЕНИЯ") }
+            item { SectionCaption("РАСПИСАНИЕ И УВЕДОМЛЕНИЯ", Modifier.padding(top = 4.dp)) }
             item {
                 AppCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -409,7 +417,7 @@ fun SettingsScreen(
                 }
             }
 
-            item { SectionHeader("КАРТА") }
+            item { SectionCaption("КАРТА", Modifier.padding(top = 4.dp)) }
 
             item {
                 var routesEnabled by remember {
@@ -464,12 +472,12 @@ fun SettingsScreen(
                 }
             }
 
-            item { SectionHeader("ЗВОНКИ") }
+            item { SectionCaption("ЗВОНКИ", Modifier.padding(top = 4.dp)) }
             item {
                 BellCountdownNotificationCard()
             }
 
-            item { SectionHeader("УЧЁБА") }
+            item { SectionCaption("УЧЁБА", Modifier.padding(top = 4.dp)) }
 
             item {
                 var weightsEnabled by remember {
@@ -519,7 +527,7 @@ fun SettingsScreen(
             }
 
             item {
-                SectionHeader("ВНЕШНИЙ ВИД")
+                SectionCaption("ВНЕШНИЙ ВИД", Modifier.padding(top = 4.dp))
             }
             item {
 
@@ -578,7 +586,7 @@ fun SettingsScreen(
                 }
             }
 
-            item { SectionHeader("ДАННЫЕ") }
+            item { SectionCaption("ДАННЫЕ", Modifier.padding(top = 4.dp)) }
             item {
                 AppCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -680,7 +688,7 @@ fun SettingsScreen(
                 }
             }
 
-            item { SectionHeader("О ПРИЛОЖЕНИИ") }
+            item { SectionCaption("О ПРИЛОЖЕНИИ", Modifier.padding(top = 4.dp)) }
             item {
                 AppCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -1308,19 +1316,6 @@ private fun SettingsValueRow(
             }
         }
     }
-}
-
-@Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text = text,
-        style = androidx.compose.ui.text.TextStyle(
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            color = ColorBrandBlue,
-        ),
-        modifier = Modifier.padding(top = 4.dp),
-    )
 }
 
 @Composable

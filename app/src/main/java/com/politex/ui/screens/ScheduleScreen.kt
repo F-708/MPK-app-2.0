@@ -85,6 +85,8 @@ import com.politex.ui.components.AppCard
 import com.politex.ui.components.AppDivider
 import com.politex.ui.components.CalendarArchiveDialog
 import com.politex.ui.components.CenteredLoader
+import com.politex.ui.components.DaySlotCell
+import com.politex.ui.components.NoLessonCard
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBadgeCourse
 import com.politex.ui.theme.ColorBadgeDiploma
@@ -107,24 +109,14 @@ import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
+import com.politex.ui.util.rememberIsTeacherKnown
 import com.politex.ui.util.rememberNowMinutes
 import com.politex.ui.util.rememberToday
+import com.politex.util.DateFormats
 import com.politex.util.HintFlags
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
 import java.util.Locale
-
-private var knownTeacherSurnamesCache: Set<String>? = null
-
-private fun knownTeacherSurnames(context: android.content.Context): Set<String> = knownTeacherSurnamesCache ?: java.util.Collections
-    .synchronizedSet(
-        com.politex.AppGraph.teachersRepository
-            .loadTeachers()
-            .map {
-                com.politex.data.repository.TeacherInsights
-                    .surnameOf(it.name)
-            }.toHashSet(),
-    ).also { knownTeacherSurnamesCache = it }
 
 @Composable
 fun ScheduleScreen(
@@ -165,48 +157,33 @@ fun ScheduleScreen(
         }
     }
 
-    val isTeacherKnown: (String) -> Boolean =
-        remember(context) {
-            val known = knownTeacherSurnames(context)
-            val check: (String) -> Boolean = { name ->
-                com.politex.data.repository.TeacherInsights
-                    .surnameOf(name) in known
-            }
-            check
-        }
+    // R2#8: общая асинхронная загрузка + кэш с инвалидацией (см. util/KnownTeachers.kt)
+    val isTeacherKnown: (String) -> Boolean = rememberIsTeacherKnown()
 
     val realNow = rememberToday()
-    val realDayOfWeek = groupScheduleDayOfWeek(realNow)
 
-    val allGroupLessons: List<com.politex.data.local.entity.LessonEntity> =
-        groupLessonsFromVm ?: scheduleRepository
-            .getAllLessonsForGroup(groupInfo.canonicalName)
-            .collectAsState(initial = emptyList())
-            .value
+    // R2#13 (CC7): null — данных ещё не было ни из ВМ, ни из локального fallback-потока
+    val allGroupLessons: List<com.politex.data.local.entity.LessonEntity>? =
+        groupLessonsFromVm
+            ?: scheduleRepository
+                .getAllLessonsForGroup(groupInfo.canonicalName)
+                .collectAsState(initial = null as List<LessonEntity>?)
+                .value
 
     val saturdayLessons: List<com.politex.data.local.entity.LessonEntity> =
-        remember(allGroupLessons) { allGroupLessons.filter { it.dayOfWeek == 6 } }
+        remember(allGroupLessons) { allGroupLessons.orEmpty().filter { it.dayOfWeek == 6 } }
     val saturdayIsSchoolDay = groupInfo.course == 1 || saturdayLessons.isNotEmpty()
 
     fun calendarDayOfWeek(cal: Calendar): Int = groupScheduleDayOfWeek(cal)
 
+    // R2-дубль3: общий хелпер слотов «сегодня/завтра» (util/DaySlots.kt)
     val daySlots =
         remember(groupInfo.canonicalName, saturdayIsSchoolDay, realNow, allGroupLessons) {
-            val left =
-                (realNow.clone() as Calendar).apply {
-                    when (realDayOfWeek) {
-                        6 -> if (!saturdayIsSchoolDay) add(Calendar.DAY_OF_YEAR, 2)
-                        7 -> add(Calendar.DAY_OF_YEAR, 1)
-                    }
-                }
-            val target =
-                com.politex.data.repository.nextSchoolDayWithFallback(left, saturdayIsSchoolDay) { cal ->
-                    val ds = groupScheduleDbDate(cal)
-                    val dow = calendarDayOfWeek(cal)
-                    allGroupLessons.any { it.dateString == ds || (it.dateString.isBlank() && it.dayOfWeek == dow) }
-                }
-            val right = target.date ?: com.politex.data.repository.nextSchoolDay(left, saturdayIsSchoolDay)
-            left to right
+            com.politex.ui.util.daySlots(realNow, saturdayIsSchoolDay) { cal ->
+                val ds = groupScheduleDbDate(cal)
+                val dow = calendarDayOfWeek(cal)
+                allGroupLessons.orEmpty().any { it.dateString == ds || (it.dateString.isBlank() && it.dayOfWeek == dow) }
+            }
         }
     val leftCal = daySlots.first
     val rightCal = daySlots.second
@@ -235,30 +212,28 @@ fun ScheduleScreen(
     // AA2: SPLIT-урок — тап по кабинету сначала спрашивает, откуда вести маршрут
     var pendingSplit by remember { mutableStateOf<Pair<String, LessonEntity>?>(null) }
 
-    val activeDayOfWeek = if (selectedSlot == 0) calendarDayOfWeek(leftCal) else calendarDayOfWeek(rightCal)
-    val activeCal = if (selectedSlot == 0) leftCal else rightCal
-
-    val activeDateString =
-        remember(selectedDateString, activeCal) {
+    // R2#6: когда дата выбрана из архив-календаря, активный день недели и календарь берутся
+    // из самой даты (parse dd.MM.yyyy), а не из слота сегодня/завтра — иначе уроки и метки
+    // дз фильтруются чужим dow; fallback — текущий слот
+    val parsedSelectedDate =
+        remember(selectedDateString) {
             if (selectedDateString.isNotBlank()) {
-                com.politex.data.network.MpkScheduleParser.parseDotDate(selectedDateString)?.let {
-
-                    String.format(
-                        java.util.Locale.ROOT,
-                        "%02d.%02d.%04d",
-                        it.get(Calendar.DAY_OF_MONTH),
-                        it.get(Calendar.MONTH) + 1,
-                        it.get(Calendar.YEAR),
-                    )
-                } ?: selectedDateString
+                com.politex.data.network.MpkScheduleParser
+                    .parseDotDate(selectedDateString)
             } else {
-                String.format(
-                    java.util.Locale.ROOT,
-                    "%02d.%02d.%04d",
-                    activeCal.get(Calendar.DAY_OF_MONTH),
-                    activeCal.get(Calendar.MONTH) + 1,
-                    activeCal.get(Calendar.YEAR),
-                )
+                null
+            }
+        }
+    val activeCal = parsedSelectedDate ?: if (selectedSlot == 0) leftCal else rightCal
+    val activeDayOfWeek = calendarDayOfWeek(activeCal)
+
+    // R2-дубль7: общий формат dd.MM.yyyy (util/DateFormats)
+    val activeDateString =
+        remember(selectedDateString, parsedSelectedDate, activeCal) {
+            when {
+                parsedSelectedDate != null -> DateFormats.dotDate(parsedSelectedDate)
+                selectedDateString.isNotBlank() -> selectedDateString
+                else -> DateFormats.dotDate(activeCal)
             }
         }
 
@@ -294,15 +269,13 @@ fun ScheduleScreen(
             }
         }
 
-    var firstEmit by remember(groupInfo.canonicalName) {
-        mutableStateOf(groupLessonsFromVm != null)
-    }
-    LaunchedEffect(allGroupLessons) { firstEmit = true }
-    val isInitialLoad = !firstEmit
+    // R2#13 (CC7): null до первой эмиссии ВМ/fallback-потока — показываем лоадер,
+    // а не вспышку «нет уроков» на первом кадре
+    val isInitialLoad = allGroupLessons == null
 
     val lessons: List<com.politex.data.local.entity.LessonEntity> =
         remember(allGroupLessons, activeDateString, activeDayOfWeek) {
-            lessonsForDay(allGroupLessons, activeDateString, activeDayOfWeek)
+            lessonsForDay(allGroupLessons.orEmpty(), activeDateString, activeDayOfWeek)
         }
 
     val roomClick: (String, String?) -> Unit = { room, fromRoom -> markScheduleHintDone(); onRoomClick(room, fromRoom) }
@@ -318,16 +291,16 @@ fun ScheduleScreen(
         pendingTasksFromVm ?: remember(context, groupInfo.canonicalName) {
             com.politex.data.local.MpkDatabase
                 .getInstance(context)
-                .taskDao()
-                .let {
+                .let { db ->
                     com.politex.data.repository
-                        .TaskRepository(it)
+                        .TaskRepository(db.taskDao(), db.taskReminderDao())
                 }.getPendingTasksForGroup(groupInfo.canonicalName)
         }.collectAsState(initial = emptyList()).value
 
     val weeklyLessonsByDow: Map<Int, List<com.politex.data.local.entity.LessonEntity>> =
         remember(allGroupLessons) {
             allGroupLessons
+                .orEmpty()
                 .groupBy { it.dayOfWeek }
                 .mapValues { (_, list) ->
                     com.politex.util.HomeworkMarkers
@@ -448,19 +421,12 @@ fun ScheduleScreen(
             scheduleRepository = scheduleRepository,
             onDismiss = { showArchiveDialog = false },
             onDateSelected = { _, dateStr ->
-
+                // R2-дубль7: dd.MM.yyyy через общий DateFormats
                 onDateChange(
                     com.politex.data.network.MpkScheduleParser
                         .parseDotDate(dateStr)
-                        ?.let { cal ->
-                            String.format(
-                                java.util.Locale.ROOT,
-                                "%02d.%02d.%04d",
-                                cal.get(Calendar.DAY_OF_MONTH),
-                                cal.get(Calendar.MONTH) + 1,
-                                cal.get(Calendar.YEAR),
-                            )
-                        } ?: dateStr,
+                        ?.let { cal -> DateFormats.dotDate(cal) }
+                        ?: dateStr,
                 )
             },
 
@@ -781,16 +747,8 @@ fun ScheduleScreen(
                     }
                 }
             } else {
-                val slots =
-                    remember(lessons) {
-                        if (lessons.isEmpty()) {
-                            emptyList()
-                        } else {
-                            val byNumber = lessons.associateBy { it.lessonNumber }
-                            (1..lessons.maxOf { it.lessonNumber })
-                                .map { number -> number to byNumber[number] }
-                        }
-                    }
+                // R2-дубль4: общий билдер слотов (ScheduleScreen + GroupScheduleScreen)
+                val slots = remember(lessons) { lessonSlots(lessons) }
 
                 LazyColumn(
                     state = listState,
@@ -867,55 +825,6 @@ private fun SplitRouteOption(
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 13.sp,
                     color = ColorBrandBlue,
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun NoLessonCard(lessonNumber: Int) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        color = ColorSurfaceVariantLight,
-        border = BorderStroke(1.dp, ColorDividerLight),
-        shadowElevation = 0.dp,
-        modifier =
-        Modifier
-            .fillMaxWidth()
-            .testTag("no_lesson_card_$lessonNumber"),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorSurfaceHighlight,
-                border = BorderStroke(1.dp, ColorDividerLight),
-                modifier = Modifier.size(24.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "$lessonNumber",
-                        style =
-                        androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = ColorTextMuted,
-                        ),
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Урока нет",
-                style =
-                androidx.compose.ui.text.TextStyle(
-                    fontSize = 14.sp,
-                    color = ColorTextBody,
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1308,53 +1217,6 @@ private fun SubgroupPane(
     }
 }
 
-@Composable
-private fun DaySlotCell(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
-        color = if (selected) ColorTopBar else ColorBgMain,
-        modifier =
-        modifier
-            .height(Tokens.ChipScreen)
-            .bouncyClickable(onClick = onClick),
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            Text(
-                text = title,
-                softWrap = false,
-                maxLines = 1,
-                style =
-                androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = if (selected) Color.White else ColorTextBody,
-                ),
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                style =
-                androidx.compose.ui.text.TextStyle(
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    fontSize = 10.sp,
-                    color = if (selected) ColorMenuSubtext else ColorTextMuted,
-                ),
-            )
-        }
-    }
-}
-
 fun autoScrollLessonIndex(
     lessonNumbers: List<Int>,
     currentLessonNumber: Int?,
@@ -1380,6 +1242,13 @@ fun lessonsForDay(
     } else {
         allGroupLessons.filter { it.dateString.isBlank() && it.dayOfWeek == activeDayOfWeek }
     }
+}
+
+// R2-дубль4: общий билдер слотов 1..max с «дырками» (ScheduleScreen + GroupScheduleScreen)
+fun lessonSlots(lessons: List<LessonEntity>): List<Pair<Int, LessonEntity?>> {
+    if (lessons.isEmpty()) return emptyList()
+    val byNumber = lessons.associateBy { it.lessonNumber }
+    return (1..lessons.maxOf { it.lessonNumber }).map { number -> number to byNumber[number] }
 }
 
 // BB15: условие пульсации — чистая функция (тестируется без Compose)

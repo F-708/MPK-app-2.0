@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.delay
 import java.util.Calendar
 
 @Composable
@@ -25,6 +26,14 @@ fun rememberToday(): Calendar {
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    // R2#12: приложение может не покидать экран через полночь — раз в минуту сверяем dayKey
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            val key = dayKeyOf(Calendar.getInstance())
+            if (key != dayKey) dayKey = key
+        }
+    }
     return remember(dayKey) { Calendar.getInstance() }
 }
 
@@ -32,12 +41,19 @@ internal fun dayKeyOf(cal: Calendar): Long = cal.get(Calendar.YEAR) * 1000L + ca
 
 internal fun minutesOfDay(cal: Calendar = Calendar.getInstance()): Int = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
 
+/**
+ * R2#12: первый тик выровнен по границе минуты (иначе «минута» наступает через
+ * period после открытия экрана); период параметризован (R2-дубль1: 30с в BellsScreen,
+ * 60с в остальном).
+ */
 @Composable
-fun rememberNowMinutes(): Int {
+fun rememberNowMinutes(periodMillis: Long = 60_000): Int {
     var nowMinutes by remember { mutableIntStateOf(minutesOfDay()) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(periodMillis) {
+        delay(60_000 - System.currentTimeMillis() % 60_000)
+        nowMinutes = minutesOfDay()
         while (true) {
-            kotlinx.coroutines.delay(60_000)
+            delay(periodMillis)
             nowMinutes = minutesOfDay()
         }
     }

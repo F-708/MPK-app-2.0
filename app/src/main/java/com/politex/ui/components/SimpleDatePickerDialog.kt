@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -153,9 +154,11 @@ fun SimpleDatePickerDialog(
                 ) {
                     ActionButton(text = "ОТМЕНА", filled = false, onClick = onDismiss)
                     Spacer(modifier = Modifier.width(8.dp))
+                    // R2#21: «ГОТОВО» активна только когда дата выбрана
                     ActionButton(
                         text = "ГОТОВО",
                         filled = true,
+                        enabled = selected != null,
                         onClick = { selected?.let(onConfirm) },
                     )
                 }
@@ -191,13 +194,17 @@ private fun ArrowButton(
 private fun ActionButton(
     text: String,
     filled: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = if (filled) ColorBrandFill else ColorBgMain,
         border = BorderStroke(1.dp, if (filled) ColorBrandFill else ColorBorderLight),
-        modifier = Modifier.bouncyClickable(onClick = onClick),
+        modifier =
+            Modifier
+                .alpha(if (enabled) 1f else 0.4f)
+                .bouncyClickable(enabled = enabled, onClick = onClick),
     ) {
         Text(
             text = text,

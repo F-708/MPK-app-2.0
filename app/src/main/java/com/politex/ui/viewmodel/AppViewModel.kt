@@ -67,7 +67,7 @@ class AppViewModel(
     private val database = MpkDatabase.getInstance(application)
 
     val scheduleRepository = com.politex.AppGraph.scheduleRepository
-    val taskRepository = TaskRepository(database.taskDao())
+    val taskRepository = TaskRepository(database.taskDao(), database.taskReminderDao())
 
     val diagnosticInfo = scheduleRepository.diagnosticInfo
 
@@ -87,16 +87,18 @@ class AppViewModel(
     private val currentGroup: Flow<String> =
         _uiState.map { it.currentGroupName }.distinctUntilChanged()
 
+    // R2#13 (CC7): null до первой эмиссии — экран показывает лоадер,
+    // а не вспышку «нет уроков/заданий» на первом кадре
     @OptIn(ExperimentalCoroutinesApi::class)
-    val groupLessons: StateFlow<List<LessonEntity>> =
+    val groupLessons: StateFlow<List<LessonEntity>?> =
         currentGroup
             .flatMapLatest { name -> scheduleRepository.getAllLessonsForGroup(name) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val pendingTasks: StateFlow<List<StudentTaskEntity>> =
+    val pendingTasks: StateFlow<List<StudentTaskEntity>?> =
         currentGroup
             .flatMapLatest { name -> taskRepository.getPendingTasksForGroup(name) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     init {
 

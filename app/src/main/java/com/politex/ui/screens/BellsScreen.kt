@@ -35,9 +35,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -47,6 +47,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,7 +73,6 @@ import com.politex.ui.util.bouncyClickable
 import com.politex.util.Dow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import java.util.Calendar
 
 private val RAIL_BLUE: Color get() = ColorActiveBlue
 private val RAIL_BLUE_SOFT: Color get() = ColorActiveBlue.copy(alpha = 0.30f)
@@ -154,19 +154,11 @@ fun BellsScreen(
         }
 
     val todayType = remember(todayDow) { CollegeBellSchedule.getTypeForDay(todayDow) }
-    var selectedScheduleType by remember { mutableStateOf(todayType) }
+    // R2#17: rememberSaveable(todayDow) — после смены дня (и смерти процесса) тип пересчитывается от нового сегодня
+    var selectedScheduleType by rememberSaveable(todayDow) { mutableStateOf(todayType) }
 
-    var currentTimeMinutes by remember {
-        mutableIntStateOf(now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE))
-    }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(30_000)
-            val c = Calendar.getInstance()
-            currentTimeMinutes = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE)
-        }
-    }
+    // R2-дубль1: общий минутный тикер (30с — как было), вместо своего LaunchedEffect-цикла
+    val currentTimeMinutes = com.politex.ui.util.rememberNowMinutes(30_000)
 
     // Z5: в воскресенье уроков нет — не показывать «идёт урок» понедельника
     val isTodaySelected = selectedScheduleType == todayType && todayDow != 7
@@ -226,6 +218,15 @@ fun BellsScreen(
     }
     LaunchedEffect(scrollToCurrentRequested, activeSlot, rows) {
         if (!scrollToCurrentRequested) return@LaunchedEffect
+
+        // R2#5: дождаться реальной раскладки; если контент не прокручивается (maxValue==0) —
+        // snapshotFlow ниже не завершится никогда и флаг CURRENT_BELL залипнет в
+        // savedStateHandle, поэтому потребляем сразу после первого замера
+        snapshotFlow { viewportPx > 0 }.first { it }
+        if (scrollState.maxValue == 0) {
+            onScrollToCurrentConsumed()
+            return@LaunchedEffect
+        }
 
         androidx.compose.runtime
             .snapshotFlow { scrollState.maxValue > 0 }
@@ -289,7 +290,8 @@ fun BellsScreen(
                             .fillMaxWidth()
 
                             .heightIn(min = 44.dp)
-                            .bouncyClickable { selectedScheduleType = type },
+                            .bouncyClickable { selectedScheduleType = type }
+                            .testTag("bells_type_${type.name.lowercase()}"),
                     ) {
 
                         Box(

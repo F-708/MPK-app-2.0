@@ -228,20 +228,8 @@ fun CollegeMapScreen(
         }.getOrNull()?.collect { value = it }
     }
 
-    var nowMinutes by remember {
-        mutableStateOf(
-            Calendar.getInstance().let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) },
-        )
-    }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(60_000)
-            nowMinutes =
-                Calendar
-                    .getInstance()
-                    .let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) }
-        }
-    }
+    // R2-дубль1: общий минутный тикер из TodayProvider вместо своего цикла
+    val nowMinutes = com.politex.ui.util.rememberNowMinutes()
 
     val roomScheduleCurrentLesson =
         remember(nowMinutes, dialogDow, roomDialogTomorrow) {
@@ -301,8 +289,10 @@ fun CollegeMapScreen(
     var manualB by rememberSaveable { mutableStateOf<String?>(null) }
 
     DisposableEffect(builderActive) {
-        RouteBuilderMode.active = builderActive
-        onDispose { RouteBuilderMode.active = false }
+        // R2#10: глобальный флаг трогает только экземпляр, включивший режим построения;
+        // вторая карта в стеке (builder выключен) больше не сбрасывает его при выходе
+        if (builderActive) RouteBuilderMode.active = true
+        onDispose { if (builderActive) RouteBuilderMode.active = false }
     }
 
     val routeCache = remember { HashMap<Pair<String, String>, CollegeRouteFinder.MultiFloorRoute?>() }

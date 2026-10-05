@@ -36,7 +36,7 @@ class ReminderSaveRoundTripTest {
                 .inMemoryDatabaseBuilder(ctx, MpkDatabase::class.java)
                 .allowMainThreadQueries()
                 .build()
-        repo = TaskRepository(db.taskDao())
+        repo = TaskRepository(db.taskDao(), db.taskReminderDao())
 
         shadowOf(ctx as Application).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
     }

@@ -28,7 +28,7 @@ class TaskUpsertTest {
                 .inMemoryDatabaseBuilder(context, MpkDatabase::class.java)
                 .allowMainThreadQueries()
                 .build()
-        repo = TaskRepository(db.taskDao())
+        repo = TaskRepository(db.taskDao(), db.taskReminderDao())
     }
 
     @After

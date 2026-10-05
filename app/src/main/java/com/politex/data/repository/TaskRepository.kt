@@ -1,6 +1,7 @@
 package com.politex.data.repository
 
 import com.politex.data.local.dao.TaskDao
+import com.politex.data.local.dao.TaskReminderDao
 import com.politex.data.local.entity.StudentTaskEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -9,6 +10,7 @@ import kotlinx.coroutines.withContext
 
 class TaskRepository(
     private val taskDao: TaskDao,
+    private val reminderDao: TaskReminderDao,
 ) {
     fun getTasksForGroup(groupName: String): Flow<List<StudentTaskEntity>> = taskDao.getTasksForGroup(groupName).flowOn(Dispatchers.IO)
 
@@ -42,11 +44,14 @@ class TaskRepository(
         taskDao.setTaskCompleted(id, isCompleted)
     }
 
+    // R2#7: каскад — напоминания не переживают задание (иначе сироты в task_reminders)
     suspend fun deleteTask(task: StudentTaskEntity) = withContext(Dispatchers.IO) {
         taskDao.deleteTask(task)
+        reminderDao.deleteForTask(task.id)
     }
 
     suspend fun deleteTaskById(id: Long) = withContext(Dispatchers.IO) {
         taskDao.deleteTaskById(id)
+        reminderDao.deleteForTask(id)
     }
 }

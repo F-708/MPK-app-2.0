@@ -74,7 +74,7 @@ class UiRenderSmokeTest {
 
     @Test
     fun `экран заданий рендерится`() {
-        val repo = TaskRepository(MpkDatabase.getInstance(context).taskDao())
+        val repo = TaskRepository(MpkDatabase.getInstance(context).taskDao(), MpkDatabase.getInstance(context).taskReminderDao())
         composeRule.setContent {
             MyApplicationTheme {
                 TasksScreen(groupInfo = group, taskRepository = repo)
