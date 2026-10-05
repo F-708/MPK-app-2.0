@@ -81,6 +81,7 @@ const Tasks: React.FC = () => {
 	return (
 		<>
 			<PhoneDark scale={0.78} left={206} top={200}>
+				<div style={{position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 40}}>
 				<ScreenImg name="shot_tasks" />
 				{/* красный слой под карточкой */}
 				<div style={{...rect, backgroundColor: '#DC2626', borderRadius: 24, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 40px', boxSizing: 'border-box'}}>
@@ -117,6 +118,7 @@ const Tasks: React.FC = () => {
 						<div style={{position: 'absolute', left: 0, bottom: 0, width: '100%', height: 6, backgroundColor: C.amber, transform: `scaleX(${bar})`, transformOrigin: 'left center'}} />
 					</div>
 				)}
+				</div>
 			</PhoneDark>
 			<Chip>свайп — и отменил</Chip>
 		</>

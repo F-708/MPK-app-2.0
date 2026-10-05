@@ -25,7 +25,7 @@ export const S15_3: React.FC = () => {
 				sub="по коридорам и лестницам"
 				titleAt={0}
 				accentAt={18}
-				left={590}
+				left={584}
 				top={620}
 				width={400}
 			/>

@@ -16,7 +16,7 @@ export const S15_1: React.FC = () => {
 				style={{
 					fontFamily: Golos,
 					fontWeight: 900,
-					fontSize: 120,
+					fontSize: 96,
 					lineHeight: 1,
 					letterSpacing: 6,
 					color: '#FFFFFF',

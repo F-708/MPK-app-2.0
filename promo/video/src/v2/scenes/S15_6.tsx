@@ -85,6 +85,6 @@ export const S15_6: React.FC = () => (
 		<PhoneDark scale={0.52} left={96} top={561}>
 			<HomeReplica pushFrame={18} />
 		</PhoneDark>
-		<KineticTitle title="Живёт" accent="на домашнем экране" titleAt={0} accentAt={18} left={590} top={640} width={400} />
+		<KineticTitle title="Живёт" accent="на домашнем экране" titleAt={0} accentAt={18} left={520} top={640} width={464} />
 	</AbsoluteFill>
 );
