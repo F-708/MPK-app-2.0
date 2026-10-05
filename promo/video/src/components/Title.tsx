@@ -4,7 +4,8 @@ import {C, Golos} from '../theme';
 
 // Титр-плашка п.4.3: белая rgba .94, radius 24, тень; Golos Text 900; accentWord —
 // янтарный #FFB020 на синей подложке #0B3564 (accentBg — темнее для тёмных сцен).
-// Вход fade + y 24→0, 300мс (п.4.5). '\n' в text = перенос строки; sub — подтитр 44px 500.
+// Вход fade + y 24→0, 300мс (п.4.5); delay<0 — fade завершается до 1-го кадра сцены.
+// '\n' в text = перенос строки; sub — подтитр 36px 500 (одной строкой).
 export const Title: React.FC<{
 	text: string;
 	sub?: string;
@@ -94,7 +95,7 @@ export const Title: React.FC<{
 					style={{
 						fontFamily: Golos,
 						fontWeight: 500,
-						fontSize: 44,
+						fontSize: 36, // подтитр одной строкой, ≤2 строк суммарно (vision-QA2 f120)
 						lineHeight: 1.15,
 						color: C.sub,
 						marginTop: 10,

@@ -85,13 +85,14 @@ export const S02: React.FC<SceneProps> = ({have, wide}) => {
 					</KenBurns>
 				}
 				title="Заблудиться в колледже?"
-				sub="Маршрут до кабинета — по коридорам и лестницам"
+				sub="Маршрут до кабинета"
 				accent="Маршрут до кабинета"
 				overlay={
 					<>
-						{/* кончик стрелки — финиш родного маршрута у лестницы (vision-QA f120) */}
+						{/* кончик стрелки — финиш родного маршрута у лестницы (vision-QA f120);
+						    ly 232→252: верх чипа ≥220 (safe-area, vision-QA2 f120) */}
 						<Sequence durationInFrames={84}>
-							<Callout delay={18} x={540} y={1400} lx={760} ly={232} label="точка Б" />
+							<Callout delay={18} x={540} y={1400} lx={760} ly={252} label="точка Б" />
 						</Sequence>
 						<Sequence from={84} durationInFrames={30}>
 							<RoutePairCard />

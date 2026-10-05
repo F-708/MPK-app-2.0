@@ -6,10 +6,13 @@ import {Shot} from '../components/Shot';
 import {KenBurns} from '../components/KenBurns';
 import {Callout} from '../components/Callout';
 
-// A8 (690–780): материалы — список предметов → PDF, наезд камеры; янтарный
-// штрих-выноска снаружи (рамка вокруг области PDF «дописывается»). Переход cut.
+// A8 (690–780): материалы — список предметов → PDF; посадка contain: скриншот вписан
+// ЦЕЛИКОМ, letterbox #F4F6F8 (vision-QA2 f700: «+ ДОБАВИТЬ» не у кромки, орг-шапка не под
+// таблеткой, навбар в кадре) → список статичен, лёгкий наезд только на PDF (низ — белый
+// margin, тулбар сверху не кроется). Янтарная рамка вокруг области PDF «дописывается».
 export const S08: React.FC<SceneProps> = ({have, wide}) => {
 	const {fps} = useVideoConfig();
+	const fit: React.CSSProperties = {objectFit: 'contain', backgroundColor: C.bg};
 	return (
 		<SceneWrap bg={C.bg}>
 			<Stage
@@ -17,14 +20,11 @@ export const S08: React.FC<SceneProps> = ({have, wide}) => {
 				screen={
 					<>
 						<Sequence durationInFrames={30} premountFor={fps}>
-							<KenBurns scale={[1.08, 1.12]} y={[60, -40]}>
-								{/* РЕАЛЬНЫЙ shot_materials, якорь cover +60px вниз: таблетка не ест таб «Задания» (vision-QA f700) */}
-								<Shot name="a8_materials_list" have={have} style={{objectPosition: '50% 17%'}} />
-							</KenBurns>
+							<Shot name="a8_materials_list" have={have} style={fit} />
 						</Sequence>
 						<Sequence from={30} premountFor={fps}>
-							<KenBurns scale={[1.1, 1.2]} y={[60, -80]}>
-								<Shot name="a8_material_pdf" have={have} />
+							<KenBurns scale={[1, 1.06]} y={[0, 50]}>
+								<Shot name="a8_material_pdf" have={have} style={fit} />
 							</KenBurns>
 						</Sequence>
 					</>
@@ -34,7 +34,8 @@ export const S08: React.FC<SceneProps> = ({have, wide}) => {
 				titleDelay={0}
 				overlay={
 					<Sequence from={30}>
-						<Callout delay={12} x={124 + 106} y={84 + 380} rect={{w: 620, h: 780}} />
+						{/* rect пересчитан под contain-посадку (масштаб 0.909, сдвиг x +41) */}
+						<Callout delay={12} x={124 + 137} y={84 + 425} rect={{w: 558, h: 702}} />
 					</Sequence>
 				}
 			/>
