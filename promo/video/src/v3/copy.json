@@ -1,0 +1,82 @@
+{
+  "titleIn": 20,
+  "bounds": [0, 140, 260, 375, 485, 650, 785, 900],
+  "cutBounds": [0, 140, 335, 450],
+  "scenes": [
+    {
+      "id": "S1",
+      "shot": "shot_map_route",
+      "crop": [0.02, 0.98, 0.16, 0.62],
+      "caption": "07:58",
+      "title": ["Заблудиться?", "Не сегодня"],
+      "sub": "Путь — по коридорам и лестницам",
+      "dur": 140,
+      "digitSide": "left"
+    },
+    {
+      "id": "S2",
+      "shot": "shot_schedule_today",
+      "crop": [0, 1, 0.1, 0.52],
+      "caption": "10:24",
+      "title": ["Что сейчас", "и где — за секунду"],
+      "sub": "Расписание — с сайта колледжа",
+      "dur": 120,
+      "digitSide": "right"
+    },
+    {
+      "id": "S3",
+      "shot": "shot_bells",
+      "crop": [0, 1, 0.14, 0.6],
+      "caption": "11:00",
+      "title": ["Перемена", "кончается. Дыши"],
+      "sub": "Виджет отсчитает за тебя",
+      "dur": 115,
+      "digitSide": "left"
+    },
+    {
+      "id": "S4",
+      "shot": "shot_viewer_text",
+      "crop": [0, 1, 0.12, 0.7],
+      "caption": "11:20",
+      "title": ["Фоткай доску?", "Не надо"],
+      "sub": "Конспекты и PDF — уже в уроках",
+      "dur": 110,
+      "digitSide": "right"
+    },
+    {
+      "id": "S5",
+      "shot": "shot_tasks",
+      "crop": [0, 1, 0.16, 0.6],
+      "caption": "14:05",
+      "title": ["Про домашку", "забудешь не ты"],
+      "sub": "Свайп — сдал. Undo — вернул",
+      "dur": 165,
+      "digitSide": "left"
+    },
+    {
+      "id": "S6",
+      "shot": "shot_grades",
+      "crop": [0, 1, 0.3, 0.72],
+      "caption": "18:30",
+      "title": ["4.2 — и это", "ещё не предел"],
+      "sub": "Средний балл — с весами, сам",
+      "dur": 135,
+      "digitSide": "right"
+    },
+    {
+      "id": "S7",
+      "shot": null,
+      "crop": null,
+      "caption": null,
+      "title": null,
+      "sub": null,
+      "dur": 115,
+      "digitSide": "left"
+    }
+  ],
+  "cut": [
+    {"id": "S1", "dur": 140},
+    {"id": "S3", "dur": 195},
+    {"id": "S7", "dur": 115, "pushInStart": 17}
+  ]
+}

@@ -8,7 +8,8 @@
     "studio": "npm run sync && remotion studio",
     "render": "npm run sync && remotion render Promo9x16 out/promo_a_9x16.mp4 --codec=h264 --crf=18",
     "render:16x9": "npm run sync && remotion render Promo16x9 out/promo_a_16x9.mp4 --codec=h264 --crf=18",
-    "qa": "npm run sync && remotion still Promo9x16 out/qa/f000.png --frame=0 && remotion still Promo9x16 out/qa/f150.png --frame=150 && remotion still Promo9x16 out/qa/f420.png --frame=420 && remotion still Promo9x16 out/qa/f870.png --frame=870 && remotion still Promo16x9 out/qa/wide_f420.png --frame=420"
+    "qa": "npm run sync && remotion still Promo9x16 out/qa/f000.png --frame=0 && remotion still Promo9x16 out/qa/f150.png --frame=150 && remotion still Promo9x16 out/qa/f420.png --frame=420 && remotion still Promo9x16 out/qa/f870.png --frame=870 && remotion still Promo16x9 out/qa/wide_f420.png --frame=420",
+    "qa3": "node scripts/check-readability.mjs"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.0",
