@@ -87,7 +87,8 @@ import java.util.TimeZone
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], qualifiers = "w412dp-h915dp-xhdpi")
+// xxxhdpi (4x): PNG ≈1648×3660 — запас резкости для hero-кропов в промо-видео.
+@Config(sdk = [35], qualifiers = "w412dp-h915dp-xxxhdpi")
 class PromoShotsTest {
     @get:Rule
     val composeRule = createComposeRule()
@@ -295,6 +296,31 @@ class PromoShotsTest {
             // Математика — 8-я в списке плана; скроллим до неё и ждём средний балл (4.2)
             waitForTag("grades_subject_row_Математика")
             composeRule.onNodeWithTag("grades_subject_row_Математика").performScrollTo()
+            waitForText("4.2")
+        },
+    ) {
+        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao(), db.taskReminderDao()))
+    }
+
+    // чистая подложка списка заданий (без демо-подсказки — HintFlags погашен в setUp) для реплики свайпа
+    @Test
+    fun shotTasksSwipe() = shoot("shot_tasks_swipe", tab = 1, interact = { waitForText("Параграф 12") }) {
+        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao(), db.taskReminderDao()))
+    }
+
+    // экран предмета оценок: GradeSubjectScreen приватный, но открывается кликом по строке предмета
+    @Test
+    fun shotGradesSubject() = shoot(
+        "shot_grades_subject",
+        tab = 1,
+        interact = {
+            composeRule.onNodeWithText("Оценки").performClick()
+            waitForTag("grades_root_list")
+            waitForTag("grades_subject_row_Математика")
+            composeRule.onNodeWithTag("grades_subject_row_Математика").performScrollTo()
+            composeRule.onNodeWithTag("grades_subject_row_Математика").performClick()
+            waitForTag("grades_subject_screen")
+            waitForTag("grades_num_5")
             waitForText("4.2")
         },
     ) {
