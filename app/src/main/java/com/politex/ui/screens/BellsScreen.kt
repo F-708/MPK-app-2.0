@@ -176,9 +176,11 @@ fun BellsScreen(
     val todayTypeSelected = selectedScheduleType == todayType
     val bells = bellsForDisplay(selectedScheduleType)
     val showSundayNote = sundayNoteVisible(todayDow, todayTypeSelected)
+    // R2#16: без уроков группы сегодня рельс СЕРЫЙ (fallback на последний звонок
+    // красил его синим, как будто уроки идут); fallback только до загрузки списка
     val blueEndNum =
         if (isTodaySelected) {
-            lastLessonToday ?: bells.lastOrNull { !it.isInfoHour }?.lessonNumber
+            lastLessonToday
         } else {
             null
         }
