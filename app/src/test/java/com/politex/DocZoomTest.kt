@@ -1,8 +1,13 @@
 package com.politex
 
+import androidx.compose.ui.geometry.Offset
 import com.politex.ui.screens.materials.DocZoom
+import com.politex.ui.screens.materials.LiveTransform
+import com.politex.ui.screens.materials.applyLive
 import com.politex.ui.screens.materials.bookmarkSizeFactor
+import com.politex.ui.screens.materials.commitDeltaY
 import com.politex.ui.screens.materials.focalAnchorX
+import com.politex.ui.screens.materials.liveAnchor
 import com.politex.ui.screens.materials.restoreX
 import com.politex.ui.screens.materials.restoreY
 import org.junit.Assert.assertEquals
@@ -119,5 +124,102 @@ class DocZoomTest {
         assertEquals(1f, bookmarkSizeFactor(1f), eps)
         assertEquals(1.2f, bookmarkSizeFactor(1.2f), eps)
         assertEquals(1.2f, bookmarkSizeFactor(4f), eps)
+    }
+
+    // FF4: двухфазный зум. Фаза 1 — applyLive: чистая функция, docZoom в сигнатуре НЕТ
+    // (live-фаза его не трогает — компилируется как гарантия). Фаза 2 — commit формулы.
+    @Test
+    fun `FF4 applyLive - первый кадр (pan=0) даёт pan = c(1-k) + d k`() {
+        val center = Offset(540f, 1000f)
+        val centroid = Offset(840f, 1200f)
+        val d = Offset(20f, -10f)
+        val t = applyLive(LiveTransform(1f, Offset.Zero), 1.5f, d, centroid, center, 0.25f, 8f)
+        assertEquals(1.5f, t.zoom, eps)
+        val c = centroid - center
+        val expected = c * (1f - 1.5f) + d * 1.5f
+        assertEquals(expected.x, t.pan.x, eps)
+        assertEquals(expected.y, t.pan.y, eps)
+    }
+
+    @Test
+    fun `FF4 applyLive - фокальный инвариант по многим кадрам точка остаётся под центроидом`() {
+        val center = Offset(540f, 1000f)
+        var t = LiveTransform(1f, Offset.Zero)
+        var c = Offset(300f, 800f)
+        // контентная точка под центроидом (смещение от центра): q = (c - center - pan)/zoom
+        val q = c - center
+        repeat(6) { i ->
+            val k = if (i % 2 == 0) 1.25f else 0.9f
+            val d = Offset(15f * (i - 2), -7f * i)
+            c += d
+            t = applyLive(t, k, d, c, center, 0.1f, 10f)
+            // инвариант: zoom*q + pan == c - center (точка q под текущим центроидом)
+            val screen = q * t.zoom + t.pan
+            assertEquals((c - center).x, screen.x, 1e-2f)
+            assertEquals((c - center).y, screen.y, 1e-2f)
+        }
+    }
+
+    @Test
+    fun `FF4 applyLive - liveZoom клампится в границы, pan считается с ЭФФЕКТИВНЫМ k`() {
+        val center = Offset(100f, 100f)
+        val centroid = Offset(300f, 300f)
+        val t = applyLive(LiveTransform(3.9f, Offset.Zero), 2f, Offset.Zero, centroid, center, 0.5f, 4f)
+        assertEquals(4f, t.zoom, eps)
+        val k = 4f / 3.9f
+        val expected = (centroid - center) * (1f - k)
+        assertEquals(expected.x, t.pan.x, 1e-3f)
+        assertEquals(expected.y, t.pan.y, 1e-3f)
+    }
+
+    @Test
+    fun `FF4 commit - docZoom = clamp(docZoom liveZoom)`() {
+        assertEquals(2.4f, DocZoom.apply(1.2f, 2f), eps)
+        assertEquals(DocZoom.MAX, DocZoom.apply(3f, 2f), eps)
+        assertEquals(DocZoom.MIN, DocZoom.apply(0.6f, 0.5f), eps)
+        // ratio для restore = newZoom/oldZoom — ровно liveZoom, если clamp не сработал
+        val old = 1.4f
+        val live = 1.8f
+        assertEquals(live, DocZoom.apply(old, live) / old, eps)
+    }
+
+    @Test
+    fun `FF4 liveAnchor - layout-координата точки под центроидом`() {
+        // identity live: layer-координата = центроид
+        assertEquals(300f, liveAnchor(540f, 300f, 0f, 1f), eps)
+        // pan +100: контент сдвинут вправо ⇒ точка под пальцем на 100px левее в layer
+        assertEquals(200f, liveAnchor(540f, 300f, 100f, 1f), eps)
+        // zoom 2 вокруг center 540: c=740 ⇒ 540 + (740-540)/2 = 640
+        assertEquals(640f, liveAnchor(540f, 740f, 0f, 2f), eps)
+        // zoom 0 не делит на ноль
+        assertTrue(liveAnchor(540f, 740f, 0f, 0f).isFinite())
+    }
+
+    @Test
+    fun `FF4 commitDeltaY - чистый драг (ratio=1) сдвигает скролл на -livePanY`() {
+        assertEquals(-50f, commitDeltaY(1f, 1000f, 400f, 50f, 1f), eps)
+        assertEquals(30f, commitDeltaY(1f, 1000f, 400f, -30f, 1f), eps)
+    }
+
+    @Test
+    fun `FF4 commitDeltaY - фокальная поправка при центроиде в центре = (ratio-1) centerY`() {
+        // ratio == liveZoom (clamp не сработал), cy == centerY, panY == 0
+        assertEquals((2f - 1f) * 1000f, commitDeltaY(2f, 1000f, 1000f, 0f, 2f), eps)
+        // без поправки restoreY оставил бы верх вьюпорта на месте — контент «уехал» бы вверх
+        assertEquals(0f, commitDeltaY(1f, 1000f, 1000f, 0f, 1f), eps)
+    }
+
+    @Test
+    fun `FF4 commit round-trip - restoreX возвращает точку под центроид в новой раскладке`() {
+        val centerX = 540f
+        val h = 100f
+        val cx = 300f
+        val live = LiveTransform(1.5f, Offset(40f, 0f))
+        val ratio = live.zoom
+        // точка layout под центроидом во время live-фазы (ровно так считает коллектор)
+        val contentX = focalAnchorX(h, liveAnchor(centerX, cx, live.pan.x, live.zoom))
+        val hNew = restoreX(contentX, ratio, cx, maxScroll = 10_000f)
+        // после commit точка масштабировалась на ratio и снова под центроидом: hNew + cx = contentX*ratio
+        assertEquals(contentX * ratio, hNew + cx, eps)
     }
 }

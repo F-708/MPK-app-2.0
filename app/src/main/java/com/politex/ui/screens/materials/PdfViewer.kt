@@ -17,6 +17,7 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,6 +82,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -270,17 +272,22 @@ fun MaterialPdfViewer(
 
     var eraserActive by remember { mutableStateOf(false) }
 
-    // DD1: layout-модель зума. Битмап страницы рендерится ОДИН раз в фикс-ширину
-    // renderWidthPx (LruCache), а страница занимает в layout ширину containerW * docZoom:
-    // Image масштабирует уже готовый битмап (дёшево), PdfRenderer при pinch не вызывается.
-    // При docZoom < 1 страница ЦЕЛИКОМ видна по высоте (высота следует из аспекта битмапа),
-    // при > 1 — горизонтальный скролл. Никаких graphicsLayer scale/pan — они обрезали страницу.
+    // DD1+FF4: двухфазный зум. Layout-модель та же: битмап рендерится ОДИН раз в фикс-ширину
+    // renderWidthPx (LruCache), страница занимает в layout ширину containerW * docZoom.
+    // Фаза 1 (жест): docZoom/layout НЕ меняются — контейнер масштабируется graphicsLayer
+    // (liveZoom/livePan, фокально), ноль relayout на кадр ⇒ плавно как в ImageViewer.
+    // Фаза 2 (отпускание): ОДИН commit — docZoom = clamp(docZoom*liveZoom), затем коллектор
+    // один раз восстанавливает скроллы (точка под центроидом остаётся на месте).
     val docZoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
+    val liveZoomState = remember(item.id) { mutableFloatStateOf(1f) }
+    val livePanState = remember(item.id) { mutableStateOf(Offset.Zero) }
 
-    // EE1: центроид текущего pinch-жеста (в координатах вьюпорта). Пишется в docPinchZoom до
-    // изменения docZoom; читается единственным коллектором для фокальной компенсации панорамирования.
-    // null ⇒ изменение zoom не от жеста (reset/draw-mode) ⇒ фокальный restore не применяется.
+    // EE1+FF4: снимок жеста для commit. focalCentroid — последний центроид (координаты вьюпорта),
+    // focalLive — liveZoom/livePan на момент отпускания. Пишутся в commitLiveZoom ПЕРЕД изменением
+    // docZoom; читаются единственным коллектором ОДИН раз на жест. null ⇒ zoom меняется не от
+    // жеста (reset/draw-mode) ⇒ фокальный restore не применяется.
     val focalCentroid = remember(item.id) { mutableStateOf<Offset?>(null) }
+    val focalLive = remember(item.id) { mutableStateOf<LiveTransform?>(null) }
 
     // DD1: двойной тап / тап по индикатору — плавный сброс к 100%.
     fun resetZoomSmooth() {
@@ -437,6 +444,7 @@ fun MaterialPdfViewer(
             // DD1: фиксированная ширина рендера битмапов — при pinch не перерисовываются.
             val renderWidthPx = with(density) { maxWidth.roundToPx() }.coerceIn(320, 2800)
             val boxW = with(density) { maxWidth.toPx() }
+            val boxH = with(density) { maxHeight.toPx() }
             val zoom = docZoomState.floatValue
             // DD1: layout-ширина страницы; при zoom <= 1 список во всю ширину вьюпорта
             // (страницы центрируются), при > 1 — horizontalScroll на ширину страницы.
@@ -446,40 +454,91 @@ fun MaterialPdfViewer(
             // EE6: фактор размера bookmark-кнопки (clamp ±20% от zoom).
             val bookmarkFactor = bookmarkSizeFactor(zoom)
 
-            // EE1: ЕДИНСТВЕННЫЙ сериализованный коллектор фокального зума (урок BB2 — без гонок).
-            // На каждое изменение docZoom: снять точку контента под центроидом в ТЕКУЩЕЙ (старой)
-            // раскладке, дождаться кадра (layout применит новый pageW), восстановить скролл так,
-            // чтобы точка осталась под пальцами. Один collect ⇒ scrollTo/scrollToItem не конфликтуют.
-            LaunchedEffect(hScrollState, listState) {
+            // EE1+FF4: ЕДИНСТВЕННЫЙ сериализованный коллектор фокального зума (урок BB2 — без гонок).
+            // FF4: срабатывает ОДИН раз на жест (commit на отпускании), а не на каждый кадр pinch.
+            // Восстанавливает скроллы так, чтобы точка layout, бывшая под центроидом ВО ВРЕМЯ live-фазы
+            // (с учётом liveZoom/livePan), оказалась под центроидом и в новой раскладке.
+            LaunchedEffect(hScrollState, listState, boxW, boxH) {
                 var prevZoom = docZoomState.floatValue
                 snapshotFlow { docZoomState.floatValue }
                     .collect { newZoom ->
                         val ratio = if (prevZoom > 0f) newZoom / prevZoom else 1f
                         prevZoom = newZoom
                         val centroid = focalCentroid.value ?: return@collect
+                        val live = focalLive.value ?: return@collect
+                        focalCentroid.value = null
+                        focalLive.value = null
                         if (ratio == 1f) return@collect
-                        // Точка контента под центроидом в старой раскладке (scroll state не зависит
-                        // от layout — снимаем до кадра).
-                        val contentX = focalAnchorX(hScrollState.value.toFloat(), centroid.x)
+                        val centerX = boxW / 2f
+                        val centerY = boxH / 2f
+                        // Точка layout под центроидом с учётом live-трансформа (scroll state не
+                        // зависит от layout — снимаем до кадра).
+                        val contentX = focalAnchorX(hScrollState.value.toFloat(), liveAnchor(centerX, centroid.x, live.pan.x, live.zoom))
                         val anchorIdx = listState.firstVisibleItemIndex
                         val anchorOff = listState.firstVisibleItemScrollOffset.toFloat()
                         // Даём раскладке применить новый pageW/высоты страниц.
                         withFrameNanos { }
                         hScrollState.scrollTo(restoreX(contentX, ratio, centroid.x, hScrollState.maxValue.toFloat()).roundToInt())
                         listState.scrollToItem(anchorIdx, restoreY(anchorOff, ratio).roundToInt())
+                        // restoreY фиксирует верх вьюпорта; поправка переносит фокус в центроид.
+                        listState.scrollBy(commitDeltaY(ratio, centerY, centroid.y, live.pan.y, live.zoom))
+                        // FF4: live-слой гасится ПОСЛЕ восстановления скроллов — в одном кадре,
+                        // без промежуточного «голого» кадра со старым скроллом.
+                        liveZoomState.floatValue = 1f
+                        livePanState.value = Offset.Zero
                     }
+            }
+
+            // FF4: фаза 2 — commit на отпускании жеста, ОДИН раз: docZoom = clamp(docZoom*liveZoom),
+            // скроллы восстановит коллектор выше. Чистый двухпальцевый драг (zoom не изменился)
+            // переводим в скроллы напрямую, чтобы контент не отпружинивал назад.
+            fun commitLiveZoom(centroid: Offset) {
+                val liveZoom = liveZoomState.floatValue
+                val livePan = livePanState.value
+                val oldZoom = docZoomState.floatValue
+                val newZoom = DocZoom.apply(oldZoom, liveZoom)
+                if (newZoom == oldZoom) {
+                    if (livePan.x != 0f || livePan.y != 0f) {
+                        // Чистый двухпальцевый драг: переводим livePan в скроллы и гасим live
+                        // В ОДНОМ кадре (launch) — без отпружинивания и без скачка.
+                        // ScrollState.value setter приватен ⇒ suspend scrollTo/scrollBy.
+                        scope.launch {
+                            hScrollState.scrollTo((hScrollState.value - livePan.x).roundToInt().coerceIn(0, hScrollState.maxValue))
+                            listState.scrollBy(-livePan.y)
+                            liveZoomState.floatValue = 1f
+                            livePanState.value = Offset.Zero
+                        }
+                    } else {
+                        liveZoomState.floatValue = 1f
+                        livePanState.value = Offset.Zero
+                    }
+                    return
+                }
+                focalCentroid.value = centroid
+                focalLive.value = LiveTransform(liveZoom, livePan)
+                docZoomState.floatValue = newZoom
             }
 
             Box(
                 modifier =
                 Modifier
                     .fillMaxSize()
-                    .docPinchZoom(
-                        scaleState = docZoomState,
+                    .docLiveZoom(
+                        docZoomState = docZoomState,
+                        liveZoomState = liveZoomState,
+                        livePanState = livePanState,
                         enabled = !drawMode,
-                        focalCentroid = focalCentroid,
+                        onCommit = { centroid -> commitLiveZoom(centroid) },
                         onReset = { resetZoomSmooth() },
                     )
+                    // FF4 фаза 1: живой слой на КОНТЕЙНЕРЕ — scale+pan в draw-фазе, без relayout.
+                    // pointerInput выше по цепочке ⇒ центроид в координатах вьюпорта (не слоя).
+                    .graphicsLayer {
+                        scaleX = liveZoomState.floatValue
+                        scaleY = liveZoomState.floatValue
+                        translationX = livePanState.value.x
+                        translationY = livePanState.value.y
+                    }
                     .horizontalScroll(hScrollState),
             ) {
                 LazyColumn(
@@ -604,18 +663,50 @@ internal fun restoreX(contentX: Float, ratio: Float, cx: Float, maxScroll: Float
 // offset первой видимой страницы домножается на ratio — контент у верха вьюпорта остаётся на месте.
 internal fun restoreY(offsetY: Float, ratio: Float): Float = offsetY * ratio
 
+// FF4: двухфазный зум — live-трансформ фазы 1 и формулы commit фазы 2. Чистые функции
+// (тесты в DocZoomTest). Фаза 1 НЕ трогает docZoom — applyLive вообще не принимает его.
+internal data class LiveTransform(
+    val zoom: Float,
+    val pan: Offset,
+)
+
+// Фокальная формула live-фазы: точка под центроидом остаётся под центроидом.
+// screen = zoom*(p-center) + center + pan ⇒ pan' = k*pan + c*(1-k) + d*k,
+// где c = centroid-center (transformOrigin — центр слоя), k = ЭФФЕКТИВНЫЙ zoomChange
+// (после clamp liveZoom), d = panChange (движение центроида, экранные px).
+internal fun applyLive(
+    t: LiveTransform,
+    zoomChange: Float,
+    panChange: Offset,
+    centroid: Offset,
+    center: Offset,
+    minZoom: Float,
+    maxZoom: Float,
+): LiveTransform {
+    val newZoom = (t.zoom * zoomChange).coerceIn(minZoom, maxZoom)
+    val k = if (t.zoom > 0f) newZoom / t.zoom else 1f
+    val pan = t.pan * k + (centroid - center) * (1f - k) + panChange * k
+    return LiveTransform(newZoom, pan)
+}
+
+// Commit: layer-координата (в px СТАРОЙ раскладки) точки, которая во время live-фазы
+// была под центроидом c: обратное преобразование live-слоя (scale вокруг center + pan).
+internal fun liveAnchor(center: Float, c: Float, pan: Float, zoom: Float): Float =
+    center + (c - center - pan) / zoom.coerceAtLeast(0.01f)
+
+// Commit (вертикаль): restoreY фиксирует верх вьюпорта (offset*ratio), а фокальный инвариант
+// требует оставить под центроидом точку liveAnchor ⇒ поправка к скроллу после restoreY.
+internal fun commitDeltaY(ratio: Float, centerY: Float, cy: Float, livePanY: Float, liveZoom: Float): Float =
+    ratio * liveAnchor(centerY, cy, livePanY, liveZoom) - cy
+
 // EE6: bookmark-кнопка масштабируется с zoom, но не сильнее ±20% (иначе на 400% она огромная).
 internal fun bookmarkSizeFactor(zoom: Float): Float = zoom.coerceIn(0.8f, 1.2f)
 
 internal const val ZOOM_RESET_ANIM_MS = 220
 
-// CC4: одиночный палец панит только при увеличении выше этого порога;
-// при scale == 1 (и рядом с ним) палец не consume-ится — LazyColumn скроллится.
-internal const val PAN_ENABLED_SCALE = 1.05f
-
 // CC4: граница pan — масштабированный контейнер не уезжает за viewport больше,
 // чем на половину избытка с каждой стороны; при scale <= 1 pan зафиксирован в 0.
-// DD1: PDF больше не использует (layout-ширина + штатные скроллы); оставлен для DocTextViewer.
+// FF4: используется в commit DocTextViewer (свёртка live в постоянный docPan).
 internal fun clampPan(
     pan: Offset,
     scale: Float,
@@ -633,73 +724,65 @@ internal fun clampPan(
 
 private fun pageCacheKey(pageIndex: Int, widthPx: Int): Long = (pageIndex.toLong() shl 32) or widthPx.toLong()
 
-// DD1: pinch (2+ пальца, Initial pass) меняет ТОЛЬКО docZoom — layout-ширину страниц.
-// Одиночный палец не потребляется: вертикаль скроллит LazyColumn, горизонталь при zoom > 1 —
-// horizontalScroll (естественно, без consume-хака). Двойной тап — плавный сброс к 100%.
-internal fun Modifier.docPinchZoom(
-    scaleState: MutableFloatState,
+// FF4: жест двухфазного зума (PDF и DOCX, Initial pass).
+// Два пальца: live-зум+пан ОДНОВРЕМЕННО через applyLive (фокально, docZoom/layout не трогаем —
+// вызывающий применяет liveZoom/livePan через graphicsLayer). Отпускание: onCommit(centroid) —
+// один commit на жест. Одиночный палец НЕ потребляется: вертикаль скроллит LazyColumn,
+// горизонталь — horizontalScroll (при zoom > 1 это и есть пан). Двойной тап — плавный сброс.
+internal fun Modifier.docLiveZoom(
+    docZoomState: MutableFloatState,
+    liveZoomState: MutableFloatState,
+    livePanState: MutableState<Offset>,
     enabled: Boolean = true,
-    // EE1: сюда пишется центроид жеста (в координатах вьюпорта) ПЕРЕД каждым изменением docZoom,
-    // чтобы единственный коллектор снял точку контента под пальцами в старой раскладке.
-    focalCentroid: MutableState<Offset?>? = null,
-    onReset: () -> Unit = { scaleState.floatValue = DocZoom.DEFAULT },
+    onCommit: (centroid: Offset) -> Unit,
+    onReset: () -> Unit = { docZoomState.floatValue = DocZoom.DEFAULT },
 ): Modifier =
     this
-        .pointerInput(scaleState, enabled) {
+        .pointerInput(docZoomState, liveZoomState, livePanState, enabled) {
             if (!enabled) return@pointerInput
-            awaitEachGesture {
-                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                do {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    if (event.changes.count { it.pressed } >= 2) {
-                        val zoomChange = event.calculateZoom()
-                        if (zoomChange != 1f) {
-                            // EE1: центроид снимаем до изменения zoom (layout ещё в старом zoom).
-                            focalCentroid?.value = event.calculateCentroid()
-                            scaleState.floatValue = DocZoom.apply(scaleState.floatValue, zoomChange)
+            val center = Offset(size.width / 2f, size.height / 2f)
+            try {
+                awaitEachGesture {
+                    var active = false
+                    var lastCentroid = Offset.Zero
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.changes.count { it.pressed } >= 2) {
+                            active = true
+                            val zoomChange = event.calculateZoom()
+                            val panChange = event.calculatePan()
+                            val centroid = event.calculateCentroid()
+                            if (zoomChange != 1f || panChange != Offset.Zero) {
+                                lastCentroid = centroid
+                                val docZ = docZoomState.floatValue
+                                val next =
+                                    applyLive(
+                                        LiveTransform(liveZoomState.floatValue, livePanState.value),
+                                        zoomChange,
+                                        panChange,
+                                        centroid,
+                                        center,
+                                        // границы live таковы, чтобы итоговый docZoom*liveZoom
+                                        // остался в [MIN, MAX] — commit клампится тем же DocZoom.apply.
+                                        DocZoom.MIN / docZ,
+                                        DocZoom.MAX / docZ,
+                                    )
+                                liveZoomState.floatValue = next.zoom
+                                livePanState.value = next.pan
+                            }
+                            event.changes.forEach { if (it.positionChanged()) it.consume() }
                         }
-                        event.changes.forEach { if (it.positionChanged()) it.consume() }
-                    }
-                } while (event.changes.any { it.pressed })
+                    } while (event.changes.any { it.pressed })
+                    if (active) onCommit(lastCentroid)
+                }
+            } finally {
+                // FF4: жест прерван (rotate/draw-mode/dispose) — не оставляем live-слой «залипшим».
+                liveZoomState.floatValue = 1f
+                livePanState.value = Offset.Zero
             }
         }
-        .pointerInput(scaleState) {
-            detectTapGestures(onDoubleTap = { onReset() })
-        }
-
-// CC4: жесты graphicsLayer-модели (scale+pan с consume одиночного пальца).
-// DD1: используется только DocTextViewer — PDF перешёл на docPinchZoom + layout-ширину.
-internal fun Modifier.docTransformGestures(
-    scaleState: MutableFloatState,
-    panState: MutableState<Offset>,
-    enabled: Boolean = true,
-    onReset: () -> Unit = {
-        scaleState.floatValue = DocZoom.DEFAULT
-        panState.value = Offset.Zero
-    },
-): Modifier =
-    this
-        .pointerInput(scaleState, panState, enabled) {
-            if (!enabled) return@pointerInput
-            awaitEachGesture {
-                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                var handled = scaleState.floatValue > PAN_ENABLED_SCALE
-                do {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    if (!handled && event.changes.count { it.pressed } >= 2) handled = true
-                    if (handled) {
-                        val zoomChange = event.calculateZoom()
-                        val panChange = event.calculatePan()
-                        val newScale = DocZoom.apply(scaleState.floatValue, zoomChange)
-                        scaleState.floatValue = newScale
-                        panState.value =
-                            clampPan(panState.value + panChange, newScale, size.width.toFloat(), size.height.toFloat())
-                        event.changes.forEach { if (it.positionChanged()) it.consume() }
-                    }
-                } while (event.changes.any { it.pressed })
-            }
-        }
-        .pointerInput(scaleState, panState) {
+        .pointerInput(docZoomState) {
             detectTapGestures(onDoubleTap = { onReset() })
         }
 

@@ -1,6 +1,8 @@
 package com.politex.ui.screens.materials
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,6 +43,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -53,6 +56,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.local.dao.MaterialDao
@@ -101,14 +105,46 @@ fun MaterialDocTextViewer(
     val undoStack = remember(item.id) { ArrayDeque<String>() }
     val redoStack = remember(item.id) { ArrayDeque<String>() }
 
-    // CC4: зум как в ImageViewer — graphicsLayer (scale+pan) на колонке абзацев.
+    // CC4+FF4: зум как в ImageViewer — graphicsLayer (scale+pan) на колонке абзацев, двухфазный:
+    // фаза 1 (жест) — liveZoom/livePan фокально, без рекомпозиций и без docZoom;
+    // фаза 2 (отпускание) — ОДИН commit: свёртка live в постоянный docZoom/docPan.
     // fontSize не масштабируется: визуальный масштаб даёт только graphicsLayer.
     val docZoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
     val docPanState = remember(item.id) { mutableStateOf(Offset.Zero) }
+    val liveZoomState = remember(item.id) { mutableFloatStateOf(1f) }
+    val livePanState = remember(item.id) { mutableStateOf(Offset.Zero) }
+    var containerSize by remember(item.id) { mutableStateOf(IntSize.Zero) }
 
-    fun resetZoom() {
-        docZoomState.floatValue = DocZoom.DEFAULT
-        docPanState.value = Offset.Zero
+    // FF4: плавный сброс (двойной тап / индикатор) — docZoom→1 и docPan→0 анимацией, без скачка.
+    fun resetZoomSmooth() {
+        val fromZoom = docZoomState.floatValue
+        val fromPan = docPanState.value
+        if (fromZoom == DocZoom.DEFAULT && fromPan == Offset.Zero) return
+        scope.launch {
+            Animatable(0f).animateTo(1f, tween(ZOOM_RESET_ANIM_MS)) {
+                docZoomState.floatValue = fromZoom + (DocZoom.DEFAULT - fromZoom) * value
+                docPanState.value = fromPan * (1f - value)
+            }
+        }
+    }
+
+    // FF4: commit на отпускании — свёртка ТОЧНАЯ: композиция «scale вокруг центра + translate»
+    // даёт S' = L*S, T' = L*T + Tp, поэтому в кадре commit визуального скачка нет.
+    fun commitLiveTransform() {
+        val liveZoom = liveZoomState.floatValue
+        val livePan = livePanState.value
+        if (liveZoom == 1f && livePan.x == 0f && livePan.y == 0f) return
+        val newScale = DocZoom.apply(docZoomState.floatValue, liveZoom)
+        docZoomState.floatValue = newScale
+        docPanState.value =
+            clampPan(
+                docPanState.value * liveZoom + livePan,
+                newScale,
+                containerSize.width.toFloat(),
+                containerSize.height.toFloat(),
+            )
+        liveZoomState.floatValue = 1f
+        livePanState.value = Offset.Zero
     }
 
     fun startEdit() {
@@ -184,7 +220,7 @@ fun MaterialDocTextViewer(
                     color = Color.Transparent,
                     modifier = Modifier
                         .heightIn(min = 44.dp)
-                        .bouncyClickable(onClick = { resetZoom() })
+                        .bouncyClickable(onClick = { resetZoomSmooth() })
                         .testTag("doc_zoom_indicator"),
                 ) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
@@ -270,22 +306,27 @@ fun MaterialDocTextViewer(
                     modifier = Modifier
                         .fillMaxSize()
                         .clipToBounds()
-                        .docTransformGestures(
-                            scaleState = docZoomState,
-                            panState = docPanState,
-                            onReset = { resetZoom() },
+                        .onSizeChanged { containerSize = it }
+                        .docLiveZoom(
+                            docZoomState = docZoomState,
+                            liveZoomState = liveZoomState,
+                            livePanState = livePanState,
+                            onCommit = { commitLiveTransform() },
+                            onReset = { resetZoomSmooth() },
                         ),
                 ) {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
-                            // CC4: scale/pan читаются в draw-фазе — без рекомпозиции и
-                            // переразметки текста при pinch.
+                            // CC4+FF4: суммарный трансформ doc∘live читается в draw-фазе —
+                            // без рекомпозиции и переразметки текста при pinch.
                             .graphicsLayer {
-                                scaleX = docZoomState.floatValue
-                                scaleY = docZoomState.floatValue
-                                translationX = docPanState.value.x
-                                translationY = docPanState.value.y
+                                val live = liveZoomState.floatValue
+                                val doc = docZoomState.floatValue
+                                scaleX = doc * live
+                                scaleY = doc * live
+                                translationX = docPanState.value.x * live + livePanState.value.x
+                                translationY = docPanState.value.y * live + livePanState.value.y
                             }
                             .testTag("doc_paragraph_list"),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
