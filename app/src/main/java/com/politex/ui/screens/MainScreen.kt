@@ -261,7 +261,9 @@ fun MainScreen(
                 if (!ViewerMode.active) MainTopBar()
             },
             bottomBar = {
-                if (!ViewerMode.active && !RouteBuilderMode.active) Column(modifier = Modifier.fillMaxWidth()) {
+                // FF1: нижняя навигация скрывается ТОЛЬКО в полноэкранном чтении;
+                // в конструкторе маршрутов она видна (иначе «пропадает» критично)
+                if (!ViewerMode.active) Column(modifier = Modifier.fillMaxWidth()) {
                     AppDivider()
                     NavigationBar(
                         containerColor = ColorBgMain,

@@ -44,7 +44,7 @@ fun DaySlotCell(
         color = if (selected) ColorTopBar else ColorBgMain,
         modifier =
             modifier
-                .height(Tokens.ChipScreen)
+                .height(Tokens.ButtonHeight) // FF2: вровень с кнопкой календаря (44dp)
                 .bouncyClickable(onClick = onClick),
     ) {
         Column(
