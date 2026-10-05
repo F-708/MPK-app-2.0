@@ -125,12 +125,18 @@ fun materialListUi(
         else -> MaterialListUi.CONTENT
     }
 
-private sealed interface MaterialRoute {
+// R2 #3: пользовательское название предмета может содержать '|' — разделитель стека.
+// '%' экранируется первым, чтобы round-trip был однозначным для любого ввода.
+private fun escapeSegment(s: String): String = s.replace("%", "%25").replace("|", "%7C")
+
+private fun unescapeSegment(s: String): String = s.replace("%7C", "|").replace("%25", "%")
+
+internal sealed interface MaterialRoute {
 
     data class SubjectScreen(
         val subjectName: String,
     ) : MaterialRoute {
-        override fun toString() = "s:$subjectName"
+        override fun toString() = "s:" + escapeSegment(subjectName)
     }
 
     object ArchiveScreen : MaterialRoute {
@@ -148,7 +154,7 @@ private sealed interface MaterialRoute {
             when (raw.firstOrNull()) {
                 'a' -> if (raw == "a") ArchiveScreen else null
                 'i' -> raw.substringAfter(':', "").toLongOrNull()?.let { Viewer(it) }
-                's' -> raw.substringAfter(':', "").takeIf { it.isNotEmpty() }?.let { SubjectScreen(it) }
+                's' -> raw.substringAfter(':', "").takeIf { it.isNotEmpty() }?.let { SubjectScreen(unescapeSegment(it)) }
                 else -> null
             }
     }
@@ -179,8 +185,9 @@ fun MaterialBaseScreen(
     // последние полученные данные помнятся, чтобы не мигать при пересборе
     val itemsOrNull by dao.getAllItems().collectAsState(initial = null as List<MaterialItemEntity>?)
     var lastItems by remember { mutableStateOf(emptyList<MaterialItemEntity>()) }
-    itemsOrNull?.let { lastItems = it }
-    val items = lastItems
+    // R2 #14: никакого backward-write в композиции — lastItems обновляется только в эффекте
+    LaunchedEffect(itemsOrNull) { itemsOrNull?.let { lastItems = it } }
+    val items = itemsOrNull ?: lastItems
     val loaded = itemsOrNull != null
 
     val sizesState = remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
@@ -259,9 +266,11 @@ fun MaterialBaseScreen(
 
     fun deleteItem(item: MaterialItemEntity) {
         scope.launch {
-
-            MaterialImporter.deleteStoredFiles(item)
-            dao.deleteItemWithBookmarks(item.id)
+            // R2 #15: сбой удаления файлов/БД не должен ронять экран молча — showErr-паттерн
+            runCatching {
+                MaterialImporter.deleteStoredFiles(item)
+                dao.deleteItemWithBookmarks(item.id)
+            }.onFailure { showErr("Не удалось удалить: ${it.message ?: it.javaClass.simpleName}") }
         }
     }
 
@@ -348,6 +357,9 @@ fun MaterialBaseScreen(
                 MaterialHeader(
                     query = query,
                     onQueryChange = { query = it },
+                    // R2 #24: поиск работает только в корне — на экране предмета/архива
+                    // поле мёртвое (результаты не показываются), скрываем его
+                    showSearch = subjectRoute == null && archiveRoute == null,
                     onAdd = {
                         showImportType = true
                     },
@@ -558,6 +570,7 @@ private fun MessageBanner(
 private fun MaterialHeader(
     query: String,
     onQueryChange: (String) -> Unit,
+    showSearch: Boolean,
     onAdd: () -> Unit,
 ) {
     Row(
@@ -569,13 +582,17 @@ private fun MaterialHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
 
-        com.politex.ui.components.SearchBar(
-            value = query,
-            onValueChange = onQueryChange,
-            placeholder = "Поиск материалов",
-            testTag = "material_search_field",
-            modifier = Modifier.weight(1f),
-        )
+        if (showSearch) {
+            com.politex.ui.components.SearchBar(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = "Поиск материалов",
+                testTag = "material_search_field",
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
+        }
         BrandActionButton(
             icon = Icons.Default.Add,
             label = "ДОБАВИТЬ",

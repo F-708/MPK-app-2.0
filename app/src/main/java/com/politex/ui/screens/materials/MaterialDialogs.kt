@@ -1,6 +1,5 @@
 package com.politex.ui.screens.materials
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.TextFields
@@ -26,7 +24,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -47,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.politex.ui.components.AppCard
+import com.politex.ui.components.DialogTitleBar
+import com.politex.ui.components.ToggleChip
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -56,7 +55,6 @@ import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
-import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 
@@ -72,7 +70,7 @@ fun MaterialImportTypeDialog(
         properties = DialogProperties(dismissOnClickOutside = false),
         shape = RoundedCornerShape(2.dp),
         containerColor = ColorBgMain,
-        title = { DialogTitle("Добавить материал", onDismiss) },
+        title = { DialogTitleBar("Добавить материал", onDismiss) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 DialogActionRow(
@@ -111,7 +109,7 @@ fun MaterialTextDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
         properties = DialogProperties(dismissOnClickOutside = false),
         shape = RoundedCornerShape(2.dp),
         containerColor = ColorBgMain,
-        title = { DialogTitle("Текстовый материал", onDismiss) },
+        title = { DialogTitleBar("Текстовый материал", onDismiss) },
         text = {
             Column {
                 OutlinedTextField(
@@ -169,7 +167,7 @@ fun MaterialSubjectDialog(
         properties = DialogProperties(dismissOnClickOutside = false),
         shape = RoundedCornerShape(2.dp),
         containerColor = ColorBgMain,
-        title = { DialogTitle("Куда положить?", onDismiss) },
+        title = { DialogTitleBar("Куда положить?", onDismiss) },
         text = {
             Column(
                 modifier = Modifier
@@ -252,7 +250,7 @@ fun MaterialRenameDialog(
         properties = DialogProperties(dismissOnClickOutside = false),
         shape = RoundedCornerShape(2.dp),
         containerColor = ColorBgMain,
-        title = { DialogTitle(label, onDismiss) },
+        title = { DialogTitleBar(label, onDismiss) },
         text = {
             OutlinedTextField(
                 value = value,
@@ -314,20 +312,6 @@ fun MaterialDeleteDialog(
 }
 
 @Composable
-private fun DialogTitle(text: String, onClose: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = ColorTextTitle))
-        IconButton(onClick = onClose, modifier = Modifier.size(Tokens.HitTarget)) {
-            Icon(imageVector = Icons.Default.Close, contentDescription = "Закрыть", tint = ColorTextMuted)
-        }
-    }
-}
-
-@Composable
 private fun DialogActionRow(
     icon: ImageVector,
     title: String,
@@ -358,23 +342,6 @@ private fun DialogActionRow(
                     style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun ToggleChip(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
-        color = if (selected) ColorTopBar else ColorBgMain,
-        contentColor = if (selected) Color.White else ColorTextBody,
-        modifier = modifier
-            .heightIn(min = Tokens.ChipForm)
-            .bouncyClickable(onClick = onClick),
-    ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
-            Text(text, maxLines = 1, style = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp))
         }
     }
 }

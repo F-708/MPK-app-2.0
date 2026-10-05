@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,6 +52,7 @@ import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorDangerFill
 import com.politex.ui.theme.ColorTextMuted
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import kotlinx.coroutines.delay
 import org.json.JSONArray
@@ -337,12 +340,14 @@ fun AnnotationToolbar(
         Column(modifier = Modifier.padding(vertical = 2.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                // R2 #22: чипы 44dp не влезают в 360dp — скролл вместо клиппинга
+                // ponytail: horizontalScroll, если тулбар когда-нибудь растёт — заменить на FlowRow
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
             ) {
                 ANNOTATION_COLORS.forEachIndexed { i, c ->
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier.size(40.dp).bouncyClickable { onColor(c) }.testTag("draw_color_$i"),
+                        modifier = Modifier.size(Tokens.IconHit).bouncyClickable { onColor(c) }.testTag("draw_color_$i"),
                     ) {
                         Box(
                             modifier =
@@ -357,7 +362,7 @@ fun AnnotationToolbar(
                 ANNOTATION_WIDTHS.forEachIndexed { i, w ->
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier.size(40.dp).bouncyClickable { onWidth(w) }.testTag("draw_width_$i"),
+                        modifier = Modifier.size(Tokens.IconHit).bouncyClickable { onWidth(w) }.testTag("draw_width_$i"),
                     ) {
                         Box(
                             modifier =
@@ -412,7 +417,7 @@ private fun ToolbarAction(
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = if (active) ColorBrandBlue.copy(alpha = 0.15f) else Color.Transparent,
-        modifier = Modifier.size(40.dp).bouncyClickable(onClick = onClick).testTag(tag),
+        modifier = Modifier.size(Tokens.IconHit).bouncyClickable(onClick = onClick).testTag(tag),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(imageVector = icon, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))

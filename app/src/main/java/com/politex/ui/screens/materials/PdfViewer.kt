@@ -108,6 +108,7 @@ import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -178,7 +179,7 @@ private fun CorruptedPdfPlaque(
                             text = "НАЗАД",
                             softWrap = false,
                             maxLines = 1,
-                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.White),
+                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = Tokens.ButtonText, color = Color.White),
                         )
                     }
                 }
@@ -947,26 +948,31 @@ private fun PdfPageRow(
                 modifier = Modifier.matchParentSize(),
             )
 
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = if (bookmarked) ColorBrandBlue else ColorBgMain.copy(alpha = 0.85f),
-                border = BorderStroke(1.dp, ColorBorderLight),
+            // R2 #22: кликабельная область закладки 44dp, визуальный размер прежний (26*factor)
+            Box(
                 modifier =
                 Modifier
                     .align(Alignment.TopStart)
-                    .padding(4.dp)
-                    // EE6: кнопка масштабируется с zoom, но clamp ±20% (bookmarkFactor).
-                    .size((26 * bookmarkFactor).dp)
+                    .size(Tokens.IconHit)
                     .bouncyClickable(onClick = { onBookmarkClick(bookmarked) })
                     .testTag("pdf_bookmark_add_$pageIndex"),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                        contentDescription = "Закладка на странице ${pageIndex + 1}",
-                        tint = if (bookmarked) Color.White else ColorBrandBlue,
-                        modifier = Modifier.size((14 * bookmarkFactor).dp),
-                    )
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = if (bookmarked) ColorBrandBlue else ColorBgMain.copy(alpha = 0.85f),
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    // EE6: кнопка масштабируется с zoom, но clamp ±20% (bookmarkFactor).
+                    modifier = Modifier.size((26 * bookmarkFactor).dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            contentDescription = "Закладка на странице ${pageIndex + 1}",
+                            tint = if (bookmarked) Color.White else ColorBrandBlue,
+                            modifier = Modifier.size((14 * bookmarkFactor).dp),
+                        )
+                    }
                 }
             }
 
@@ -1111,7 +1117,7 @@ private fun AddBookmarkDialog(
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(label.trim()) }) {
-                Text("СОХРАНИТЬ", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ColorBrandBlue))
+                Text("СОХРАНИТЬ", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ColorBrandFill))
             }
         },
         dismissButton = {

@@ -301,6 +301,10 @@ fun MaterialImageViewer(
 
                             awaitEachGesture {
                                 awaitFirstDown(requireUnconsumed = false)
+                                // R2 #2: в drawMode двухпальцевый трансформ обрабатывает AnnotationLayer —
+                                // внешний зум-хэндлер жест не трогает (иначе zoom/pan применяется дважды
+                                // и портит штрихи). drawMode читается из snapshot-state на каждый жест.
+                                if (drawMode) return@awaitEachGesture
                                 var handled = zoom > 1.05f
                                 do {
                                     val event = awaitPointerEvent()

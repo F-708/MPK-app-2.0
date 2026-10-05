@@ -44,7 +44,6 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import java.util.Calendar
-import java.util.Locale
 
 @Composable
 fun SimpleDatePickerDialog(
@@ -214,9 +213,3 @@ private fun ActionButton(
         )
     }
 }
-
-internal fun isoFromParts(
-    year: Int,
-    monthZeroBased: Int,
-    day: Int,
-): String = String.format(Locale.ROOT, "%04d-%02d-%02d", year, monthZeroBased + 1, day)

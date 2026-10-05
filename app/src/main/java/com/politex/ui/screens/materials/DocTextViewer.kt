@@ -60,9 +60,11 @@ import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.data.local.entity.MaterialKind
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBrandBlue
+import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextTitle
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.DocxParagraph
 import com.politex.util.DocxTextExtractor
@@ -172,7 +174,9 @@ fun MaterialDocTextViewer(
     BackHandler(enabled = editMode) { requestExitEdit() }
 
     Column(modifier = modifier.fillMaxSize().background(ColorBgMain)) {
-        MaterialViewerTopBar(title = item.title, testTag = "doc_top_bar", onBack = onBack) {
+        // R2 #1: кнопка топбара в editMode идёт через requestExitEdit — защита
+        // несохранённых правок работает и для системного Back, и для стрелки
+        MaterialViewerTopBar(title = item.title, testTag = "doc_top_bar", onBack = { if (editMode) requestExitEdit() else onBack() }) {
             if (!editMode) {
 
                 Surface(
@@ -246,7 +250,7 @@ fun MaterialDocTextViewer(
                         Spacer(modifier = Modifier.height(16.dp))
                         Surface(
                             shape = RoundedCornerShape(2.dp),
-                            color = ColorBrandBlue,
+                            color = ColorBrandFill,
                             modifier = Modifier.bouncyClickable(onClick = onBack).testTag("doc_empty_back"),
                         ) {
                             Box(
@@ -334,7 +338,7 @@ fun MaterialDocTextViewer(
                     },
                     modifier = Modifier.testTag("doc_unsaved_save"),
                 ) {
-                    Text("СОХРАНИТЬ", style = TextStyle(fontWeight = FontWeight.Bold, color = ColorBrandBlue))
+                    Text("СОХРАНИТЬ", style = TextStyle(fontWeight = FontWeight.Bold, color = ColorBrandFill))
                 }
             },
             dismissButton = {
@@ -385,11 +389,11 @@ private fun TextEditToolbar(
             Spacer(modifier = Modifier.weight(1f))
             Surface(
                 shape = RoundedCornerShape(2.dp),
-                color = ColorBrandBlue,
+                color = ColorBrandFill,
                 modifier = Modifier.size(width = 104.dp, height = 36.dp).bouncyClickable(onClick = onSave).testTag("doc_save_btn"),
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text("СОХРАНИТЬ", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.White))
+                    Text("СОХРАНИТЬ", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = Tokens.ButtonText, color = Color.White))
                 }
             }
         }
@@ -406,7 +410,7 @@ private fun EditMarkButton(
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = Color.Transparent,
-        modifier = Modifier.size(40.dp).bouncyClickable(onClick = onClick).testTag(tag),
+        modifier = Modifier.size(Tokens.IconHit).bouncyClickable(onClick = onClick).testTag(tag),
     ) {
         Box(contentAlignment = Alignment.Center) { Text(label, style = style) }
     }
@@ -422,7 +426,7 @@ private fun EditMarkIcon(
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = Color.Transparent,
-        modifier = Modifier.size(40.dp).bouncyClickable(onClick = onClick).testTag(tag),
+        modifier = Modifier.size(Tokens.IconHit).bouncyClickable(onClick = onClick).testTag(tag),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(imageVector = icon, contentDescription = description, tint = ColorTextBody, modifier = Modifier.size(18.dp))

@@ -96,6 +96,8 @@ import com.politex.data.repository.TaskRepository
 import com.politex.ui.components.AppCard
 import com.politex.ui.components.AppDivider
 import com.politex.ui.components.BrandActionButton
+import com.politex.ui.components.DialogTitleBar
+import com.politex.ui.components.ToggleChip
 import com.politex.ui.theme.ColorBadgeCourse
 import com.politex.ui.theme.ColorBadgeDiploma
 import com.politex.ui.theme.ColorBadgeExam
@@ -915,28 +917,11 @@ fun TaskEditDialog(
         shape = RoundedCornerShape(2.dp),
         containerColor = ColorBgMain,
         title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = if (isEdit) "Редактировать задание" else "Новое задание",
-                    style =
-                    androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = ColorTextTitle,
-                    ),
-                )
-                IconButton(
-                    onClick = onDismissRequest,
-
-                    modifier = Modifier.size(Tokens.IconHit),
-                ) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Закрыть", tint = ColorTextMuted)
-                }
-            }
+            // R2-дубли: общий заголовок диалога из ui.components
+            DialogTitleBar(
+                text = if (isEdit) "Редактировать задание" else "Новое задание",
+                onClose = onDismissRequest,
+            )
         },
         text = {
             Column(
@@ -987,52 +972,13 @@ fun TaskEditDialog(
                     }
                 }
 
+                // R2-дубли: общий ToggleChip из ui.components (тот же, что в MaterialSubjectDialog)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, if (!isCustomSubject) ColorTopBar else ColorBorderLight),
-                        color = if (!isCustomSubject) ColorTopBar else ColorBgMain,
-                        contentColor = if (!isCustomSubject) Color.White else ColorTextBody,
-                        modifier =
-                        Modifier
-                            .height(Tokens.ChipForm)
-                            .bouncyClickable { isCustomSubject = false },
-                    ) {
-                        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
-                            Text(
-                                text = "Из списка",
-                                style =
-                                androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 11.sp,
-                                ),
-                            )
-                        }
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, if (isCustomSubject) ColorTopBar else ColorBorderLight),
-                        color = if (isCustomSubject) ColorTopBar else ColorBgMain,
-                        contentColor = if (isCustomSubject) Color.White else ColorTextBody,
-                        modifier =
-                        Modifier
-                            .height(Tokens.ChipForm)
-                            .bouncyClickable { isCustomSubject = true },
-                    ) {
-                        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
-                            Text(
-                                text = "Другое…",
-                                style =
-                                androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 11.sp,
-                                ),
-                            )
-                        }
-                    }
+                    ToggleChip("Из списка", !isCustomSubject) { isCustomSubject = false }
+                    ToggleChip("Другое…", isCustomSubject) { isCustomSubject = true }
                 }
 
                 if (isCustomSubject) {

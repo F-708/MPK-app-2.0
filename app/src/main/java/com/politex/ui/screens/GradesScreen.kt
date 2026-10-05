@@ -289,19 +289,22 @@ private fun GradeSubjectScreen(
         scope.launch { dao.insert(entry) }
     }
 
-    var lastDeleted by remember { mutableStateOf<GradeEntryEntity?>(null) }
-    LaunchedEffect(lastDeleted) {
-        if (lastDeleted != null) {
+    // R2 #9: undo-стек вместо одной записи — второе быстрое удаление не хоронит первое.
+    // Плашка показывает верх стека, «ОТМЕНИТЬ» pop'ает его; таймер очищает весь стек.
+    var undoStack by remember { mutableStateOf(ArrayDeque<GradeEntryEntity>()) }
+    LaunchedEffect(undoStack) {
+        if (undoStack.isNotEmpty()) {
             delay(5000)
-            lastDeleted = null
+            undoStack = ArrayDeque()
         }
     }
     fun deleteGrade(e: GradeEntryEntity) {
-        lastDeleted = e
+        undoStack = ArrayDeque(undoStack).apply { addLast(e) }
         scope.launch { dao.deleteById(e.id) }
     }
-    fun restoreGrade(e: GradeEntryEntity) {
-        lastDeleted = null
+    fun restoreLastGrade() {
+        val e = undoStack.lastOrNull() ?: return
+        undoStack = ArrayDeque(undoStack).apply { removeLast() }
         scope.launch { dao.insert(e) }
     }
 
@@ -402,7 +405,7 @@ private fun GradeSubjectScreen(
             Column(modifier = Modifier.padding(8.dp)) {
 
                 // CC1: undo-плашка НАД строкой оценок (панель растёт вверх, средний балл не сдвигает)
-                lastDeleted?.let { deleted ->
+                undoStack.lastOrNull()?.let { deleted ->
                     AppCard(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -432,7 +435,7 @@ private fun GradeSubjectScreen(
                                 modifier =
                                 Modifier
                                     .testTag("grades_undo_btn")
-                                    .bouncyClickable { restoreGrade(deleted) }
+                                    .bouncyClickable { restoreLastGrade() }
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                             )
                         }
