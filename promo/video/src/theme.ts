@@ -38,3 +38,6 @@ export type SceneProps = {
 export const MOCK_9 = {x: 110, y: 70, w: 860, h: 1692};
 // Геометрия мокапа в 16:9: высота 920, правая треть.
 export const MOCK_16 = {x: 1344, y: 80, w: 446, h: 920};
+// 16:9: контент экрана опущен на высоту пилюли динамика + 8px, чтобы орг-шапка шота
+// не пряталась под пилюль (vision-QA3 wide_f420). Учитывается в Layout и projectShot.
+export const NOTCH = 36;

@@ -1,6 +1,6 @@
 import React from 'react';
 import {Easing, Img, interpolate, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
-import {MOCK_9, MOCK_16} from '../theme';
+import {MOCK_9, MOCK_16, NOTCH} from '../theme';
 import {PhoneMockup} from './PhoneMockup';
 import {Title} from './Title';
 
@@ -84,7 +84,14 @@ export const Stage: React.FC<{
 			)}
 			<div style={{position: 'absolute', left: mock.x, top: mock.y, zIndex: 2}}>
 				<PhoneMockup width={mock.w} aspect={aspect} tilt={tilt} entrance={entrance}>
-					{screen}
+					{/* 16:9: контент ниже пилюли динамика (NOTCH), иначе орг-шапка шота под ней (vision-QA3 wide_f420) */}
+					{wide ? (
+						<div style={{position: 'absolute', left: 0, right: 0, top: NOTCH, bottom: 0, overflow: 'hidden'}}>
+							{screen}
+						</div>
+					) : (
+						screen
+					)}
 				</PhoneMockup>
 			</div>
 			{title &&

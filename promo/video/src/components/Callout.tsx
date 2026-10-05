@@ -12,7 +12,9 @@ export const Callout: React.FC<{
 	label?: string;
 	delay?: number;
 	rect?: {w: number; h: number}; // если задан — рамка (x,y = левый верхний угол)
-}> = ({x, y, lx = x, ly = y, label, delay = 0, rect}) => {
+	maxW?: number; // макс. ширина чипа: текст переносится по строкам (без — nowrap)
+	fs?: number; // кегль подписи (без — 34 по стилевой библии); мельче = ниже чип
+}> = ({x, y, lx = x, ly = y, label, delay = 0, rect, maxW, fs = 34}) => {
 	const frame = useCurrentFrame();
 	const {fps} = useVideoConfig();
 	const f = Math.max(0, frame - delay);
@@ -64,9 +66,11 @@ export const Callout: React.FC<{
 						padding: '8px 20px',
 						fontFamily: Golos,
 						fontWeight: 500,
-						fontSize: 34,
+						fontSize: fs,
 						color: C.ink,
-						whiteSpace: 'nowrap',
+						whiteSpace: maxW ? 'normal' : 'nowrap',
+						maxWidth: maxW,
+						textAlign: 'center',
 						boxShadow: '0 4px 16px rgba(11,53,100,0.15)',
 					}}
 				>
