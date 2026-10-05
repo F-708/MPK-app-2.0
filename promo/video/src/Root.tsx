@@ -1,5 +1,6 @@
 import {Composition, staticFile} from 'remotion';
 import {Video} from './Video';
+import {Video15} from './v2/Video15';
 
 // Манифест наличия кадров (public/shots.json) пишет scripts/sync-shots.mjs.
 // fetch(staticFile()) — официальный способ Remotion, работает и в Studio, и в рендере.
@@ -36,6 +37,8 @@ export const RemotionRoot: React.FC = () => {
 				defaultProps={{have: {} as Record<string, string>}}
 				calculateMetadata={calculateMetadata}
 			/>
+			{/* v2: 15s cut — 450 кадров, только 9:16. */}
+			<Composition id="Promo15" component={Video15} width={1080} height={1920} fps={30} durationInFrames={450} />
 		</>
 	);
 };
