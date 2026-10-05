@@ -264,13 +264,18 @@ fun CollegeMapScreen(
     val autoActive = routesEnabled && !autoCancelled && (showRoute || fromRoom != null)
 
     val floors = remember(mapData) { CollegeMap.Floor.entries.associate { it.id to mapData.floor(it.id) } }
-    val route =
-        remember(autoActive, target, fromRoom, mapData, floors) {
-            if (!autoActive || target.isBlank()) {
+
+    // FF3: авто-маршрут (из расписания/виджета) ЗАПИНЕН на исходную цель — считается
+    // ОДИН раз от initialRoom и НЕ перестраивается при смене `target` (тап/поиск).
+    // Сбрасывается только «Отменить маршрут» (autoCancelled) или выходом с экрана.
+    val pinnedTarget = remember(initialRoom) { initialRoom?.trim().orEmpty() }
+    val pinnedAutoRoute =
+        remember(autoActive, pinnedTarget, fromRoom, mapData, floors) {
+            if (!autoActive || pinnedTarget.isBlank()) {
                 null
             } else {
                 run {
-                    val to = findRoomEverywhere(mapData, target) ?: return@run null
+                    val to = findRoomEverywhere(mapData, pinnedTarget) ?: return@run null
                     val from =
                         if (!fromRoom.isNullOrBlank()) {
                             findRoomEverywhere(mapData, fromRoom)
@@ -304,7 +309,34 @@ fun CollegeMapScreen(
 
     val routeActive = autoActive || manualA != null
 
-    val activeRoute = manualRoute ?: route
+    val activeRoute = manualRoute ?: pinnedAutoRoute
+
+    // FF3: единая build-логика — используется и кнопкой «ПОСТРОИТЬ», и тапом в
+    // режиме конструктора. Читает ТЕКУЩИЕ pairA/pairB из state на момент вызова.
+    val doBuild: () -> Unit = {
+        val a = pairA.trim()
+        val b = pairB.trim()
+        val ra = if (a.isEmpty()) mainEntranceRoom(mapData) else findRoomEverywhere(mapData, a)
+        val rb = findRoomEverywhere(mapData, b)
+        val keyA = if (a.isEmpty()) MAIN_ENTRANCE_KEY else ra?.number
+        when {
+            b.isEmpty() || rb == null ->
+                Toast.makeText(context, "Кабинет «${b.ifBlank { "…" }}» не найден на плане", Toast.LENGTH_SHORT).show()
+            ra == null || keyA == null ->
+                Toast.makeText(context, "Кабинет «$a» не найден на плане", Toast.LENGTH_SHORT).show()
+            else -> {
+                val r = cachedRoute(keyA, rb.number, mapData, floors, routeCache)
+                if (r == null) {
+                    Toast.makeText(context, "${rb.number} недоступен из ${if (a.isEmpty()) "главного входа" else a}", Toast.LENGTH_SHORT).show()
+                } else {
+                    manualA = keyA
+                    manualB = rb.number
+                    builderActive = false
+                    target = rb.number
+                }
+            }
+        }
+    }
 
     val routePoints =
         remember(activeRoute, floorId, floor) {
@@ -379,8 +411,8 @@ fun CollegeMapScreen(
                     .bouncyClickable {
                         val found = query.trim()
                         if (found.isNotBlank()) {
-                            manualA = null
-                            manualB = null
+                            // FF3: поиск лишь выбирает кабинет — запиненный маршрут
+                            // (авто/ручной) живёт до «Отменить маршрут»/выхода, как и при тапе.
                             target = found
                             searchFailed = findRoomEverywhere(mapData, found) == null
                         }
@@ -429,31 +461,7 @@ fun CollegeMapScreen(
                 onValueA = { pairA = it },
                 valueB = pairB,
                 onValueB = { pairB = it },
-                onBuild = {
-                    val a = pairA.trim()
-                    val b = pairB.trim()
-                    val ra = if (a.isEmpty()) mainEntranceRoom(mapData) else findRoomEverywhere(mapData, a)
-                    val rb = findRoomEverywhere(mapData, b)
-                    val keyA = if (a.isEmpty()) MAIN_ENTRANCE_KEY else ra?.number
-                    when {
-                        b.isEmpty() || rb == null ->
-                            Toast.makeText(context, "Кабинет «${b.ifBlank { "…" }}» не найден на плане", Toast.LENGTH_SHORT).show()
-                        ra == null || keyA == null ->
-                            Toast.makeText(context, "Кабинет «$a» не найден на плане", Toast.LENGTH_SHORT).show()
-                        else -> {
-                            val r = cachedRoute(keyA, rb.number, mapData, floors, routeCache)
-                            if (r == null) {
-                                Toast.makeText(context, "${rb.number} недоступен из ${if (a.isEmpty()) "главного входа" else a}", Toast.LENGTH_SHORT).show()
-                            } else {
-
-                                manualA = keyA
-                                manualB = rb.number
-                                builderActive = false
-                                target = rb.number
-                            }
-                        }
-                    }
-                },
+                onBuild = doBuild,
             )
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -464,10 +472,19 @@ fun CollegeMapScreen(
             targetRoom = targetRoom,
 
             onRoomTap = { room ->
-                manualA = null
-                manualB = null
                 searchFailed = false
-                target = room.number
+                // FF3: запиненный маршрут (авто/ручной) тап НЕ перестраивает — только
+                // выбирает кабинет. В конструкторе тап заполняет A/B и строит при обоих.
+                val res =
+                    resolveRouteSource(
+                        pinnedRouteActive = pinnedAutoRoute != null || manualA != null,
+                        builderFields = BuilderFields(builderActive, pairA, pairB),
+                        tapRoom = room.number,
+                    )
+                target = res.target
+                res.pairA?.let { pairA = it }
+                res.pairB?.let { pairB = it }
+                if (res.build) doBuild()
             },
             routePoints = routePoints,
             routeOffsetsDp = routeOffsetsDp,
