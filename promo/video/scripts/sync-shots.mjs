@@ -14,6 +14,7 @@ const ALIAS = {
 	shot_tasks: 'a7_task_dialog',
 	shot_materials: 'a8_materials_list',
 	shot_viewer_text: 'a8_material_pdf',
+	shot_grades: 'a6_grades',
 };
 
 mkdirSync(DST, {recursive: true});

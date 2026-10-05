@@ -6,7 +6,7 @@ import {Shot} from '../components/Shot';
 import {KenBurns} from '../components/KenBurns';
 import {Callout} from '../components/Callout';
 import {BellDot} from '../components/BellDot';
-import {CountdownWidget, HomeScreen, NotificationCard, Shade} from '../components/AndroidChrome';
+import {CountdownWidget, DEMO_ROWS, HomeScreen, NotificationCard, Shade, WidgetToday} from '../components/AndroidChrome';
 import {Seconds} from '../components/Seconds';
 
 // A4 (300–420): звонки ×3 быстрой склейкой (~1.3с каждая, slide):
@@ -31,6 +31,10 @@ export const S04: React.FC<SceneProps> = ({have, wide}) => {
 						<Sequence from={40} durationInFrames={40} premountFor={fps}>
 							<SceneWrap in="slide-left">
 								<HomeScreen>
+									{/* home-реплика под scrim шторки, opacity 0.4 (vision-QA f350) */}
+									<div style={{opacity: 0.4}}>
+										<WidgetToday rows={DEMO_ROWS} />
+									</div>
 									<Shade>
 										<NotificationCard
 											title={
@@ -57,7 +61,7 @@ export const S04: React.FC<SceneProps> = ({have, wide}) => {
 				accent="вплоть до секунд"
 				overlay={
 					<Sequence from={40} durationInFrames={40}>
-						<Callout delay={8} x={124 + 416} y={84 + 220} lx={640} ly={38} label="тикает по секундам" />
+						<Callout delay={8} x={430} y={275} lx={660} ly={440} label="тикает по секундам" />
 					</Sequence>
 				}
 			/>

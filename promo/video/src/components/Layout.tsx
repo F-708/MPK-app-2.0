@@ -1,6 +1,6 @@
 import React from 'react';
-import {Easing, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
-import {C, Golos, MOCK_9, MOCK_16} from '../theme';
+import {Easing, Img, interpolate, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
+import {MOCK_9, MOCK_16} from '../theme';
 import {PhoneMockup} from './PhoneMockup';
 import {Title} from './Title';
 
@@ -54,19 +54,23 @@ export const Stage: React.FC<{
 	screen: React.ReactNode;
 	overlay?: React.ReactNode; // выноски в координатах кадра 9:16 (в wide домасштабируются к мокапу)
 	title?: string;
+	sub?: string;
 	accent?: string;
+	accentBg?: string;
 	titleDelay?: number;
 	titleDot?: boolean;
 	tilt?: number;
 	entrance?: boolean;
-	aspect?: number;
-}> = ({wide, screen, overlay, title, accent, titleDelay = 6, titleDot = false, tilt = 0, entrance = false, aspect = 2.0}) => {
+}> = ({wide, screen, overlay, title, sub, accent, accentBg, titleDelay = 6, titleDot = false, tilt = 0, entrance = false}) => {
 	const mock = wide ? MOCK_16 : MOCK_9;
 	const k = MOCK_16.w / MOCK_9.w;
+	// Экран мокапа = корпус минус рамку 14×2; в 16:9 высота корпуса ровно 920 (vision-QA wide_f420).
+	const aspect = (mock.h - 28) / (mock.w - 28);
 	return (
 		<>
 			{wide && (
-				<div
+				<Img
+					src={staticFile('icon.svg')}
 					style={{
 						position: 'absolute',
 						left: 180,
@@ -74,20 +78,9 @@ export const Stage: React.FC<{
 						translate: '0 -50%',
 						width: 640,
 						height: 640,
-						borderRadius: '50%',
-						border: `44px solid ${C.navy}`,
 						opacity: 0.08,
-						display: 'flex',
-						alignItems: 'center',
-						justifyContent: 'center',
-						fontFamily: Golos,
-						fontWeight: 900,
-						fontSize: 380,
-						color: C.navy,
 					}}
-				>
-					П
-				</div>
+				/>
 			)}
 			<div style={{position: 'absolute', left: mock.x, top: mock.y, zIndex: 2}}>
 				<PhoneMockup width={mock.w} aspect={aspect} tilt={tilt} entrance={entrance}>
@@ -97,7 +90,7 @@ export const Stage: React.FC<{
 			{title &&
 				(wide ? (
 					<div style={{position: 'absolute', left: 96, top: '50%', translate: '0 -50%', zIndex: 3, maxWidth: 900}}>
-						<Title text={title} accent={accent} delay={titleDelay} dot={titleDot} align="left" />
+						<Title text={title} sub={sub} accent={accent} accentBg={accentBg} delay={titleDelay} dot={titleDot} align="left" />
 					</div>
 				) : (
 					<div
@@ -105,13 +98,14 @@ export const Stage: React.FC<{
 							position: 'absolute',
 							left: 96,
 							right: 96,
-							bottom: 210,
+							// низ плашки ≤ y1700 (safe-bottom 220, vision-QA global)
+							bottom: 220,
 							zIndex: 3,
 							display: 'flex',
 							justifyContent: 'center',
 						}}
 					>
-						<Title text={title} accent={accent} delay={titleDelay} dot={titleDot} />
+						<Title text={title} sub={sub} accent={accent} accentBg={accentBg} delay={titleDelay} dot={titleDot} />
 					</div>
 				))}
 			{overlay && (

@@ -1,4 +1,5 @@
 import React from 'react';
+import {Img, staticFile} from 'remotion';
 import {C, Golos, Mono, SP} from '../theme';
 import {Seconds} from './Seconds';
 
@@ -37,6 +38,14 @@ export const StatusBar: React.FC = () => {
 	);
 };
 
+// Телефон / сообщения / камера / галерея — простые глифы для дока (vision-QA f250).
+const DOCK = [
+	{bg: C.blue, glyph: <><rect x={18} y={6} width={20} height={44} rx={4} /><path d="M24 44h8" /></>},
+	{bg: '#34A853', glyph: <><rect x={6} y={10} width={44} height={30} rx={8} /><path d="M16 40v10l10-10" /></>},
+	{bg: C.amber, glyph: <><rect x={6} y={14} width={44} height={32} rx={6} /><circle cx={28} cy={30} r={9} /><path d="M20 14l3-6h10l3 6" /></>},
+	{bg: '#8E9BAA', glyph: <><rect x={6} y={8} width={44} height={40} rx={6} /><circle cx={19} cy={20} r={4} /><path d="M10 42l12-14 8 9 6-7 10 12" /></>},
+];
+
 export const HomeScreen: React.FC<{children?: React.ReactNode}> = ({children}) => {
 	return (
 		<div
@@ -54,27 +63,34 @@ export const HomeScreen: React.FC<{children?: React.ReactNode}> = ({children}) =
 					flex: 1,
 					display: 'flex',
 					flexDirection: 'column',
-					justifyContent: 'center',
+					justifyContent: 'flex-start',
 					gap: 30,
-					padding: '0 34px',
+					padding: '60px 16px 0',
 				}}
 			>
 				{children}
 			</div>
-			{/* док */}
+			{/* док: цветные круги с белыми глифами (vision-QA f250) */}
 			<div style={{display: 'flex', justifyContent: 'center', gap: 40, paddingBottom: 46}}>
-				{[C.blue, '#34A853', C.amber, '#8E9BAA'].map((c, i) => (
+				{DOCK.map((d, i) => (
 					<div
 						key={i}
 						style={{
 							width: 116,
 							height: 116,
-							borderRadius: 30,
-							backgroundColor: c,
+							borderRadius: '50%',
+							backgroundColor: d.bg,
 							opacity: 0.85,
 							boxShadow: '0 6px 18px rgba(11,53,100,0.18)',
+							display: 'flex',
+							alignItems: 'center',
+							justifyContent: 'center',
 						}}
-					/>
+					>
+						<svg width={56} height={56} viewBox="0 0 56 56" fill="none" stroke="#FFFFFF" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round">
+							{d.glyph}
+						</svg>
+					</div>
 				))}
 			</div>
 		</div>
@@ -95,6 +111,11 @@ export const WidgetToday: React.FC<{rows: WRow[]}> = ({rows}) => {
 				borderRadius: 36,
 				padding: '24px 26px',
 				boxShadow: '0 8px 28px rgba(11,53,100,0.14)',
+				// ширина ~800px при экране 860 (vision-QA f250)
+				width: 800,
+				maxWidth: '100%',
+				margin: '0 auto',
+				boxSizing: 'border-box',
 			}}
 		>
 			<div style={{fontFamily: Golos, fontWeight: 700, fontSize: 10 * SP, letterSpacing: 1.5, color: C.navy}}>
@@ -192,22 +213,21 @@ export const NotificationCard: React.FC<{
 			}}
 		>
 			<div style={{display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12}}>
+				{/* иконка приложения = эмблема icon.svg 48×48 на белом круге (vision-QA f350) */}
 				<div
 					style={{
-						width: 52,
-						height: 52,
-						borderRadius: 14,
-						backgroundColor: C.blue,
+						width: 64,
+						height: 64,
+						borderRadius: '50%',
+						backgroundColor: '#FFFFFF',
+						boxShadow: '0 0 0 2px rgba(17,24,32,0.10)',
 						display: 'flex',
 						alignItems: 'center',
 						justifyContent: 'center',
-						fontFamily: Golos,
-						fontWeight: 900,
-						fontSize: 30,
-						color: '#FFFFFF',
+						flexShrink: 0,
 					}}
 				>
-					П
+					<Img src={staticFile('icon.svg')} style={{width: 48, height: 48}} />
 				</div>
 				<span style={{fontFamily: Golos, fontWeight: 400, fontSize: 28, color: C.widgetSub}}>
 					Мой Политех · {when}

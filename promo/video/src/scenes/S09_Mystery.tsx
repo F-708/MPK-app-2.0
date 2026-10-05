@@ -22,7 +22,7 @@ export const S09: React.FC<SceneProps> = ({wide}) => {
 						: {bottom: 240, display: 'flex', justifyContent: 'center'}),
 				}}
 			>
-				<Title text="Ещё кое-что есть. Пока не скажем." accent="Пока не скажем" delay={10} />
+				<Title text="Ещё кое-что есть. Пока не скажем." accent="Пока не скажем" accentBg="#082647" delay={10} />
 			</div>
 		</SceneWrap>
 	);

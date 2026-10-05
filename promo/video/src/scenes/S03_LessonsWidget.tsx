@@ -23,27 +23,25 @@ export const S03: React.FC<SceneProps> = ({have, wide}) => {
 								<Shot name="a3_lessons" have={have} />
 							</KenBurns>
 						</Sequence>
-						{/* match-cut: домашний экран + виджет (реплика), зум на виджет */}
+						{/* match-cut: домашний экран + виджет (реплика); виджет статичен, рамка дописывается */}
 						<Sequence from={60} premountFor={fps}>
-							<KenBurns scale={[1, 1.14]}>
-								<HomeScreen>
-									<WidgetToday rows={DEMO_ROWS} />
-								</HomeScreen>
-							</KenBurns>
+							<HomeScreen>
+								<WidgetToday rows={DEMO_ROWS} />
+							</HomeScreen>
 						</Sequence>
 					</>
 				}
-				title="Уроки сегодня и завтра. И прямо на домашнем экране"
+				title={"Уроки сегодня и завтра.\nИ прямо на домашнем экране"}
 				accent="на домашнем экране"
 				overlay={
 					<>
 						{/* выноска на слот «Завтра» (верхняя часть экрана уроков) */}
 						<Sequence durationInFrames={60}>
-							<Callout delay={14} x={124 + 620} y={84 + 320} lx={700} ly={38} label="Завтра" />
+							<Callout delay={14} x={124 + 620} y={84 + 320} lx={700} ly={232} label="Завтра" />
 						</Sequence>
-						{/* рамка вокруг виджета на домашнем экране */}
+						{/* рамка вокруг виджета на домашнем экране (виджет поднят к статусбару, vision-QA f250) */}
 						<Sequence from={60}>
-							<Callout delay={20} x={124 + 34} y={84 + 640} rect={{w: 764, h: 400}} />
+							<Callout delay={20} x={130} y={206} rect={{w: 820, h: 360}} />
 						</Sequence>
 					</>
 				}

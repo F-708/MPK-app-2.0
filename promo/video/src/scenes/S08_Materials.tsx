@@ -18,7 +18,8 @@ export const S08: React.FC<SceneProps> = ({have, wide}) => {
 					<>
 						<Sequence durationInFrames={30} premountFor={fps}>
 							<KenBurns scale={[1.08, 1.12]} y={[60, -40]}>
-								<Shot name="a8_materials_list" have={have} />
+								{/* РЕАЛЬНЫЙ shot_materials, якорь cover +60px вниз: таблетка не ест таб «Задания» (vision-QA f700) */}
+								<Shot name="a8_materials_list" have={have} style={{objectPosition: '50% 17%'}} />
 							</KenBurns>
 						</Sequence>
 						<Sequence from={30} premountFor={fps}>
@@ -30,6 +31,7 @@ export const S08: React.FC<SceneProps> = ({have, wide}) => {
 				}
 				title="Конспекты и материалы — хранятся в приложении"
 				accent="хранятся в приложении"
+				titleDelay={0}
 				overlay={
 					<Sequence from={30}>
 						<Callout delay={12} x={124 + 106} y={84 + 380} rect={{w: 620, h: 780}} />

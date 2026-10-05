@@ -20,7 +20,7 @@ export const S06: React.FC<SceneProps> = ({have, wide}) => {
 				}
 				title="Оценки и средний балл — без калькулятора"
 				accent="без калькулятора"
-				overlay={<Callout delay={48} x={124 + 620} y={84 + 420} lx={700} ly={38} label="средний балл" />}
+				overlay={<Callout delay={48} x={124 + 620} y={84 + 420} lx={700} ly={232} label="средний балл" />}
 			/>
 		</SceneWrap>
 	);

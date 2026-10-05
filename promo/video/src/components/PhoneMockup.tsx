@@ -29,7 +29,8 @@ export const PhoneMockup: React.FC<{
 				position: 'relative',
 				rotate: `${tilt}deg`,
 				scale: interpolate(s, [0, 1], [0.92, 1]),
-				translate: `0 ${interpolate(s, [0, 1], [300, 0])}px`,
+				// y +180→0 (было +300): меньше обрезки низа мокапа на первом кадре (vision-QA f000).
+				translate: `0 ${interpolate(s, [0, 1], [180, 0])}px`,
 			}}
 		>
 			<div

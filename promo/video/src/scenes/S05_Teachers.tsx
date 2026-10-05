@@ -1,39 +1,34 @@
 import React from 'react';
-import {Sequence, useVideoConfig} from 'remotion';
 import {C, SceneProps} from '../theme';
 import {SceneWrap, Stage} from '../components/Layout';
 import {Shot} from '../components/Shot';
 import {KenBurns} from '../components/KenBurns';
 import {Callout} from '../components/Callout';
 
-// A5 (420–510): преподаватели — список ФИО (пан вниз) → карточка «ведёт у вас»
-// (зум в карточку), янтарная выноска на «ведёт у вас». Переход cut.
+// A5 (420–510): преподаватели — ЗУМ-кроп реального shot_schedule_today на строке урока
+// (вторая карточка списка: ФИО + чип кабинета), Ken Burns scale 1.0→1.6 к центру строки
+// (translatе компенсирует зум, чтобы строка держалась в центре); две выноски снаружи:
+// «ФИО и «ведёт у вас»» и «кабинет → расписание кабинета» (vision-QA f420). Переход cut.
 export const S05: React.FC<SceneProps> = ({have, wide}) => {
-	const {fps} = useVideoConfig();
+	// центр строки 2-й карточки в экранных координатах мокапа: 9:16 y≈642, 16:9 y≈351;
+	// translate = (центр экрана − центр строки) · scale держит строку в центре кадра.
+	const zoomY = wide ? [0, 153] : [0, 304];
 	return (
 		<SceneWrap bg={C.bg}>
 			<Stage
 				wide={wide}
 				screen={
-					<>
-						<Sequence durationInFrames={45} premountFor={fps}>
-							<KenBurns scale={[1.16, 1.16]} y={[-90, 90]}>
-								<Shot name="a5_teachers_list" have={have} />
-							</KenBurns>
-						</Sequence>
-						<Sequence from={45} premountFor={fps}>
-							<KenBurns scale={[1.06, 1.16]} y={[30, -40]}>
-								<Shot name="a5_teacher_card" have={have} />
-							</KenBurns>
-						</Sequence>
-					</>
+					<KenBurns scale={[1, 1.6]} y={zoomY}>
+						<Shot name="shot_schedule_today" have={have} />
+					</KenBurns>
 				}
 				title="Кто ведёт пару и в каком кабинете"
 				accent="в каком кабинете"
 				overlay={
-					<Sequence from={45}>
-						<Callout delay={12} x={124 + 416} y={84 + 560} lx={640} ly={38} label="ведёт у вас" />
-					</Sequence>
+					<>
+						<Callout delay={30} x={214} y={984} lx={300} ly={240} label="ФИО и «ведёт у вас»" />
+						<Callout delay={45} x={864} y={989} lx={680} ly={240} label="кабинет → расписание кабинета" />
+					</>
 				}
 			/>
 		</SceneWrap>

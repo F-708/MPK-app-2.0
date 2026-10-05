@@ -11,8 +11,8 @@ const CARD_H = 340;
 export const MysteryCards: React.FC = () => {
 	const frame = useCurrentFrame();
 	const drift = -frame * 0.35; // лёгкий drift вверх
-	// 20→26 открытие, 32→38 закрытие (0.4с ≈ 12 кадров приоткрыто)
-	const open = interpolate(frame, [20, 26, 32, 38], [0, 1, 1, 0], {
+	// окно приоткрытия — глобальные кадры 794–806 (vision-QA f800): в сцене 14–26
+	const open = interpolate(frame, [14, 17, 23, 26], [0, 1, 1, 0], {
 		extrapolateLeft: 'clamp',
 		extrapolateRight: 'clamp',
 	});

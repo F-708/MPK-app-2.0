@@ -33,25 +33,21 @@ export const Finale: React.FC<{have: Record<string, string>}> = ({have}) => {
 					style={{width: 200, height: 200, borderRadius: 44, translate: `0 ${rise}px`}}
 				/>
 			) : (
-				// TODO-заглушка «иконка»: заменить на реальный icon.png (ассет №12 п.5), когда дадут.
 				<div
 					style={{
 						width: 200,
 						height: 200,
 						borderRadius: 44,
-						backgroundColor: C.blue,
+						backgroundColor: '#FFFFFF',
 						display: 'flex',
 						alignItems: 'center',
 						justifyContent: 'center',
-						fontFamily: Golos,
-						fontWeight: 900,
-						fontSize: 120,
-						color: '#FFFFFF',
 						translate: `0 ${rise}px`,
 						boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+						overflow: 'hidden',
 					}}
 				>
-					П
+					<Img src={staticFile('icon.svg')} style={{width: 168, height: 168}} />
 				</div>
 			)}
 			<div
@@ -83,7 +79,7 @@ export const Finale: React.FC<{have: Record<string, string>}> = ({have}) => {
 					fontFamily: Golos,
 					fontWeight: 400,
 					fontSize: 38, // 24sp «мелким» в масштабе кадра 1080
-					color: '#5B6B7A',
+					color: '#93A6B8', // осветлено для читемости на #0B3564 (vision-QA f870)
 					maxWidth: 820,
 					lineHeight: 1.3,
 				}}

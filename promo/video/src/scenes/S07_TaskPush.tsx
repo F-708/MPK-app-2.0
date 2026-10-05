@@ -43,7 +43,7 @@ export const S07: React.FC<SceneProps> = ({have, wide}) => {
 				accent="приложение напомнит"
 				overlay={
 					<Sequence durationInFrames={50}>
-						<Callout delay={16} x={124 + 416} y={84 + 1050} lx={640} ly={38} label="напоминание" />
+						<Callout delay={16} x={124 + 416} y={84 + 1050} lx={640} ly={232} label="напоминание" />
 					</Sequence>
 				}
 			/>
