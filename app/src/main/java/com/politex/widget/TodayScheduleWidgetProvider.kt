@@ -82,7 +82,11 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 lessons.take(MAX_ROWS).forEach { lesson ->
                     views.addView(
                         R.id.today_rows,
-                        buildRow(context, lesson, now, style, showRoom, appWidgetId, pref),
+                        buildRow(
+                            context, lesson, now, style, showRoom, appWidgetId, pref,
+                            // HH1: маршрут от кабинета ПРЕДЫДУЩЕГО урока (pref подгруппы для split)
+                            com.politex.ui.util.RouteStartResolver.startRoomForLesson(lessons, lesson, true, now, pref),
+                        ),
                     )
                 }
 
@@ -113,6 +117,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             showRoom: Boolean,
             appWidgetId: Int,
             pref: com.politex.util.SubgroupPref,
+            fromRoom: String,
         ): RemoteViews {
             val row = RemoteViews(context.packageName, R.layout.widget_row_list)
 
@@ -172,6 +177,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                             "MAP",
                             room = room,
                             showRoute = true,
+                            fromRoom = fromRoom,
                         ),
                     )
                 }

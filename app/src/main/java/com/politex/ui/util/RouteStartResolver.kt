@@ -89,8 +89,17 @@ object RouteStartResolver {
         lesson: LessonEntity,
         isToday: Boolean,
         nowMinutes: Int,
+    ): String = startRoomForLesson(lessons, lesson, isToday, nowMinutes, SubgroupPref.NEUTRAL)
+
+    /** HH1: то же с pref подгруппы; для виджетов (диалога нет) Ask схлопывается в roomFirst. */
+    fun startRoomForLesson(
+        lessons: List<LessonEntity>,
+        lesson: LessonEntity,
+        isToday: Boolean,
+        nowMinutes: Int,
+        pref: SubgroupPref,
     ): String =
-        when (val s = startForLesson(lessons, lesson, isToday, nowMinutes, SubgroupPref.NEUTRAL)) {
+        when (val s = startForLesson(lessons, lesson, isToday, nowMinutes, pref)) {
             is RouteStart.Ask -> s.roomFirst
             is RouteStart.From -> s.room
         }

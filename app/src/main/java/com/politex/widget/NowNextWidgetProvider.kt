@@ -83,17 +83,15 @@ class NowNextWidgetProvider : AppWidgetProvider() {
 
             val current = lessons.firstOrNull { now in it.startMinutes()..it.endMinutes() }
 
-            val nextFromRoom = RouteStartResolver.previousRoomNow(lessons, now)
-            val nowFromRoom =
-                current?.let { c ->
-                    RouteStartResolver.previousRoomNow(lessons.filter { it.lessonNumber < c.lessonNumber }, now)
-                }
-
             val next =
                 when {
                     current != null -> lessons.firstOrNull { it.lessonNumber > current.lessonNumber }
                     else -> lessons.firstOrNull { it.startMinutes() > now }
                 }
+
+            // HH1: «откуда» — кабинет ПРЕДЫДУЩЕГО урока с pref подгруппы (split), как в расписании
+            val nextFromRoom = next?.let { RouteStartResolver.startRoomForLesson(lessons, it, true, now, pref) }
+            val nowFromRoom = current?.let { RouteStartResolver.startRoomForLesson(lessons, it, true, now, pref) }
 
             val groupBlank = WidgetUpdateHelper.getSelectedGroup(context).isBlank()
             val emptyText =
