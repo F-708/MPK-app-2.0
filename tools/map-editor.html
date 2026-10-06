@@ -130,6 +130,7 @@
   <div class="group">
     <button id="tSnap" class="tgl on" title="Примагничивание к границам соседних комнат при перетаскивании (Shift — к сетке)">Снап: вкл</button>
     <button id="tLinks" class="tgl on" title="Показывать связи между узлами графа (пунктир) и бейджи «↕этаж» у лестниц, связанных с другими этажами">Связи: вкл</button>
+    <button id="tNums" class="tgl on" title="Показывать номера комнат на плане (выключите для чистой правки геометрии)">Номера: вкл</button>
   </div>
 
   <div class="group">
@@ -233,7 +234,7 @@ const EMBEDDED_BG = {
 
 let cam = {s:1, ox:0, oy:0};
 let tool = 'select';
-let snapOn = true, showLinks = true;
+let snapOn = true, showLinks = true, showNumbers = true;
 let sel = null;                           // {kind, obj, pi?, handle?}
 let mode = null;                          // активное перетаскивание
 let pending = null;                       // коридор в процессе: {points:[[x,y],..]}
@@ -402,9 +403,11 @@ function draw(){
     ctx.setLineDash([]);
 
     const num = String(r.number||'');
-    if(num){
-      const fs = fitFont(r);
-      const tooSmall = fs != null && fs < MIN_FONT;
+    if(num && showNumbers){
+      // GG: ручной numberSize — рисуем им БЕЗ авто-уменьшения; иначе прежний fitFont
+      const manual = typeof r.numberSize === 'number';
+      const fs = manual ? r.numberSize : fitFont(r);
+      const tooSmall = !manual && fs != null && fs < MIN_FONT;
       ctx.font = fs + 'px "Segoe UI",sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.lineWidth = 3/cam.s; ctx.strokeStyle = 'rgba(2,6,23,0.9)';
@@ -1322,6 +1325,12 @@ function loadMapText(text, name){
     });
     for(const r of f.rooms){
       if(r.door!=null && !(Array.isArray(r.door) && r.door.length===2)) r.door = null;
+      // GG: numberSize — опц. ручной размер номера (8..28); мусор/пусто → авто
+      if(r.numberSize!=null){
+        const ns = Math.round(parseFloat(r.numberSize));
+        if(isFinite(ns)) r.numberSize = Math.min(28, Math.max(8, ns));
+        else delete r.numberSize;
+      }
     }
     // W6: links у входов (лестниц) — толерантно: только массив строк, иначе выбрасываем
     for(const en of f.entrances){
@@ -1763,13 +1772,16 @@ function fitNumber(r){
   const num = String(r.number||'');
   if(!num){ toast('Сначала введите номер комнаты'); return; }
   pushUndo();
-  ctx.font = '12px "Segoe UI",sans-serif';
+  // GG: ручной numberSize — рамка подгоняется под него, сам размер НЕ меняется; авто — прежние 12px
+  const fs = (typeof r.numberSize === 'number') ? r.numberSize : 12;
+  ctx.font = fs + 'px "Segoe UI",sans-serif';
   const tw = ctx.measureText(num).width;
   const needW = tw/0.92 + 2;   // с запасом
   if(needW > r.w*W) r.w = Math.min(1, r4(needW/W));
-  if(18 > r.h*H) r.h = Math.min(1, r4(18/H));
+  const needH = (typeof r.numberSize === 'number') ? r.numberSize + 6 : 18;
+  if(needH > r.h*H) r.h = Math.min(1, r4(needH/H));
   renderPanel(); draw(); scheduleSave();
-  toast('Рамка расширена под номер «' + num + '»');
+  toast('Рамка расширена под номер «' + num + '»' + (typeof r.numberSize === 'number' ? ' (размер ' + r.numberSize + ')' : ''));
 }
 
 /* ===== удаление ===== */
@@ -1827,7 +1839,7 @@ function renderPanel(){
       '• Кликните по объекту на плане, чтобы править его.<br>' +
       '• Или включите инструмент сверху («＋ Комната», «～ Коридор», «● Узел», «▲ Маркер»).<br>' +
       '• Начните с кнопки «📂 Открыть карту» и загрузите фон этажа.</div>' +
-      '<div class="note" style="margin-top:8px"><b>Тоглы:</b> «Снап» — примагничивание комнат и точек к соседям, дверям и узлам (Shift — к сетке). «Связи» — показать связи узлов пунктиром и бейджи «↔этаж» у лестниц, связанных с другими этажами.</div>' +
+      '<div class="note" style="margin-top:8px"><b>Тоглы:</b> «Снап» — примагничивание комнат и точек к соседям, дверям и узлам (Shift — к сетке). «Связи» — показать связи узлов пунктиром и бейджи «↔этаж» у лестниц, связанных с другими этажами. «Номера» — показать/скрыть номера комнат (для чистой правки геометрии).</div>' +
       (hasLS ? '<div class="note warn">Есть автосохранение — кнопка «⟲ Восстановить» вверху.</div>' : '');
     return;
   }
@@ -1835,6 +1847,7 @@ function renderPanel(){
   if(sel.kind==='room'){
     p.innerHTML = roId(o) +
       fld('Номер (как на двери)', '<input type="text" id="p_num" value="'+esc(o.number)+'">') +
+      fld('Размер номера (8–28, пусто — авто)', '<input type="number" id="p_numsize" min="8" max="28" step="1" placeholder="авто" value="'+(typeof o.numberSize==='number' ? o.numberSize : '')+'">') +
       fld('Название', '<input type="text" id="p_title" value="'+esc(o.title)+'">') +
       fld('Примечание', '<input type="text" id="p_note" value="'+esc(o.note)+'">') +
       fld('Статус', '<select id="p_status"><option value="normal"'+(o.status!=='nonexistent'?' selected':'')+'>обычный</option><option value="nonexistent"'+(o.status==='nonexistent'?' selected':'')+'>нет на плане (виртуальный)</option></select>') +
@@ -1846,6 +1859,21 @@ function renderPanel(){
         '<button id="p_del" class="danger">Удалить комнату</button>' +
       '</div>';
     bind($('p_num'), o, 'number');
+    // GG: numberSize — пусто = авто (поле удаляется), иначе кламп 8..28
+    const nsI = $('p_numsize');
+    nsI.addEventListener('focus', ()=>{ nsI._pre = snap(); });
+    nsI.addEventListener('input', ()=>{
+      const v = String(nsI.value).trim();
+      if(v==='') delete o.numberSize;
+      else { const n = Math.round(parseFloat(v)); if(!isFinite(n)) return; o.numberSize = Math.min(28, Math.max(8, n)); }
+      draw(); scheduleSave();
+    });
+    nsI.addEventListener('change', ()=>{
+      if(nsI._pre!=null && snap()!==nsI._pre){
+        undoStack.push(nsI._pre); trimUndo(); redoStack.length=0; updateUndoBtns();
+      }
+      nsI._pre=null; scheduleSave();
+    });
     bind($('p_title'), o, 'title');
     bind($('p_note'), o, 'note');
     bind($('p_status'), o, 'status');
@@ -2083,6 +2111,13 @@ $('tLinks').onclick = ()=>{
   const b = $('tLinks');
   b.classList.toggle('on', showLinks);
   b.textContent = 'Связи: ' + (showLinks?'вкл':'выкл');
+  draw();
+};
+$('tNums').onclick = ()=>{
+  showNumbers = !showNumbers;
+  const b = $('tNums');
+  b.classList.toggle('on', showNumbers);
+  b.textContent = 'Номера: ' + (showNumbers?'вкл':'выкл');
   draw();
 };
 $('bUndo').onclick = undo;

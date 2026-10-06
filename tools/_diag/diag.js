@@ -294,6 +294,49 @@ const TEST = `
 
     map.floors = savedFloors; curFloor = '1'; tool = 'select'; routeA = null; routePreview = null;
 
+    // (о) GG: размер номера (numberSize) — round-trip serialize/import, «Вписать номер»
+    // с ручным размером, тогл «Номера» (скрытие не ломает hit-test, шрифт = numberSize)
+    curFloor = '1'; sel = null;
+    const f1g = map.floors['1'];
+    const rg = f1g.rooms.find(r => String(r.number||'').indexOf('-') >= 0) || f1g.rooms[0];
+    rg.numberSize = 14;
+    const outN = JSON.parse(serialize());
+    check('numbersize-serialized', (outN.floors['1'].rooms.find(r=>r.id===rg.id)||{}).numberSize === 14);
+    // импорт: мусор → авто (поле удалено), вне диапазона → кламп 8..28
+    const badN = JSON.parse(serialize());
+    badN.floors['1'].rooms.find(r=>r.id===rg.id).numberSize = 'x';
+    loadMapText(JSON.stringify(badN), 'ns-garbage');
+    check('numbersize-import-garbage', map.floors['1'].rooms.find(r=>r.id===rg.id).numberSize == null);
+    const bigN = JSON.parse(serialize());
+    bigN.floors['1'].rooms.find(r=>r.id===rg.id).numberSize = 100;
+    loadMapText(JSON.stringify(bigN), 'ns-clamp');
+    const rgI = map.floors['1'].rooms.find(r=>r.id===rg.id);
+    check('numbersize-import-clamped', rgI.numberSize === 28, 'numberSize=' + rgI.numberSize);
+    // «Вписать номер» с ручным размером: numberSize не меняется
+    rgI.numberSize = 14;
+    sel = {kind:'room', obj:rgI}; renderPanel();
+    fitNumber(rgI);
+    check('fitnumber-manual-keeps-size', rgI.numberSize === 14, 'numberSize=' + rgI.numberSize);
+    sel = null;
+    // отрисовка: ручной размер — шрифт ровно numberSize (без авто-уменьшения);
+    // тогл «Номера» скрывает номер, hit-test комнаты остаётся живым
+    map.floors['9'] = emptyFloor();
+    const tiny = {id:'room_ns9', number:'201-2', title:'', note:'', status:'normal', x:0.5, y:0.5, w:0.01, h:0.01, numberSize:14};
+    map.floors['9'].rooms.push(tiny);
+    curFloor = '9';
+    const NS_FONT = '14px "Segoe UI",sans-serif';
+    __fontSets.length = 0; draw();
+    check('numbersize-draw-manual', __fontSets.indexOf(NS_FONT) >= 0, JSON.stringify(__fontSets.slice(0,5)));
+    const hitOn = hitTest({x:0.5, y:0.5});
+    showNumbers = false;
+    __fontSets.length = 0; draw();
+    check('numbers-toggle-hides-number', __fontSets.indexOf(NS_FONT) < 0, JSON.stringify(__fontSets.slice(0,5)));
+    const hitOff = hitTest({x:0.5, y:0.5});
+    check('numbers-toggle-keeps-hit-test',
+      !!(hitOn && hitOn.kind==='room' && hitOn.obj===tiny) && !!(hitOff && hitOff.kind==='room' && hitOff.obj===tiny));
+    showNumbers = true; curFloor = '1';
+    delete map.floors['9'];
+
     console.log('INTERACTION OK');
   } catch (e) {
     console.error('INTERACT ERROR:', e && e.stack || e);
@@ -320,6 +363,7 @@ function makeEl() {
   return el;
 }
 const __lwSets = global.__lwSets = [];
+const __fontSets = global.__fontSets = [];
 const ctxStub = new Proxy({}, {
   get(_, k) {
     if (k === 'canvas') return {};
@@ -329,7 +373,11 @@ const ctxStub = new Proxy({}, {
       return undefined;
     };
   },
-  set(_, k, v) { if (k === 'lineWidth') __lwSets.push(v); return true; },
+  set(_, k, v) {
+    if (k === 'lineWidth') __lwSets.push(v);
+    if (k === 'font') __fontSets.push(v);
+    return true;
+  },
 });
 const elements = {};
 global.document = {
