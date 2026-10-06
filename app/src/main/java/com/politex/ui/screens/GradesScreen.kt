@@ -405,6 +405,7 @@ private fun GradeSubjectScreen(
         AppCard(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
                 .testTag("grades_input_panel"),
         ) {
             Column(modifier = Modifier.padding(8.dp)) {
