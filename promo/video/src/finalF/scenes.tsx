@@ -72,8 +72,8 @@ export const F2: React.FC = () => {
 					frame={frame}
 					keys={[
 						{f: 0, s: 1.0, x: 824, y: 1500},
-						{f: 70, s: 1.3, x: 824, y: 2163},
-						{f: 165, s: 1.34, x: 824, y: 2163},
+						{f: 70, s: 1.06, x: 824, y: 2163},
+						{f: 165, s: 1.08, x: 824, y: 2163},
 					]}
 				>
 					<ShotLayer shot="shot_schedule_today">
@@ -214,7 +214,7 @@ export const F4: React.FC = () => {
 										fontFamily: F,
 										fontWeight: 700,
 										fontSize: 40,
-										letterSpacing: '0.08em',
+										letterSpacing: '0.15em',
 										color: CF.title,
 										boxShadow: '0 8px 24px rgba(0,23,55,0.25)',
 									}}
@@ -249,7 +249,7 @@ export const F5: React.FC = () => {
 						frame={frame}
 						keys={[
 							{f: 0, s: 1.0, x: 824, y: 950},
-							{f: 85, s: 1.3, x: 824, y: 1050},
+							{f: 85, s: 1.3, x: 1005, y: 1050},
 						]}
 					>
 						<ShotLayer shot="shot_tasks">
@@ -286,8 +286,8 @@ export const F5: React.FC = () => {
 					<Cam
 						frame={frame}
 						keys={[
-							{f: 85, s: 1.22, x: 824, y: 2123},
-							{f: 180, s: 1.32, x: 824, y: 2123},
+							{f: 85, s: 1.22, x: 955, y: 2123},
+							{f: 180, s: 1.32, x: 1015, y: 2123},
 						]}
 					>
 						<ShotLayer shot="shot_grades">
