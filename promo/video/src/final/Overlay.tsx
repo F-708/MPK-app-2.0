@@ -76,8 +76,8 @@ export const PulseDot: React.FC<{fx: number; fy: number; frame: number; period?:
 					height: 28,
 					borderRadius: 14,
 					backgroundColor: C.blue,
-					transform: `scale(${interpolate(ph, [0, 1], [1, 2.4])})`,
-					opacity: interpolate(ph, [0, 1], [0.5, 0]),
+					transform: `scale(${interpolate(ph, [0, 1], [1, 2.4], clamp)})`,
+					opacity: interpolate(ph, [0, 1], [0.5, 0], clamp),
 				}}
 			/>
 			<div

@@ -1,5 +1,6 @@
 import React from 'react';
 import {interpolate, spring, useCurrentFrame, useVideoConfig} from 'remotion';
+import {clamp} from './anim';
 
 // Моккап: тонкий тёмный безель, punch-hole фронталка, глубинная тень (бриф Фазы 2).
 // Вход — пружинное всплытие снизу: spring(damping 14, mass 0.8).
@@ -25,8 +26,8 @@ export const Phone: React.FC<{
 				boxSizing: 'content-box',
 				boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
 				position: 'relative',
-				scale: `${interpolate(sp, [0, 1], [0.88, 1])}`,
-				translate: `0 ${interpolate(sp, [0, 1], [560, 0])}px`,
+				scale: `${interpolate(sp, [0, 1], [0.88, 1], clamp)}`,
+				translate: `0 ${interpolate(sp, [0, 1], [560, 0], clamp)}px`,
 			}}
 		>
 			<div
