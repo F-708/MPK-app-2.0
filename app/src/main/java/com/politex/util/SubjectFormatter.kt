@@ -120,6 +120,11 @@ object SubjectFormatter {
             "Делопро" to "Делопроизводство",
             "АрхивоВед" to "Архивоведение",
             "МаИсслед" to "Маркетинговые исследования",
+            // GG4: усечение колонки расписания спец. О «Програм» = ПЦУ; вариант названия
+            // «Программирование цифровых устройств» (жалоба) → канон «Программируемые…».
+            // ponytail: «Програм» глобально; если у др. спец. оно значит иное — нужен group-aware normalize.
+            "Програм" to "Программируемые цифровые устройства",
+            "Программирование цифровых устройств" to "Программируемые цифровые устройства",
         )
 
     private val PREDEFINED_SHORT_NAMES: Map<String, String> =
@@ -251,6 +256,13 @@ object SubjectFormatter {
             "Международный маркетинг" to "Междунар. маркет.",
             "Управление маркетингом" to "Управл. маркет.",
             "Стратегический маркетинг" to "Стратег. маркет.",
+            // GG4: ПЦУ — предмет жалобы. Без явной записи «Программируемые цифровые
+            // устройства» проваливались в contains-fallback и ловили «Системы ЧПУ».
+            "Программируемые цифровые устройства" to "ПЦУ",
+            // GG4: короткие названия не должны равняться ПОЛНОМУ имени другого предмета.
+            "Математика в профессиональной деятельности" to "Матем. проф. деят.",
+            "Русский язык (профессиональная лексика)" to "Рус. яз. (проф)",
+            "Физика твёрдого тела" to "Физика тв. тела",
         )
 
     private val PREDEFINED_ACRONYMS: Map<String, String> =
@@ -379,6 +391,11 @@ object SubjectFormatter {
             "Международный маркетинг" to "ММ",
             "Управление маркетингом" to "УМ",
             "Стратегический маркетинг" to "СМ",
+            // GG4: явные акронимы, чтобы contains-fallback не подставлял чужие.
+            "Программируемые цифровые устройства" to "ПЦУ",
+            "Математика в профессиональной деятельности" to "МВПД",
+            "Русский язык (профессиональная лексика)" to "РЯП",
+            "Физика твёрдого тела" to "ФТТ",
         )
 
     private val STOP_WORDS: Set<String> =
@@ -444,18 +461,54 @@ object SubjectFormatter {
         return cleaned
     }
 
-    // М19: fallback-перебор идёт от длинных ключей к коротким — выигрывает самое специфичное
-    // совпадение, а не первое попавшееся в порядке объявления карты.
-    private val shortNameEntries by lazy { PREDEFINED_SHORT_NAMES.entries.sortedByDescending { it.key.length } }
-    private val acronymEntries by lazy { PREDEFINED_ACRONYMS.entries.sortedByDescending { it.key.length } }
+    // М19/GG4: fallback-перебор идёт от длинных ключей к коротким — выигрывает самое
+    // специфичное совпадение. Ключ заранее приводится к lower-case для матчинга по границам слов.
+    private val shortNameEntries by lazy {
+        PREDEFINED_SHORT_NAMES.entries
+            .sortedByDescending { it.key.length }
+            .map { it.value to it.key.lowercase(Locale.ROOT) }
+    }
+    private val acronymEntries by lazy {
+        PREDEFINED_ACRONYMS.entries
+            .sortedByDescending { it.key.length }
+            .map { it.value to it.key.lowercase(Locale.ROOT) }
+    }
+
+    // GG4: ключ входит в текст ЦЕЛОЙ фразой и по границам слов (с обеих сторон не
+    // буква/цифра). Двусторонний contains удалён: прежнее `key.contains(normalized)`
+    // ловило пересечения — короткое усечение «Програм» (ПЦУ) попадало внутрь длинного
+    // ключа «Системы числового программного управления» → показывалось «Системы ЧПУ».
+    // «ПЦУ» и «ЧПУ» — разные строки, границами они больше не склеиваются.
+    private fun containsPhraseBounded(
+        textLower: String,
+        phraseLower: String,
+    ): Boolean {
+        if (phraseLower.isEmpty()) return false
+        var from = 0
+        while (true) {
+            val idx = textLower.indexOf(phraseLower, from)
+            if (idx < 0) return false
+            val beforeOk = idx == 0 || !textLower[idx - 1].isLetterOrDigit()
+            val end = idx + phraseLower.length
+            val afterOk = end >= textLower.length || !textLower[end].isLetterOrDigit()
+            if (beforeOk && afterOk) return true
+            from = idx + 1
+        }
+    }
 
     fun getShortName(rawTitle: String): String {
         val normalized = normalize(rawTitle)
 
+        // GG5: пустой/пробельный raw и «предмет» из одних цифр — не предмет.
+        // Без guard'а пустая строка матчила бы любой ключ через key.contains(""),
+        // а цифры парсера (fallback на сырую строку) доезжали бы до карточки урока.
+        if (normalized.isBlank() || normalized.all { it.isDigit() }) return ""
+
         PREDEFINED_SHORT_NAMES[normalized]?.let { return it }
 
-        for ((key, shortVal) in shortNameEntries) {
-            if (normalized.contains(key, ignoreCase = true) || key.contains(normalized, ignoreCase = true)) {
+        val normalizedLower = normalized.lowercase(Locale.ROOT)
+        for ((shortVal, keyLower) in shortNameEntries) {
+            if (containsPhraseBounded(normalizedLower, keyLower)) {
                 return shortVal
             }
         }
@@ -468,8 +521,9 @@ object SubjectFormatter {
 
         PREDEFINED_ACRONYMS[normalized]?.let { return it }
 
-        for ((key, acronym) in acronymEntries) {
-            if (normalized.contains(key, ignoreCase = true) || key.contains(normalized, ignoreCase = true)) {
+        val normalizedLower = normalized.lowercase(Locale.ROOT)
+        for ((acronym, keyLower) in acronymEntries) {
+            if (containsPhraseBounded(normalizedLower, keyLower)) {
                 return acronym
             }
         }

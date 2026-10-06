@@ -209,8 +209,9 @@ fun ScheduleScreen(
     }
     var showArchiveDialog by remember { mutableStateOf(false) }
 
-    // AA2: SPLIT-урок — тап по кабинету сначала спрашивает, откуда вести маршрут
-    var pendingSplit by remember { mutableStateOf<Pair<String, LessonEntity>?>(null) }
+    // AA2/GG2: источник маршрута — если ПРЕДЫДУЩИЙ урок split и подгруппа не выбрана,
+    // спрашиваем, из какого кабинета идти (tappedRoom, prevRoomFirst, prevRoomSecond)
+    var pendingSplit by remember { mutableStateOf<Triple<String, String, String>?>(null) }
 
     // R2#6: когда дата выбрана из архив-календаря, активный день недели и календарь берутся
     // из самой даты (parse dd.MM.yyyy), а не из слота сегодня/завтра — иначе уроки и метки
@@ -442,7 +443,7 @@ fun ScheduleScreen(
         )
     }
 
-    pendingSplit?.let { (tappedRoom, splitLesson) ->
+    pendingSplit?.let { (tappedRoom, fromFirst, fromSecond) ->
         AlertDialog(
             onDismissRequest = { pendingSplit = null },
             shape = RoundedCornerShape(2.dp),
@@ -460,13 +461,13 @@ fun ScheduleScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SplitRouteOption("каб. ${splitLesson.roomFirst} (1 подгруппа)") {
+                    SplitRouteOption("каб. $fromFirst (1 подгруппа)") {
                         pendingSplit = null
-                        roomClick(tappedRoom, splitLesson.roomFirst)
+                        roomClick(tappedRoom, fromFirst)
                     }
-                    SplitRouteOption("каб. ${splitLesson.roomSecond} (2 подгруппа)") {
+                    SplitRouteOption("каб. $fromSecond (2 подгруппа)") {
                         pendingSplit = null
-                        roomClick(tappedRoom, splitLesson.roomSecond)
+                        roomClick(tappedRoom, fromSecond)
                     }
                     SplitRouteOption("Главный вход") {
                         pendingSplit = null
@@ -774,14 +775,30 @@ fun ScheduleScreen(
                                 pulse = showPulse(scheduleHintDone, lesson.lessonNumber == pulseLessonNumber),
 
                                 onRoomClick = { room ->
-                                    if (lesson.isSplit && lesson.roomFirst.isNotBlank() && lesson.roomSecond.isNotBlank()) {
-                                        pendingSplit = room to lesson
+                                    // GG1: маршруты выключены — никакого диалога, просто выбор кабинета
+                                    val routesOn =
+                                        com.politex.widget.WidgetUpdateHelper
+                                            .getPrefs(context)
+                                            .getBoolean("map_routes_enabled", true)
+                                    if (!routesOn) {
+                                        roomClick(room, null)
                                     } else {
-                                        roomClick(
-                                            room,
-                                            com.politex.ui.util.RouteStartResolver
-                                                .startForLesson(lessons, lesson, isViewingToday, nowMinutes),
-                                        )
+                                        // GG2/GG3: «откуда» — из ПРЕДЫДУЩЕГО урока; текущий split даёт только цель
+                                        when (
+                                            val start =
+                                                com.politex.ui.util.RouteStartResolver.startForLesson(
+                                                    lessons,
+                                                    lesson,
+                                                    isViewingToday,
+                                                    nowMinutes,
+                                                    com.politex.util.SubgroupSettings.get(context),
+                                                )
+                                        ) {
+                                            is com.politex.ui.util.RouteStartResolver.RouteStart.Ask ->
+                                                pendingSplit = Triple(room, start.roomFirst, start.roomSecond)
+                                            is com.politex.ui.util.RouteStartResolver.RouteStart.From ->
+                                                roomClick(room, start.room)
+                                        }
                                     }
                                 },
 
@@ -956,13 +973,16 @@ fun LessonCard(
                     )
                 }
             } else {
+                // GG5: пустой/цифровой «предмет» — заглушка, НИКОГДА не номер урока
+                val subject = lesson.shortSubjectName
+                val noSubject = subject.isBlank()
                 Text(
-                    text = lesson.shortSubjectName,
+                    text = if (noSubject) "Предмет уточняется" else subject,
                     style =
                     androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = ColorTextTitle,
+                        fontWeight = if (noSubject) FontWeight.Normal else FontWeight.Bold,
+                        fontSize = if (noSubject) 11.sp else 15.sp,
+                        color = if (noSubject) ColorTextMuted else ColorTextTitle,
                     ),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -1188,17 +1208,21 @@ private fun SubgroupPane(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        Text(
-            text = subject,
-            style =
-            androidx.compose.ui.text.TextStyle(
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 13.sp,
-                color = ColorTextTitle,
-            ),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        // GG5: пустой/цифровой «предмет» — заглушка, НИКОГДА не номер урока
+        run {
+            val noSubject = subject.isBlank()
+            Text(
+                text = if (noSubject) "Предмет уточняется" else subject,
+                style =
+                androidx.compose.ui.text.TextStyle(
+                    fontWeight = if (noSubject) FontWeight.Normal else FontWeight.SemiBold,
+                    fontSize = if (noSubject) 11.sp else 13.sp,
+                    color = if (noSubject) ColorTextMuted else ColorTextTitle,
+                ),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
 
         if (teacher.isNotBlank()) {
             Spacer(modifier = Modifier.height(3.dp))

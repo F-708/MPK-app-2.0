@@ -957,6 +957,14 @@ private fun MapCanvas(
         label = "tickPhase",
     )
 
+    // GG10: пульс точки-«лестницы» (эталон — точка «сейчас» в звонках: 900ms Reverse)
+    val stairsPulse by rememberInfiniteTransition(label = "лестница").animateFloat(
+        initialValue = 4.5f,
+        targetValue = 7f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = 900), RepeatMode.Reverse),
+        label = "stairsPulseRadius",
+    )
+
     BoxWithConstraints(
         modifier =
         modifier
@@ -1141,6 +1149,7 @@ private fun MapCanvas(
                             drawFinish = routeFinishHere,
                             tickPhase = tickPhase,
                             offsetsDp = routeOffsetsDp,
+                            stairsPulse = stairsPulse,
                         )
                     }
                 }
@@ -1393,6 +1402,7 @@ private fun DrawScope.drawRoutePath(
     drawFinish: Boolean,
     tickPhase: Float = 0f,
     offsetsDp: List<Float> = emptyList(),
+    stairsPulse: Float = 0f,
 ) {
     if (imgW <= 0f || imgH <= 0f) return
     val unit = 1f / zoom
@@ -1415,7 +1425,19 @@ private fun DrawScope.drawRoutePath(
     val contour = ArrayList<Triple<Float, List<Offset>, FloatArray>>(polylines.size) // base, screen, cum
     var totalImg = 0f
     for ((pi, raw) in polylines.withIndex()) {
-        if (raw.size < 2) continue
+        if (raw.size < 2) {
+            // GG10: этап-«лестница» (переход между этажами, линия нулевой длины) —
+            // пульсирующая точка на позиции лестницы, чтобы шаг не был пустым
+            val p = raw.lastOrNull() ?: continue
+            val c = Offset(p.x * imgW, p.y * imgH)
+            drawCircle(
+                color = ColorActiveBlue.copy(alpha = 0.30f),
+                radius = (stairsPulse + 4f) * pxPerDp * unit,
+                center = c,
+            )
+            drawCircle(color = ColorActiveBlue, radius = 4.5f * pxPerDp * unit, center = c)
+            continue
+        }
 
         val off = (offsetsDp.getOrNull(pi) ?: 0f) * pxPerDp * unit
         val points = if (off != 0f) offsetPolyline(raw, imgW, imgH, off) else raw

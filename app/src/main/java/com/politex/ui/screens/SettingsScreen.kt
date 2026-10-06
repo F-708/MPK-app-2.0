@@ -84,10 +84,13 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.ColorWarning
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.AppThemeStore
 import com.politex.util.GradeSettings
 import com.politex.util.MpkCurriculum
+import com.politex.util.SubgroupPref
+import com.politex.util.SubgroupSettings
 import com.politex.util.defaultBackupFileName
 import com.politex.widget.WidgetUpdateHelper
 import com.politex.worker.MpkWorkManagerHelper
@@ -468,6 +471,70 @@ fun SettingsScreen(
                                 fontSize = 11.sp,
                             ),
                         )
+                    }
+                }
+            }
+
+            // GG3: подгруппа для split-уроков — маршруты и виджеты ведут в кабинеты выбранной подгруппы
+            item {
+                var subgroupPref by remember { mutableStateOf(SubgroupSettings.get(context)) }
+                AppCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("subgroup_pref_card"),
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "Подгруппа",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = ColorTextTitle,
+                            ),
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            SubgroupChip(
+                                title = "Нейтрально",
+                                selected = subgroupPref == SubgroupPref.NEUTRAL,
+                                tag = "subgroup_pref_neutral",
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                subgroupPref = SubgroupPref.NEUTRAL
+                                SubgroupSettings.set(context, SubgroupPref.NEUTRAL)
+                            }
+                            SubgroupChip(
+                                title = "1-я",
+                                selected = subgroupPref == SubgroupPref.FIRST,
+                                tag = "subgroup_pref_first",
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                subgroupPref = SubgroupPref.FIRST
+                                SubgroupSettings.set(context, SubgroupPref.FIRST)
+                            }
+                            SubgroupChip(
+                                title = "2-я",
+                                selected = subgroupPref == SubgroupPref.SECOND,
+                                tag = "subgroup_pref_second",
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                subgroupPref = SubgroupPref.SECOND
+                                SubgroupSettings.set(context, SubgroupPref.SECOND)
+                            }
+                        }
+                        if (subgroupPref != SubgroupPref.NEUTRAL) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Маршруты и виджеты будут вести на кабинеты выбранной подгруппы.",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    color = ColorTextMuted,
+                                    fontSize = 11.sp,
+                                ),
+                            )
+                        }
                     }
                 }
             }
@@ -1348,6 +1415,40 @@ private fun ActionChip(
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
                     color = if (filled) Color.White else ColorTextTitle,
+                ),
+            )
+        }
+    }
+}
+
+// GG3: сегмент выбора подгруппы (эталон — DayChip из CollegeScreen)
+@Composable
+private fun SubgroupChip(
+    title: String,
+    selected: Boolean,
+    tag: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
+        color = if (selected) ColorTopBar else ColorBgMain,
+        modifier =
+        modifier
+            .height(Tokens.ChipScreen)
+            .bouncyClickable(onClick = onClick)
+            .testTag(tag),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = title,
+                softWrap = false,
+                maxLines = 1,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 11.sp,
+                    color = if (selected) Color.White else ColorTextBody,
                 ),
             )
         }
