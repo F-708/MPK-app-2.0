@@ -6,7 +6,7 @@ import {Seconds} from '../components/Seconds';
 import {Cam, ShotDiv, ShotLayer, ShotSvg} from './Cam';
 import {Emblem} from './Emblem';
 import {Plate} from './Plate';
-import {BG, CF, F, R2} from './theme';
+import {BG, CF, DEPTH_SHADOW, F, R2} from './theme';
 
 // Телефон стоит в одной точке во всех сценах — склейки Sequence бесшовны.
 const Phone: React.FC<{children: React.ReactNode; style?: React.CSSProperties}> = ({children, style}) => (
@@ -71,7 +71,7 @@ export const F2: React.FC = () => {
 				<Cam
 					frame={frame}
 					keys={[
-						{f: 0, s: 1.0, x: 824, y: 1500},
+						{f: 0, s: 1.0, x: 824, y: 1750},
 						{f: 70, s: 1.06, x: 824, y: 2163},
 						{f: 165, s: 1.08, x: 824, y: 2163},
 					]}
@@ -160,7 +160,7 @@ export const F3: React.FC = () => {
 	);
 };
 
-// S4 Карта 420–585: наезд на план этажа, пунктирный маршрут (dashoffset) + маркер кабинета.
+// S4 Карта 420–585: наезд на план этажа, дорисовка маршрута клипом (dashoffset — медленный марш) + маркер кабинета.
 const ROUTE_LEN = 2950 - 1244;
 export const F4: React.FC = () => {
 	const frame = useCurrentFrame();
@@ -183,15 +183,20 @@ export const F4: React.FC = () => {
 				>
 					<ShotLayer shot="shot_map_route">
 						<ShotSvg>
-							<path
-								d="M825,1244 L827,2950"
-								fill="none"
-								stroke={CF.accent}
-								strokeWidth={18}
-								strokeLinecap="round"
-								strokeDasharray="46 34"
-								strokeDashoffset={(1 - reveal) * (ROUTE_LEN + 80)}
-							/>
+							<clipPath id="routeReveal">
+								<rect x={775} y={1244} width={110} height={reveal * ROUTE_LEN} />
+							</clipPath>
+							<g clipPath="url(#routeReveal)">
+								<path
+									d="M825,1244 L827,2950"
+									fill="none"
+									stroke={CF.accent}
+									strokeWidth={18}
+									strokeLinecap="round"
+									strokeDasharray="46 34"
+									strokeDashoffset={-(frame * 2)}
+								/>
+							</g>
 							{pin > 0 && (
 								<circle
 									cx={827}
@@ -204,7 +209,7 @@ export const F4: React.FC = () => {
 							)}
 						</ShotSvg>
 						{pin > 0 && (
-							<ShotDiv x={880} y={2860} style={{opacity: pin, scale: `${0.85 + 0.15 * pin}`}}>
+							<ShotDiv x={700} y={2860} style={{opacity: pin, scale: `${0.85 + 0.15 * pin}`}}>
 								<div
 									style={{
 										backgroundColor: CF.surface,
@@ -364,7 +369,7 @@ export const F6: React.FC = () => {
 						display: 'flex',
 						alignItems: 'center',
 						justifyContent: 'center',
-						boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+						boxShadow: DEPTH_SHADOW,
 					}}
 				>
 					<Emblem size={112} fill="#FFFFFF" />

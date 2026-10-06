@@ -1,4 +1,4 @@
-// finalF — стилевая библия PromoFinal9x16_d4 (1080×1920, 30fps, 900f). Self-contained.
+// finalF — стилевая библия PromoFinal9x16-d4 (1080×1920, 30fps, 900f). Self-contained.
 import {loadFont} from '@remotion/google-fonts/Roboto';
 
 export const CF = {
@@ -8,10 +8,8 @@ export const CF = {
 	surface: '#F8FAFC',
 	border: '#E2E8F0',
 	title: '#111827',
-	body: '#1F2937',
 	muted: '#6B7280',
 	badgeLab: '#8B5CF6',
-	badgeExam: '#E11D48',
 };
 
 export const F = loadFont('normal', {
