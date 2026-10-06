@@ -10,8 +10,8 @@ import {C3} from './theme3';
 
 // точки в долях карточки (crop S1)
 const LINE: [number, number][] = [
-	[0.4988, 0.3863],
-	[0.4988, 1.04],
+	[0.4988, 0.6136],
+	[0.4988, 1.2673],
 ];
 const STEP = 48;
 const SPEED_PX_PER_F = 12 / 30;

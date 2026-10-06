@@ -1,18 +1,11 @@
-// Finale3 — S7: веер-текстура из кропов S1/S3/S6 (w440 h600 radius24 blur8 op.35 rot −6/0/6,
-// pivot (540,2060), stagger 4f, settle ≤20f, после — без своего движения) + эмблема-купол
-// (path'ы из public/icon.svg, fill перекрашен #0B1B3D→#0B3564) 160px + aura #E8F0FE a.90 r520 +
-// вордмарк Golos900 108 y640 (blur8→0 scale.94→1 12f на local 10) + суб 44 y740 + микро mono32 y800
-// + общий push-in 1.00→1.03 50f.
+// Finale3 — S7: чистый финал (фон + aura + эмблема-купол + вордмарк); веер blur-остатков
+// экранов убран (vision-QA: месиво внизу кадра читалось как артефакт).
+// Эмблема-купол (path'ы из public/icon.svg, fill перекрашен #0B1B3D→#0B3564) 160px +
+// aura #E8F0FE a.90 r520 + вордмарк Golos900 108 y640 (blur8→0 scale.94→1 12f на local 10) +
+// суб 44 y740 + микро mono32 y800 + общий push-in 1.00→1.03 за 85f (дрейф до конца сцены).
 import React from 'react';
-import {Img, staticFile} from 'remotion';
 import {clamp01, easeInOut} from './anim3';
 import {C3, Golos3, Mono3} from './theme3';
-
-const FAN: {shot: string; pos: string; rot: number; off: number}[] = [
-	{shot: 'shot_map_route', pos: '50% 39%', rot: -6, off: -190},
-	{shot: 'shot_bells', pos: '50% 37%', rot: 0, off: 0},
-	{shot: 'shot_grades', pos: '50% 51%', rot: 6, off: 190},
-];
 
 // public/icon.svg, fill подменён на #0B3564 (inline-замена при импорте).
 const DOME: string[] = [
@@ -42,38 +35,10 @@ export const Emblem3: React.FC<{size: number; color?: string}> = ({size, color =
 );
 
 export const Finale3: React.FC<{frame: number; pushInStart?: number}> = ({frame, pushInStart = 30}) => {
-	const push = 1 + 0.03 * easeInOut((frame - pushInStart) / 50);
+	const push = 1 + 0.03 * easeInOut((frame - pushInStart) / 85);
 	const wm = clamp01((frame - 10) / 12);
 	return (
 		<div style={{position: 'absolute', inset: 0, transform: `scale(${push})`}}>
-			{FAN.map((f, i) => {
-				const t = easeInOut((frame - i * 4) / 20);
-				const left = 540 - 220 + f.off;
-				const top = 1150;
-				return (
-					<div
-						key={i}
-						style={{
-							position: 'absolute',
-							left,
-							top,
-							width: 440,
-							height: 600,
-							borderRadius: 24,
-							overflow: 'hidden',
-							opacity: 0.35 * t,
-							filter: 'blur(8px)',
-							transformOrigin: `${540 - left}px ${2060 - top}px`,
-							transform: `rotate(${f.rot * t}deg) translateY(${80 * (1 - t)}px)`,
-						}}
-					>
-						<Img
-							src={staticFile(`shots/${f.shot}.png`)}
-							style={{width: '100%', height: '100%', objectFit: 'cover', objectPosition: f.pos}}
-						/>
-					</div>
-				);
-			})}
 			{/* aura #E8F0FE a.90 r520 вокруг эмблемы (540,400) */}
 			<div
 				style={{

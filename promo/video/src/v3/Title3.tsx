@@ -1,14 +1,15 @@
 // Title3 — Golos 900 96px (≤16 симв/строку) иначе 84px, lh 1.06, tracking −1%, #0B3564,
-// left 84 top 140, ≤2 строк; суб Golos 500 40px #5A6B80; вход fade+rise4px 8f без kinetic-scale.
+// left 96 top 200 (safe-area 96/200), ≤2 строк; суб Golos 500 40px #5A6B80; вход fade+rise4px 8f без kinetic-scale.
 import React from 'react';
 import {clamp01} from './anim3';
 import {C3, Golos3, TITLE_IN} from './theme3';
 
 export const Title3: React.FC<{lines: string[]; sub: string; frame: number}> = ({lines, sub, frame}) => {
-	const fs = Math.max(...lines.map((l) => l.length)) <= 16 ? 96 : 84;
+	// 96px только если верхняя строка ≤12 симв: иначе на f420 хедлайн наезжал на часы caption.
+	const fs = Math.max(...lines.map((l) => l.length)) <= 16 && lines[0].length <= 12 ? 96 : 84;
 	const t = clamp01((frame - TITLE_IN) / 8);
 	return (
-		<div style={{position: 'absolute', left: 84, top: 140, opacity: t, transform: `translateY(${4 * (1 - t)}px)`}}>
+		<div style={{position: 'absolute', left: 96, top: 200, opacity: t, transform: `translateY(${4 * (1 - t)}px)`}}>
 			{lines.map((l, i) => (
 				<div
 					key={i}

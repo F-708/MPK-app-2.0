@@ -1,4 +1,4 @@
-// Caption3 — mono 600 52px #0072CE tracking+4% FIXED top-right (x≤996, y=150), один на сцену.
+// Caption3 — mono 600 52px #0072CE tracking+4% FIXED top-right (x≤984, y=200 safe-area), один на сцену.
 // Crossfade 4f: трек рендерится на уровне видео (окна in/out в абсолютных кадрах).
 import React from 'react';
 import {clamp01} from './anim3';
@@ -16,8 +16,8 @@ export const Caption3: React.FC<{text: string; frame: number; inF: number; outF:
 		<div
 			style={{
 				position: 'absolute',
-				top: 150,
-				right: 84, // правый край текста x=996
+				top: 200,
+				right: 96, // правый край текста x=984 (safe-area)
 				fontFamily: Mono3,
 				fontWeight: 600,
 				fontSize: 52,

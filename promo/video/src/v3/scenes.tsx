@@ -32,7 +32,7 @@ export const V3S1: React.FC<SP> = ({dur = 140}) => {
 				<Card3 shot={s.shot!} crop={crop} frame={frame} fps={fps} dur={dur} enter="open"
 					// push-in 1.0→1.08 вдоль маршрута 60f easeInOut с кадра 15 (origin — верх ломаной)
 					contentStyle={{
-						transformOrigin: `${0.4988 * CARD_W}px ${0.3863 * h}px`,
+						transformOrigin: `${0.4988 * CARD_W}px ${0.6136 * h}px`,
 						transform: `scale(${1 + 0.08 * easeInOut((frame - 15) / 60)})`,
 					}}>
 					<ChevronOverlay3 frame={frame} w={CARD_W} h={h} />
