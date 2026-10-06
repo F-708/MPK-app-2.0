@@ -40,12 +40,9 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -75,6 +72,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -98,6 +96,7 @@ import com.politex.ui.components.AppDivider
 import com.politex.ui.components.BrandActionButton
 import com.politex.ui.components.DialogTitleBar
 import com.politex.ui.components.ToggleChip
+import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBadgeCourse
 import com.politex.ui.theme.ColorBadgeDiploma
 import com.politex.ui.theme.ColorBadgeExam
@@ -180,6 +179,12 @@ fun TasksScreen(
     val availableTypes =
         remember(groupInfo.course) {
             TaskType.getAvailableForCourse(groupInfo.course)
+        }
+
+    // GG6: предметы, уже встречавшиеся в заданиях пользователя, — добавляются к куррикулуму группы
+    val usedSubjects =
+        remember(allTasks) {
+            allTasks.map { it.subjectName }.filter { it.isNotBlank() }.distinct()
         }
 
     fun deleteWithUndo(task: StudentTaskEntity) {
@@ -428,6 +433,7 @@ fun TasksScreen(
         TaskEditDialog(
             groupInfo = groupInfo,
             availableTypes = availableTypes,
+            usedSubjects = usedSubjects,
             task = null,
             initialReminders = emptyList(),
             onDismissRequest = { showAddDialog = false },
@@ -441,6 +447,7 @@ fun TasksScreen(
         TaskEditDialog(
             groupInfo = groupInfo,
             availableTypes = availableTypes,
+            usedSubjects = usedSubjects,
             task = task,
             initialReminders = editingReminders,
             onDismissRequest = { editingTask = null },
@@ -695,8 +702,8 @@ private fun TaskFilterChip(
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
-        color = if (isSelected) ColorTopBar else ColorBgMain,
+        border = BorderStroke(1.dp, if (isSelected) ColorActiveBlue else ColorBorderLight),
+        color = if (isSelected) ColorActiveBlue else ColorBgMain,
         modifier =
         Modifier
             .height(Tokens.ChipScreen)
@@ -876,12 +883,11 @@ private fun DemoSwipeHintItem(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskEditDialog(
     groupInfo: GroupInfo,
     availableTypes: List<TaskType>,
-
+    usedSubjects: List<String> = emptyList(),
     task: StudentTaskEntity? = null,
     initialReminders: List<Long> = emptyList(),
     onDismissRequest: () -> Unit,
@@ -899,20 +905,21 @@ fun TaskEditDialog(
         }
     var selectedType by remember { mutableStateOf(task?.taskTypeEnum ?: TaskType.HOMEWORK) }
 
-    val officialSubjects =
-        remember(groupInfo.specialtyCode, groupInfo.course) {
-            MpkCurriculum.getSubjects(groupInfo.specialtyCode, groupInfo.course)
+    // GG6: полный список — куррикулум группы + уже использованные предметы, distinct + sorted
+    val subjectOptions =
+        remember(groupInfo.specialtyCode, groupInfo.course, usedSubjects) {
+            subjectListFor(groupInfo, usedSubjects)
         }
-    val defaultSubject = officialSubjects.firstOrNull() ?: "Охрана труда"
+    val defaultSubject = subjectOptions.firstOrNull() ?: "Охрана труда"
 
-    val subjectIsOfficial = task != null && officialSubjects.contains(task.subjectName)
+    val subjectInList = task != null && subjectOptions.contains(task.subjectName)
     var selectedSubject by remember {
-        mutableStateOf(if (subjectIsOfficial) (task?.subjectName ?: defaultSubject) else defaultSubject)
+        mutableStateOf(if (subjectInList) (task?.subjectName ?: defaultSubject) else defaultSubject)
     }
     var subjectExpanded by remember { mutableStateOf(false) }
-    var isCustomSubject by remember { mutableStateOf(task != null && !subjectIsOfficial) }
+    var isCustomSubject by remember { mutableStateOf(task != null && !subjectInList) }
     var customSubject by remember {
-        mutableStateOf(if (task != null && !subjectIsOfficial) task.subjectName else "")
+        mutableStateOf(if (task != null && !subjectInList) task.subjectName else "")
     }
     val effectiveSubject = if (isCustomSubject) customSubject.trim() else selectedSubject
 
@@ -1004,35 +1011,39 @@ fun TaskEditDialog(
                             .testTag("custom_subject_field"),
                     )
                 } else {
-                    ExposedDropdownMenuBox(
-                        expanded = subjectExpanded,
-                        onExpandedChange = { subjectExpanded = !subjectExpanded },
+                    // GG6: вместо дефолтного DropdownMenu (фиолетово-розовый) — свой триггер-поле,
+                    // по тапу открывается SubjectPickerDialog со списком-карточками
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        border = BorderStroke(1.dp, ColorBorderLight),
+                        color = ColorBgMain,
+                        modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .bouncyClickable { subjectExpanded = true }
+                            .testTag("subject_field"),
                     ) {
-                        OutlinedTextField(
-                            value = selectedSubject,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Предмет", fontSize = 12.sp) },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = subjectExpanded) },
-                            shape = RoundedCornerShape(2.dp),
-                            modifier =
-                            Modifier
-                                .menuAnchor()
-                                .fillMaxWidth(),
-                        )
-                        ExposedDropdownMenu(
-                            expanded = subjectExpanded,
-                            onDismissRequest = { subjectExpanded = false },
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
                         ) {
-                            officialSubjects.forEach { subject ->
-                                DropdownMenuItem(
-                                    text = { Text(subject, fontSize = 13.sp) },
-                                    onClick = {
-                                        selectedSubject = subject
-                                        subjectExpanded = false
-                                    },
-                                )
-                            }
+                            Text(
+                                text = selectedSubject.ifBlank { "Предмет" },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style =
+                                androidx.compose.ui.text.TextStyle(
+                                    fontSize = 14.sp,
+                                    color = if (selectedSubject.isBlank()) ColorTextMuted else ColorTextTitle,
+                                ),
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Выбрать предмет",
+                                tint = ColorTextMuted,
+                                modifier = Modifier.size(20.dp),
+                            )
                         }
                     }
                 }
@@ -1054,23 +1065,26 @@ fun TaskEditDialog(
                         .TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                 )
 
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                // GG7: вместо чипов [+1 день, +2 дня, + напоминание] — одно полноширинное окошко,
+                // тап открывает существующую форму создания напоминания
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(2.dp, ColorBorderLight),
+                    color = ColorBgMain,
+                    modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .bouncyClickable { showReminderComposer = !showReminderComposer }
+                        .testTag("add_reminder_chip"),
                 ) {
-
-                    item {
-                        ReminderQuickChip(text = "+1 день") {
-                            reminderMillisFrom(todayIso(), 18, 0, 1)?.let { m -> reminders = reminders + m }
-                        }
-                    }
-                    item {
-                        ReminderQuickChip(text = "+2 дня") {
-                            reminderMillisFrom(todayIso(), 18, 0, 2)?.let { m -> reminders = reminders + m }
-                        }
-                    }
-                    item {
-                        ReminderQuickChip(text = "+ напоминание", tag = "add_reminder_chip") { showReminderComposer = !showReminderComposer }
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Добавить напоминание",
+                            tint = ColorBrandBlue,
+                            modifier = Modifier.size(24.dp),
+                        )
                     }
                 }
 
@@ -1166,6 +1180,19 @@ fun TaskEditDialog(
             }
         },
     )
+
+    // GG6: список предметов — AlertDialog со скроллящимся списком-карточками (не DropdownMenu)
+    if (subjectExpanded) {
+        SubjectPickerDialog(
+            options = subjectOptions,
+            selected = selectedSubject,
+            onDismiss = { subjectExpanded = false },
+            onPick = {
+                selectedSubject = it
+                subjectExpanded = false
+            },
+        )
+    }
 }
 
 internal fun formatDateForShow(raw: String): String {
@@ -1213,36 +1240,6 @@ internal fun todayIso(): String {
         c.get(java.util.Calendar.MONTH) + 1,
         c.get(java.util.Calendar.DAY_OF_MONTH),
     )
-}
-
-@Composable
-private fun ReminderQuickChip(
-    text: String,
-    tag: String? = null,
-    onClick: () -> Unit,
-) {
-    Surface(
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, ColorBorderLight),
-        color = ColorBgMain,
-        contentColor = ColorTextBody,
-        modifier =
-        Modifier
-            .height(Tokens.ChipForm)
-            .bouncyClickable(onClick = onClick)
-            .let { if (tag != null) it.testTag(tag) else it },
-    ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
-            Text(
-                text = text,
-                softWrap = false,
-                maxLines = 1,
-                style =
-                androidx.compose.ui.text
-                    .TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp),
-            )
-        }
-    }
 }
 
 @Composable
@@ -1397,8 +1394,10 @@ private fun ReminderComposer(
 
             if (customTime) {
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    // GG7: час/минуты по центру окошка, а не слева
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
                 ) {
                     OutlinedTextField(
                         value = hourInput,
@@ -1499,4 +1498,83 @@ private fun ReminderComposer(
             },
         )
     }
+}
+
+/** GG6: полный список предметов для выбора — куррикулум группы + уже использованные,
+ *  без пустых и дублей, отсортирован. Чистая функция — покрыта SubjectListForTest. */
+internal fun subjectListFor(
+    groupInfo: GroupInfo,
+    used: List<String>,
+): List<String> =
+    (MpkCurriculum.getSubjects(groupInfo.specialtyCode, groupInfo.course) + used)
+        .filter { it.isNotBlank() }
+        .distinct()
+        .sorted()
+
+/** GG6: диалог выбора предмета — скроллящийся список карточек в стиле приложения
+ *  (Surface 2dp border ColorBorderLight, bg ColorBgMain, padding 12dp, 14sp ColorTextTitle,
+ *  выбранный = ColorTopBar/белый), высота не более 60% экрана. */
+@Composable
+private fun SubjectPickerDialog(
+    options: List<String>,
+    selected: String,
+    onDismiss: () -> Unit,
+    onPick: (String) -> Unit,
+) {
+    val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.6f).dp
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(2.dp),
+        containerColor = ColorBgMain,
+        title = {
+            Text(
+                text = "Предмет",
+                style =
+                androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = ColorTextTitle,
+                ),
+            )
+        },
+        text = {
+            LazyColumn(
+                modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxHeight)
+                    .testTag("subject_picker_list"),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(options) { subject ->
+                    val isSelected = subject == selected
+                    Surface(
+                        shape = RoundedCornerShape(2.dp),
+                        border = BorderStroke(2.dp, ColorBorderLight),
+                        color = if (isSelected) ColorTopBar else ColorBgMain,
+                        modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .bouncyClickable { onPick(subject) }
+                            .testTag("subject_option_$subject"),
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.CenterStart,
+                            modifier = Modifier.padding(12.dp),
+                        ) {
+                            Text(
+                                text = subject,
+                                style =
+                                androidx.compose.ui.text.TextStyle(
+                                    fontSize = 14.sp,
+                                    color = if (isSelected) Color.White else ColorTextTitle,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+    )
 }

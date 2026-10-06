@@ -87,6 +87,7 @@ import com.politex.ui.screens.materials.materialIconTint
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
+import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorDangerFill
 import com.politex.ui.theme.ColorDividerLight
 import com.politex.ui.theme.ColorError
@@ -354,16 +355,16 @@ fun MaterialBaseScreen(
                 val subjectRoute = currentRoute as? MaterialRoute.SubjectScreen
                 val archiveRoute = currentRoute as? MaterialRoute.ArchiveScreen
 
-                MaterialHeader(
-                    query = query,
-                    onQueryChange = { query = it },
-                    // R2 #24: поиск работает только в корне — на экране предмета/архива
-                    // поле мёртвое (результаты не показываются), скрываем его
-                    showSearch = subjectRoute == null && archiveRoute == null,
-                    onAdd = {
-                        showImportType = true
-                    },
-                )
+                // GG15: корневая шапка (поиск + ДОБАВИТЬ) — только в корне; на экране
+                // предмета/архива «+» переехал в строку заголовка (MaterialSubjectContent)
+                if (subjectRoute == null && archiveRoute == null) {
+                    MaterialHeader(
+                        query = query,
+                        onQueryChange = { query = it },
+                        showSearch = true,
+                        onAdd = { showImportType = true },
+                    )
+                }
 
                 val subjectItems =
                     remember(items, subjectRoute) {
@@ -380,6 +381,7 @@ fun MaterialBaseScreen(
                             loaded = loaded,
                             actions = actions,
                             onBack = pop,
+                            onAdd = { showImportType = true },
                             modifier = Modifier.weight(1f),
                         )
 
@@ -391,6 +393,7 @@ fun MaterialBaseScreen(
                             loaded = loaded,
                             actions = actions,
                             onBack = pop,
+                            onAdd = { showImportType = true },
                             modifier = Modifier.weight(1f),
                         )
 
@@ -721,6 +724,7 @@ private fun MaterialSubjectContent(
     loaded: Boolean,
     actions: MaterialActions,
     onBack: () -> Unit,
+    onAdd: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -743,10 +747,12 @@ private fun MaterialSubjectContent(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
             }
+            // GG15: название предмета сразу после «назад», weight 1f, 2 строки с эллипсисом
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = subjectName ?: "Архив",
                     maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
                 )
                 Text(
@@ -754,6 +760,26 @@ private fun MaterialSubjectContent(
                     maxLines = 1,
                     style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                 )
+            }
+            // GG15: «ДОБАВИТЬ» — только иконка Plus в квадрате Tokens.IconHit, справа
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                border = BorderStroke(1.dp, ColorBrandBlue),
+                color = ColorBrandFill,
+                modifier =
+                Modifier
+                    .size(Tokens.IconHit)
+                    .bouncyClickable(onClick = onAdd)
+                    .testTag("material_add_btn"),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Добавить",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
 
