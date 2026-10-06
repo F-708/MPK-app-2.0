@@ -4,17 +4,21 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -44,11 +48,15 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
@@ -58,17 +66,22 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.local.dao.MaterialDao
 import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.data.local.entity.MaterialKind
 import com.politex.ui.theme.ColorBgMain
+import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextBody
+import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
@@ -78,6 +91,7 @@ import com.politex.util.MaterialImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayInputStream
 import java.io.File
 import kotlin.math.ceil
 import kotlin.math.roundToInt
@@ -87,7 +101,23 @@ private val TEXT_LIKE_EXT = setOf("txt", "md", "markdown", "csv", "log", "json",
 // GG14: листы-подложки DOCX — чистые формулы (тесты в DocZoomTest).
 internal const val A4_RATIO = 1.414f
 internal const val DOC_SHEET_GAP_DP = 8
-internal const val DOC_SHEET_MARGIN_DP = 16
+internal const val DOC_SHEET_MARGIN_DP = 24
+
+// HH4: pt из DOCX → sp листа. Word body 11pt ≈ 14sp на листе шириной ~360dp.
+internal const val DOC_PT_SCALE = 1.27f
+
+internal fun docSp(halfPt: Int): TextUnit = ((halfPt / 2f) * DOC_PT_SCALE).coerceIn(7f, 48f).sp
+
+private sealed interface DocContent {
+    data class Rich(val doc: DocxDocument) : DocContent
+    data class Flat(val paragraphs: List<DocxParagraph>) : DocContent
+
+    val isEmpty: Boolean
+        get() = when (this) {
+            is Rich -> doc.blocks.isEmpty()
+            is Flat -> paragraphs.isEmpty()
+        }
+}
 
 // Высота листа A4 из его ширины.
 internal fun pageHeightFromWidth(widthPx: Float): Float = widthPx * A4_RATIO
@@ -107,12 +137,12 @@ fun MaterialDocTextViewer(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
-    var paragraphs by remember(item.id, item.uriPath) { mutableStateOf<List<DocxParagraph>?>(null) }
+    var content by remember(item.id, item.uriPath) { mutableStateOf<DocContent?>(null) }
     var failed by remember(item.id, item.uriPath) { mutableStateOf(false) }
 
     LaunchedEffect(item.id, item.uriPath, item.kind, item.textEdited) {
-        paragraphs = withContext(Dispatchers.IO) { loadParagraphs(item) }
-        failed = paragraphs == null
+        content = withContext(Dispatchers.IO) { loadContent(item) }
+        failed = content == null
     }
 
     var editMode by remember(item.id) { mutableStateOf(false) }
@@ -166,7 +196,11 @@ fun MaterialDocTextViewer(
     }
 
     fun startEdit() {
-        val initial = paragraphs?.joinToString("\n") { it.text } ?: item.textContent
+        val initial = when (val c = content) {
+            is DocContent.Rich -> c.doc.plainText()
+            is DocContent.Flat -> c.paragraphs.joinToString("\n") { it.text }
+            null -> item.textContent
+        }
         textValue = TextFieldValue(initial)
         originalText = initial
         undoStack.clear()
@@ -201,6 +235,14 @@ fun MaterialDocTextViewer(
         textValue = TextFieldValue(t.substring(0, lineStart) + "- " + t.substring(lineStart), selection = TextRange(cursor + 2))
     }
 
+    fun numberLine() {
+        snapshot()
+        val t = textValue.text
+        val cursor = textValue.selection.min
+        val lineStart = if (cursor == 0) 0 else t.lastIndexOf('\n', cursor - 1) + 1
+        textValue = TextFieldValue(t.substring(0, lineStart) + "1. " + t.substring(lineStart), selection = TextRange(cursor + 3))
+    }
+
     fun undo() {
         val prev = undoStack.removeLastOrNull() ?: return
         redoStack.addLast(textValue.text)
@@ -218,7 +260,8 @@ fun MaterialDocTextViewer(
     fun save() {
         val text = textValue.text
         scope.launch { dao.updateTextContent(item.id, text) }
-        paragraphs = text.split('\n').map { DocxParagraph(it.trimEnd()) }
+        // HH4: правленый текст показываем плоским рендером (textEdited=1)
+        content = DocContent.Flat(text.split('\n').map { DocxParagraph(it.trimEnd()) })
         failed = false
         editMode = false
     }
@@ -267,6 +310,7 @@ fun MaterialDocTextViewer(
                 onItalic = { wrapSelection("*") },
                 onUnderline = { wrapSelection("__") },
                 onBullet = ::bulletLine,
+                onNumber = ::numberLine,
                 onUndo = ::undo,
                 onRedo = ::redo,
                 onSave = ::save,
@@ -281,16 +325,16 @@ fun MaterialDocTextViewer(
                 textStyle = TextStyle(fontSize = 14.sp, color = ColorTextBody, lineHeight = 19.sp),
             )
         } else {
-            val content = paragraphs
+            val doc = content
             when {
 
                 failed -> UnsupportedFormatPlaque(ext = item.ext, fileName = item.fileName.ifBlank { item.title })
 
-                content == null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                doc == null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = ColorBrandBlue, modifier = Modifier.testTag("doc_loading"))
                 }
 
-                content.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                doc.isEmpty -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(24.dp),
@@ -386,18 +430,27 @@ fun MaterialDocTextViewer(
                                 .padding(horizontal = DOC_SHEET_MARGIN_DP.dp, vertical = DOC_SHEET_MARGIN_DP.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            content.forEachIndexed { index, p ->
-                                Text(
-                                    text = parseInlineMarks(p.text),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .then(if (p.heading) Modifier.padding(top = 10.dp) else Modifier)
-                                        .testTag("doc_paragraph_$index"),
-                                    style = when {
-                                        p.heading -> TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle, lineHeight = 21.sp)
-                                        p.bold -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle, lineHeight = 19.sp)
-                                        else -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, color = ColorTextBody, lineHeight = 19.sp)
-                                    },
+                            when (doc) {
+                                is DocContent.Flat -> doc.paragraphs.forEachIndexed { index, p ->
+                                    Text(
+                                        text = parseInlineMarks(p.text),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .then(if (p.heading) Modifier.padding(top = 10.dp) else Modifier)
+                                            .testTag("doc_paragraph_$index"),
+                                        style = when {
+                                            p.heading -> TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle, lineHeight = 21.sp)
+                                            p.bold -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle, lineHeight = 19.sp)
+                                            else -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, color = ColorTextBody, lineHeight = 19.sp)
+                                        },
+                                    )
+                                }
+
+                                is DocContent.Rich -> DocxBlocksView(
+                                    blocks = doc.doc.blocks,
+                                    pageHeightPx = pageHeightPx,
+                                    gapPx = gapPx,
+                                    marginPx = with(density) { DOC_SHEET_MARGIN_DP.dp.toPx() },
                                 )
                             }
                         }
@@ -450,12 +503,14 @@ fun MaterialDocTextViewer(
     }
 }
 
+// HH4: компактная панель правки, группы: форматирование | списки | undo/redo | сохранить.
 @Composable
 private fun TextEditToolbar(
     onBold: () -> Unit,
     onItalic: () -> Unit,
     onUnderline: () -> Unit,
     onBullet: () -> Unit,
+    onNumber: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onSave: () -> Unit,
@@ -477,7 +532,10 @@ private fun TextEditToolbar(
                 TextStyle(textDecoration = TextDecoration.Underline, fontSize = 15.sp, color = ColorTextTitle),
                 onUnderline,
             )
+            ToolbarDivider()
             EditMarkButton("•", "doc_bullet_btn", TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ColorTextTitle), onBullet)
+            EditMarkButton("1.", "doc_number_btn", TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = ColorTextTitle), onNumber)
+            ToolbarDivider()
             EditMarkIcon(Icons.AutoMirrored.Filled.Undo, "Отменить", "doc_undo_btn", onUndo)
             EditMarkIcon(Icons.AutoMirrored.Filled.Redo, "Повторить", "doc_redo_btn", onRedo)
             Spacer(modifier = Modifier.weight(1f))
@@ -569,15 +627,15 @@ internal fun parseInlineMarks(par: String): AnnotatedString {
     }
 }
 
-private fun loadParagraphs(item: MaterialItemEntity): List<DocxParagraph>? {
+private fun loadContent(item: MaterialItemEntity): DocContent? {
 
     if (item.textEdited) {
-        return item.textContent.split('\n').map { DocxParagraph(it.trimEnd()) }
+        return DocContent.Flat(item.textContent.split('\n').map { DocxParagraph(it.trimEnd()) })
     }
 
     if (item.kindEnum == MaterialKind.TEXT) {
-        if (item.textContent.isBlank()) return emptyList()
-        return item.textContent.split('\n').map { DocxParagraph(it.trimEnd()) }
+        if (item.textContent.isBlank()) return DocContent.Flat(emptyList())
+        return DocContent.Flat(item.textContent.split('\n').map { DocxParagraph(it.trimEnd()) })
     }
 
     if (item.uriPath.isBlank()) return null
@@ -586,13 +644,172 @@ private fun loadParagraphs(item: MaterialItemEntity): List<DocxParagraph>? {
 
     return when (item.ext) {
         "docx" -> runCatching {
-            file.inputStream().use { DocxTextExtractor.extract(it) }
+            val bytes = file.readBytes()
+            val doc = runCatching { DocxDocumentParser.parse(ByteArrayInputStream(bytes)) }.getOrNull()
+            // структурированный парсер не справился — откат на плоский текст
+            if (doc != null && doc.blocks.isNotEmpty()) {
+                DocContent.Rich(doc)
+            } else {
+                DocContent.Flat(DocxTextExtractor.extract(ByteArrayInputStream(bytes)))
+            }
         }.getOrNull()
 
         in TEXT_LIKE_EXT -> runCatching {
-            MaterialImporter.decodeSmart(file.readBytes()).split('\n').map { DocxParagraph(it.trimEnd()) }
+            DocContent.Flat(MaterialImporter.decodeSmart(file.readBytes()).split('\n').map { DocxParagraph(it.trimEnd()) })
         }.getOrNull()
 
         else -> null
     }
+}
+
+// ---------------------------------------------------------------- HH4: rich-рендер DOCX
+
+@Composable
+private fun DocxBlocksView(
+    blocks: List<DocxBlock>,
+    pageHeightPx: Float,
+    gapPx: Float,
+    marginPx: Float,
+    indent: Dp = 0.dp,
+) {
+    blocks.forEachIndexed { index, block ->
+        when (block) {
+            is DocxBlock.Para -> DocxParaView(block, indent, Modifier.testTag("doc_paragraph_$index"))
+            is DocxBlock.Table -> DocxTableView(block)
+            DocxBlock.PageBreak -> PageBreakSpacer(index, pageHeightPx, gapPx, marginPx)
+        }
+    }
+}
+
+@Composable
+private fun DocxParaView(
+    p: DocxBlock.Para,
+    indent: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val heading = p.headingLevel
+    val baseColor = if (heading > 0) ColorTextTitle else ColorTextBody
+    val linkColor = ColorBrandBlue
+    val mutedColor = ColorTextMuted
+    val annotated = remember(p, baseColor, linkColor, mutedColor) {
+        buildAnnotatedString {
+            p.runs.forEach { r ->
+                val span = SpanStyle(
+                    fontWeight = if (r.bold) FontWeight.Bold else null,
+                    fontStyle = if (r.italic) FontStyle.Italic else null,
+                    textDecoration = if (r.underline) TextDecoration.Underline else null,
+                    fontSize = r.sizeHalfPt?.let { docSp(it) } ?: TextUnit.Unspecified,
+                    color = when {
+                        r.colorArgb != null -> Color(r.colorArgb)
+                        r.imagePlaceholder -> mutedColor
+                        else -> Color.Unspecified
+                    },
+                )
+                withStyle(span) {
+                    if (r.linkUrl != null) {
+                        // клик открывает LocalUriHandler (Intent ACTION_VIEW)
+                        withLink(LinkAnnotation.Url(r.linkUrl, TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)))) {
+                            append(r.text)
+                        }
+                    } else {
+                        append(r.text)
+                    }
+                }
+            }
+        }
+    }
+    val fontSize = when (heading) {
+        1 -> 20.sp
+        2 -> 17.sp
+        3 -> 15.sp
+        else -> 14.sp
+    }
+    val style = TextStyle(
+        fontSize = fontSize,
+        fontWeight = if (heading > 0) FontWeight.Bold else FontWeight.Normal,
+        color = baseColor,
+        lineHeight = fontSize * 1.35f,
+        textAlign = when (p.align) {
+            DocxAlign.CENTER -> TextAlign.Center
+            DocxAlign.RIGHT -> TextAlign.End
+            DocxAlign.LEFT -> TextAlign.Start
+        },
+    )
+    val headPad = when (heading) {
+        1 -> 14.dp
+        2 -> 12.dp
+        0 -> 0.dp
+        else -> 8.dp
+    }
+    val startIndent = indent +
+        (p.indentLevel * 16).dp +
+        ((p.indentTwips / 20f) * DOC_PT_SCALE).coerceIn(0f, 120f).dp
+    if (p.bullet != null) {
+        Row(modifier = modifier.fillMaxWidth().padding(start = startIndent, top = headPad)) {
+            Text(p.bullet, style = style, textAlign = TextAlign.End, modifier = Modifier.width(20.dp))
+            Text(annotated, style = style, modifier = Modifier.weight(1f))
+        }
+    } else {
+        Text(annotated, style = style, modifier = modifier.fillMaxWidth().padding(start = startIndent, top = headPad))
+    }
+}
+
+@Composable
+private fun DocxTableView(t: DocxBlock.Table) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        t.rows.forEach { row ->
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                row.forEach { cell ->
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .border(1.dp, ColorBorderLight)
+                            .padding(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        // разрывы страниц внутри ячеек не снапятся к листам — pageHeightPx = 0
+                        DocxBlocksView(cell, pageHeightPx = 0f, gapPx = 0f, marginPx = 0f)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// HH4: условная пагинация — разрыв страницы додвигает контент до верха следующего листа.
+// Высота считается после первого замера y (onPlaced → один проход ре-лейаута).
+@Composable
+private fun PageBreakSpacer(
+    index: Int,
+    pageHeightPx: Float,
+    gapPx: Float,
+    marginPx: Float,
+) {
+    val density = LocalDensity.current
+    var yPx by remember(index) { mutableFloatStateOf(0f) }
+    val fillPx = if (pageHeightPx <= 0f) {
+        with(density) { 24.dp.toPx() }
+    } else {
+        val period = pageHeightPx + gapPx
+        val next = ceil((yPx + 1f) / period) * period + marginPx
+        (next - yPx).coerceAtLeast(0f)
+    }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(with(density) { fillPx.toDp() })
+            .onPlaced { yPx = it.positionInParent().y },
+    )
+}
+
+@Composable
+private fun ToolbarDivider() {
+    Box(
+        Modifier
+            .padding(horizontal = 4.dp)
+            .width(1.dp)
+            .height(24.dp)
+            .background(ColorBorderLight),
+    )
 }
