@@ -24,6 +24,20 @@ for (const r of rows) {
 		`${ok ? 'PASS' : 'FAIL'} ${r.scene.padEnd(8)} dur=${String(r.dur).padStart(3)}f titleOn=${String(on).padStart(3)}f need≥${need.toFixed(1)}f  «${r.title}»`,
 	);
 }
+
+// Final PromoFinal9x16: гейт по src/final/copy.json (та же формула, строка-описание вместо титула).
+const fin = JSON.parse(readFileSync(new URL('../src/final/copy.json', import.meta.url)));
+const finTitleIn = fin.titleIn;
+for (const s of fin.scenes) {
+	if (!s.line) continue;
+	const on = s.dur - finTitleIn;
+	const need = req(s.dur);
+	const ok = on >= need;
+	if (!ok) fail++;
+	console.log(
+		`${ok ? 'PASS' : 'FAIL'} ${s.id.padEnd(8)} dur=${String(s.dur).padStart(3)}f lineOn=${String(on).padStart(3)}f need≥${need.toFixed(1)}f  «${s.line}»`,
+	);
+}
 if (fail) {
 	console.error(`[readability] FAIL: ${fail} сцен(ы)`);
 	process.exit(1);

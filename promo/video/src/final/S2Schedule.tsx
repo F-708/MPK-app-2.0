@@ -14,8 +14,8 @@ export const S2Schedule: React.FC<{dur?: number}> = ({dur = 165}) => {
 			shot="shot_schedule_today.png"
 			scale={[1, 1.3]}
 			fx={[0.5, 0.5]}
-			fy={[0.42, 0.28]}
-			overlays={<FocusBox fx={0.5} fy={0.28} w={0.9} h={0.14} frame={frame} at={65} />}
+			fy={[0.5, 0.591]}
+			overlays={<FocusBox fx={0.5} fy={0.591} w={0.92} h={0.134} frame={frame} at={65} />}
 		/>
 	);
 };

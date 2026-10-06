@@ -13,9 +13,10 @@ export const ShotScreen: React.FC<{
 	scale?: number[]; // ключи зума по сцене
 	fx?: number[]; // ключи фокуса x [0..1]
 	fy?: number[]; // ключи фокуса y [0..1]
+	from?: number; // смещение локального кадра (для сплит-сцен: вторая половина начинается с frame=from)
 	children?: React.ReactNode;
-}> = ({shot, dur, scale = [1, 1], fx = [0.5, 0.5], fy = [0.5, 0.5], children}) => {
-	const frame = useCurrentFrame();
+}> = ({shot, dur, scale = [1, 1], fx = [0.5, 0.5], fy = [0.5, 0.5], from = 0, children}) => {
+	const frame = useCurrentFrame() - from;
 	const s = cam(scale, frame, dur);
 	const fxc = cam(fx, frame, dur);
 	const fyc = cam(fy, frame, dur);

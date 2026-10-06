@@ -24,7 +24,7 @@ export const S5Tasks: React.FC<{dur?: number}> = ({dur = 180}) => {
 							<ShotScreen shot="shot_tasks.png" dur={half} scale={[1, 1.26]} fx={[0.5, 0.8]} fy={[0.45, 0.3]} />
 						</div>
 						<div style={{position: 'absolute', inset: 0, translate: `${slide}px 0`}}>
-							<ShotScreen shot="shot_grades.png" dur={dur - half} scale={[1, 1.3]} fx={[0.5, 0.85]} fy={[0.45, 0.58]}>
+							<ShotScreen shot="shot_grades.png" dur={dur - half} from={half} scale={[1, 1.3]} fx={[0.5, 0.85]} fy={[0.45, 0.58]}>
 								<FocusBox fx={0.913} fy={0.58} w={0.14} h={0.07} frame={in2} at={25} />
 							</ShotScreen>
 						</div>
