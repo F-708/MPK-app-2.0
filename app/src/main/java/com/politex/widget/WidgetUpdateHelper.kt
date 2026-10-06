@@ -93,6 +93,15 @@ object WidgetUpdateHelper {
         NowNextWidgetProvider.updateAll(context)
     }
 
+    // HH2: смена подгруппы меняет только NowNext+Today — перерисовать их сразу,
+    // не дожидаясь тика (Today не входит в минутное обновление). Вне main-потока: buildViews делает runBlocking-запрос БД.
+    fun refreshScheduleWidgets(context: Context) {
+        widgetScope.launch {
+            NowNextWidgetProvider.updateAll(context)
+            TodayScheduleWidgetProvider.updateAll(context)
+        }
+    }
+
     fun updateOne(
         context: Context,
         appWidgetId: Int,
