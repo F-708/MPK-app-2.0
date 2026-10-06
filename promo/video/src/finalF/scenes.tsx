@@ -169,7 +169,7 @@ export const F4: React.FC = () => {
 		extrapolateRight: 'clamp',
 		easing: (t) => t * t * (3 - 2 * t),
 	});
-	const pin = interpolate(frame, [72, 86], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+	const pin = interpolate(frame, [100, 115], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
 	return (
 		<AbsoluteFill style={{background: BG}}>
 			<Phone>

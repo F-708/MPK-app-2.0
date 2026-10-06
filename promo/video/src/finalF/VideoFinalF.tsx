@@ -7,7 +7,7 @@ import {CF} from './theme';
 
 export const VideoFinalF: React.FC = () => {
 	const frame = useCurrentFrame();
-	const black = interpolate(frame, [885, 900], [0, 1], {
+	const black = interpolate(frame, [885, 897], [0, 1], {
 		extrapolateLeft: 'clamp',
 		extrapolateRight: 'clamp',
 	});
