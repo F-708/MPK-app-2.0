@@ -3,6 +3,9 @@ import {AbsoluteFill, Series} from 'remotion';
 import {S1Intro} from './S1Intro';
 import {S2Schedule} from './S2Schedule';
 import {S3Bells} from './S3Bells';
+import {S4Map} from './S4Map';
+import {S5Tasks} from './S5Tasks';
+import {S6Outro} from './S6Outro';
 import {C, SCENE_DUR} from './theme';
 
 // PromoFinal9x16 — 30.0s = 900f @30fps. Границы: 0/105/270/420/585/765/900.
@@ -21,13 +24,13 @@ export const VideoFinal: React.FC = () => {
 					<S3Bells />
 				</Series.Sequence>
 				<Series.Sequence durationInFrames={d4}>
-					{/* S4Map — Task 3 */}
+					<S4Map />
 				</Series.Sequence>
 				<Series.Sequence durationInFrames={d5}>
-					{/* S5Tasks — Task 3 */}
+					<S5Tasks />
 				</Series.Sequence>
 				<Series.Sequence durationInFrames={d6}>
-					{/* S6Outro — Task 3 */}
+					<S6Outro />
 				</Series.Sequence>
 			</Series>
 		</AbsoluteFill>
