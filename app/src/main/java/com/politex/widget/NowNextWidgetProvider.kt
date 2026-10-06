@@ -23,9 +23,11 @@ class NowNextWidgetProvider : AppWidgetProvider() {
         val pending = goAsync()
         WidgetUpdateHelper.widgetScope.launch {
             try {
-                ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
-                WidgetAlarm.scheduleNext(context)
+                ids.forEach { id -> runCatching { manager.updateAppWidget(id, buildViews(context, id)) } }
             } finally {
+                // GG8(а): перевзвод будильника ОБЯЗАН переживать падение сборки одного из
+                // виджетов — иначе цепочка минутных тиков обрывалась и виджет «отключался через день».
+                WidgetAlarm.scheduleNext(context)
                 pending.finish()
             }
         }
@@ -41,7 +43,9 @@ class NowNextWidgetProvider : AppWidgetProvider() {
         fun updateAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, NowNextWidgetProvider::class.java))
-            ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
+            // GG8(а): не бросать наружу — вызывающий (alarm receiver) после нас ещё
+            // должен перевзвести будильник; упавший build одного id не должен рвать цепочку.
+            ids.forEach { id -> runCatching { manager.updateAppWidget(id, buildViews(context, id)) } }
         }
 
         private fun buildViews(
@@ -66,6 +70,13 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             views.setInt(R.id.tv_next_room, "setBackgroundColor", style.highlightColor)
             views.setTextColor(R.id.tv_now_room, style.mainColor)
             views.setTextColor(R.id.tv_next_room, style.mainColor)
+            // GG8в: вторая кнопка split-комнаты — тот же стиль чипа
+            views.setInt(R.id.tv_now_room2, "setBackgroundColor", style.highlightColor)
+            views.setInt(R.id.tv_next_room2, "setBackgroundColor", style.highlightColor)
+            views.setTextColor(R.id.tv_now_room2, style.mainColor)
+            views.setTextColor(R.id.tv_next_room2, style.mainColor)
+
+            val pref = com.politex.util.SubgroupSettings.get(context)
 
             val now = WidgetData.minuteOfDay(context)
             val lessons = WidgetData.todayLessons(context)
@@ -105,17 +116,18 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.tv_now_label, "СЕЙЧАС")
                 views.setTextViewText(R.id.tv_now_subject, SubjectFormatter.getShortName(current.subjectRaw))
                 views.setTextViewText(R.id.tv_now_details, detailsOf(current))
-                applyRoomChip(context, views, R.id.tv_now_room, current, showRoom, appWidgetId, "now", nowFromRoom)
+                applyRoomChips(context, views, current, showRoom, appWidgetId, 1, pref, nowFromRoom, R.id.tv_now_room, R.id.tv_now_room2)
                 if (next != null) {
                     views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                     views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next.subjectRaw))
                     views.setTextViewText(R.id.tv_next_details, detailsOf(next))
-                    applyRoomChip(context, views, R.id.tv_next_room, next, showRoom, appWidgetId, "next", nextFromRoom)
+                    applyRoomChips(context, views, next, showRoom, appWidgetId, 2, pref, nextFromRoom, R.id.tv_next_room, R.id.tv_next_room2)
                 } else {
                     views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                     views.setTextViewText(R.id.tv_next_subject, "Уроков больше нет")
                     views.setTextViewText(R.id.tv_next_details, "")
                     views.setViewVisibility(R.id.tv_next_room, android.view.View.GONE)
+                    views.setViewVisibility(R.id.tv_next_room2, android.view.View.GONE)
                 }
             } else {
 
@@ -132,11 +144,12 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                     },
                 )
                 views.setViewVisibility(R.id.tv_now_room, android.view.View.GONE)
+                views.setViewVisibility(R.id.tv_now_room2, android.view.View.GONE)
 
                 views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
                 views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next!!.subjectRaw))
                 views.setTextViewText(R.id.tv_next_details, detailsOf(next))
-                applyRoomChip(context, views, R.id.tv_next_room, next, showRoom, appWidgetId, "next", nextFromRoom)
+                applyRoomChips(context, views, next, showRoom, appWidgetId, 2, pref, nextFromRoom, R.id.tv_next_room, R.id.tv_next_room2)
             }
 
             val open =
@@ -152,40 +165,45 @@ class NowNextWidgetProvider : AppWidgetProvider() {
 
         private fun detailsOf(lesson: LessonEntity): String = "${lesson.timeStart}–${lesson.timeEnd}"
 
-        private fun applyRoomChip(
+        private fun applyRoomChips(
             context: Context,
             views: RemoteViews,
-            viewId: Int,
             lesson: LessonEntity,
             showRoom: Boolean,
             appWidgetId: Int,
-            slot: String,
-
-            fromRoom: String? = null,
+            slotCode: Int, // 1 = «сейчас», 2 = «дальше»
+            pref: com.politex.util.SubgroupPref,
+            fromRoom: String?,
+            id1: Int,
+            id2: Int,
         ) {
-            val rooms =
-                listOf(lesson.roomFirst, lesson.roomSecond)
-                    .filter { it.isNotBlank() }
-                    .distinct()
+            // GG8в: split-урок → две кнопки-цифры (при NEUTRAL), иначе одна кнопка
+            // подгруппы; non-split → «каб. N» как раньше. Тап = карта с комнатой и
+            // маршрутом от предыдущего слота (fromRoom), как было.
+            val rooms = WidgetData.chooseRooms(lesson, pref)
             if (!showRoom || rooms.isEmpty()) {
-                views.setViewVisibility(viewId, android.view.View.GONE)
+                views.setViewVisibility(id1, android.view.View.GONE)
+                views.setViewVisibility(id2, android.view.View.GONE)
                 return
             }
-            val room = rooms.first()
-            views.setTextViewText(viewId, "каб. $room")
-            views.setViewVisibility(viewId, android.view.View.VISIBLE)
-
-            views.setOnClickPendingIntent(
-                viewId,
-                WidgetUpdateHelper.openAppIntent(
-                    context,
-                    1_000_000 + appWidgetId * 10 + if (slot == "now") 1 else 2,
-                    "SCHEDULE",
-                    room = room,
-                    showRoute = true,
-                    fromRoom = fromRoom,
-                ),
-            )
+            rooms.forEachIndexed { i, room ->
+                val viewId = if (i == 0) id1 else id2
+                views.setTextViewText(viewId, if (lesson.isSplit) room else "каб. $room")
+                views.setViewVisibility(viewId, android.view.View.VISIBLE)
+                views.setOnClickPendingIntent(
+                    viewId,
+                    WidgetUpdateHelper.openAppIntent(
+                        context,
+                        // SRED11-неймспейс: 1M + id*100 + slot*10 + roomIdx (slot 1..2, idx 0..1)
+                        1_000_000 + appWidgetId * 100 + slotCode * 10 + i,
+                        "SCHEDULE",
+                        room = room,
+                        showRoute = true,
+                        fromRoom = fromRoom,
+                    ),
+                )
+            }
+            if (rooms.size == 1) views.setViewVisibility(id2, android.view.View.GONE)
         }
     }
 }
@@ -198,19 +216,26 @@ object WidgetData {
 
     fun dayOfWeek(context: Context): Int = Dow.of(java.util.Calendar.getInstance())
 
-    @Volatile private var cacheMinute = -1
-
-    @Volatile private var cacheGroup = ""
+    // GG8(а): ключ кэша ОБЯЗАН содержать дату. minuteOfDay повторяется каждые сутки:
+    // при живом процессе вчерашний кэш на той же минуте отдавал вчерашние уроки —
+    // все они «в прошлом» → current==null && next==null → «Уроки закончились» при живых уроках.
+    @Volatile private var cacheKey = ""
 
     @Volatile private var cacheLessons: List<LessonEntity> = emptyList()
+
+    internal fun lessonsCacheKey(
+        minute: Int,
+        group: String,
+        date: String,
+    ): String = "$date|$minute|$group"
 
     fun todayLessons(context: Context): List<LessonEntity> {
         val group = WidgetUpdateHelper.getSelectedGroup(context)
         if (group.isBlank()) return emptyList()
-        val minute = minuteOfDay(context)
-        if (minute == cacheMinute && group == cacheGroup) return cacheLessons
-        val dow = dayOfWeek(context)
         val todayString = todayDateString()
+        val key = lessonsCacheKey(minuteOfDay(context), group, todayString)
+        if (key == cacheKey) return cacheLessons
+        val dow = dayOfWeek(context)
         val result =
             try {
                 kotlinx.coroutines.runBlocking {
@@ -226,9 +251,25 @@ object WidgetData {
             }
 
         cacheLessons = result
-        cacheGroup = group
-        cacheMinute = minute
+        cacheKey = key
         return result
+    }
+
+    /**
+     * GG8в/GG9: комнаты для кнопок урока.
+     * split+NEUTRAL → обе [roomFirst, roomSecond]; split+FIRST/SECOND → комната подгруппы;
+     * non-split → первая непустая. Пустые комнаты отбрасываются.
+     */
+    fun chooseRooms(
+        lesson: LessonEntity,
+        pref: com.politex.util.SubgroupPref,
+    ): List<String> {
+        val both =
+            listOf(lesson.roomFirst.trim(), lesson.roomSecond.trim())
+                .filter { it.isNotBlank() }
+        if (!lesson.isSplit) return both.take(1)
+        val idx = com.politex.util.SubgroupSettings.splitIndex(pref) ?: return both
+        return listOfNotNull(both.getOrNull(idx) ?: both.firstOrNull())
     }
 
     internal fun todayDateString(): String {

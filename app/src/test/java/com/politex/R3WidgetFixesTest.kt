@@ -11,8 +11,9 @@ import org.junit.Test
 /** R3: чистая логика фиксов (без Robolectric) — CRIT2, SRED5, SRED10, SRED11. */
 class R3WidgetFixesTest {
     // SRED11-контракт requestCode-неймспейсов (зеркалит формулы в провайдерах/NotificationHelper)
-    private fun nowNextChip(id: Int, slot: Int) = 1_000_000 + id * 10 + slot
-    private fun todayChip(id: Int, lesson: Int) = 2_000_000 + id * 100 + lesson
+    // GG8в/GG9: у чипов появились вторые slot-индексы (split-комнаты)
+    private fun nowNextChip(id: Int, slot: Int, roomIdx: Int = 0) = 1_000_000 + id * 100 + slot * 10 + roomIdx
+    private fun todayChip(id: Int, lesson: Int, slot: Int = 0) = 2_000_000 + id * 100 + lesson * 2 + slot
     private fun reminder(id: Long) = (3_000_000 + id % 1_000_000).toInt()
     private fun openApp(id: Int) = 4_000_000 + id
 
@@ -74,9 +75,9 @@ class R3WidgetFixesTest {
     @Test
     fun `SRED11 неймспейсы занимают непересекающиеся диапазоны`() {
         assertTrue(nowNextChip(0, 1) >= 1_000_000)
-        assertTrue(nowNextChip(99_999, 2) < 2_000_000)
+        assertTrue(nowNextChip(9_999, 2, 1) < 2_000_000)
         assertTrue(todayChip(0, 0) >= 2_000_000)
-        assertTrue(todayChip(9_999, 99) < 3_000_000)
+        assertTrue(todayChip(9_999, 12, 1) < 3_000_000)
         assertTrue(reminder(0L) >= 3_000_000)
         assertTrue(reminder(Long.MAX_VALUE) < 4_000_000)
         assertTrue(openApp(0) >= 4_000_000)
@@ -91,9 +92,12 @@ class R3WidgetFixesTest {
         }
         for (id in 1..50) {
             put(openApp(id), "openApp#$id")
-            put(nowNextChip(id, 1), "nowNext#$id.now")
-            put(nowNextChip(id, 2), "nowNext#$id.next")
-            for (lesson in 1..12) put(todayChip(id, lesson), "today#$id.$lesson")
+            for (slot in 1..2) {
+                for (roomIdx in 0..1) put(nowNextChip(id, slot, roomIdx), "nowNext#$id.$slot.$roomIdx")
+            }
+            for (lesson in 1..12) {
+                for (slot in 0..1) put(todayChip(id, lesson, slot), "today#$id.$lesson.$slot")
+            }
             put(reminder(id.toLong()), "reminder#$id")
         }
     }

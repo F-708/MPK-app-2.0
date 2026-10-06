@@ -19,9 +19,10 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
         val pending = goAsync()
         WidgetUpdateHelper.widgetScope.launch {
             try {
-                ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
-                WidgetAlarm.scheduleNext(context)
+                ids.forEach { id -> runCatching { manager.updateAppWidget(id, buildViews(context, id)) } }
             } finally {
+                // GG8(а): перевзвод будильника переживает падение сборки виджета
+                WidgetAlarm.scheduleNext(context)
                 pending.finish()
             }
         }
@@ -39,7 +40,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
         fun updateAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, TodayScheduleWidgetProvider::class.java))
-            ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
+            ids.forEach { id -> runCatching { manager.updateAppWidget(id, buildViews(context, id)) } }
         }
 
         private fun buildViews(
@@ -57,6 +58,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             val now = WidgetData.minuteOfDay(context)
             val lessons = WidgetData.todayLessons(context)
             val group = WidgetUpdateHelper.getSelectedGroup(context)
+            val pref = com.politex.util.SubgroupSettings.get(context)
 
             views.setTextViewText(
                 R.id.tv_today_header,
@@ -80,7 +82,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 lessons.take(MAX_ROWS).forEach { lesson ->
                     views.addView(
                         R.id.today_rows,
-                        buildRow(context, lesson, now, style, showRoom, appWidgetId),
+                        buildRow(context, lesson, now, style, showRoom, appWidgetId, pref),
                     )
                 }
 
@@ -110,6 +112,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             style: WidgetStyle,
             showRoom: Boolean,
             appWidgetId: Int,
+            pref: com.politex.util.SubgroupPref,
         ): RemoteViews {
             val row = RemoteViews(context.packageName, R.layout.widget_row_list)
 
@@ -142,12 +145,10 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             )
             row.setTextColor(R.id.row_subject, textColor)
 
-            val room = lesson.roomFirst.takeIf { it.isNotBlank() } ?: lesson.roomSecond
-            if (showRoom && room.isNotBlank()) {
-                row.setTextViewText(R.id.row_room, "каб. $room")
-
-                row.setTextColor(R.id.row_room, style.mainColor)
-                row.setInt(R.id.row_room, "setBackgroundColor", style.highlightColor)
+            // GG9: split-урок → две полуширинные кнопки-цифры (roomFirst|roomSecond);
+            // при SubgroupPref != NEUTRAL — одна кнопка подгруппы; non-split — «каб. N» как раньше.
+            val rooms = WidgetData.chooseRooms(lesson, pref)
+            if (showRoom && rooms.isNotEmpty()) {
                 val d = context.resources.displayMetrics.density
 
                 val ph = (10 * d + 0.5f).toInt()
@@ -155,20 +156,30 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 // (row_root = 0dp + weight → строка фиксирована, ~11-20dp при 12
                 // уроках) — цифры клиппились. 2dp keeps chip ≈ высоте текста строки.
                 val pv = (2 * d + 0.5f).toInt()
-                row.setViewPadding(R.id.row_room, ph, pv, ph, pv)
-                row.setOnClickPendingIntent(
-                    R.id.row_room,
-                    WidgetUpdateHelper.openAppIntent(
-                        context,
-                        2_000_000 + appWidgetId * 100 + lesson.lessonNumber,
-                        "MAP",
-                        room = room,
-                        showRoute = true,
-                    ),
-                )
+                rooms.forEachIndexed { i, room ->
+                    val viewId = if (i == 0) R.id.row_room else R.id.row_room2
+                    row.setTextViewText(viewId, if (lesson.isSplit) room else "каб. $room")
+                    row.setTextColor(viewId, style.mainColor)
+                    row.setInt(viewId, "setBackgroundColor", style.highlightColor)
+                    row.setViewPadding(viewId, ph, pv, ph, pv)
+                    row.setViewVisibility(viewId, android.view.View.VISIBLE)
+                    row.setOnClickPendingIntent(
+                        viewId,
+                        WidgetUpdateHelper.openAppIntent(
+                            context,
+                            // SRED11-неймспейс GG9: 2M + id*100 + lesson*2 + slot
+                            2_000_000 + appWidgetId * 100 + lesson.lessonNumber * 2 + i,
+                            "MAP",
+                            room = room,
+                            showRoute = true,
+                        ),
+                    )
+                }
+                if (rooms.size == 1) row.setViewVisibility(R.id.row_room2, android.view.View.GONE)
             } else {
                 row.setTextViewText(R.id.row_room, "")
                 row.setTextColor(R.id.row_room, style.subColor)
+                row.setViewVisibility(R.id.row_room2, android.view.View.GONE)
             }
 
             return row

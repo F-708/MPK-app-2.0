@@ -195,4 +195,32 @@ class WidgetLayoutsTest {
             assertTrue("$id: marginTop=$mt dp вне диапазона 4-6dp", mt!! in 4..6)
         }
     }
+
+    @Test
+    fun `GG8 вторые кнопки split-комнат в now-next есть и по умолчанию скрыты`() {
+        val text = File(layoutsDir, "widget_now_next.xml").readText()
+        listOf("tv_now_room2", "tv_next_room2").forEach { id ->
+            assertTrue("$id отсутствует в widget_now_next.xml", text.contains("@+id/$id"))
+            val attrs = text.substringAfter("android:id=\"@+id/$id\"").substringBefore("/>")
+            assertTrue("$id не скрыт по умолчанию", attrs.contains("android:visibility=\"gone\""))
+            assertTrue("$id без фона чипа", attrs.contains("@drawable/bg_widget_room_chip"))
+        }
+    }
+
+    @Test
+    fun `GG9 вторая кнопка split-комнаты в строке расписания есть и по умолчанию скрыта`() {
+        val text = File(layoutsDir, "widget_row_list.xml").readText()
+        assertTrue("row_room2 отсутствует в widget_row_list.xml", text.contains("@+id/row_room2"))
+        val attrs = text.substringAfter("android:id=\"@+id/row_room2\"").substringBefore("/>")
+        assertTrue("row_room2 не скрыт по умолчанию", attrs.contains("android:visibility=\"gone\""))
+        assertTrue("row_room2 должен быть wrap_content по высоте (EE3)", attrs.contains("android:layout_height=\"wrap_content\""))
+    }
+
+    @Test
+    fun `GG8 now_next widget info — полная ширина 4 колонки с ресайзом до 5`() {
+        val text = File("src/main/res/xml/now_next_widget_info.xml").readText()
+        assertTrue("targetCellWidth != 4", text.contains("android:targetCellWidth=\"4\""))
+        assertTrue("minWidth != 250dp (формула 70*4-30)", text.contains("android:minWidth=\"250dp\""))
+        assertTrue("maxResizeWidth != 320dp (5 колонок)", text.contains("android:maxResizeWidth=\"320dp\""))
+    }
 }
