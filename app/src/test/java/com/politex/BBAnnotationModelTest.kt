@@ -3,7 +3,6 @@ package com.politex
 import androidx.compose.ui.geometry.Offset
 import com.politex.ui.screens.materials.AnnotationAction
 import com.politex.ui.screens.materials.AnnotationUndoSession
-import com.politex.ui.screens.materials.DocZoom
 import com.politex.ui.screens.materials.Stroke
 import com.politex.ui.screens.materials.applyUndo
 import com.politex.ui.screens.materials.clampToBox
@@ -33,17 +32,16 @@ class BBAnnotationModelTest {
     }
 
     @Test
-    fun `DD2 PDF — толщина штриха константна ОТНОСИТЕЛЬНО СТРАНИЦЫ (экранная ~ zoom)`() {
-        // PDF: страница масштабируется layout-шириной (pageW = containerW*zoom), слой
-        // не трансформируется; layerScale = 1/zoom ⇒ экранная толщина = widthDp*pxPerDp*zoom
+    fun `DD2+HH3 PDF — толщина штриха константна ОТНОСИТЕЛЬНО СТРАНИЦЫ (экранная ~ zoom)`() {
+        // HH3: layout постоянный (страница = containerW, fit = 1.0), зум — graphicsLayer(zoom).
+        // layerScale = 1 ⇒ толщина в координатах страницы = widthDp*pxPerDp; экранная = *zoom
         // (тоньше на экране при 0.5, толще при 2 — «нарисовано на бумаге»).
         val containerW = 1080f
         val pxPerDp = 3f
         listOf(0.5f, 1f, 2f, 4f).forEach { zoom ->
-            val drawn = compensatedStrokeWidthPx(4f, pxPerDp, DocZoom.strokeLayerScale(zoom))
-            val pageW = DocZoom.pageWidthPx(containerW, zoom)
-            assertEquals("экранная толщина ~ zoom при $zoom", 12f * zoom, drawn, eps)
-            assertEquals("page-const при $zoom", 12f / containerW, drawn / pageW, eps)
+            val drawn = compensatedStrokeWidthPx(4f, pxPerDp, 1f)
+            assertEquals("экранная толщина ~ zoom при $zoom", 12f * zoom, drawn * zoom, eps)
+            assertEquals("page-const при $zoom", 12f / containerW, drawn / containerW, eps)
         }
     }
 
@@ -54,18 +52,18 @@ class BBAnnotationModelTest {
     }
 
     @Test
-    fun `DD2 PDF eraser — порог в page-координатах, нормализованный не зависит от zoom`() {
-        // PDF: boxWidthPx = containerW*zoom (layout-ширина страницы), layerScale = 1/zoom ⇒
+    fun `DD2+HH3 PDF eraser — порог в page-координатах, нормализованный не зависит от zoom`() {
+        // HH3: boxWidthPx = containerW (layout постоянный), layerScale = 1 ⇒
         // нормализованный порог (widthDp/2+extra)*pxPerDp/containerW — константа «на бумаге».
         val containerW = 1080f
         val norm =
-            listOf(0.5f, 1f, 2f, 4f).map { zoom ->
+            listOf(0.5f, 1f, 2f, 4f).map {
                 eraserThresholdNorm(
                     4f,
                     8f,
                     3f,
-                    boxWidthPx = DocZoom.pageWidthPx(containerW, zoom),
-                    layerScale = DocZoom.strokeLayerScale(zoom),
+                    boxWidthPx = containerW,
+                    layerScale = 1f,
                 )
             }
         norm.forEach { assertEquals(norm.first(), it, eps) }
