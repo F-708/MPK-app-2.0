@@ -113,13 +113,16 @@ import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
 
@@ -289,6 +292,9 @@ fun MaterialPdfViewer(
     val focalCentroid = remember(item.id) { mutableStateOf<Offset?>(null) }
     val focalLive = remember(item.id) { mutableStateOf<LiveTransform?>(null) }
 
+    // GG13a: job settle компенсирующего фактора — новый жест отменяет его, чтобы не драться за liveZoom.
+    var settleJob by remember(item.id) { mutableStateOf<Job?>(null) }
+
     // DD1: двойной тап / тап по индикатору — плавный сброс к 100%.
     fun resetZoomSmooth() {
         val from = docZoomState.floatValue
@@ -298,6 +304,25 @@ fun MaterialPdfViewer(
             Animatable(0f).animateTo(1f, tween(ZOOM_RESET_ANIM_MS)) {
                 docZoomState.floatValue = from + (DocZoom.DEFAULT - from) * value
             }
+        }
+    }
+
+    // GG13a: плавная посадка live-слоя к единичному трансформу (COMMIT_SETTLE_MS).
+    // Используется после commit/restore: остаточная компенсация гаснет анимацией, а не скачком.
+    fun settleLive(fromZoom: Float, fromPan: Offset) {
+        settleJob?.cancel()
+        if (fromZoom == 1f && fromPan == Offset.Zero) {
+            liveZoomState.floatValue = 1f
+            livePanState.value = Offset.Zero
+            return
+        }
+        settleJob = scope.launch {
+            Animatable(0f).animateTo(1f, tween(COMMIT_SETTLE_MS)) {
+                liveZoomState.floatValue = fromZoom + (1f - fromZoom) * value
+                livePanState.value = fromPan * (1f - value)
+            }
+            liveZoomState.floatValue = 1f
+            livePanState.value = Offset.Zero
         }
     }
 
@@ -468,24 +493,64 @@ fun MaterialPdfViewer(
                         val live = focalLive.value ?: return@collect
                         focalCentroid.value = null
                         focalLive.value = null
-                        if (ratio == 1f) return@collect
+                        if (ratio == 1f) {
+                            // GG13a: zoom вернулся к прежнему (двойной commit в одном кадре) —
+                            // компенсирующий live-слой сажаем к единичному, чтобы не залип.
+                            settleLive(liveZoomState.floatValue, livePanState.value)
+                            return@collect
+                        }
                         val centerX = boxW / 2f
                         val centerY = boxH / 2f
                         // Точка layout под центроидом с учётом live-трансформа (scroll state не
                         // зависит от layout — снимаем до кадра).
-                        val contentX = focalAnchorX(hScrollState.value.toFloat(), liveAnchor(centerX, centroid.x, live.pan.x, live.zoom))
+                        val oldHScroll = hScrollState.value
+                        val contentX = focalAnchorX(oldHScroll.toFloat(), liveAnchor(centerX, centroid.x, live.pan.x, live.zoom))
                         val anchorIdx = listState.firstVisibleItemIndex
                         val anchorOff = listState.firstVisibleItemScrollOffset.toFloat()
-                        // Даём раскладке применить новый pageW/высоты страниц.
+                        // Даём раскладке применить новый pageW/высоты страниц. Промежуточный кадр
+                        // не вспыхивает двойным зумом: live-слой уже держит компенсацию (GG13a).
                         withFrameNanos { }
                         hScrollState.scrollTo(restoreX(contentX, ratio, centroid.x, hScrollState.maxValue.toFloat()).roundToInt())
+                        val dx = (hScrollState.value - oldHScroll).toFloat()
                         listState.scrollToItem(anchorIdx, restoreY(anchorOff, ratio).roundToInt())
-                        // restoreY фиксирует верх вьюпорта; поправка переносит фокус в центроид.
-                        listState.scrollBy(commitDeltaY(ratio, centerY, centroid.y, live.pan.y, live.zoom))
-                        // FF4: live-слой гасится ПОСЛЕ восстановления скроллов — в одном кадре,
-                        // без промежуточного «голого» кадра со старым скроллом.
-                        liveZoomState.floatValue = 1f
-                        livePanState.value = Offset.Zero
+                        val offMid = listState.firstVisibleItemScrollOffset.toFloat()
+                        val consumed = listState.scrollBy(commitDeltaY(ratio, centerY, centroid.y, live.pan.y, live.zoom))
+                        // ponytail: dy точен, пока scrollBy не перешагнул границу item; на границе
+                        // ошибка ≤ высота строки и гасится settle-анимацией ниже.
+                        val dy = offMid + consumed - anchorOff
+                        // GG13a: restore сдвинул скроллы на (dx, dy) — остаточная компенсация
+                        // поглощает сдвиг и плавно садится к единичному трансформу вместо скачка.
+                        // Без clamp остаток ≈ 0 (comp совпадает с restore), посадка мгновенная.
+                        val cz = liveZoomState.floatValue
+                        settleLive(
+                            cz,
+                            Offset(
+                                residualPan(livePanState.value.x, cz, dx),
+                                residualPan(livePanState.value.y, cz, dy),
+                            ),
+                        )
+                    }
+            }
+
+            // GG13b: фоновый прогрев битмапов ±PREFETCH_RANGE страниц вокруг видимой.
+            // Ближайшие к вьюпорту греются первыми; collectLatest сбрасывает устаревшую
+            // партию при быстром скролле. renderLock общий с рендером видимых страниц,
+            // LruCache потокобезопасен. Без композиции — только битмап в кэш.
+            LaunchedEffect(renderer, renderWidthPx, pageCount) {
+                snapshotFlow { listState.firstVisibleItemIndex }
+                    .collectLatest { first ->
+                        neighborPages(first, pageCount, PREFETCH_RANGE)
+                            .sortedBy { abs(it - first) }
+                            .forEach { p ->
+                                val key = pageCacheKey(p, renderWidthPx)
+                                if (pageCache.get(key) == null) {
+                                    val bmp =
+                                        withContext(Dispatchers.IO) {
+                                            renderLock.withLock { renderPageBitmap(renderer, p, renderWidthPx) }
+                                        }
+                                    if (bmp != null) pageCache.put(key, bmp)
+                                }
+                            }
                     }
             }
 
@@ -493,6 +558,7 @@ fun MaterialPdfViewer(
             // скроллы восстановит коллектор выше. Чистый двухпальцевый драг (zoom не изменился)
             // переводим в скроллы напрямую, чтобы контент не отпружинивал назад.
             fun commitLiveZoom(centroid: Offset) {
+                settleJob?.cancel()
                 val liveZoom = liveZoomState.floatValue
                 val livePan = livePanState.value
                 val oldZoom = docZoomState.floatValue
@@ -505,17 +571,29 @@ fun MaterialPdfViewer(
                         scope.launch {
                             hScrollState.scrollTo((hScrollState.value - livePan.x).roundToInt().coerceIn(0, hScrollState.maxValue))
                             listState.scrollBy(-livePan.y)
-                            liveZoomState.floatValue = 1f
-                            livePanState.value = Offset.Zero
+                            // GG13a: clamp на пределе мог оставить liveZoom ≠ 1 — сажаем плавно.
+                            settleLive(liveZoom, Offset.Zero)
                         }
                     } else {
-                        liveZoomState.floatValue = 1f
-                        livePanState.value = Offset.Zero
+                        // GG13a: pinch упёрся в MIN/MAX — обратный ход живого слоя плавно
+                        // садится к 1 вместо мгновенного отскока.
+                        settleLive(liveZoom, Offset.Zero)
                     }
                     return
                 }
                 focalCentroid.value = centroid
                 focalLive.value = LiveTransform(liveZoom, livePan)
+                // GG13a: компенсирующий live-трансформ в ТОМ ЖЕ snapshot, что и новый docZoom:
+                // visual = layout(new) * comp, comp = oldVisual/newLayout. Промежуточный кадр
+                // (новая раскладка + старые скроллы) визуально совпадает с последним live-кадром —
+                // двойного зума нет; после restore коллектор плавно сажает остаток comp к 1.
+                val cz = compZoom(liveZoom, newZoom / oldZoom)
+                liveZoomState.floatValue = cz
+                livePanState.value =
+                    Offset(
+                        compPan(livePan.x, liveZoom, cz, hScrollState.value.toFloat(), boxW / 2f),
+                        compPan(livePan.y, liveZoom, cz, listState.firstVisibleItemScrollOffset.toFloat(), boxH / 2f),
+                    )
                 docZoomState.floatValue = newZoom
             }
 
@@ -528,6 +606,7 @@ fun MaterialPdfViewer(
                         liveZoomState = liveZoomState,
                         livePanState = livePanState,
                         enabled = !drawMode,
+                        onGestureStart = { settleJob?.cancel() },
                         onCommit = { centroid -> commitLiveZoom(centroid) },
                         onReset = { resetZoomSmooth() },
                     )
@@ -699,6 +778,36 @@ internal fun liveAnchor(center: Float, c: Float, pan: Float, zoom: Float): Float
 internal fun commitDeltaY(ratio: Float, centerY: Float, cy: Float, livePanY: Float, liveZoom: Float): Float =
     ratio * liveAnchor(centerY, cy, livePanY, liveZoom) - cy
 
+// GG13a: компенсация commit — чистые функции (тесты в DocZoomTest). На отпускании жеста layout
+// становится newZoom, а скроллы ещё старые; чтобы промежуточный кадр не вспыхивал двойным зумом,
+// live-слой держит comp: visual = layout(new) * comp ≡ последний live-кадр.
+// Точка контента x_o (экранные px старой раскладки) после relayout без restore лежит в
+// x_n = ratio*x_o + scroll*(ratio-1); тождество cz*ratio = liveZoom даёт compZoom, а сдвиг
+// поглощает compPan (center — центр слоя, transformOrigin graphicsLayer).
+internal fun compZoom(liveZoom: Float, ratio: Float): Float = if (ratio > 0f) liveZoom / ratio else 1f
+
+internal fun compPan(livePan: Float, liveZoom: Float, compZoom: Float, scroll: Float, center: Float): Float =
+    livePan + (compZoom - liveZoom) * (scroll + center)
+
+// Restore сдвигает скролл на delta (контент на экране уходит на -delta) — остаток comp
+// поглощает сдвиг; без clamp и округлений он равен 0, иначе плавно садится к единице.
+internal fun residualPan(compPan: Float, compZoom: Float, scrollDelta: Float): Float = compPan + compZoom * scrollDelta
+
+internal const val COMMIT_SETTLE_MS = 140
+
+// GG13b: фоновый прогрев битмапов соседей — при быстром скролле/отдалении LazyColumn
+// композиции соседних страниц ещё нет, но битмапы уже в LruCache ⇒ вместо пустых
+// плейсхолдеров страница сразу рисуется из кэша.
+internal const val PREFETCH_RANGE = 3
+
+// Страницы для прогрева: ±range вокруг видимой, clamp в [0, total). Чистая функция (тесты).
+internal fun neighborPages(firstVisible: Int, total: Int, range: Int): List<Int> {
+    if (total <= 0 || range < 0) return emptyList()
+    val from = (firstVisible - range).coerceIn(0, total - 1)
+    val to = (firstVisible + range).coerceIn(0, total - 1)
+    return (from..to).toList()
+}
+
 // EE6: bookmark-кнопка масштабируется с zoom, но не сильнее ±20% (иначе на 400% она огромная).
 internal fun bookmarkSizeFactor(zoom: Float): Float = zoom.coerceIn(0.8f, 1.2f)
 
@@ -734,6 +843,9 @@ internal fun Modifier.docLiveZoom(
     liveZoomState: MutableFloatState,
     livePanState: MutableState<Offset>,
     enabled: Boolean = true,
+    // GG13a: первый кадр двухпальцевого жеста — вызывающий отменяет settle-анимацию commit,
+    // чтобы она не дралась за liveZoom с жестом.
+    onGestureStart: () -> Unit = {},
     onCommit: (centroid: Offset) -> Unit,
     onReset: () -> Unit = { docZoomState.floatValue = DocZoom.DEFAULT },
 ): Modifier =
@@ -749,6 +861,7 @@ internal fun Modifier.docLiveZoom(
                     do {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         if (event.changes.count { it.pressed } >= 2) {
+                            if (!active) onGestureStart()
                             active = true
                             val zoomChange = event.calculateZoom()
                             val panChange = event.calculatePan()

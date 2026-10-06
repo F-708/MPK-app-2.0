@@ -6,10 +6,16 @@ import com.politex.ui.screens.materials.LiveTransform
 import com.politex.ui.screens.materials.applyLive
 import com.politex.ui.screens.materials.bookmarkSizeFactor
 import com.politex.ui.screens.materials.commitDeltaY
+import com.politex.ui.screens.materials.compPan
+import com.politex.ui.screens.materials.compZoom
 import com.politex.ui.screens.materials.focalAnchorX
 import com.politex.ui.screens.materials.liveAnchor
+import com.politex.ui.screens.materials.neighborPages
+import com.politex.ui.screens.materials.pageHeightFromWidth
+import com.politex.ui.screens.materials.residualPan
 import com.politex.ui.screens.materials.restoreX
 import com.politex.ui.screens.materials.restoreY
+import com.politex.ui.screens.materials.sheetCount
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -221,5 +227,88 @@ class DocZoomTest {
         val hNew = restoreX(contentX, ratio, cx, maxScroll = 10_000f)
         // после commit точка масштабировалась на ratio и снова под центроидом: hNew + cx = contentX*ratio
         assertEquals(contentX * ratio, hNew + cx, eps)
+    }
+
+    // GG13a: компенсация commit — visual = layout(new) * comp, comp стартует = oldVisual/newLayout
+    // и садится к 1. Без clamp comp тождественно гасится точным restore (остаток = 0).
+    @Test
+    fun `GG13 compZoom - без clamp равен 1, с clamp держит визуальный масштаб жеста`() {
+        assertEquals(1f, compZoom(2f, 2f), eps) // ratio == liveZoom ⇒ comp единичный
+        assertEquals(1.5f, compZoom(2f, 4f / 3f), eps) // clamp: layout не догнал жест
+        assertEquals(1f, compZoom(1.5f, 0f), eps) // guard ratio=0
+    }
+
+    @Test
+    fun `GG13 comp round-trip горизонталь - compPan + точный restore = нулевой остаток`() {
+        // oz=1, lz=2 ⇒ r=2, cz=1; старый скролл s=100, center=540
+        val s = 100f
+        val cx = 540f
+        val cp = compPan(0f, 2f, 1f, s, cx)
+        assertEquals(-(s + cx), cp, eps) // (1-2)*(100+540)
+        // коллектор: s' = restoreX(focalAnchorX(s, liveAnchor(...)), r, centroid, max)
+        val centroidX = 300f
+        val contentX = focalAnchorX(s, liveAnchor(cx, centroidX, 0f, 2f))
+        val sNew = restoreX(contentX, 2f, centroidX, 10_000f)
+        assertEquals(0f, residualPan(cp, 1f, sNew - s), 1e-3f)
+    }
+
+    @Test
+    fun `GG13 comp round-trip вертикаль - restoreY + commitDeltaY гасят compPan в ноль`() {
+        val o = 80f // offset первой видимой страницы
+        val cy = 1000f
+        val centroidY = 400f
+        val cpy = compPan(0f, 2f, 1f, o, cy) // (1-2)*(80+1000) = -1080
+        assertEquals(-(o + cy), cpy, eps)
+        val dy = restoreY(o, 2f) + commitDeltaY(2f, cy, centroidY, 0f, 2f) - o
+        assertEquals(0f, residualPan(cpy, 1f, dy), 1e-3f)
+    }
+
+    @Test
+    fun `GG13 residualPan - сдвиг скролла на delta требует pan + compZoom delta`() {
+        assertEquals(-40f, residualPan(-100f, 2f, 30f), eps) // -100 + 2*30
+        assertEquals(0f, residualPan(-640f, 1f, 640f), eps)
+    }
+
+    // GG13b: prefetch соседей — чистая функция окна страниц.
+    @Test
+    fun `GG13 neighborPages - середина документа даёт окно 2 range + 1`() {
+        assertEquals(listOf(2, 3, 4, 5, 6, 7, 8), neighborPages(5, 100, 3))
+    }
+
+    @Test
+    fun `GG13 neighborPages - clamp на границах и вырожденные случаи`() {
+        assertEquals(listOf(0, 1, 2, 3), neighborPages(0, 100, 3))
+        assertEquals(listOf(6, 7, 8, 9), neighborPages(9, 10, 3))
+        assertEquals(listOf(0, 1), neighborPages(0, 2, 3)) // документ короче окна
+        assertEquals(emptyList<Int>(), neighborPages(0, 0, 3)) // пустой документ
+        assertEquals(listOf(4), neighborPages(4, 9, 0)) // range=0 — только видимая
+        assertEquals(listOf(9), neighborPages(50, 10, 3)) // индекс вне диапазона — clamp, без падения
+    }
+
+    // GG14: листы-подложки DOCX — A4-пропорции и число листов.
+    @Test
+    fun `GG14 pageHeightFromWidth - A4 пропорция 1_414`() {
+        assertEquals(1414f, pageHeightFromWidth(1000f), eps)
+        assertEquals(0f, pageHeightFromWidth(0f), eps)
+    }
+
+    @Test
+    fun `GG14 sheetCount - покрывает высоту текста с зазорами`() {
+        // один лист: 1000 < 1414
+        assertEquals(1, sheetCount(1000f, 1414f, 8f))
+        // ровно высота листа — всё ещё один
+        assertEquals(1, sheetCount(1414f, 1414f, 8f))
+        // 1415: (1415+8)/(1422) = 1.0007 → 2
+        assertEquals(2, sheetCount(1415f, 1414f, 8f))
+        // 2844 = 2*(1414+8) ровно два листа; 2845 → три
+        assertEquals(2, sheetCount(2844f - 8f, 1414f, 8f))
+        assertEquals(3, sheetCount(2845f, 1414f, 8f))
+    }
+
+    @Test
+    fun `GG14 sheetCount - до измерения текста и на вырожденных входах всегда 1`() {
+        assertEquals(1, sheetCount(0f, 1414f, 8f))
+        assertEquals(1, sheetCount(-5f, 1414f, 8f))
+        assertEquals(1, sheetCount(500f, 0f, 8f)) // ширина ещё не измерена ⇒ pageHeight=0
     }
 }

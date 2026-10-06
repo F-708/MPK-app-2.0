@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,8 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -44,6 +45,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -77,9 +79,25 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 private val TEXT_LIKE_EXT = setOf("txt", "md", "markdown", "csv", "log", "json", "xml")
+
+// GG14: листы-подложки DOCX — чистые формулы (тесты в DocZoomTest).
+internal const val A4_RATIO = 1.414f
+internal const val DOC_SHEET_GAP_DP = 8
+internal const val DOC_SHEET_MARGIN_DP = 16
+
+// Высота листа A4 из его ширины.
+internal fun pageHeightFromWidth(widthPx: Float): Float = widthPx * A4_RATIO
+
+// Число листов, покрывающих текст высотой textHeightPx (с зазорами между листами);
+// до измерения текста и на вырожденных входах — 1.
+internal fun sheetCount(textHeightPx: Float, pageHeightPx: Float, gapPx: Float): Int {
+    if (textHeightPx <= 0f || pageHeightPx <= 0f) return 1
+    return ceil((textHeightPx + gapPx) / (pageHeightPx + gapPx)).toInt().coerceAtLeast(1)
+}
 
 @Composable
 fun MaterialDocTextViewer(
@@ -306,6 +324,7 @@ fun MaterialDocTextViewer(
                     modifier = Modifier
                         .fillMaxSize()
                         .clipToBounds()
+                        .background(ColorSurfaceHighlight)
                         .onSizeChanged { containerSize = it }
                         .docLiveZoom(
                             docZoomState = docZoomState,
@@ -315,7 +334,18 @@ fun MaterialDocTextViewer(
                             onReset = { resetZoomSmooth() },
                         ),
                 ) {
-                    LazyColumn(
+                    // GG14: вид готового документа — листы-подложки A4 (белые, тень 2dp, зазор 8dp),
+                    // поверх них течёт ОДНА непрерывная колонка абзацев. Точной пагинации нет:
+                    // число листов = ceil от измеренной высоты текста (дешёво и стабильно).
+                    val density = LocalDensity.current
+                    val scrollState = rememberScrollState()
+                    var textHeightPx by remember(item.id) { mutableIntStateOf(0) }
+                    var sheetWidthPx by remember(item.id) { mutableIntStateOf(0) }
+                    val gapPx = with(density) { DOC_SHEET_GAP_DP.dp.toPx() }
+                    val pageHeightPx = pageHeightFromWidth(sheetWidthPx.toFloat())
+                    val sheets = sheetCount(textHeightPx.toFloat(), pageHeightPx, gapPx)
+                    val pageHeightDp = with(density) { pageHeightPx.toDp() }
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
                             // CC4+FF4: суммарный трансформ doc∘live читается в draw-фазе —
@@ -328,25 +358,48 @@ fun MaterialDocTextViewer(
                                 translationX = docPanState.value.x * live + livePanState.value.x
                                 translationY = docPanState.value.y * live + livePanState.value.y
                             }
+                            .verticalScroll(scrollState)
                             .testTag("doc_paragraph_list"),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        items(content.size) { index ->
-                            val p = content[index]
-                            Text(
-
-                                text = parseInlineMarks(p.text),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(if (p.heading) Modifier.padding(top = 10.dp) else Modifier)
-                                    .testTag("doc_paragraph_$index"),
-                                style = when {
-                                    p.heading -> TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle, lineHeight = 21.sp)
-                                    p.bold -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle, lineHeight = 19.sp)
-                                    else -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, color = ColorTextBody, lineHeight = 19.sp)
-                                },
-                            )
+                        // Листы-подложки: текст течёт поверх них, как страница документа.
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            repeat(sheets) { i ->
+                                Surface(
+                                    shape = RoundedCornerShape(2.dp),
+                                    color = Color.White,
+                                    shadowElevation = 2.dp,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(pageHeightDp)
+                                        .testTag("doc_sheet_$i"),
+                                ) {}
+                                if (i < sheets - 1) Spacer(modifier = Modifier.height(DOC_SHEET_GAP_DP.dp))
+                            }
+                        }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onSizeChanged {
+                                    textHeightPx = it.height
+                                    sheetWidthPx = it.width
+                                }
+                                .padding(horizontal = DOC_SHEET_MARGIN_DP.dp, vertical = DOC_SHEET_MARGIN_DP.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            content.forEachIndexed { index, p ->
+                                Text(
+                                    text = parseInlineMarks(p.text),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .then(if (p.heading) Modifier.padding(top = 10.dp) else Modifier)
+                                        .testTag("doc_paragraph_$index"),
+                                    style = when {
+                                        p.heading -> TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle, lineHeight = 21.sp)
+                                        p.bold -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ColorTextTitle, lineHeight = 19.sp)
+                                        else -> TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, color = ColorTextBody, lineHeight = 19.sp)
+                                    },
+                                )
+                            }
                         }
                     }
                 }
