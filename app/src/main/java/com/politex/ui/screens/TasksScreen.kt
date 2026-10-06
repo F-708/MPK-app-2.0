@@ -96,7 +96,6 @@ import com.politex.ui.components.AppDivider
 import com.politex.ui.components.BrandActionButton
 import com.politex.ui.components.DialogTitleBar
 import com.politex.ui.components.ToggleChip
-import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBadgeCourse
 import com.politex.ui.theme.ColorBadgeDiploma
 import com.politex.ui.theme.ColorBadgeExam
@@ -702,8 +701,8 @@ private fun TaskFilterChip(
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, if (isSelected) ColorActiveBlue else ColorBorderLight),
-        color = if (isSelected) ColorActiveBlue else ColorBgMain,
+        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
+        color = if (isSelected) ColorTopBar else ColorBgMain,
         modifier =
         Modifier
             // Вёрстка: та же высота, что у кнопки «+ ДОБАВИТЬ» (44dp).

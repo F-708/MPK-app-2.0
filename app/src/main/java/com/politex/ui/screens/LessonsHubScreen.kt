@@ -108,17 +108,6 @@ fun LessonsHubScreen(
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Box(
-                            modifier =
-                            Modifier
-                                .width(28.dp)
-                                .height(3.dp)
-                                .background(
-                                    if (isSelected) ColorTopBar else Color.Transparent,
-                                    RoundedCornerShape(2.dp),
-                                ),
-                        )
                     }
                 }
             }
