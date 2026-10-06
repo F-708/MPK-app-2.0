@@ -3,6 +3,7 @@ import {Video} from './Video';
 import {Video15} from './v2/Video15';
 import {Video30} from './v3/Video30';
 import {Video15v3} from './v3/Video15v3';
+import {VideoFinal} from './final/VideoFinal';
 
 // Манифест наличия кадров (public/shots.json) пишет scripts/sync-shots.mjs.
 // fetch(staticFile()) — официальный способ Remotion, работает и в Studio, и в рендере.
@@ -44,6 +45,8 @@ export const RemotionRoot: React.FC = () => {
 			{/* v3 FINAL: 30s master + 15s cut-down по VIDEO_V3_FINAL.md */}
 			<Composition id="Promo30" component={Video30} width={1080} height={1920} fps={30} durationInFrames={900} />
 			<Composition id="Promo15v3" component={Video15v3} width={1080} height={1920} fps={30} durationInFrames={450} />
+			{/* FINAL: 30s master 9:16 по финальному брифу (гибрид PhoneMockup + камера) */}
+			<Composition id="PromoFinal9x16" component={VideoFinal} width={1080} height={1920} fps={30} durationInFrames={900} />
 		</>
 	);
 };
