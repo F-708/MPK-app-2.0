@@ -180,6 +180,7 @@ private fun Modifier.tabSwipeGesture(
             if (down.position.x < edgePx) return@awaitEachGesture
             var dx = 0f
             var dy = 0f
+            var lastDx = 0f
             var claimed = false
             var aborted = false
             while (true) {
@@ -190,14 +191,17 @@ private fun Modifier.tabSwipeGesture(
                 }
                 if (event.changes.none { it.pressed }) break
                 val change = event.changes.first()
+                lastDx = change.position.x - (change.previousPosition.x)
                 dx = change.position.x - down.position.x
                 dy = change.position.y - down.position.y
-                if (!claimed && abs(dx) > slop * 4f && abs(dx) > abs(dy) * 1.5f) {
+                // GG12: порог как в Telegram — раньше claim + флинг по скорости
+                if (!claimed && abs(dx) > slop * 2f && abs(dx) > abs(dy) * 1.2f) {
                     claimed = true
                 }
                 if (claimed) change.consume()
             }
-            if (claimed && !aborted) {
+            val flick = abs(lastDx) > 18f // быстрый короткий свайп-флик тоже переключает
+            if ((claimed || flick) && !aborted && abs(dx) > slop) {
                 if (dx < 0) onSwipeLeft() else onSwipeRight()
             }
         }

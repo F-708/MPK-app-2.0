@@ -329,7 +329,7 @@ fun BellsScreen(
                             .width(28.dp)
                             .height(3.dp)
                             .background(
-                                if (isToday && indicatorVisible(todayDow)) ColorActiveBlue else Color.Transparent,
+                                if (isToday && indicatorVisible(todayDow)) ColorTopBar else Color.Transparent, // GG16: selected-акцент единый (ColorTopBar)
                                 RoundedCornerShape(2.dp),
                             ),
                     )
