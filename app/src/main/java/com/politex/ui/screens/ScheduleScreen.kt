@@ -347,6 +347,19 @@ fun ScheduleScreen(
             }.first { it }
     }
 
+    // Вёрстка: скролл к целевой карточке ТОЛЬКО если она не видна целиком уже сейчас.
+    // Иначе scrollToItem клампится к maxScroll (контент чуть выше вьюпорта) и верхняя
+    // карточка остаётся «съеденной» шапкой; при полном visibility скролл = 0.
+    suspend fun scrollToLessonFullyVisible(idx: Int) {
+        val info = listState.layoutInfo
+        val visible = info.visibleItemsInfo.firstOrNull { it.index == idx }
+        val fullyVisible =
+            visible != null &&
+                visible.offset >= info.viewportStartOffset &&
+                visible.offset + visible.size <= info.viewportEndOffset
+        if (!fullyVisible) listState.scrollToItem(idx)
+    }
+
     LaunchedEffect(isInitialLoad, currentLessonNumber, isViewingToday) {
         if (isInitialLoad || didColdStartScroll) return@LaunchedEffect
         if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
@@ -354,10 +367,9 @@ fun ScheduleScreen(
             return@LaunchedEffect
         }
         val idx = autoScrollLessonIndex(lessonNumbers, currentLessonNumber, isViewingToday)
-        if (idx != null && idx > 0) {
+        if (idx != null) {
             awaitFirstLayout()
-
-            listState.animateScrollToItem(idx, -listState.layoutInfo.viewportEndOffset / 3)
+            scrollToLessonFullyVisible(idx)
         }
         didColdStartScroll = true
     }
@@ -407,8 +419,9 @@ fun ScheduleScreen(
             return@LaunchedEffect
         }
         val idx = autoScrollLessonIndex(lessonNumbers, currentLessonNumber, true)
-        if (idx != null && idx > 0) {
-            listState.animateScrollToItem(idx, -listState.layoutInfo.viewportEndOffset / 3)
+        if (idx != null) {
+            // Вёрстка: индекс 0 / уже видимая целиком карточка → скролл 0.
+            scrollToLessonFullyVisible(idx)
         }
 
         highlightLesson = currentLessonNumber
@@ -1361,7 +1374,9 @@ private fun HomeworkBadge(
                 }
             }
 
-            if (distinctTypes.isNotEmpty()) {
+            // Вёрстка: при ОДНОМ типе цвет бейджа уже кодирует тип — осиротевшая
+            // точка не рисуется; ряд точек только при 2+ типах.
+            if (distinctTypes.size > 1) {
                 Spacer(modifier = Modifier.height(3.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     distinctTypes.forEach { type ->

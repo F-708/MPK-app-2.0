@@ -403,6 +403,9 @@ fun SettingsScreen(
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
                                     checkedTrackColor = ColorBrandBlue,
+                                    // Вёрстка: OFF-состояние различимо (светлый трек + серый палец).
+                                    uncheckedTrackColor = ColorBorderLight,
+                                    uncheckedThumbColor = ColorTextMuted,
                                 ),
                                 modifier = Modifier.testTag("notifications_switch"),
                             )
@@ -460,6 +463,9 @@ fun SettingsScreen(
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
                                     checkedTrackColor = ColorBrandBlue,
+                                    // Вёрстка: OFF-состояние различимо (светлый трек + серый палец).
+                                    uncheckedTrackColor = ColorBorderLight,
+                                    uncheckedThumbColor = ColorTextMuted,
                                 ),
                             )
                         }
@@ -578,6 +584,9 @@ fun SettingsScreen(
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
                                     checkedTrackColor = ColorBrandBlue,
+                                    // Вёрстка: OFF-состояние различимо (светлый трек + серый палец).
+                                    uncheckedTrackColor = ColorBorderLight,
+                                    uncheckedThumbColor = ColorTextMuted,
                                 ),
                             )
                         }
@@ -985,6 +994,8 @@ private fun BellCountdownNotificationCard() {
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
                         checkedTrackColor = ColorBrandBlue,
+                        uncheckedTrackColor = ColorBorderLight,
+                        uncheckedThumbColor = ColorTextMuted,
                     ),
                     modifier = Modifier.testTag("bell_notification_switch"),
                 )
@@ -1337,6 +1348,8 @@ private fun SettingsSwitchRow(
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
                 checkedTrackColor = ColorBrandBlue,
+                uncheckedTrackColor = ColorBorderLight,
+                uncheckedThumbColor = ColorTextMuted,
             ),
         )
     }

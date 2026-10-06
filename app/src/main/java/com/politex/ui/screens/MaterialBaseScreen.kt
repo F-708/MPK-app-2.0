@@ -672,7 +672,7 @@ private fun MaterialRootList(
                                 style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ColorTextTitle),
                             )
                             Text(
-                                text = "$archiveCount отложенных",
+                                text = "$archiveCount ${deferredWord(archiveCount)}",
                                 maxLines = 1,
                                 style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                             )
@@ -756,7 +756,12 @@ private fun MaterialSubjectContent(
                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
                 )
                 Text(
-                    text = if (isArchive) "${items.size} отложенных" else "${items.size} материалов",
+                    text =
+                    if (isArchive) {
+                        "${items.size} ${deferredWord(items.size)}"
+                    } else {
+                        "${items.size} ${pluralWord(items.size, "материал", "материала", "материалов")}"
+                    },
                     maxLines = 1,
                     style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                 )
@@ -1104,4 +1109,20 @@ private fun RowIconButton(
         }
     }
 }
+
+// Вёрстка: склонение «1 отложенный / 2 отложенных / 5 отложенных» —
+// тот же паттерн, что lessonsWord (util/NotificationHelper.kt).
+private fun pluralWord(
+    n: Int,
+    one: String,
+    few: String,
+    many: String,
+): String =
+    when {
+        n % 10 == 1 && n % 100 != 11 -> one
+        n % 10 in 2..4 && n % 100 !in 12..14 -> few
+        else -> many
+    }
+
+private fun deferredWord(n: Int): String = pluralWord(n, "отложенный", "отложенных", "отложенных")
 

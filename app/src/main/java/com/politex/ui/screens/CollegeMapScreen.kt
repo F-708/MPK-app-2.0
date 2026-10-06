@@ -351,6 +351,10 @@ fun CollegeMapScreen(
         remember(routePoints) { routePoints?.mapIndexed { i, _ -> laneOffsetDp(i) } ?: emptyList() }
     val routeFinishHere =
         remember(activeRoute, floorId) { activeRoute?.floorPaths?.lastOrNull()?.floorId == floorId }
+    // Вёрстка: маркер старта — на ПЕРВОМ этапе маршрута (авто и ручной одинаково),
+    // финиш — на последнем; см. drawRoutePath(drawStart/drawFinish).
+    val routeStartHere =
+        remember(activeRoute, floorId) { activeRoute?.floorPaths?.firstOrNull()?.floorId == floorId }
 
     // BB8: шильдик «через N этаж» убран; BB9: соседние одинаковые этажи схлопнуты.
     // EE4: шаги = стадии после склейки; полоса видна всегда при активном маршруте (и с 1 шагом).
@@ -489,6 +493,7 @@ fun CollegeMapScreen(
             routePoints = routePoints,
             routeOffsetsDp = routeOffsetsDp,
             routeFinishHere = routeFinishHere,
+            routeStartHere = routeStartHere,
             routeStages = routeStages,
             selectedStage = selectedStage,
             onSelectStage = { i ->
@@ -918,6 +923,7 @@ private fun MapCanvas(
 
     routePoints: List<List<MapPoint>>? = null,
     routeFinishHere: Boolean = false,
+    routeStartHere: Boolean = false,
     routeStages: List<String> = emptyList(),
     selectedStage: Int = -1,
     onSelectStage: (Int) -> Unit = {},
@@ -1147,6 +1153,7 @@ private fun MapCanvas(
                             pxPerDp = with(density) { 1.dp.toPx() },
                             pulse = pulse,
                             drawFinish = routeFinishHere,
+                            drawStart = routeStartHere,
                             tickPhase = tickPhase,
                             offsetsDp = routeOffsetsDp,
                             stairsPulse = stairsPulse,
@@ -1400,6 +1407,7 @@ private fun DrawScope.drawRoutePath(
     pxPerDp: Float,
     pulse: Float,
     drawFinish: Boolean,
+    drawStart: Boolean = false,
     tickPhase: Float = 0f,
     offsetsDp: List<Float> = emptyList(),
     stairsPulse: Float = 0f,
@@ -1408,6 +1416,7 @@ private fun DrawScope.drawRoutePath(
     val unit = 1f / zoom
     val color = ColorBrandBlue
     var finish: MapPoint? = null
+    var start: MapPoint? = null
 
     // Экранные константы, компенсированные на unit: после graphicsLayer(scale=zoom)
     // дают одинаковый физический размер/шаг/скорость при любом зуме.
@@ -1442,6 +1451,7 @@ private fun DrawScope.drawRoutePath(
         val off = (offsetsDp.getOrNull(pi) ?: 0f) * pxPerDp * unit
         val points = if (off != 0f) offsetPolyline(raw, imgW, imgH, off) else raw
         finish = points.last()
+        if (drawStart && start == null) start = points.first()
         val screen = ArrayList<Offset>(points.size)
         points.forEach { screen += Offset(it.x * imgW, it.y * imgH) }
 
@@ -1500,6 +1510,16 @@ private fun DrawScope.drawRoutePath(
                     idx++
                 }
             }
+        }
+    }
+
+    // Маркер старта — точка на первом конце АКТИВНОЙ полилинии; размер экранный
+    // (pxPerDp*unit компенсирует graphicsLayer(scale=zoom)), как у финиша.
+    if (drawStart) {
+        start?.let { s ->
+            val c = Offset(s.x * imgW, s.y * imgH)
+            drawCircle(color = color, radius = 5f * pxPerDp * unit, center = c)
+            drawCircle(color = Color.White, radius = 2f * pxPerDp * unit, center = c)
         }
     }
 

@@ -223,8 +223,13 @@ private fun GradeSubjectList(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     if (avg == null) {
-
-                        EmptyDots(modifier = Modifier.width(22.dp).testTag("grades_avg_$subject"))
+                        // Вёрстка: трейлинг «•••» читался как overflow-меню —
+                        // явный текст вместо точек (width wrap).
+                        Text(
+                            text = "нет оценок",
+                            style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                            modifier = Modifier.testTag("grades_avg_$subject"),
+                        )
                     } else {
                         Text(
                             text = GradeAggregator.format(avg),
@@ -583,7 +588,8 @@ private fun RowScope.CategorySegment(
         modifier =
         Modifier
             .weight(1f)
-            .height(Tokens.ChipForm)
+            // Вёрстка: 40dp (ChipScreen) — две строки 10sp влезают без рубки.
+            .height(Tokens.ChipScreen)
             .testTag("grades_chip_${category.name}")
             .bouncyClickable(onClick = onClick),
     ) {
@@ -591,10 +597,11 @@ private fun RowScope.CategorySegment(
             val short = CATEGORY_SHORT[category.name] ?: category.title
             Text(
                 text = if (count > 0) "$short · $count" else short,
-                maxLines = 1,
+                // Вёрстка: 2 строки 10sp в чипе 40dp — короткие имена не рубятся.
+                maxLines = 2,
                 style =
                 TextStyle(
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (selected) Color.White else ColorTextBody,
                 ),
@@ -1012,10 +1019,11 @@ private fun weightsPreviewLine(ws: List<Int>): String {
 
 private val CATEGORY_SHORT =
     mapOf(
-        GradeCategory.REGULAR.name to "Обычн",
-        GradeCategory.PRACTICAL.name to "Практи",
-        GradeCategory.CONTROL.name to "Контр",
-        GradeCategory.EXAM.name to "Экз",
+        // Вёрстка: полные короткие имена (чипы 40dp/2 строки) вместо рубленых.
+        GradeCategory.REGULAR.name to "Обычные",
+        GradeCategory.PRACTICAL.name to "Практич.",
+        GradeCategory.CONTROL.name to "Контр.",
+        GradeCategory.EXAM.name to "Экзамен",
     )
 
 private fun isoOf(cal: Calendar): String =

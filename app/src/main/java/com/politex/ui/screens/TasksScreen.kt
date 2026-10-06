@@ -706,7 +706,8 @@ private fun TaskFilterChip(
         color = if (isSelected) ColorActiveBlue else ColorBgMain,
         modifier =
         Modifier
-            .height(Tokens.ChipScreen)
+            // Вёрстка: та же высота, что у кнопки «+ ДОБАВИТЬ» (44dp).
+            .height(Tokens.ButtonHeight)
             .onGloballyPositioned { offsets[index] = it.positionInParent().x.toInt() to it.size.width }
             .bouncyClickable(onClick = onClick)
             .testTag(tag),
