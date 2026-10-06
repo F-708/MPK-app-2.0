@@ -29,7 +29,6 @@ object BellCountdownNotifier {
     private const val PREF_STYLE = "bell_notification_style"
     private const val PREF_THEME = "bell_notification_theme"
     private const val PREF_SCOPE = "bell_notification_scope"
-    private const val PREF_PINNED = "bell_notification_pinned"
 
     enum class Scope(
         val id: String,
@@ -144,19 +143,7 @@ object BellCountdownNotifier {
         if (isEnabled(context)) show(context)
     }
 
-    fun isPinned(context: Context): Boolean = WidgetUpdateHelper.getPrefs(context).getBoolean(PREF_PINNED, true)
 
-    fun setPinned(
-        context: Context,
-        pinned: Boolean,
-    ) {
-        WidgetUpdateHelper
-            .getPrefs(context)
-            .edit()
-            .putBoolean(PREF_PINNED, pinned)
-            .apply()
-        if (isEnabled(context)) show(context)
-    }
 
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -310,7 +297,6 @@ object BellCountdownNotifier {
                 .Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_mpk_emblem)
                 .setContentIntent(openIntent)
-                .setOngoing(isPinned(context))
                 .setOnlyAlertOnce(true)
                 .setSilent(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -380,7 +366,6 @@ object BellCountdownNotifier {
             .setContentTitle("Уроков нет")
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setCustomContentView(views)
-            .setOngoing(isPinned(context))
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)

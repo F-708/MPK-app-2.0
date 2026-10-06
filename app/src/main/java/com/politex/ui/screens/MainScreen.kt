@@ -3,6 +3,7 @@ package com.politex.ui.screens
 import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -39,11 +40,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -167,13 +170,16 @@ fun tabSlideDir(from: Int, to: Int): Int = when {
 }
 
 private fun Modifier.tabSwipeGesture(
+    onDrag: (Float) -> Unit,
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit,
+    onRelease: (dx: Float) -> Unit,
 ): Modifier = composed {
     val density = LocalDensity.current
     val slop = LocalViewConfiguration.current.touchSlop
     val edgePx = with(density) { 24.dp.toPx() }
     pointerInput(Unit) {
+        val width = size.width.toFloat()
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             // Зона системного back-жеста — не перехватываем.
@@ -182,27 +188,32 @@ private fun Modifier.tabSwipeGesture(
             var dy = 0f
             var lastDx = 0f
             var claimed = false
-            var aborted = false
+            // HH7: Initial-pass — родитель видит события РАНЬШЕ детей. Старый Main-pass
+            // abort-ился на первом же isConsumed (любая кликабельная карточка потребляла
+            // down), поэтому жест не срабатывал почти нигде. Claim — только строгая
+            // горизонталь; после claim consume не пускает детей к событиям вообще.
             while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Main)
-                if (event.changes.any { it.isConsumed }) {
-                    aborted = true
-                    break
-                }
+                val event = awaitPointerEvent(PointerEventPass.Initial)
                 if (event.changes.none { it.pressed }) break
                 val change = event.changes.first()
-                lastDx = change.position.x - (change.previousPosition.x)
+                lastDx = change.position.x - change.previousPosition.x
                 dx = change.position.x - down.position.x
                 dy = change.position.y - down.position.y
-                // GG12: порог как в Telegram — раньше claim + флинг по скорости
                 if (!claimed && abs(dx) > slop * 2f && abs(dx) > abs(dy) * 1.2f) {
                     claimed = true
                 }
-                if (claimed) change.consume()
+                if (claimed) {
+                    event.changes.forEach { it.consume() }
+                    onDrag(dx)
+                }
             }
-            val flick = abs(lastDx) > 18f // быстрый короткий свайп-флик тоже переключает
-            if ((claimed || flick) && !aborted && abs(dx) > slop) {
-                if (dx < 0) onSwipeLeft() else onSwipeRight()
+            if (!claimed) return@awaitEachGesture
+            val flick = abs(lastDx) > 18f
+            val commit = abs(dx) > width * 0.22f || (flick && abs(dx) > slop)
+            when {
+                commit && dx < 0 -> { onDrag(0f); onSwipeLeft() }
+                commit && dx > 0 -> { onDrag(0f); onSwipeRight() }
+                else -> onRelease(dx)
             }
         }
     }
@@ -336,10 +347,20 @@ fun MainScreen(
             val curIdx = ownerTabIndex(backStackEntry?.destination?.route)
             // R2#4: деталь оценок (GradeDetailMode) гасит свайп — иначе жест уносит из раскрытой оценки
             val gestureActive = swipeEnabled && curIdx >= 0 && !ViewerMode.active && !RouteBuilderMode.active && !GradeDetailMode.active
+            val dragOffset = remember { mutableFloatStateOf(0f) }
+            var settleTick by remember { mutableIntStateOf(0) }
+            LaunchedEffect(settleTick) {
+                if (settleTick == 0) return@LaunchedEffect
+                Animatable(dragOffset.floatValue).animateTo(0f, tween(180)) {
+                    dragOffset.floatValue = value
+                }
+            }
             Box(
                 modifier =
                 if (gestureActive) {
                     Modifier.tabSwipeGesture(
+                        onDrag = { dragOffset.floatValue = it },
+                        onRelease = { settleTick++ },
                         onSwipeLeft = {
                             val i = ownerTabIndex(backStackEntry?.destination?.route)
                             if (i in 0 until AppTab.entries.size - 1) {
@@ -361,7 +382,8 @@ fun MainScreen(
                     modifier =
                     Modifier
                         .fillMaxSize()
-                        .padding(innerPadding),
+                        .padding(innerPadding)
+                        .graphicsLayer { translationX = dragOffset.floatValue },
                     enterTransition = {
                         val d = tabSlideDir(ownerTabIndex(initialState.destination.route), ownerTabIndex(targetState.destination.route))
                         if (d == 0) fadeIn(tween(150)) else slideInHorizontally(tween(280)) { if (d > 0) it else -it }

@@ -901,9 +901,6 @@ private fun BellCountdownNotificationCard() {
     var selectedTheme by remember {
         mutableStateOf(com.politex.util.BellCountdownNotifier.getTheme(context))
     }
-    var isPinned by remember {
-        mutableStateOf(com.politex.util.BellCountdownNotifier.isPinned(context))
-    }
 
     var canExactAlarms by remember { mutableStateOf(canScheduleExactAlarms(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -1061,18 +1058,6 @@ private fun BellCountdownNotificationCard() {
                 }
             }
 
-            SettingsSwitchRow(
-                title = "Закрепить в шторке",
-                subtitle = "Строку «До звонка» нельзя смахнуть",
-                checked = isPinned,
-                onCheckedChange = { on ->
-                    isPinned = on
-                    com.politex.util.BellCountdownNotifier.setPinned(context, on)
-                },
-                modifier = Modifier
-                    .padding(top = 12.dp)
-                    .testTag("bell_pinned_switch"),
-            )
 
             if (isOngoingEnabled) {
                 Spacer(modifier = Modifier.height(12.dp))
