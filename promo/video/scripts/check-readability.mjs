@@ -25,13 +25,15 @@ for (const r of rows) {
 	);
 }
 
-// Final PromoFinal9x16: гейт по src/final/copy.json (та же формула, строка-описание вместо титула).
+// Final PromoFinal9x16: гейт по src/final/copy.json — формула плана: строка ≥ (len/15 + 1.0)s на экране.
 const fin = JSON.parse(readFileSync(new URL('../src/final/copy.json', import.meta.url)));
 const finTitleIn = fin.titleIn;
+let finCount = 0;
 for (const s of fin.scenes) {
 	if (!s.line) continue;
+	finCount++;
 	const on = s.dur - finTitleIn;
-	const need = req(s.dur);
+	const need = (s.line.length / 15 + 1.0) * 30;
 	const ok = on >= need;
 	if (!ok) fail++;
 	console.log(
@@ -42,4 +44,4 @@ if (fail) {
 	console.error(`[readability] FAIL: ${fail} сцен(ы)`);
 	process.exit(1);
 }
-console.log(`[readability] PASS: ${rows.length} сцен(ы)`);
+console.log(`[readability] PASS: ${rows.length + finCount} сцен(ы)`);
