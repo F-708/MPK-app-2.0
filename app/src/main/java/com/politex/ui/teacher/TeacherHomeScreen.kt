@@ -1,5 +1,6 @@
 package com.politex.ui.teacher
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
@@ -31,10 +32,14 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +60,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.politex.data.local.entity.TeacherOverrideEntity
+import com.politex.data.model.CollegeMap
+import com.politex.data.model.CollegeMapData
 import com.politex.data.network.MpkNetworkClient
 import com.politex.data.repository.LessonStatus
 import com.politex.data.repository.TeacherDayLesson
@@ -65,15 +73,19 @@ import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
+import com.politex.ui.theme.ColorError
 import com.politex.ui.theme.ColorSuccess
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.ColorWarning
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.DateFormats
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 
 // Экран «Мой день» преподавателя (SPEC §4.1 фича 3, §6.3).
@@ -88,6 +100,8 @@ fun TeacherHomeScreen(
     val metrics = LocalTeacherMetrics.current
     val state by viewModel.state.collectAsState()
     LaunchedEffect(profile) { viewModel.setProfile(profile) }
+    // SPEC §4.1 фича 10: пара, для которой открыт bottom sheet «Править».
+    var editing by remember { mutableStateOf<TeacherDayLesson?>(null) }
 
     if (profile == null) {
         Column(
@@ -200,6 +214,31 @@ fun TeacherHomeScreen(
             if (idx >= 0) listState.animateScrollToItem(idx)
         }
 
+        // SPEC §5.4: молчаливый сброс правки запрещён — одноразовая плашка до закрытия.
+        if (state.overrideResets.isNotEmpty()) {
+            AppCard(
+                color = ColorSurfaceHighlight,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).testTag("teacher_reset_plate"),
+            ) {
+                Row(modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.Top) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        state.overrideResets.forEach { reset ->
+                            Text(
+                                TeacherDayLogic.resetMessage(reset),
+                                style = TextStyle(fontSize = metrics.chipText, color = ColorTextBody),
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier.size(metrics.hitTarget).bouncyClickable(onClick = viewModel::dismissOverrideResets).testTag("teacher_reset_close"),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Закрыть", tint = ColorTextMuted, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+        }
+
         if (!notifPromptShown && !notifGranted && !state.loading) {
             AppCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                 Column(modifier = Modifier.padding(12.dp)) {
@@ -293,11 +332,27 @@ fun TeacherHomeScreen(
                             status = statuses.getOrElse(i) { LessonStatus.UPCOMING },
                             metrics = metrics,
                             onRoomClick = onRoomClick,
+                            onEdit = { editing = lesson },
                             staleData = staleData,
                         )
                     }
                 }
         }
+    }
+
+    editing?.let { lesson ->
+        TeacherOverrideSheet(
+            lesson = lesson,
+            onSave = { kind, room ->
+                viewModel.saveOverride(lesson.lessonNumber, kind, room)
+                editing = null
+            },
+            onCancelOverride = {
+                viewModel.cancelOverride(lesson.lessonNumber)
+                editing = null
+            },
+            onDismiss = { editing = null },
+        )
     }
 }
 
@@ -345,10 +400,14 @@ private fun TeacherLessonCard(
     status: LessonStatus,
     metrics: TeacherMetrics,
     onRoomClick: (String) -> Unit,
+    onEdit: () -> Unit = {},
     staleData: Boolean = false,
 ) {
     AppCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
+            if (lesson.isReplacement) {
+                StatusLabel("ЗАМЕНА", ColorWarning)
+            }
             when (status) {
                 LessonStatus.NOW -> StatusLabel("ИДЁТ", ColorSuccess)
                 LessonStatus.NEXT -> StatusLabel("СЛЕДУЮЩАЯ", ColorActiveBlue)
@@ -404,6 +463,30 @@ private fun TeacherLessonCard(
                     }
                 }
             }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End,
+            ) {
+                if (lesson.overridden) {
+                    Text(
+                        "✎ ваша правка",
+                        style = TextStyle(fontSize = metrics.chipText, color = ColorTextMuted, fontWeight = FontWeight.Medium),
+                        modifier = Modifier.padding(end = 8.dp).testTag("teacher_override_mark"),
+                    )
+                }
+                // SPEC §6.3/§5.4: вход в правку одним тапом, hit ≥48dp
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    color = ColorSurfaceHighlight,
+                    modifier = Modifier.heightIn(min = metrics.hitTarget).bouncyClickable(onClick = onEdit).testTag("teacher_edit_${lesson.lessonNumber}"),
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 18.dp)) {
+                        Text("Править", style = TextStyle(fontSize = metrics.buttonText, fontWeight = FontWeight.SemiBold, color = ColorBrandBlue))
+                    }
+                }
+            }
         }
     }
 }
@@ -424,4 +507,146 @@ private fun minutesNow(): Int {
 private fun slotSubtitle(offset: Int): String {
     val cal = teacherTargetCalendar(offset, null)
     return DateFormats.dotDate(cal).dropLast(5) + ", " + TeacherDayLogic.shortDow(com.politex.util.Dow.of(cal))
+}
+
+// ——— SPEC §4.1 фича 10 / §5.4: bottom sheet «Править» ———
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun TeacherOverrideSheet(
+    lesson: TeacherDayLesson,
+    onSave: (kind: String, room: String) -> Unit,
+    onCancelOverride: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val metrics = LocalTeacherMetrics.current
+    val context = LocalContext.current
+    // overridden && !isReplacement == OTHER_ROOM: сразу раскрываем ввод с текущим кабинетом
+    var otherRoom by remember { mutableStateOf(lesson.overridden && !lesson.isReplacement) }
+    var room by remember(lesson.room) { mutableStateOf(lesson.room) }
+    var suggestions by remember { mutableStateOf(emptyList<String>()) }
+    LaunchedEffect(lesson.room) {
+        suggestions = withContext(Dispatchers.IO) { floorRoomSuggestions(context, lesson.room) }
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = ColorBgMain,
+        shape = RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        ) {
+            Text(
+                "${lesson.lessonNumber}-я пара · ${lesson.subject.ifBlank { "Пара" }}",
+                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ColorTextTitle),
+            )
+            if (lesson.start.isNotBlank()) {
+                Text(
+                    "${lesson.start}–${lesson.end}" + if (lesson.room.isNotBlank()) " · каб. ${lesson.room}" else "",
+                    style = TextStyle(fontSize = metrics.chipText, color = ColorTextMuted),
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            OverrideSheetItem("Другой кабинет", selected = otherRoom, metrics = metrics, tag = "override_other_room") { otherRoom = true }
+            if (otherRoom) {
+                OutlinedTextField(
+                    value = room,
+                    onValueChange = { room = it },
+                    label = { Text("Кабинет", fontSize = 12.sp) },
+                    placeholder = { Text("Например: 241", fontSize = 12.sp) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(2.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("override_room_field"),
+                )
+                if (suggestions.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        suggestions.forEach { s ->
+                            val picked = s == room.trim()
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                border = BorderStroke(1.dp, if (picked) ColorTopBar else ColorBorderLight),
+                                color = if (picked) ColorTopBar else ColorSurfaceHighlight,
+                                modifier = Modifier.heightIn(min = 40.dp).bouncyClickable(scaleDown = 0.97f) { room = s }.testTag("override_room_chip_$s"),
+                            ) {
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 10.dp)) {
+                                    Text(s, style = TextStyle(fontSize = metrics.chipText, color = if (picked) Color.White else ColorBrandBlue))
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorTopBar,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = metrics.hitTarget)
+                            .bouncyClickable(enabled = room.isNotBlank(), onClick = { onSave(TeacherOverrideEntity.KIND_OTHER_ROOM, room) })
+                            .testTag("override_save_room"),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("Сохранить", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = metrics.buttonText)
+                    }
+                }
+            }
+            OverrideSheetItem("Пары нет", selected = false, metrics = metrics, tag = "override_no_lesson") {
+                onSave(TeacherOverrideEntity.KIND_NO_LESSON, "")
+            }
+            OverrideSheetItem("Замена — веду не я", selected = lesson.isReplacement, metrics = metrics, tag = "override_someone_else") {
+                onSave(TeacherOverrideEntity.KIND_SOMEONE_ELSE, "")
+            }
+            if (lesson.overridden) {
+                OverrideSheetItem("Отменить правку", selected = false, metrics = metrics, tag = "override_cancel", danger = true, onClick = onCancelOverride)
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverrideSheetItem(
+    text: String,
+    selected: Boolean,
+    metrics: TeacherMetrics,
+    tag: String,
+    danger: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val textColor =
+        when {
+            danger -> ColorError
+            selected -> ColorBrandBlue
+            else -> ColorTextBody
+        }
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = if (selected) ColorSurfaceHighlight else Color.Transparent,
+        modifier = Modifier.fillMaxWidth().heightIn(min = metrics.hitTarget).bouncyClickable(onClick = onClick).testTag(tag),
+    ) {
+        Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.padding(horizontal = 10.dp)) {
+            Text(text, style = TextStyle(fontSize = metrics.body, color = textColor, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal))
+        }
+    }
+}
+
+/** Комнаты того же этажа/корпуса из college_map.json — быстрые чипы ввода кабинета. */
+private fun floorRoomSuggestions(
+    context: Context,
+    room: String,
+): List<String> {
+    val floor = CollegeMap.floorForRoom(room) ?: return emptyList()
+    val prefix = room.trim().takeWhile { it.isDigit() }.take(1)
+    return runCatching {
+        CollegeMapData
+            .load(context)
+            .floor(floor.id)
+            .rooms
+            .mapNotNull { it.number.trim().takeIf(String::isNotBlank) }
+    }.getOrDefault(emptyList())
+        .filter { prefix.isEmpty() || it.startsWith(prefix) }
+        .distinct()
+        .sorted()
+        .take(16)
 }

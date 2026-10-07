@@ -1,7 +1,9 @@
 package com.politex.data.repository
 
 import android.content.Context
+import com.politex.data.local.MpkDatabase
 import com.politex.data.local.entity.TeacherLessonEntity
+import com.politex.data.local.entity.TeacherOverrideEntity
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.network.MpkScheduleParser
 import com.politex.data.network.TeacherSlot
@@ -77,6 +79,10 @@ data class TeacherDayLesson(
     val end: String,
     val startMinutes: Int,
     val endMinutes: Int,
+    /** Личная правка преподавателя (SPEC §5.4) — на карточке маркер ✎ «ваша правка». */
+    val overridden: Boolean = false,
+    /** SOMEONE_ELSE: пару веду не я. Статусы ИДЁТ/СЛЕДУЮЩАЯ и напоминания её игнорируют. */
+    val isReplacement: Boolean = false,
 )
 
 data class TeacherDay(
@@ -85,6 +91,20 @@ data class TeacherDay(
     val error: String,
     val isSynced: Boolean,
     val lastSyncEpoch: Long,
+    /** SPEC §5.4: правки, сброшенные полевым diff'ом при этом синке (для плашки/уведомления). */
+    val resets: List<OverrideReset> = emptyList(),
+)
+
+/** Причина сброса правки — конкретное поле конкретной пары (SPEC §5.4). */
+enum class OverrideResetReason { ROOM_CHANGED, TIME_CHANGED, SUBJECT_CHANGED, GROUPS_CHANGED, LESSON_GONE }
+
+data class OverrideReset(
+    val dateString: String,
+    val lessonNumber: Int,
+    val reason: OverrideResetReason,
+    val newRoom: String = "",
+    val newStart: String = "",
+    val newEnd: String = "",
 )
 
 data class NextLesson(
@@ -109,7 +129,8 @@ object TeacherDayLogic {
         var nextAssigned = false
         return lessons.map { l ->
             when {
-                l.startMinutes < 0 -> LessonStatus.UPCOMING
+                // «Замена — веду не я» и пара без времени не занимают ИДЁТ/СЛЕДУЮЩАЯ.
+                l.startMinutes < 0 || l.isReplacement -> LessonStatus.UPCOMING
                 nowMinutes in l.startMinutes..l.endMinutes -> LessonStatus.NOW
                 nowMinutes > l.endMinutes -> LessonStatus.PAST
                 !nextAssigned -> {
@@ -119,6 +140,119 @@ object TeacherDayLogic {
                 else -> LessonStatus.UPCOMING
             }
         }
+    }
+
+    /** Оверлей личных правок поверх строк teacher_lessons (SPEC §5.4), ключ (dateString, lessonNumber). */
+    fun applyOverrides(
+        dateString: String,
+        lessons: List<TeacherDayLesson>,
+        overrides: List<TeacherOverrideEntity>,
+    ): List<TeacherDayLesson> {
+        val byLesson = overrides.filter { it.dateString == dateString }.associateBy { it.lessonNumber }
+        if (byLesson.isEmpty() || lessons.isEmpty()) return lessons
+        return lessons.mapNotNull { l ->
+            val o = byLesson[l.lessonNumber] ?: return@mapNotNull l
+            when (o.kind) {
+                TeacherOverrideEntity.KIND_NO_LESSON -> null
+                TeacherOverrideEntity.KIND_OTHER_ROOM -> l.copy(room = o.room.trim().ifBlank { l.room }, overridden = true)
+                TeacherOverrideEntity.KIND_SOMEONE_ELSE -> l.copy(overridden = true, isReplacement = true)
+                else -> l
+            }
+        }
+    }
+
+    /**
+     * Правки старше maxAgeDays дней (Calendar-разбор dd.MM.yyyy — конвенция проекта,
+     * НЕ лексикографика). Неразобранную дату не трогаем: чужие данные не удаляем.
+     */
+    fun overridesToPrune(
+        overrides: List<TeacherOverrideEntity>,
+        today: Calendar,
+        maxAgeDays: Int = 60,
+    ): List<TeacherOverrideEntity> {
+        if (overrides.isEmpty()) return emptyList()
+        val cutoff =
+            (today.clone() as Calendar).apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                add(Calendar.DAY_OF_YEAR, -maxAgeDays)
+            }
+        return overrides.filter { o ->
+            val cal = MpkScheduleParser.parseDotDate(o.dateString) ?: return@filter false
+            cal.timeInMillis < cutoff.timeInMillis
+        }
+    }
+
+    /**
+     * Полевой diff-сброс (SPEC §5.4): правка пары сбрасывается ТОЛЬКО если в новом доке
+     * изменилось конкретное поле этой пары (room/time/subject/groups) или пара исчезла.
+     * beforeDoc/afterDoc — СЫРЫЕ строки документа (без оверлея), ключ (dateString, lessonNumber).
+     * Пары, которой не было в старом доке, правка не трогается (fail-safe: не удаляем без доказательства).
+     * На номер пары может приходиться несколько строк документа (две группы в одном слоте) —
+     * сравниваем весь набор строк, иначе изменение в первой из них прошло бы молча.
+     */
+    fun diffOverrideResets(
+        dateString: String,
+        beforeDoc: List<TeacherDayLesson>,
+        afterDoc: List<TeacherDayLesson>,
+        overrides: List<TeacherOverrideEntity>,
+    ): List<OverrideReset> {
+        val mine = overrides.filter { it.dateString == dateString }
+        if (mine.isEmpty()) return emptyList()
+        val before = beforeDoc.groupBy { it.lessonNumber }
+        val after = afterDoc.groupBy { it.lessonNumber }
+        return mine
+            .mapNotNull { o ->
+                val b = before[o.lessonNumber] ?: return@mapNotNull null
+                val a = after[o.lessonNumber]
+                val reason: OverrideResetReason? =
+                    when {
+                        a == null -> OverrideResetReason.LESSON_GONE
+                        sig(b) { it.room } != sig(a) { it.room } -> OverrideResetReason.ROOM_CHANGED
+                        sig(b) { "${it.start}-${it.end}" } != sig(a) { "${it.start}-${it.end}" } -> OverrideResetReason.TIME_CHANGED
+                        sig(b) { it.subject } != sig(a) { it.subject } -> OverrideResetReason.SUBJECT_CHANGED
+                        sig(b) { groupsKey(it.groups) } != sig(a) { groupsKey(it.groups) } -> OverrideResetReason.GROUPS_CHANGED
+                        else -> null
+                    }
+                reason ?: return@mapNotNull null
+                OverrideReset(
+                    dateString = dateString,
+                    lessonNumber = o.lessonNumber,
+                    reason = reason,
+                    newRoom = a?.mapNotNull { it.room.trim().takeIf(String::isNotBlank) }?.distinct()?.sorted()?.joinToString(", ").orEmpty(),
+                    newStart = a?.firstOrNull()?.start.orEmpty(),
+                    newEnd = a?.firstOrNull()?.end.orEmpty(),
+                )
+            }.sortedBy { it.lessonNumber }
+    }
+
+    private fun sig(
+        rows: List<TeacherDayLesson>,
+        pick: (TeacherDayLesson) -> String,
+    ): String = rows.map { pick(it).trim() }.sorted().joinToString("|")
+
+    private fun groupsKey(groups: List<String>): String =
+        groups.map { it.trim() }.filter { it.isNotEmpty() }.sorted().joinToString(",")
+
+    /** «07.10, вт» — день в тексте уведомления о сбросе. */
+    fun dayLabel(dateString: String): String {
+        val cal = MpkScheduleParser.parseDotDate(dateString) ?: return dateString
+        return dateString.dropLast(5) + ", " + shortDow(Dow.of(cal))
+    }
+
+    /** Текст плашки/уведомления об одном сбросе (SPEC §5.4: молчаливый сброс запрещён). */
+    fun resetMessage(reset: OverrideReset): String {
+        val tail =
+            when (reset.reason) {
+                OverrideResetReason.ROOM_CHANGED -> "в доке теперь " + reset.newRoom.ifBlank { "без кабинета" }
+                OverrideResetReason.TIME_CHANGED -> "в доке теперь ${reset.newStart}–${reset.newEnd}"
+                OverrideResetReason.SUBJECT_CHANGED, OverrideResetReason.GROUPS_CHANGED -> "в доке теперь другой предмет/группы"
+                OverrideResetReason.LESSON_GONE -> "пары больше нет в документе"
+            }
+        return "Расписание обновлено: ваша правка на ${dayLabel(reset.dateString)}, " +
+            "${reset.lessonNumber}-я пара сброшена — $tail"
     }
 
     fun shortDow(dow: Int): String = SHORT_DOW[(dow - 1).coerceIn(0, 6)]
@@ -220,6 +354,7 @@ object TeacherDayLoader {
             val teachers = allTeachers ?: TeachersRepository(context).loadTeachers()
             val selected = Teacher(name = profile.name)
             var ambiguous = false
+            var resets: List<OverrideReset> = emptyList()
             val result =
                 loadTeacherDay(
                     dateKey = dateString,
@@ -231,18 +366,80 @@ object TeacherDayLoader {
                         }
                     },
                     sync = {
-                        cal?.let { repository.syncTeacherScheduleForDate(it) }
-                            ?: Result.failure(IOException("Неверная дата $dateString"))
+                        val (res, diffResets) =
+                            syncDayWithOverrideDiff(context, repository, profile, dateString, cal, teachers)
+                        resets = diffResets
+                        res
                     },
                 )
+            val overrideDao = MpkDatabase.getInstance(context).teacherOverrideDao()
+            val overrides = overrideDao.forDate(dateString)
+            // ponytail: all() читает всю таблицу правок (личная, единицы строк);
+            // при росте — @Query DELETE ... WHERE dateString < :cutoff
+            TeacherDayLogic.overridesToPrune(overrideDao.all(), Calendar.getInstance())
+                .forEach { overrideDao.deleteForLesson(it.dateString, it.lessonNumber) }
             TeacherDay(
-                lessons = result.slots.map { toLesson(it, dow) },
+                lessons = TeacherDayLogic.applyOverrides(dateString, result.slots.map { toLesson(it, dow) }, overrides),
                 ambiguous = ambiguous,
                 error = result.error,
                 isSynced = repository.hasTeacherScheduleForDate(dateString),
                 lastSyncEpoch = readLastSyncEpoch(context),
+                resets = resets,
             )
         }
+
+    /**
+     * SPEC §5.4: синк дня + ПОЛЕВОЙ diff-сброс личных правок вокруг него.
+     * Единственная точка, где replaceForDate может вернуть неверный кабинет в правку пользователя:
+     * снимок пар ДО и ПОСЛЕ, сброс только изменившегося поля. Никакого «док новее → сбросить день».
+     * Возвращает (результат синка, список сбросов).
+     */
+    suspend fun syncDayWithOverrideDiff(
+        context: Context,
+        repository: ScheduleRepository,
+        profile: TeacherProfile,
+        dateString: String,
+        cal: Calendar?,
+        allTeachers: List<Teacher>? = null,
+        force: Boolean = false,
+    ): Pair<Result<Int>, List<OverrideReset>> =
+        withContext(Dispatchers.IO) {
+            val sync: suspend () -> Result<Int> = {
+                cal?.let { repository.syncTeacherScheduleForDate(it, force) }
+                    ?: Result.failure(IOException("Неверная дата $dateString"))
+            }
+            if (cal == null) return@withContext runSync(sync) to emptyList()
+
+            val overrideDao = MpkDatabase.getInstance(context).teacherOverrideDao()
+            val overrides = overrideDao.forDate(dateString)
+            if (overrides.isEmpty()) return@withContext runSync(sync) to emptyList()
+
+            val dow = Dow.of(cal)
+            val teachers = allTeachers ?: TeachersRepository(context).loadTeachers()
+            val selected = Teacher(name = profile.name)
+            val before = rawLessons(repository, profile, selected, teachers, dateString, dow)
+            val result = runSync(sync)
+            if (result.isFailure) return@withContext result to emptyList()
+            val after = rawLessons(repository, profile, selected, teachers, dateString, dow)
+            val resets = TeacherDayLogic.diffOverrideResets(dateString, before, after, overrides)
+            resets.forEach { overrideDao.deleteForLesson(it.dateString, it.lessonNumber) }
+            result to resets
+        }
+
+    /** Тот же контракт, что у loadTeacherDay: исключение синка не уходит наверх, а становится failure. */
+    private suspend fun runSync(block: suspend () -> Result<Int>): Result<Int> =
+        runCatching { block() }
+            .onFailure { if (it is CancellationException) throw it }
+            .getOrElse { Result.failure(it) }
+
+    private suspend fun rawLessons(
+        repository: ScheduleRepository,
+        profile: TeacherProfile,
+        selected: Teacher,
+        allTeachers: List<Teacher>,
+        dateString: String,
+        dow: Int,
+    ): List<TeacherDayLesson> = readMatchedRows(repository, profile, selected, allTeachers, dateString, dow).first.map { toLesson(it, dow) }
 
     /** Следующая пара в пределах maxDays дней (кэш; одна попытка синка, если кэш совсем пуст). */
     suspend fun findNextLesson(

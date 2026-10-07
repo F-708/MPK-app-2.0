@@ -1,8 +1,9 @@
 package com.politex.data.local.dao
 
 import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Upsert
 import com.politex.data.local.entity.TeacherOverrideEntity
 
 @Dao
@@ -13,7 +14,9 @@ interface TeacherOverrideDao {
     @Query("SELECT * FROM teacher_overrides")
     suspend fun all(): List<TeacherOverrideEntity>
 
-    @Upsert
+    // НЕ @Upsert: при autoGenerate-PK Room ищет строку для обновления по id (=0) и молча
+    // не сохраняет правку при конфликте уникального индекса. REPLACE даёт «одна строка на пару».
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: TeacherOverrideEntity)
 
     @Query("DELETE FROM teacher_overrides WHERE dateString = :dateString AND lessonNumber = :lessonNumber")
