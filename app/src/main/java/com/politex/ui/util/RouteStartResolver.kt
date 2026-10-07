@@ -3,7 +3,6 @@ package com.politex.ui.util
 import com.politex.data.local.entity.LessonEntity
 import com.politex.util.SubgroupPref
 import com.politex.util.SubgroupSettings
-import com.politex.widget.startMinutes
 
 object RouteStartResolver {
 
@@ -17,42 +16,18 @@ object RouteStartResolver {
         data class Ask(val roomFirst: String, val roomSecond: String) : RouteStart
     }
 
-    fun previousRoomNow(
-        lessons: List<LessonEntity>,
-        nowMinutes: Int,
-    ): String? =
-        previousLessonNow(lessons, nowMinutes, Int.MAX_VALUE)
-            ?.let { it.roomFirst.ifBlank { it.roomSecond }.trim() }
-
     /**
-     * GG2: предыдущий урок дня (lessonNumber < текущего, макс).
-     * Сегодня — дополнительно только уже начавшийся; не сегодня — просто по номеру.
+     * II1: предыдущий урок ОТНОСИТЕЛЬНО ЦЕЛЕВОГО — максимальный номер меньше
+     * lesson.lessonNumber с непустой комнатой. Текущее время не влияет:
+     * тап по 3-му уроку утром ведёт маршрут от кабинета 2-го.
      */
     fun previousLesson(
         lessons: List<LessonEntity>,
         lesson: LessonEntity,
-        isToday: Boolean,
-        nowMinutes: Int,
-    ): LessonEntity? =
-        if (isToday) {
-            previousLessonNow(lessons, nowMinutes, lesson.lessonNumber)
-        } else {
-            lessons
-                .filter {
-                    it.lessonNumber in 1 until lesson.lessonNumber &&
-                        (it.roomFirst.isNotBlank() || it.roomSecond.isNotBlank())
-                }.maxByOrNull { it.lessonNumber }
-        }
-
-    private fun previousLessonNow(
-        lessons: List<LessonEntity>,
-        nowMinutes: Int,
-        maxNumberExclusive: Int,
     ): LessonEntity? =
         lessons
             .filter {
-                it.lessonNumber in 1 until maxNumberExclusive &&
-                    it.startMinutes() in 0..nowMinutes &&
+                it.lessonNumber in 1 until lesson.lessonNumber &&
                     (it.roomFirst.isNotBlank() || it.roomSecond.isNotBlank())
             }.maxByOrNull { it.lessonNumber }
 
@@ -78,28 +53,22 @@ object RouteStartResolver {
     fun startForLesson(
         lessons: List<LessonEntity>,
         lesson: LessonEntity,
-        isToday: Boolean,
-        nowMinutes: Int,
         pref: SubgroupPref,
-    ): RouteStart = startFromPrevious(previousLesson(lessons, lesson, isToday, nowMinutes), pref)
+    ): RouteStart = startFromPrevious(previousLesson(lessons, lesson), pref)
 
     /** Совместимость (GroupScheduleScreen): диалога нет — Ask схлопывается в комнату 1-й подгруппы. */
     fun startForLesson(
         lessons: List<LessonEntity>,
         lesson: LessonEntity,
-        isToday: Boolean,
-        nowMinutes: Int,
-    ): String = startRoomForLesson(lessons, lesson, isToday, nowMinutes, SubgroupPref.NEUTRAL)
+    ): String = startRoomForLesson(lessons, lesson, SubgroupPref.NEUTRAL)
 
     /** HH1: то же с pref подгруппы; для виджетов (диалога нет) Ask схлопывается в roomFirst. */
     fun startRoomForLesson(
         lessons: List<LessonEntity>,
         lesson: LessonEntity,
-        isToday: Boolean,
-        nowMinutes: Int,
         pref: SubgroupPref,
     ): String =
-        when (val s = startForLesson(lessons, lesson, isToday, nowMinutes, pref)) {
+        when (val s = startForLesson(lessons, lesson, pref)) {
             is RouteStart.Ask -> s.roomFirst
             is RouteStart.From -> s.room
         }

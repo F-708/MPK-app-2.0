@@ -84,8 +84,8 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                         R.id.today_rows,
                         buildRow(
                             context, lesson, now, style, showRoom, appWidgetId, pref,
-                            // HH1: маршрут от кабинета ПРЕДЫДУЩЕГО урока (pref подгруппы для split)
-                            com.politex.ui.util.RouteStartResolver.startRoomForLesson(lessons, lesson, true, now, pref),
+                            // HH1+II1: маршрут от кабинета урока, ПРЕДЫДУЩЕГО относительно этого
+                            com.politex.ui.util.RouteStartResolver.startRoomForLesson(lessons, lesson, pref),
                         ),
                     )
                 }
@@ -150,8 +150,8 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             )
             row.setTextColor(R.id.row_subject, textColor)
 
-            // GG9: split-урок → две полуширинные кнопки-цифры (roomFirst|roomSecond);
-            // при SubgroupPref != NEUTRAL — одна кнопка подгруппы; non-split — «каб. N» как раньше.
+            // GG9/II2: две полуширинные кнопки-цифры только при NEUTRAL-split (rooms.size>1);
+            // при выбранной подгруппе — ванильный чип «каб. N» как у non-split.
             val rooms = WidgetData.chooseRooms(lesson, pref)
             if (showRoom && rooms.isNotEmpty()) {
                 val d = context.resources.displayMetrics.density
@@ -161,9 +161,10 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 // (row_root = 0dp + weight → строка фиксирована, ~11-20dp при 12
                 // уроках) — цифры клиппились. 2dp keeps chip ≈ высоте текста строки.
                 val pv = (2 * d + 0.5f).toInt()
+                val splitStyle = WidgetData.isSplitStyle(rooms)
                 rooms.forEachIndexed { i, room ->
                     val viewId = if (i == 0) R.id.row_room else R.id.row_room2
-                    row.setTextViewText(viewId, if (lesson.isSplit) room else "каб. $room")
+                    row.setTextViewText(viewId, if (splitStyle) room else "каб. $room")
                     row.setTextColor(viewId, style.mainColor)
                     row.setInt(viewId, "setBackgroundColor", style.highlightColor)
                     row.setViewPadding(viewId, ph, pv, ph, pv)

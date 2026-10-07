@@ -796,14 +796,13 @@ fun ScheduleScreen(
                                     if (!routesOn) {
                                         roomClick(room, null)
                                     } else {
-                                        // GG2/GG3: «откуда» — из ПРЕДЫДУЩЕГО урока; текущий split даёт только цель
+                                        // GG2/GG3 + II1: «откуда» — кабинет урока, ПРЕДЫДУЩЕГО
+                                        // относительно тапнутого (время суток не влияет)
                                         when (
                                             val start =
                                                 com.politex.ui.util.RouteStartResolver.startForLesson(
                                                     lessons,
                                                     lesson,
-                                                    isViewingToday,
-                                                    nowMinutes,
                                                     com.politex.util.SubgroupSettings.get(context),
                                                 )
                                         ) {

@@ -333,8 +333,6 @@ fun GroupScheduleScreen(
             lessonsForDay(allForeignLessons ?: emptyList(), activeDateString, activeDayOfWeek)
         }
 
-    val todaySlot = selectedSlot == 0 && leftIsToday
-
     Column(
         modifier =
         modifier
@@ -692,7 +690,7 @@ fun GroupScheduleScreen(
                                     onRoomClick(
                                         room,
                                         com.politex.ui.util.RouteStartResolver
-                                            .startForLesson(lessons, lesson, todaySlot, nowMinutes),
+                                            .startForLesson(lessons, lesson),
                                     )
                                 },
                             )

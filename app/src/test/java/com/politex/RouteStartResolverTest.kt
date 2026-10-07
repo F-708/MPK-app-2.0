@@ -4,7 +4,6 @@ import com.politex.data.local.entity.LessonEntity
 import com.politex.ui.util.RouteStartResolver
 import com.politex.util.SubgroupPref
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RouteStartResolverTest {
@@ -34,80 +33,60 @@ class RouteStartResolverTest {
             lesson(3, "10:35", "320"),
         )
 
-    private fun at(
-        h: Int,
-        m: Int,
-    ) = h * 60 + m
+    // --- II1: старт = предыдущий ОТНОСИТЕЛЬНО ЦЕЛЕВОГО урока, время не влияет ---
 
     @Test
-    fun `до уроков — null (маршрут от главного входа)`() {
-        assertNull(RouteStartResolver.previousRoomNow(lessons, at(8, 0)))
+    fun `II1 тап по 3-му уроку — старт от кабинета 2-го даже утром до всех уроков`() {
+        // прежнее поведение брало «последний НАЧАВШИЙСЯ» — утром это был главный вход
+        assertEquals(
+            RouteStartResolver.RouteStart.From("223"),
+            RouteStartResolver.startForLesson(lessons, lessons[2], SubgroupPref.NEUTRAL),
+        )
     }
 
     @Test
-    fun `во время второго урока — кабинет второго`() {
-        assertEquals("223", RouteStartResolver.previousRoomNow(lessons, at(10, 30)))
+    fun `II1 тап по 1-му уроку — главный вход`() {
+        assertEquals(
+            RouteStartResolver.RouteStart.From(""),
+            RouteStartResolver.startForLesson(lessons, lessons[0], SubgroupPref.NEUTRAL),
+        )
     }
 
     @Test
-    fun `перемена после первого — кабинет первого`() {
-        assertEquals("118", RouteStartResolver.previousRoomNow(lessons, at(9, 15)))
+    fun `II1 тап по 2-му уроку — старт от кабинета 1-го`() {
+        assertEquals(
+            RouteStartResolver.RouteStart.From("118"),
+            RouteStartResolver.startForLesson(lessons, lessons[1], SubgroupPref.NEUTRAL),
+        )
     }
 
     @Test
-    fun `вечер после уроков — кабинет последнего`() {
-        assertEquals("320", RouteStartResolver.previousRoomNow(lessons, at(20, 0)))
-    }
-
-    @Test
-    fun `пустой день — null`() {
-        assertNull(RouteStartResolver.previousRoomNow(emptyList(), at(12, 0)))
-    }
-
-    @Test
-    fun `кабинет только у второй подгруппы — берётся roomSecond`() {
-        val split = listOf(lesson(1, "08:30", "", "118"))
-        assertEquals("118", RouteStartResolver.previousRoomNow(split, at(9, 0)))
-    }
-
-    @Test
-    fun `без кабинета у начавшегося урока — null, а не пустая строка`() {
-        val noRoom = listOf(lesson(1, "08:30", " "))
-        assertNull(RouteStartResolver.previousRoomNow(noRoom, at(9, 0)))
-    }
-
-    @Test
-    fun `V21 сегодня, ничего не началось — пустая строка (от главного входа)`() {
-        assertEquals("", RouteStartResolver.startForLesson(lessons, lessons[0], isToday = true, nowMinutes = at(8, 0)))
-    }
-
-    @Test
-    fun `V21 сегодня, во время второго урока — старт как previousRoomNow`() {
-        assertEquals("223", RouteStartResolver.startForLesson(lessons, lessons[2], isToday = true, nowMinutes = at(10, 30)))
-    }
-
-    @Test
-    fun `V21 не сегодня — кабинет ближайшего предыдущего урока`() {
-        assertEquals("223", RouteStartResolver.startForLesson(lessons, lessons[2], isToday = false, nowMinutes = 0))
-    }
-
-    @Test
-    fun `V21 не сегодня, первый урок — пустая строка (от главного входа)`() {
-        assertEquals("", RouteStartResolver.startForLesson(lessons, lessons[0], isToday = false, nowMinutes = 0))
-    }
-
-    @Test
-    fun `GG2 не сегодня, у предыдущего только roomSecond — берётся roomSecond (как previousRoomNow)`() {
+    fun `II1 у предыдущего только roomSecond — берётся roomSecond`() {
         val onlySecond = listOf(lesson(1, "08:30", "", "118"), lesson(2, "09:25", "", "223"))
-        assertEquals("118", RouteStartResolver.startForLesson(onlySecond, onlySecond[1], isToday = false, nowMinutes = 0))
+        assertEquals(
+            RouteStartResolver.RouteStart.From("118"),
+            RouteStartResolver.startForLesson(onlySecond, onlySecond[1], SubgroupPref.NEUTRAL),
+        )
     }
 
     @Test
-    fun `V21 не сегодня, пустой день — пустая строка`() {
-        assertEquals("", RouteStartResolver.startForLesson(emptyList(), lessons[0], isToday = false, nowMinutes = 0))
+    fun `II1 предыдущий без кабинета пропускается — старт от более раннего`() {
+        val day = listOf(lesson(1, "08:30", "118"), lesson(2, "09:25", " "), lesson(3, "10:35", "320"))
+        assertEquals(
+            RouteStartResolver.RouteStart.From("118"),
+            RouteStartResolver.startForLesson(day, day[2], SubgroupPref.NEUTRAL),
+        )
     }
 
-    // --- GG2/GG3: «откуда» для split-уроков ---
+    @Test
+    fun `II1 пустой день — главный вход`() {
+        assertEquals(
+            RouteStartResolver.RouteStart.From(""),
+            RouteStartResolver.startForLesson(emptyList(), lessons[0], SubgroupPref.NEUTRAL),
+        )
+    }
+
+    // --- GG2/GG3: split-предыдущий ---
 
     private val splitDay =
         listOf(
@@ -121,7 +100,7 @@ class RouteStartResolverTest {
         // тапнут ТЕКУЩИЙ split-урок (3) — он даёт только цель; источник = урок 2
         assertEquals(
             RouteStartResolver.RouteStart.From("320"),
-            RouteStartResolver.startForLesson(splitDay, splitDay[2], isToday = false, nowMinutes = 0, pref = SubgroupPref.NEUTRAL),
+            RouteStartResolver.startForLesson(splitDay, splitDay[2], SubgroupPref.NEUTRAL),
         )
     }
 
@@ -129,7 +108,7 @@ class RouteStartResolverTest {
     fun `GG2 prev split + NEUTRAL — вопрос с двумя комнатами ПРЕДЫДУЩЕГО урока`() {
         assertEquals(
             RouteStartResolver.RouteStart.Ask("118", "224"),
-            RouteStartResolver.startForLesson(splitDay, splitDay[1], isToday = false, nowMinutes = 0, pref = SubgroupPref.NEUTRAL),
+            RouteStartResolver.startForLesson(splitDay, splitDay[1], SubgroupPref.NEUTRAL),
         )
     }
 
@@ -137,15 +116,15 @@ class RouteStartResolverTest {
     fun `GG3 prev split + FIRST — from = roomFirst предыдущего, без вопроса`() {
         assertEquals(
             RouteStartResolver.RouteStart.From("118"),
-            RouteStartResolver.startForLesson(splitDay, splitDay[1], isToday = false, nowMinutes = 0, pref = SubgroupPref.FIRST),
+            RouteStartResolver.startForLesson(splitDay, splitDay[1], SubgroupPref.FIRST),
         )
     }
 
     @Test
-    fun `GG3 prev split + SECOND — from = roomSecond предыдущего, без вопроса`() {
+    fun `II1 prev split + SECOND — from = roomSecond предыдущего`() {
         assertEquals(
             RouteStartResolver.RouteStart.From("224"),
-            RouteStartResolver.startForLesson(splitDay, splitDay[1], isToday = false, nowMinutes = 0, pref = SubgroupPref.SECOND),
+            RouteStartResolver.startForLesson(splitDay, splitDay[1], SubgroupPref.SECOND),
         )
     }
 
@@ -154,33 +133,7 @@ class RouteStartResolverTest {
         val day = listOf(lesson(1, "08:30", "401", "402", split = true))
         assertEquals(
             RouteStartResolver.RouteStart.From(""),
-            RouteStartResolver.startForLesson(day, day[0], isToday = false, nowMinutes = 0, pref = SubgroupPref.NEUTRAL),
-        )
-    }
-
-    @Test
-    fun `GG2 сегодня prev split уже начался + NEUTRAL — вопрос`() {
-        assertEquals(
-            RouteStartResolver.RouteStart.Ask("118", "224"),
-            RouteStartResolver.startForLesson(splitDay, splitDay[1], isToday = true, nowMinutes = at(9, 0), pref = SubgroupPref.NEUTRAL),
-        )
-    }
-
-    @Test
-    fun `GG2 сегодня prev split ещё не начался — предыдущего нет, главный вход`() {
-        // 08:00 — урок 1 (split) ещё не начался → предыдущего нет → главный вход
-        assertEquals(
-            RouteStartResolver.RouteStart.From(""),
-            RouteStartResolver.startForLesson(splitDay, splitDay[1], isToday = true, nowMinutes = at(8, 0), pref = SubgroupPref.NEUTRAL),
-        )
-    }
-
-    @Test
-    fun `GG2 сегодня тапнут текущий начавшийся split — источник НЕ он сам, а более ранний`() {
-        // 08:45 — урок 1 (split) начался, тапаем ЕГО же кабинет: prev по номеру отсутствует → вход
-        assertEquals(
-            RouteStartResolver.RouteStart.From(""),
-            RouteStartResolver.startForLesson(splitDay, splitDay[0], isToday = true, nowMinutes = at(8, 45), pref = SubgroupPref.NEUTRAL),
+            RouteStartResolver.startForLesson(day, day[0], SubgroupPref.NEUTRAL),
         )
     }
 
@@ -188,7 +141,7 @@ class RouteStartResolverTest {
     fun `GG2 String-совместимость — Ask схлопывается в roomFirst`() {
         assertEquals(
             "118",
-            RouteStartResolver.startForLesson(splitDay, splitDay[1], isToday = false, nowMinutes = 0),
+            RouteStartResolver.startForLesson(splitDay, splitDay[1]),
         )
     }
 
@@ -197,7 +150,7 @@ class RouteStartResolverTest {
         val day = listOf(lesson(1, "08:30", "118", split = true), lesson(2, "09:25", "320"))
         assertEquals(
             RouteStartResolver.RouteStart.From("118"),
-            RouteStartResolver.startForLesson(day, day[1], isToday = false, nowMinutes = 0, pref = SubgroupPref.NEUTRAL),
+            RouteStartResolver.startForLesson(day, day[1], SubgroupPref.NEUTRAL),
         )
     }
 }

@@ -89,9 +89,10 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                     else -> lessons.firstOrNull { it.startMinutes() > now }
                 }
 
-            // HH1: «откуда» — кабинет ПРЕДЫДУЩЕГО урока с pref подгруппы (split), как в расписании
-            val nextFromRoom = next?.let { RouteStartResolver.startRoomForLesson(lessons, it, true, now, pref) }
-            val nowFromRoom = current?.let { RouteStartResolver.startRoomForLesson(lessons, it, true, now, pref) }
+            // HH1+II1: «откуда» — кабинет урока, ПРЕДЫДУЩЕГО относительно целевого
+            // (для «дальше» это текущий/последний прошедший; время не влияет)
+            val nextFromRoom = next?.let { RouteStartResolver.startRoomForLesson(lessons, it, pref) }
+            val nowFromRoom = current?.let { RouteStartResolver.startRoomForLesson(lessons, it, pref) }
 
             val groupBlank = WidgetUpdateHelper.getSelectedGroup(context).isBlank()
             val emptyText =
@@ -175,18 +176,19 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             id1: Int,
             id2: Int,
         ) {
-            // GG8в: split-урок → две кнопки-цифры (при NEUTRAL), иначе одна кнопка
-            // подгруппы; non-split → «каб. N» как раньше. Тап = карта с комнатой и
-            // маршрутом от предыдущего слота (fromRoom), как было.
+            // GG8в/II2: две кнопки-цифры только для NEUTRAL-split (rooms.size>1);
+            // при выбранной подгруппе — ванильный чип «каб. N» как у non-split.
+            // Тап = карта с комнатой и маршрутом от предыдущего слота (fromRoom).
             val rooms = WidgetData.chooseRooms(lesson, pref)
             if (!showRoom || rooms.isEmpty()) {
                 views.setViewVisibility(id1, android.view.View.GONE)
                 views.setViewVisibility(id2, android.view.View.GONE)
                 return
             }
+            val splitStyle = WidgetData.isSplitStyle(rooms)
             rooms.forEachIndexed { i, room ->
                 val viewId = if (i == 0) id1 else id2
-                views.setTextViewText(viewId, if (lesson.isSplit) room else "каб. $room")
+                views.setTextViewText(viewId, if (splitStyle) room else "каб. $room")
                 views.setViewVisibility(viewId, android.view.View.VISIBLE)
                 views.setOnClickPendingIntent(
                     viewId,
@@ -269,6 +271,9 @@ object WidgetData {
         val idx = com.politex.util.SubgroupSettings.splitIndex(pref) ?: return both
         return listOfNotNull(both.getOrNull(idx) ?: both.firstOrNull())
     }
+
+    /** II2: split-стиль (две мелкие цифры) — только когда комнат действительно две (NEUTRAL). */
+    fun isSplitStyle(rooms: List<String>): Boolean = rooms.size > 1
 
     internal fun todayDateString(): String {
         val cal = java.util.Calendar.getInstance()

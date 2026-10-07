@@ -3,6 +3,8 @@ package com.politex.widget
 import com.politex.data.local.entity.LessonEntity
 import com.politex.util.SubgroupPref
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** HH2: split-комнаты следуют настройке «Подгруппа». */
@@ -41,5 +43,24 @@ class SubgroupRoomsTest {
         val lesson = splitLesson().copy(isSplit = false, roomSecond = "")
         assertEquals(listOf("101"), WidgetData.chooseRooms(lesson, SubgroupPref.NEUTRAL))
         assertEquals(listOf("101"), WidgetData.chooseRooms(lesson, SubgroupPref.SECOND))
+    }
+
+    // --- II2: split-стиль (две мелкие цифры) только для NEUTRAL, иначе ванильный чип ---
+
+    @Test
+    fun `II2 NEUTRAL split - splitStyle true (две цифры-кнопки)`() {
+        assertTrue(WidgetData.isSplitStyle(WidgetData.chooseRooms(splitLesson(), SubgroupPref.NEUTRAL)))
+    }
+
+    @Test
+    fun `II2 FIRST и SECOND - splitStyle false (ванильный чип каб N)`() {
+        assertFalse(WidgetData.isSplitStyle(WidgetData.chooseRooms(splitLesson(), SubgroupPref.FIRST)))
+        assertFalse(WidgetData.isSplitStyle(WidgetData.chooseRooms(splitLesson(), SubgroupPref.SECOND)))
+    }
+
+    @Test
+    fun `II2 non-split - splitStyle false`() {
+        val lesson = splitLesson().copy(isSplit = false, roomSecond = "")
+        assertFalse(WidgetData.isSplitStyle(WidgetData.chooseRooms(lesson, SubgroupPref.NEUTRAL)))
     }
 }

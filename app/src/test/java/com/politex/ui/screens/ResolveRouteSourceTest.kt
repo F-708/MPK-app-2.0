@@ -175,7 +175,7 @@ class ResolveRouteSourceTest {
 
     @Test
     fun `HH1 fromRoom = кабинет предыдущего урока попадает в маршрут карты`() {
-        val from = RouteStartResolver.startRoomForLesson(day, day[2], isToday = false, nowMinutes = 0, pref = SubgroupPref.NEUTRAL)
+        val from = RouteStartResolver.startRoomForLesson(day, day[2], SubgroupPref.NEUTRAL)
         assertEquals("320", from)
         val route = buildMapRoute("401", from, showRoute = false)
         assertTrue("запись навигации несёт from=$from: $route", route.contains("from=320"))
@@ -183,8 +183,13 @@ class ResolveRouteSourceTest {
     }
 
     @Test
+    fun `II1 утро до всех уроков — тап по 3-му даёт from = кабинет 2-го, время не влияет`() {
+        assertEquals("320", RouteStartResolver.startRoomForLesson(day, day[2], SubgroupPref.NEUTRAL))
+    }
+
+    @Test
     fun `HH1 предыдущий split + SECOND — fromRoom = roomSecond без вопроса`() {
-        val from = RouteStartResolver.startRoomForLesson(day, day[1], isToday = false, nowMinutes = 0, pref = SubgroupPref.SECOND)
+        val from = RouteStartResolver.startRoomForLesson(day, day[1], SubgroupPref.SECOND)
         assertEquals("224", from)
         assertTrue(buildMapRoute("320", from, showRoute = false).contains("from=224"))
     }
@@ -193,16 +198,16 @@ class ResolveRouteSourceTest {
     fun `HH1 предыдущий split + NEUTRAL — схлопывается в roomFirst (виджеты, без диалога)`() {
         assertEquals(
             "118",
-            RouteStartResolver.startRoomForLesson(day, day[1], isToday = false, nowMinutes = 0, pref = SubgroupPref.NEUTRAL),
+            RouteStartResolver.startRoomForLesson(day, day[1], SubgroupPref.NEUTRAL),
         )
     }
 
     @Test
     fun `HH1 нет предыдущего — пустая строка (главный вход), String-совместимость прежняя`() {
-        assertEquals("", RouteStartResolver.startRoomForLesson(day, day[0], isToday = false, nowMinutes = 0, pref = SubgroupPref.NEUTRAL))
+        assertEquals("", RouteStartResolver.startRoomForLesson(day, day[0], SubgroupPref.NEUTRAL))
         assertEquals(
-            RouteStartResolver.startForLesson(day, day[1], isToday = false, nowMinutes = 0),
-            RouteStartResolver.startRoomForLesson(day, day[1], isToday = false, nowMinutes = 0, pref = SubgroupPref.NEUTRAL),
+            RouteStartResolver.startForLesson(day, day[1]),
+            RouteStartResolver.startRoomForLesson(day, day[1], SubgroupPref.NEUTRAL),
         )
     }
 }
