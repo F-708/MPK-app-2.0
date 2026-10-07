@@ -78,6 +78,10 @@ import com.politex.ui.screens.materials.MaterialDocTextViewer
 import com.politex.ui.screens.materials.MaterialImageViewer
 import com.politex.ui.screens.materials.MaterialImportTypeDialog
 import com.politex.ui.screens.materials.MaterialPdfViewer
+import com.politex.ui.screens.materials.MaterialWebViewer
+import com.politex.ui.screens.materials.docxRouteWeb
+import com.politex.ui.screens.materials.pdfRouteWeb
+import com.politex.ui.screens.materials.webViewEngineInfo
 import com.politex.ui.screens.materials.MaterialRenameDialog
 import com.politex.ui.screens.materials.MaterialSubjectDialog
 import com.politex.ui.screens.materials.MaterialTextDialog
@@ -333,12 +337,37 @@ fun MaterialBaseScreen(
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                    MaterialKind.FILE ->
-                        if (viewerItem.ext == "pdf") {
-                            MaterialPdfViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
-                        } else {
-                            MaterialDocTextViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
+                    MaterialKind.FILE -> {
+                        // READER-PLAN D1/D3: PDF и DOCX идут в WebView-рендер (gander), если
+                        // движок достаточно новый и файл цел; иначе нативный PdfViewer / плоский
+                        // DocTextViewer. onFallbackNative переключает на нативный путь при смерти
+                        // рендер-процесса или pdf с паролем («locked»).
+                        val context = LocalContext.current
+                        val engine = remember { webViewEngineInfo(context) }
+                        val fileExists = remember(viewerItem.uriPath) { File(viewerItem.uriPath).exists() }
+                        var useFallback by remember(viewerItem.id) { mutableStateOf(false) }
+                        val useWeb = !useFallback && when (viewerItem.ext) {
+                            "pdf" -> pdfRouteWeb(fileExists, viewerItem.pageCount, engine.first, engine.second)
+                            "docx" -> docxRouteWeb(viewerItem.textEdited, fileExists, engine.first)
+                            else -> false
                         }
+                        when {
+                            useWeb ->
+                                MaterialWebViewer(
+                                    item = viewerItem,
+                                    dao = dao,
+                                    onBack = pop,
+                                    onFallbackNative = { useFallback = true },
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
+                            viewerItem.ext == "pdf" ->
+                                MaterialPdfViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
+
+                            else ->
+                                MaterialDocTextViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())
+                        }
+                    }
 
                     MaterialKind.TEXT ->
                         MaterialDocTextViewer(item = viewerItem, dao = dao, onBack = pop, modifier = Modifier.fillMaxSize())

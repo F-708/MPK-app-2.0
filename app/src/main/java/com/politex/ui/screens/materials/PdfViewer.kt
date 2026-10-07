@@ -1099,7 +1099,7 @@ private fun pageCacheKey(
 ): Long = (pageIndex.toLong() shl 32) or widthPx.toLong()
 
 @Composable
-private fun BookmarkPanel(
+internal fun BookmarkPanel(
     bookmarks: List<MaterialBookmarkEntity>,
     onJump: (Int) -> Unit,
     onDelete: (Long) -> Unit,
@@ -1169,7 +1169,7 @@ private fun BookmarkPanel(
 }
 
 @Composable
-private fun AddBookmarkDialog(
+internal fun AddBookmarkDialog(
     page: Int,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
@@ -1212,7 +1212,7 @@ private fun AddBookmarkDialog(
 }
 
 @Composable
-private fun PageJumpDialog(
+internal fun PageJumpDialog(
     pageCount: Int,
     onDismiss: () -> Unit,
     onJump: (Int) -> Unit,
