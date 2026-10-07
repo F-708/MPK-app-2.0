@@ -1327,11 +1327,13 @@ private fun DrawScope.drawMap(
         val raw = rawFits[r.id] ?: return@forEach
 
         val fit =
-            roomNumberFit(
-                raw = raw,
-                median = medianFit,
-                minReadable = minNumberPx / layout.size.height.toFloat(),
-            ) ?: return@forEach
+            (
+                roomNumberFit(
+                    raw = raw,
+                    median = medianFit,
+                    minReadable = minNumberPx / layout.size.height.toFloat(),
+                ) ?: return@forEach
+            ) * r.numScale
 
         val cx = r.x * imgW
         val cy = r.y * imgH

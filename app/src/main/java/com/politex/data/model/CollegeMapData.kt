@@ -21,6 +21,9 @@ data class MapRoom(
     val h: Float,
 
     val door: MapPoint? = null,
+
+    // Ручная подстройка размера числа кабинета (множитель авто-fit). Правится в tools/map-editor.html.
+    val numScale: Float = 1f,
 )
 
 data class MapCorridor(
@@ -121,6 +124,7 @@ class CollegeMapData(
                                 h = o.optDouble("h").toFloat(),
                                 door = o.optJSONArray("door")?.takeIf { it.length() >= 2 }
                                     ?.let { MapPoint(it.optDouble(0).toFloat(), it.optDouble(1).toFloat()) },
+                                numScale = o.optDouble("numScale", 1.0).toFloat().coerceIn(0.1f, 3f),
                             )
                         },
                         corridors =
