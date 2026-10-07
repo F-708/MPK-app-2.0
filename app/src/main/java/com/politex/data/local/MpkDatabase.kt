@@ -12,6 +12,7 @@ import com.politex.data.local.dao.MaterialDao
 import com.politex.data.local.dao.TaskDao
 import com.politex.data.local.dao.TaskReminderDao
 import com.politex.data.local.dao.TeacherLessonDao
+import com.politex.data.local.dao.TeacherOverrideDao
 import com.politex.data.local.entity.GradeConfigEntity
 import com.politex.data.local.entity.GradeEntryEntity
 import com.politex.data.local.entity.LessonEntity
@@ -22,6 +23,7 @@ import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.data.local.entity.StudentTaskEntity
 import com.politex.data.local.entity.TaskReminderEntity
 import com.politex.data.local.entity.TeacherLessonEntity
+import com.politex.data.local.entity.TeacherOverrideEntity
 
 @Database(
     entities = [
@@ -35,8 +37,9 @@ import com.politex.data.local.entity.TeacherLessonEntity
         MaterialAnnotationEntity::class,
         GradeEntryEntity::class,
         GradeConfigEntity::class,
+        TeacherOverrideEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class MpkDatabase : RoomDatabase() {
@@ -51,6 +54,8 @@ abstract class MpkDatabase : RoomDatabase() {
     abstract fun materialDao(): MaterialDao
 
     abstract fun gradeDao(): GradeDao
+
+    abstract fun teacherOverrideDao(): TeacherOverrideDao
 
     companion object {
 
@@ -243,10 +248,27 @@ abstract class MpkDatabase : RoomDatabase() {
                 }
             }
 
+        private val migration9To10 =
+            object : Migration(9, 10) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `teacher_overrides` (" +
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`dateString` TEXT NOT NULL, `lessonNumber` INTEGER NOT NULL, " +
+                            "`kind` TEXT NOT NULL, `room` TEXT NOT NULL, `note` TEXT NOT NULL, " +
+                            "`createdAt` INTEGER NOT NULL)",
+                    )
+                    db.execSQL(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS `index_teacher_overrides_dateString_lessonNumber` " +
+                            "ON `teacher_overrides` (`dateString`, `lessonNumber`)",
+                    )
+                }
+            }
+
         /**
          * R1-СРЕД15 (осознанное решение): fallbackToDestructiveMigration СОЗНАТЕЛЬНО оставлен.
          * Краш из-за пропущенной миграции хуже даунгрейда: БД — только кэш, она пересинхронизируется с сайтом.
-         * Покрытие 1→9 гарантировано списком addMigrations ниже и тестами MigrationV1ToV2Test…MigrationV8ToV9Test.
+         * Покрытие 1→10 гарантировано списком addMigrations ниже и тестами MigrationV1ToV2Test…MigrationV9ToV10Test.
          * При bump версии на N+1 ОБЯЗАТЕЛЬНО: добавить migrationNToN+1 в addMigrations и MigrationVNToVN+1Test.
          */
         fun getInstance(context: Context): MpkDatabase = instance ?: synchronized(this) {
@@ -258,7 +280,7 @@ abstract class MpkDatabase : RoomDatabase() {
                             context.applicationContext,
                             MpkDatabase::class.java,
                             DATABASE_NAME,
-                        ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8, migration8To9)
+                        ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8, migration8To9, migration9To10)
 
                         .fallbackToDestructiveMigration()
                         .build()
