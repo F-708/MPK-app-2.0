@@ -348,7 +348,7 @@ fun MaterialBaseScreen(
                         var useFallback by remember(viewerItem.id) { mutableStateOf(false) }
                         val useWeb = !useFallback && when (viewerItem.ext) {
                             "pdf" -> pdfRouteWeb(fileExists, viewerItem.pageCount, engine.first, engine.second)
-                            "docx" -> docxRouteWeb(viewerItem.textEdited, fileExists, engine.first)
+                            "docx" -> docxRouteWeb(viewerItem.textEdited, fileExists, engine.first, engine.second)
                             else -> false
                         }
                         when {

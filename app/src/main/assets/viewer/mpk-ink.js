@@ -33,7 +33,8 @@
   var wNorm = 0.01;
   var strokes = {};    // page0 -> [{c,w,pts}]
   var root = null;
-  var live = null;     // {page0, box, cv, ctx, pts, rect}
+  var live = null;     // {page0, box, pointerId, cv, ctx, pts, rect} | {page0, box, pointerId, erasing:true}
+  var layoutSent = 0;  // последняя отправленная физическая ширина бокса
   var MIN_DIST = 0.004; // как MIN_POINT_DIST в AnnotationLayer
 
   function pagesRoot() {
@@ -117,6 +118,24 @@
     for (var key in strokes) if (strokes[key] && strokes[key].length) redrawPage(+key);
   }
 
+  /* Ревью MED #3: физическая ширина первого page-бокса — база нормировки толщины
+     штриха и порога ластика в Kotlin. pdf.mjs фиксирует её при открытии документа и
+     не перекладывает при ротации, поэтому источник истины — это измерение, а не
+     Compose-размер viewer'а. */
+  function reportLayout() {
+    var r = pagesRoot();
+    if (!r || !port) return;
+    var box = r.children[0];
+    if (!box) return;
+    var rect = box.getBoundingClientRect();
+    if (!rect.width) return;
+    var phys = Math.round(rect.width * (window.devicePixelRatio || 1));
+    if (phys > 0 && phys !== layoutSent) {
+      layoutSent = phys;
+      send("layout " + phys);
+    }
+  }
+
   /* ---- порт ---- */
 
   function send(msg) { if (port) port.postMessage(msg); }
@@ -154,11 +173,15 @@
       try { onPortCommand(String(m.data || "")); } catch (err) { /* канал не должен умереть */ }
     });
     port.start();
+    requestAnimationFrame(reportLayout);
   });
 
   /* Страницы (.pg) создаются одним фрагментом после открытия документа — штрихи,
      присланные раньше, рисуются, когда боксы появятся. */
-  var mo = new MutationObserver(function () { redrawAllocated(); });
+  var mo = new MutationObserver(function () {
+    redrawAllocated();
+    requestAnimationFrame(reportLayout);
+  });
   function observeRoot() {
     var r = pagesRoot();
     if (r) mo.observe(r, { childList: true });
@@ -171,7 +194,7 @@
     var raf = 0;
     window.visualViewport.addEventListener("resize", function () {
       if (raf) return;
-      raf = requestAnimationFrame(function () { raf = 0; redrawAllocated(); });
+      raf = requestAnimationFrame(function () { raf = 0; redrawAllocated(); reportLayout(); });
     });
   }
 
@@ -187,6 +210,7 @@
 
   document.addEventListener("pointerdown", function (e) {
     if (!mode || !port) return;
+    if (live) return; // MED #4: второй палец не перезаписывает первый штрих (иначе ghost)
     var box = e.target && e.target.closest ? e.target.closest(".pg") : null;
     if (!box || !pagesRoot() || !pagesRoot().contains(box)) return;
     e.preventDefault();
@@ -196,13 +220,13 @@
     var p = normPoint(e, rect);
     if (eraser) {
       send("zap " + page0 + " " + p[0] + " " + p[1] + " " + aspectOf(rect));
-      live = { page0: page0, box: box, erasing: true };
+      live = { page0: page0, box: box, erasing: true, pointerId: e.pointerId };
       box.setPointerCapture(e.pointerId);
       return;
     }
     var cv = ensureOverlay(box);
     live = {
-      page0: page0, box: box, cv: cv,
+      page0: page0, box: box, cv: cv, pointerId: e.pointerId,
       ctx: sizeCanvas(cv, rect), rect: rect,
       pts: [p[0], p[1]],
     };
@@ -211,7 +235,7 @@
   }, true);
 
   document.addEventListener("pointermove", function (e) {
-    if (!live) return;
+    if (!live || e.pointerId !== live.pointerId) return;
     e.preventDefault();
     var box = live.box;
     var rect = live.erasing ? box.getBoundingClientRect() : live.rect;
@@ -227,11 +251,16 @@
     redrawPage(live.page0, { c: color, w: wNorm, pts: live.pts });
   }, true);
 
-  function endLive(e) {
-    if (!live) return;
+  function releaseLive(e) {
     var l = live;
     live = null;
     try { l.box.releasePointerCapture(e.pointerId); } catch (err) { }
+    return l;
+  }
+
+  function endLive(e) {
+    if (!live || e.pointerId !== live.pointerId) return;
+    var l = releaseLive(e);
     if (l.erasing) return;
     if (l.pts.length >= 2 && port) {
       send("ink " + l.page0 + " " + l.pts.join(" "));
@@ -239,6 +268,14 @@
     // канонический ответ native перерисует страницу; до него остаётся optimistic-штрих
   }
 
+  // LOW #6: отменённый жест (pointercancel) НЕ сохраняется как штрих — только стираем
+  // optimistic-пиксели, иначе случайный system-gesture оставил бы мусорную линию.
+  function cancelLive(e) {
+    if (!live || e.pointerId !== live.pointerId) return;
+    var l = releaseLive(e);
+    if (!l.erasing) redrawPage(l.page0);
+  }
+
   document.addEventListener("pointerup", endLive, true);
-  document.addEventListener("pointercancel", endLive, true);
+  document.addEventListener("pointercancel", cancelLive, true);
 })();

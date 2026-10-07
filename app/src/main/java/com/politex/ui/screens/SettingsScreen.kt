@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -38,6 +40,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
@@ -45,6 +48,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -106,6 +110,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var showGroupDialog by remember { mutableStateOf(false) }
+    var showViewerLicences by remember { mutableStateOf(false) }
     var isNotificationEnabled by remember {
         mutableStateOf(WidgetUpdateHelper.isNotificationEnabled(context))
     }
@@ -821,10 +826,46 @@ fun SettingsScreen(
                             title = "Версия",
                             value = BuildConfig.VERSION_NAME,
                         )
+                        // READER-PLAN D10: лицензии вендоренного рендера документов (pdf.js,
+                        // docx-preview, JSZip, Gander) — тексты едут в APK (assets/viewer-licences.md).
+                        LinkItem(
+                            title = "Лицензии просмотрщика документов",
+                            subtitle = "pdf.js, docx-preview, JSZip, Gander",
+                            onClick = { showViewerLicences = true },
+                        )
                     }
                 }
             }
         }
+    }
+
+    if (showViewerLicences) {
+        // 17 КБ текста из ассетов — одноразовое локальное чтение, корутина не нужна.
+        val licencesText = remember {
+            runCatching { context.assets.open("viewer-licences.md").bufferedReader().use { it.readText() } }
+                .getOrDefault("Не удалось открыть текст лицензий.")
+        }
+        AlertDialog(
+            onDismissRequest = { showViewerLicences = false },
+            shape = RoundedCornerShape(2.dp),
+            containerColor = ColorBgMain,
+            title = {
+                Text(
+                    "Лицензии просмотрщика документов",
+                    style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ColorTextTitle),
+                )
+            },
+            text = {
+                Box(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    Text(licencesText, style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = ColorTextBody))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showViewerLicences = false }) {
+                    Text("ЗАКРЫТЬ", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ColorBrandBlue))
+                }
+            },
+        )
     }
 
     if (showGroupDialog) {

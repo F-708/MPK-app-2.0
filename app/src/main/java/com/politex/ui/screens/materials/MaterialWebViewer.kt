@@ -82,8 +82,15 @@ private class InkToolState {
     @Volatile var viewerWidthPx: Float = 0f
     @Volatile var density: Float = 1f
 
+    // Ревью MED #3: авторитетная база — физическая ширина .pg-бокса, которую JS меряет
+    // сам (pdf.mjs фиксирует её при загрузке и НЕ перекладывает при ротации). Compose
+    // viewerWidthPx — только fallback до первого layout-сообщения.
+    @Volatile var jsBoxWidthPx: Float = 0f
+
+    fun boxWidthPx(): Float = (jsBoxWidthPx.takeIf { it > 0f } ?: viewerWidthPx).coerceAtLeast(1f)
+
     fun widthNorm(widthDp: Float): Float {
-        val w = viewerWidthPx
+        val w = jsBoxWidthPx.takeIf { it > 0f } ?: viewerWidthPx
         return if (w > 0f) widthDp * density / w else 0.01f
     }
 }
@@ -156,8 +163,11 @@ fun MaterialWebViewer(
         if (saveVersion == 0) return@LaunchedEffect
         delay(500)
         val pages = dirtyPages.toList()
-        dirtyPages.clear()
+        // MED #2: страницы остаются dirty НА ВРЕМЯ персиста — иначе запоздавшая эмиссия
+        // Room (LaunchedEffect(annotations)) в окне «clear → upsert» перезаписала бы
+        // pageStrokes старым JSON, и persistPages сохранил бы stale. Чистим после.
         persistPages(pages)
+        dirtyPages.removeAll(pages)
     }
 
     var flushing by remember(item.id) { mutableStateOf(false) }
@@ -165,11 +175,11 @@ fun MaterialWebViewer(
         if (!flushing) {
             flushing = true
             val pages = dirtyPages.toList()
-            dirtyPages.clear()
             scope.launch {
                 try {
                     if (pages.isNotEmpty()) withContext(Dispatchers.IO) { persistPages(pages) }
                 } finally {
+                    dirtyPages.removeAll(pages)
                     onBack()
                 }
             }
@@ -177,7 +187,16 @@ fun MaterialWebViewer(
     }
     BackHandler(enabled = dirtyPages.isNotEmpty() || flushing) { flushAndBack() }
 
-    LaunchedEffect(rendererGone) { if (rendererGone) onFallbackNative() }
+    // HIGH #1: при смерти рендер-процесса уходим в нативный viewer — но СНАЧАЛА сохраняем
+    // несохранённые штрихи, иначе MaterialPdfViewer прочитает Room без последних правок.
+    LaunchedEffect(rendererGone) {
+        if (rendererGone) {
+            val pages = dirtyPages.toList()
+            if (pages.isNotEmpty()) withContext(Dispatchers.IO) { persistPages(pages) }
+            dirtyPages.removeAll(pages)
+            onFallbackNative()
+        }
+    }
 
     // ---------------------------------------------------------------- порт / WebView
     val portRef = remember(item.id) { arrayOfNulls<WebMessagePortCompat>(1) }
@@ -222,7 +241,7 @@ fun MaterialWebViewer(
                 val list = pageStrokes[said.page0].orEmpty()
                 if (list.isEmpty()) return
                 val threshold =
-                    eraserThresholdNorm(tool.widthDp, ERASER_TOUCH_EXTRA_DP, tool.density, tool.viewerWidthPx.coerceAtLeast(1f), 1f)
+                    eraserThresholdNorm(tool.widthDp, ERASER_TOUCH_EXTRA_DP, tool.density, tool.boxWidthPx(), 1f)
                 val idx = list.indexOfLast { eraserHitTest(it, said.at, threshold, said.aspect) }
                 if (idx < 0) return
                 undoSession.record(AnnotationAction.Erase(said.page0, idx, list[idx]))
@@ -231,7 +250,20 @@ fun MaterialWebViewer(
                 sendStrokesPage(said.page0)
             }
 
-            PortMessage.Locked -> { rendererGone = true }
+            // Ревью MED #3: JS сообщил физическую ширину page-бокса. База нормировки
+            // толщины/ластика меняется — пересылаем инструмент и все штрихи с новой шириной.
+            is PortMessage.Layout -> {
+                if (tool.jsBoxWidthPx != said.boxWidthPx.toFloat()) {
+                    tool.jsBoxWidthPx = said.boxWidthPx.toFloat()
+                    sendTool()
+                    pageStrokes.keys.toList().forEach { sendStrokesPage(it) }
+                }
+            }
+
+            // PDF с паролем: pdf.mjs сам показывает карточку ввода пароля внутри страницы
+            // (vwAskPassword) — fallback в нативный НЕ делаем, PdfRenderer шифрованные
+            // файлы не открывает вовсе (был бы ложный plaque «повреждён»).
+            PortMessage.Locked -> Unit
             is PortMessage.SearchCount -> Unit
             null -> Unit
         }
@@ -375,10 +407,12 @@ fun MaterialWebViewer(
                 AndroidView(
                     factory = { ctx -> createDocWebView(ctx, item, isPdf, webRef, ::openPort) { rendererGone = true } },
                     onRelease = { v ->
+                        // LOW #7: закрыть порт (иначе Handler+callback живут до GC) и снять WebView.
+                        runCatching { portRef[0]?.close() }
+                        portRef[0] = null
                         runCatching { (v.parent as? ViewGroup)?.removeView(v) }
                         runCatching { v.destroy() }
                         webRef[0] = null
-                        portRef[0] = null
                     },
                     modifier = Modifier.fillMaxSize().testTag(if (isPdf) "web_pdf_view" else "web_docx_view"),
                 )
@@ -437,6 +471,7 @@ private fun createDocWebView(
             allowContentAccess = false
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             setSupportMultipleWindows(false)
+            javaScriptCanOpenWindowsAutomatically = false
 
             @Suppress("DEPRECATION")
             setAllowFileAccessFromFileURLs(false)
@@ -474,11 +509,11 @@ private fun createDocWebView(
                         }
                         return webNotFound()
                     }
-                    // У MPK есть INTERNET: любая попытка страницы уйти в сеть гасится здесь (вторая стена).
-                    return when (url.scheme) {
-                        "http", "https" -> webNotFound()
-                        else -> null
-                    }
+                    // У MPK есть INTERNET: любая попытка страницы уйти в сеть гасится здесь
+                    // (вторая стена после CSP). Пропускаем только data:/blob: — это байты, которые
+                    // страница уже держит (картинки docx-preview, воркер/декодеры pdf.js); всё
+                    // прочее (http/https/ws/wss/ftp/file/content/intent) → 404, не в сеть.
+                    return if (url.scheme == "data" || url.scheme == "blob") null else webNotFound()
                 }
 
                 override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean {

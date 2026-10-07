@@ -130,12 +130,23 @@ class DocWebBridgeTest {
     }
 
     @Test
-    fun `docxRouteWeb — правленые и отсутствующие не в WebView`() {
-        assertTrue(docxRouteWeb(textEdited = false, fileExists = true, major = 80))
-        assertTrue(docxRouteWeb(false, true, null)) // docx: null-версия пропускается (пол низкий)
-        assertFalse(docxRouteWeb(false, true, 79)) // ниже пола docx-preview
-        assertFalse(docxRouteWeb(true, true, 130)) // textEdited → плоский рендер из БД (QA CRITICAL #1)
-        assertFalse(docxRouteWeb(false, false, 130)) // файла нет
+    fun `docxRouteWeb — правленые, отсутствующие и Huawei не в WebView`() {
+        assertTrue(docxRouteWeb(textEdited = false, fileExists = true, major = 80, locked = false))
+        assertTrue(docxRouteWeb(false, true, null, false)) // не-Huawei: null-версия пропускается (пол низкий)
+        assertFalse(docxRouteWeb(false, true, 79, false)) // ниже пола docx-preview
+        assertFalse(docxRouteWeb(false, true, null, true)) // Huawei locked + версия не читается → плоский (тупика нет)
+        assertTrue(docxRouteWeb(false, true, 100, true)) // Huawei, но версия известна и ≥ пола
+        assertFalse(docxRouteWeb(true, true, 130, false)) // textEdited → плоский рендер из БД (QA CRITICAL #1)
+        assertFalse(docxRouteWeb(false, false, 130, false)) // файла нет
+    }
+
+    @Test
+    fun `layout — физическая ширина бокса от JS`() {
+        assertEquals(PortMessage.Layout(1080), parsePortMessage("layout 1080"))
+        assertNull(parsePortMessage("layout 0"))
+        assertNull(parsePortMessage("layout -5"))
+        assertNull(parsePortMessage("layout abc"))
+        assertNull(parsePortMessage("layout 100 200")) // лишнее поле
     }
 
     // ---- chromiumMajor ----

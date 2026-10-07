@@ -129,9 +129,15 @@ internal fun webViewEngineInfo(context: Context): Pair<Int?, Boolean> {
 internal fun pdfRouteWeb(fileExists: Boolean, pageCount: Int, major: Int?, locked: Boolean): Boolean =
     fileExists && pageCount > 0 && !locked && major != null && major >= PDFJS_MIN_CHROMIUM
 
-/** DOCX в WebView, если не правлен (textEdited показываем плоским текстом из БД) и движок не древний. */
-internal fun docxRouteWeb(textEdited: Boolean, fileExists: Boolean, major: Int?): Boolean =
-    !textEdited && fileExists && (major == null || major >= DOCX_PREVIEW_MIN_CHROMIUM)
+/**
+ * DOCX в WebView, если не правлен (textEdited показываем плоским текстом из БД) и движок
+ * потянет docx-preview. На locked-провайдере (Huawei) с нечитаемой версией — КОНСЕРВАТИВНО
+ * плоский рендер: у docx-пути нет порта и fallback-сигнала, битый рендер был бы тупиком.
+ */
+internal fun docxRouteWeb(textEdited: Boolean, fileExists: Boolean, major: Int?, locked: Boolean): Boolean {
+    if (textEdited || !fileExists) return false
+    return if (major == null) !locked else major >= DOCX_PREVIEW_MIN_CHROMIUM
+}
 
 // ---------------------------------------------------------------- Индексы страниц
 
@@ -157,7 +163,8 @@ internal object PortCommand {
     /** Режим рисования: JS перехватывает pointer-события страниц. */
     fun inkMode(on: Boolean) = "M" + if (on) "1" else "0"
 
-    /** Текущий инструмент: цвет ARGB (signed int) и толщина, нормированная к ширине страницы. */
+    /** Текущий инструмент: цвет ARGB (signed int) и толщина, нормированная к ФИЗИЧЕСКОЙ ширине
+     *  page-бокса (её JS меряет сам и шлёт сообщением layout) — не зависит от ротации (ревью MED #3). */
     fun inkTool(colorArgb: Int, widthNorm: Float) = "S $colorArgb $widthNorm"
 
     fun inkEraser(on: Boolean) = "E" + if (on) "1" else "0"
@@ -181,6 +188,11 @@ internal sealed interface PortMessage {
 
     /** Точка ластика (норм. 0..1) + aspect страницы (h/w) для изотропного hit-test. */
     data class Zap(val page0: Int, val at: Offset, val aspect: Float) : PortMessage
+
+    /** Физическая ширина page-бокса (.pg), измеренная JS: rect.width*devicePixelRatio.
+     *  База нормировки толщины штриха и порога ластика — фиксирована у pdf.mjs, не
+     *  меняется при ротации, поэтому источник истины — JS, а не Compose onSizeChanged. */
+    data class Layout(val boxWidthPx: Int) : PortMessage
 }
 
 /**
@@ -215,6 +227,14 @@ internal fun parsePortMessage(data: String?): PortMessage? {
         val aspect = said[4].toFloatOrNull() ?: return null
         if (page0 < 0 || !x.isFinite() || !y.isFinite() || !aspect.isFinite() || aspect <= 0f) return null
         return PortMessage.Zap(page0, Offset(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f)), aspect)
+    }
+
+    // «layout <boxWidthPhysPx>» — физическая ширина page-бокса, измеренная JS.
+    if (said.firstOrNull() == "layout") {
+        if (said.size != 2) return null
+        val w = said[1].toIntOrNull() ?: return null
+        if (w <= 0) return null
+        return PortMessage.Layout(w)
     }
 
     if (said.size != 3) return null
