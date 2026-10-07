@@ -1479,6 +1479,8 @@ private fun TeacherScheduleTab(
     var loading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     var slots by remember { mutableStateOf<List<com.politex.data.network.TeacherSlot>>(emptyList()) }
+    var ambiguous by remember { mutableStateOf(false) }
+    val allTeachers = com.politex.ui.util.rememberTeachers()
 
     val targetCalendar =
         remember(dayOffset, customDate, today) {
@@ -1499,7 +1501,7 @@ private fun TeacherScheduleTab(
 
     // R2#18: ключ today — после полуночи (rememberToday обновляется) расписание перечитывается,
     // «СЕГОДНЯ» не показывает вчерашний день; R2-дубль7: dd.MM.yyyy через общий DateFormats
-    LaunchedEffect(teacher.name, dayOffset, customDate, today) {
+    LaunchedEffect(teacher.name, dayOffset, customDate, today, allTeachers) {
         val dateKey = com.politex.util.DateFormats.dotDate(targetCalendar)
 
         // AA5: loading под try/finally — ни отмена эффекта (смена дня), ни исключение
@@ -1510,18 +1512,23 @@ private fun TeacherScheduleTab(
                 loadTeacherDay(
                     dateKey = dateKey,
                     fromDatabase = {
-                        repository
-                            .getTeacherLessonsForDate(surname, dateKey)
-                            .filter { it.dayOfWeek == selectedDateDow || it.dayOfWeek == 0 }
-                            .map {
-                                com.politex.data.network.TeacherSlot(
-                                    lessonNumber = it.lessonNumber,
-                                    groups = it.groups.split(", ").filter { g -> g.isNotBlank() },
-                                    subject = it.subject,
-                                    room = it.room,
-                                    dayOfWeek = it.dayOfWeek,
-                                )
-                            }
+                        val shown =
+                            repository
+                                .getTeacherLessonsForDate(surname, dateKey)
+                                .mapNotNull { row ->
+                                    val m = TeacherInsights.matchRowToTeacher(row.teacherName, teacher, allTeachers)
+                                    if (m == com.politex.data.repository.TeacherRowMatch.NO) null else row to m
+                                }.filter { (row, _) -> row.dayOfWeek == selectedDateDow || row.dayOfWeek == 0 }
+                        ambiguous = shown.any { it.second == com.politex.data.repository.TeacherRowMatch.AMBIGUOUS }
+                        shown.map { (row, _) ->
+                            com.politex.data.network.TeacherSlot(
+                                lessonNumber = row.lessonNumber,
+                                groups = row.groups.split(", ").filter { g -> g.isNotBlank() },
+                                subject = row.subject,
+                                room = row.room,
+                                dayOfWeek = row.dayOfWeek,
+                            )
+                        }
                     },
                     sync = { repository.syncTeacherScheduleForDate(targetCalendar) },
                 )
@@ -1665,6 +1672,22 @@ private fun TeacherScheduleTab(
                     contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    if (ambiguous) {
+                        item {
+                            AppCard(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "Не удалось точно определить (однофамильцы) — проверьте список",
+                                    style =
+                                    androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 12.sp,
+                                        color = ColorTextMuted,
+                                    ),
+                                    modifier = Modifier.padding(10.dp),
+                                )
+                            }
+                        }
+                    }
                     items(slots) { slot ->
                         AppCard(
                             modifier = Modifier.fillMaxWidth(),

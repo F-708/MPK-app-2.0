@@ -212,21 +212,25 @@ internal fun teacherRows(
 ): List<TeacherLessonEntity> =
     parsedAll
         .flatMap { (rawName, slots) ->
-            val surname = TeacherInsights.surnameOf(rawName)
-            if (surname.isBlank()) {
-                emptyList()
-            } else {
-                slots.map { slot ->
-                    TeacherLessonEntity(
-                        teacherName = rawName.trim(),
-                        surnameKey = surname,
-                        dateString = date,
-                        dayOfWeek = if (slot.dayOfWeek != 0) slot.dayOfWeek else requestedDow,
-                        lessonNumber = slot.lessonNumber,
-                        groups = slot.groups.joinToString(", "),
-                        subject = slot.subject,
-                        room = slot.room,
-                    )
+            // «Иванов/Петров» — две строки, каждая со своим surnameKey (иначе SQL-фильтр
+            // по surnameKey не вернул бы ячейку ни одному из преподавателей).
+            TeacherInsights.splitTeacherNames(rawName).flatMap { name ->
+                val surname = TeacherInsights.surnameOf(name)
+                if (surname.isBlank()) {
+                    emptyList()
+                } else {
+                    slots.map { slot ->
+                        TeacherLessonEntity(
+                            teacherName = name,
+                            surnameKey = surname,
+                            dateString = date,
+                            dayOfWeek = if (slot.dayOfWeek != 0) slot.dayOfWeek else requestedDow,
+                            lessonNumber = slot.lessonNumber,
+                            groups = slot.groups.joinToString(", "),
+                            subject = slot.subject,
+                            room = slot.room,
+                        )
+                    }
                 }
             }
         }

@@ -2,6 +2,8 @@ package com.politex.data.repository
 
 import com.politex.data.local.entity.LessonEntity
 
+enum class TeacherRowMatch { YES, NO, AMBIGUOUS }
+
 class TeacherInsights(
     private val teachers: List<Teacher>,
     lessons: List<LessonEntity>,
@@ -158,6 +160,38 @@ class TeacherInsights(
     companion object {
 
         const val STALE_DAYS = 30L
+
+        // Строка teacher_lessons принадлежит выбранному преподавателю: YES/NO/AMBIGUOUS.
+        // «Иванов/Петров» матчится на каждого; голая фамилия при однофамильцах — AMBIGUOUS
+        // (нельзя ни дропать, ни угадывать); инициалы при одном носителе — YES.
+        fun matchRowToTeacher(
+            rowTeacherName: String,
+            selected: Teacher,
+            allTeachers: List<Teacher>,
+        ): TeacherRowMatch {
+            val selectedKey = surnameOf(selected.name)
+            if (selectedKey.isBlank()) return TeacherRowMatch.NO
+            val candidates = allTeachers.filter { surnameOf(it.name) == selectedKey }
+            val parts = splitTeacherNames(rowTeacherName).filter { surnameOf(it) == selectedKey }
+            if (parts.isEmpty()) return TeacherRowMatch.NO
+            if (candidates.size <= 1) return TeacherRowMatch.YES
+
+            var ambiguous = false
+            for (part in parts) {
+                val ini = initialsOf(part)
+                if (ini.isEmpty()) {
+                    ambiguous = true
+                    continue
+                }
+                val matches = candidates.filter { initialsOf(it.name).startsWith(ini) }
+                if (matches.size == 1) {
+                    if (matches[0].name == selected.name) return TeacherRowMatch.YES
+                } else if (matches.size > 1) {
+                    ambiguous = true
+                }
+            }
+            return if (ambiguous) TeacherRowMatch.AMBIGUOUS else TeacherRowMatch.NO
+        }
 
         fun splitTeacherNames(raw: String): List<String> = raw
             .split('/')
