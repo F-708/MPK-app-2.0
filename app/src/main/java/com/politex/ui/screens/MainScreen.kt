@@ -169,6 +169,9 @@ fun tabSlideDir(from: Int, to: Int): Int = when {
     else -> -1
 }
 
+/** II4: сопротивление drag (Telegram-style): 1.0 = контент 1-в-1 за пальцем (дёргано). */
+private const val DRAG_RESISTANCE = 0.65f
+
 private fun Modifier.tabSwipeGesture(
     onDrag: (Float) -> Unit,
     onSwipeLeft: () -> Unit,
@@ -204,15 +207,16 @@ private fun Modifier.tabSwipeGesture(
                 }
                 if (claimed) {
                     event.changes.forEach { it.consume() }
-                    onDrag(dx)
+                    // II4: сопротивление 0.65 — контент тяжелее пальца, микро-рывки гасятся
+                    onDrag(dx * DRAG_RESISTANCE)
                 }
             }
             if (!claimed) return@awaitEachGesture
             val flick = abs(lastDx) > 18f
-            val commit = abs(dx) > width * 0.22f || (flick && abs(dx) > slop)
+            val commit = abs(dx) > width * 0.25f || (flick && abs(dx) > slop)
             when {
-                commit && dx < 0 -> { onDrag(0f); onSwipeLeft() }
-                commit && dx > 0 -> { onDrag(0f); onSwipeRight() }
+                commit && dx < 0 -> { onRelease(dx); onSwipeLeft() }
+                commit && dx > 0 -> { onRelease(dx); onSwipeRight() }
                 else -> onRelease(dx)
             }
         }
@@ -351,7 +355,7 @@ fun MainScreen(
             var settleTick by remember { mutableIntStateOf(0) }
             LaunchedEffect(settleTick) {
                 if (settleTick == 0) return@LaunchedEffect
-                Animatable(dragOffset.floatValue).animateTo(0f, tween(180)) {
+                Animatable(dragOffset.floatValue).animateTo(0f, tween(220)) {
                     dragOffset.floatValue = value
                 }
             }
