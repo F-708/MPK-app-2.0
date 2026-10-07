@@ -26,6 +26,11 @@ android {
             applicationIdSuffix = ".admin"
             versionNameSuffix = "-admin"
         }
+        create("teacher") {
+            dimension = "version"
+            applicationIdSuffix = ".teacher"
+            versionNameSuffix = "-teacher"
+        }
     }
     minSdk = 24
     targetSdk = 36

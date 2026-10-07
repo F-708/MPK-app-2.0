@@ -36,6 +36,9 @@ jobs:
         mkdir -p app
         cp debug.keystore app/debug.keystore
 
+    - name: Unit tests (main gate)
+      run: ./gradlew :app:testStandardDebugUnitTest --no-daemon
+
     - name: Build Debug APK
       run: ./gradlew assembleDebug --no-daemon --stacktrace
 

@@ -61,12 +61,17 @@ class MainActivity : ComponentActivity() {
                 handleIntent(intent, navController)
             }
 
-            MyApplicationTheme {
-                MainScreen(
-                    viewModel = appViewModel,
-                    navController = navController,
-                    modifier = Modifier.fillMaxSize(),
-                )
+            // Единственная точка ветвления flavor (долг чести №6: ноль FLAVOR в остальном коде)
+            if (BuildConfig.FLAVOR == "teacher") {
+                com.politex.ui.teacher.TeacherRoot(modifier = Modifier.fillMaxSize())
+            } else {
+                MyApplicationTheme {
+                    MainScreen(
+                        viewModel = appViewModel,
+                        navController = navController,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
         }
     }
