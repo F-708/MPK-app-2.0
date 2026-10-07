@@ -1,6 +1,6 @@
 package com.politex
 
-import com.politex.ui.screens.teacherTargetCalendar
+import com.politex.data.repository.teacherTargetCalendar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame

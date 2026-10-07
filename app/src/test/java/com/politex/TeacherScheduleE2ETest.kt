@@ -6,9 +6,9 @@ import com.politex.data.network.TeacherScheduleParser
 import com.politex.data.network.TeacherSlot
 import com.politex.data.repository.TeacherInsights
 import com.politex.data.repository.teacherRows
-import com.politex.ui.screens.defaultTeacherDayOffset
-import com.politex.ui.screens.loadTeacherDay
-import com.politex.ui.screens.teacherSyncErrorMessage
+import com.politex.data.repository.defaultTeacherDayOffset
+import com.politex.data.repository.loadTeacherDay
+import com.politex.data.repository.teacherSyncErrorMessage
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

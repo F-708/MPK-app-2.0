@@ -1409,56 +1409,6 @@ private fun AboutTeacherTab(
     }
 }
 
-internal fun teacherTargetCalendar(
-    dayOffset: Int,
-    customDate: Calendar?,
-    base: Calendar = Calendar.getInstance(),
-): Calendar =
-    customDate ?: (base.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, dayOffset) }
-
-// AA5: в воскресенье документа преподавателей не существует (проверено curl: вс — 404,
-// сб/пн — 200), поэтому по умолчанию сразу открываем понедельник, а не «сегодня».
-internal fun defaultTeacherDayOffset(todayDow: Int): Int = if (todayDow == 7) 1 else 0
-
-internal fun teacherSyncErrorMessage(
-    e: Throwable,
-    dateKey: String,
-): String {
-    val msg = e.message.orEmpty()
-    return if (msg.contains("не найден") || msg.contains("вместо") || msg.contains("другой день")) {
-        "Расписание преподавателя на $dateKey ещё не опубликовано"
-    } else {
-        "Не удалось загрузить расписание (проверьте интернет)"
-    }
-}
-
-internal data class TeacherDayLoad(
-    val slots: List<com.politex.data.network.TeacherSlot>,
-    val error: String,
-)
-
-// AA5: кэш-первым, сеть один раз; ЛЮБАЯ ошибка (Result.failure или исключение)
-// превращается в текст — вызывающий код всегда может сбросить loading.
-internal suspend fun loadTeacherDay(
-    dateKey: String,
-    fromDatabase: suspend () -> List<com.politex.data.network.TeacherSlot>,
-    sync: suspend () -> Result<Int>,
-): TeacherDayLoad {
-    val cached = fromDatabase()
-    if (cached.isNotEmpty()) return TeacherDayLoad(cached, "")
-
-    var slots = cached
-    var error = ""
-    runCatching { sync() }
-        .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
-        .getOrElse { Result.failure(it) }
-        .fold(
-            onSuccess = { slots = fromDatabase() },
-            onFailure = { error = teacherSyncErrorMessage(it, dateKey) },
-        )
-    return TeacherDayLoad(slots, error)
-}
-
 // AA4: авто-факт уверен (weekly/recent) и пользователь его не снимал — шильд не кликабельен.
 internal fun canToggleLeads(
     autoActive: Boolean,
@@ -1471,9 +1421,10 @@ private fun TeacherScheduleTab(
     onOpenRoom: (String) -> Unit = {},
 ) {
     val repository = com.politex.AppGraph.scheduleRepository
+    val context = LocalContext.current
 
     val today = rememberToday()
-    var dayOffset by rememberSaveable { mutableIntStateOf(defaultTeacherDayOffset(com.politex.util.Dow.of(today))) }
+    var dayOffset by rememberSaveable { mutableIntStateOf(com.politex.data.repository.defaultTeacherDayOffset(com.politex.util.Dow.of(today))) }
     var showCalendar by remember { mutableStateOf(false) }
     var customDate by remember { mutableStateOf<Calendar?>(null) }
     var loading by remember { mutableStateOf(false) }
@@ -1484,7 +1435,7 @@ private fun TeacherScheduleTab(
 
     val targetCalendar =
         remember(dayOffset, customDate, today) {
-            teacherTargetCalendar(dayOffset, customDate)
+            com.politex.data.repository.teacherTargetCalendar(dayOffset, customDate)
         }
 
     val surname =
@@ -1506,34 +1457,29 @@ private fun TeacherScheduleTab(
 
         // AA5: loading под try/finally — ни отмена эффекта (смена дня), ни исключение
         // больше не оставляют вечный спиннер; ошибка сети становится честным текстом.
+        // T2-A: загрузка вынесена в TeacherDayLoader (общий со студенческим экраном путь).
         loading = true
         try {
-            val result =
-                loadTeacherDay(
-                    dateKey = dateKey,
-                    fromDatabase = {
-                        val shown =
-                            repository
-                                .getTeacherLessonsForDate(surname, dateKey)
-                                .mapNotNull { row ->
-                                    val m = TeacherInsights.matchRowToTeacher(row.teacherName, teacher, allTeachers)
-                                    if (m == com.politex.data.repository.TeacherRowMatch.NO) null else row to m
-                                }.filter { (row, _) -> row.dayOfWeek == selectedDateDow || row.dayOfWeek == 0 }
-                        ambiguous = shown.any { it.second == com.politex.data.repository.TeacherRowMatch.AMBIGUOUS }
-                        shown.map { (row, _) ->
-                            com.politex.data.network.TeacherSlot(
-                                lessonNumber = row.lessonNumber,
-                                groups = row.groups.split(", ").filter { g -> g.isNotBlank() },
-                                subject = row.subject,
-                                room = row.room,
-                                dayOfWeek = row.dayOfWeek,
-                            )
-                        }
-                    },
-                    sync = { repository.syncTeacherScheduleForDate(targetCalendar) },
+            val day =
+                com.politex.data.repository.TeacherDayLoader.loadDay(
+                    context = context,
+                    repository = repository,
+                    profile = com.politex.ui.teacher.TeacherProfile(teacher.name, surname),
+                    dateString = dateKey,
+                    allTeachers = allTeachers,
                 )
-            slots = result.slots
-            errorMessage = result.error
+            slots =
+                day.lessons.map {
+                    com.politex.data.network.TeacherSlot(
+                        lessonNumber = it.lessonNumber,
+                        groups = it.groups,
+                        subject = it.subject,
+                        room = it.room,
+                        dayOfWeek = selectedDateDow,
+                    )
+                }
+            ambiguous = day.ambiguous
+            errorMessage = day.error
         } finally {
             loading = false
         }
