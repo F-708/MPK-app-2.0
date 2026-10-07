@@ -205,14 +205,14 @@ class TeacherInsights(
                     .replace(Regex("[0-9]"), "")
                     .split(Regex("\\s+"))
                     .firstOrNull() ?: return ""
-            return first.trim(' ', ',', '.', '-', '/', '\\').lowercase()
+            return first.trim(' ', ',', '.', '-', '/', '\\').lowercase().replace('ё', 'е')
         }
 
         fun initialsOf(raw: String): String {
             val parts = raw.trim().split(Regex("\\s+")).drop(1)
             return parts
                 .joinToString("") { part ->
-                    part.trim('.', ',', '/', '-').take(1).lowercase()
+                    part.trim('.', ',', '/', '-').take(1).lowercase().replace('ё', 'е')
                 }.filter { it.isLetter() }
         }
     }

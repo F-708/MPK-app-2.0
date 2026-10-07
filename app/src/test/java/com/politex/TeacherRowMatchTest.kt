@@ -66,4 +66,16 @@ class TeacherRowMatchTest {
         assertEquals(setOf("иванов", "петров"), rows.map { it.surnameKey }.toSet())
         assertTrue(rows.all { it.dateString == "05.10.2026" && it.lessonNumber == 1 })
     }
+
+    @Test
+    fun `ё и е в фамилии и инициалах не расходятся`() {
+        val eremenkoCsv = Teacher(name = "Еременко Татьяна Викторовна")
+        val list = listOf(eremenkoCsv)
+        assertEquals(
+            TeacherRowMatch.YES,
+            TeacherInsights.matchRowToTeacher("Ерёменко Т.В.", eremenkoCsv, list),
+        )
+        assertEquals(TeacherInsights.surnameOf("Еременко А.Б."), TeacherInsights.surnameOf("Ерёменко А.Б."))
+        assertEquals(TeacherInsights.initialsOf("Ерёменко Т.В."), TeacherInsights.initialsOf("Еременко Т.В."))
+    }
 }
