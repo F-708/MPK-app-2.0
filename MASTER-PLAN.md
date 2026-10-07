@@ -871,3 +871,16 @@ II3. PDF: при отдалении (pinch не отпущен) страницы
      больший запас страниц (beyond viewport по фактическому zoom), чтобы при 0.5x контент был.
 II4. Свайп вкладок влево/вправо слишком резкий/дёрганый — отполировать: сопротивление пальца,
      плавный commit/settle, стабильный claim направления. НЕ сломать работающий жест (HH7).
+
+---
+
+# ПРИЛОЖЕНИЕ ПРЕПОДАВАТЕЛЯ (flavor teacher) — план автономной реализации 2026-10-08
+Источник: TEACHER-APP-SPEC.md (§8 волны) + решения заказчика (§15) + DECISIONS.md консилиума.
+Режим: автономно, волны ≤3 агентов, compile standard+teacher после волны, коммит на блок, консилиум активен.
+- T0 (общий код): surnameKey-фикс + сплит teacherRows «Иванов/Петров» + плашка неоднозначности + тесты; CI-гейт testStandardDebugUnitTest в build-apk.yml. Privacy ОТМЕНЕНА (В1/В2=B).
+- T1 (каркас): flavor teacher (applicationIdSuffix .teacher), src/teacher/res (иконка — академическая шапка синяя на белом, app_name «Мой Политех — Преподавателю»), MainActivity → TeacherRoot, teacher-тема (48dp/13sp параметром).
+- T2 (демо): TeacherHomeScreen+VM+DayLoader (перенос TeacherScheduleTab, статусы, метки свежести); Onboarding «найди себя» + ProfileStore (prefs); TeacherScheduleWorker (06:30 прогон, force сегодня).
+- T3 (данные/фон): Room v10 teacher_overrides + MIGRATION_9_10 + тест + по-field diff-сброс + уведомление о сбросе + bottom sheet; TeacherWeekScreen (полоса дат + нагрузка + inline-дисклеймер); виджеты «следующая пара» 4×1/2×2 + «моё сегодня» 4×2.
+- T4 (оболочка/честность): TeacherNav (Сегодня/Неделя/Ещё), BellsScreen-адапт, карта as-is, About+дисклеймер «неофициальное», честная деградация, OEM-справка; «мои пары у группы» из чипа; каналы уведомлений + сводка 07:15 + quiet hours + action «Пометить».
+- T5 (RC): testTeacherDebugUnitTest + standard, roborazzi teacher + vision-аудит, гейты students.csv=0 в teacher, LiveDocTest, assembleTeacherRelease+StandardRelease (паровоз, versionCode общий), APK в releases/, финальный отчёт.
+- Консилиум: чекпоинт после T2 (демо-ревью) и перед T5 (релиз-ревью 2 критиками); решения — в DECISIONS.md.
