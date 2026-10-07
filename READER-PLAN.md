@@ -39,3 +39,19 @@
 5. Роутинг MaterialBaseScreen (floor-детект + fallback-состояние).
 6. Прогоны: compile → unit-гейт → коммиты по блокам.
 7. Ревью-консиллиум по фактическому diff (code-review + security re-audit), фикс находок.
+
+## Итог ревью-консиллиума (волна 3, по фактическому диффу)
+
+Участники: **code-reviewer** (дифф 51b9e82) + **security-reaudit** (инварианты по коду). Security-вердикт: **ДЕРЖИТ**, 0 CRIT/HIGH/MED, 4 LOW. Code-review: блок крепкий, 1 HIGH + 4 MED + 3 LOW — все закрыты в коммите 429fedf:
+
+- **HIGH** — штрихи сохранялись в Room ПОСЛЕ выхода из композиции при смерти рендера → терялись. Фикс: персист ДО `onFallbackNative()`.
+- **MED** — `dirtyPages.clear()` до завершения `persistPages` → запоздавшая эмиссия Room перетирала `pageStrokes` stale-JSON. Фикс: clear после персиста.
+- **MED** — база нормировки толщины/ластика (Compose `viewerWidthPx`) расходилась с фиксированной шириной `.pg` у pdf.mjs после ротации. Фикс: JS меряет физ. ширину бокса и шлёт `layout <px>`, Kotlin использует её как авторитетную.
+- **MED** — мультитач: второй палец перезаписывал live-штрих (ghost). Фикс: `if (live) return` + проверка `pointerId`.
+- **MED** — `docxRouteWeb` игнорировал locked-провайдер (Huawei) → docx в WebView без fallback-порта = тупик. Фикс: locked+нечитаемая версия → плоский рендер.
+- **LOW** — `pointercancel` сохранял жест как штрих → отдельный обработчик, discard без send.
+- **LOW** — WebMessagePort не закрывался → `close()` в `onRelease`.
+- **LOW (security, defense-in-depth)** — `javaScriptCanOpenWindowsAutomatically=false`; `shouldInterceptRequest` пропускает только `data:`/`blob:`, прочие не-http схемы → 404.
+- Принято без фикса: origin-check в JS-слушателях порта (риск сломать рабочий port-handoff > выгоды от митигированного LOW — `frame-src 'none'`, нет opener, фиксированный targetOrigin); PDF с паролем остаётся в WebView (in-page ввод pdf.mjs).
+
+**Верификация:** чистый git-worktree на HEAD 429fedf (без uncommitted WIP и untracked-файлов параллельной teacher-сессии) — `:app:testStandardDebugUnitTest` BUILD SUCCESSFUL. Общий :app-модуль в рабочем дереве временно не компилируется из-за ЖИВОГО WIP teacher-сессии (`ui/teacher/*`), вне namespace материалов; согласовано через SendMessage, зелёный гейт восстановится после их T3-коммитов.
