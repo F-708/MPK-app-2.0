@@ -46,11 +46,13 @@ class MainActivity : ComponentActivity() {
             com.politex.util.BellTimerService
                 .start(this)
         }
-        MpkWorkManagerHelper.setupPeriodicScheduleCheck(this)
-
-        MpkWorkManagerHelper.setupBellServiceWatchdog(this)
-
-        MpkWorkManagerHelper.setupPeriodicReminderCheck(this)
+        if (BuildConfig.FLAVOR == "teacher") {
+            MpkWorkManagerHelper.setupTeacherSync(this)
+        } else {
+            MpkWorkManagerHelper.setupPeriodicScheduleCheck(this)
+            MpkWorkManagerHelper.setupBellServiceWatchdog(this)
+            MpkWorkManagerHelper.setupPeriodicReminderCheck(this)
+        }
 
         setContent {
             val appViewModel: AppViewModel = viewModel()

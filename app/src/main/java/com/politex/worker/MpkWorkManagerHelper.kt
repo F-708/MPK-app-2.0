@@ -40,6 +40,25 @@ object MpkWorkManagerHelper {
         }
     }
 
+    fun setupTeacherSync(context: Context) {
+        val constraints =
+            Constraints
+                .Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+        val request =
+            PeriodicWorkRequestBuilder<TeacherScheduleWorker>(
+                CHECK_INTERVAL_MINUTES,
+                TimeUnit.MINUTES,
+            ).setConstraints(constraints)
+                .build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            TeacherScheduleWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            request,
+        )
+    }
+
     fun setupBellServiceWatchdog(context: Context) {
         val request =
             PeriodicWorkRequestBuilder<BellServiceWatchdogWorker>(
