@@ -65,6 +65,8 @@ class TeacherScheduleWorker(
                     .edit()
                     .putLong("lastSyncEpoch", System.currentTimeMillis())
                     .apply()
+                // T3-C: после успешного синка — перерисовать teacher-виджеты (в студенческой сборке профиль null → мгновенный выход)
+                com.politex.widget.TeacherWidgetUpdater.updateAll(applicationContext)
                 return@withContext Result.success()
             }
             // Сетевые ошибки тихо: retry/следующий тик, без уведомлений (уведомления — T4).

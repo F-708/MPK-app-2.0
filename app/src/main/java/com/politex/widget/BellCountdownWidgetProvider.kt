@@ -450,6 +450,10 @@ object WidgetAlarm {
             NowNextWidgetProvider::class.java,
             TodayScheduleWidgetProvider::class.java,
             BellsWidgetProvider::class.java,
+            // T3-C: teacher-виджеты держат минутный тик живым в teacher-сборке.
+            // В студенческой они не зарегистрированы → getAppWidgetIds пуст, дёшево.
+            TeacherNextWidgetProvider::class.java,
+            TeacherTodayWidgetProvider::class.java,
         ).any { manager.getAppWidgetIds(ComponentName(context, it)).isNotEmpty() }
     }
 
@@ -510,6 +514,10 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
                                 WidgetUpdateHelper.updateMinuteWidgets(context)
                             }
                         }
+                        // T3-C: teacher-виджеты обновляем тем же минутным тиком, БЕЗ flavor-гейта —
+                        // в студенческой сборке профиль null → updateAllNow мгновенно выходит (дёшево:
+                        // одно чтение prefs). Держать тик живым для teacher-виджетов — см. hasWork().
+                        TeacherWidgetUpdater.updateAllNow(context)
                         WidgetAlarm.scheduleNext(context)
                     } finally {
                         pending.finish()
@@ -531,6 +539,8 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
                 WidgetUpdateHelper.widgetScope.launch {
                     try {
                         WidgetUpdateHelper.updateAllWidgets(context)
+                        // T3-C: teacher-виджеты после перезагрузки/обновления приложения
+                        TeacherWidgetUpdater.updateAllNow(context)
                     } finally {
                         pending.finish()
                     }

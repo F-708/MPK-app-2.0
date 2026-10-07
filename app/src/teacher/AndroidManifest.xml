@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Overlay-манифест flavor'а teacher: регистрация teacher-виджетов ТОЛЬКО здесь.
+     В main-манифест НЕ добавляем — иначе виджеты появятся у студентов.
+     Manifest merger (AGP) подхватывает src/teacher/AndroidManifest.xml и сливает
+     эти <receiver> в итоговый манифест teacher-сборки. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Виджет преподавателя «Следующая пара» (4×1 / 2×2) -->
+        <receiver
+            android:name="com.politex.widget.TeacherNextWidgetProvider"
+            android:exported="true"
+            android:label="Следующая пара">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_teacher_next_info" />
+        </receiver>
+
+        <!-- Виджет преподавателя «Моё сегодня» (4×2) -->
+        <receiver
+            android:name="com.politex.widget.TeacherTodayWidgetProvider"
+            android:exported="true"
+            android:label="Моё сегодня">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_teacher_today_info" />
+        </receiver>
+    </application>
+</manifest>
