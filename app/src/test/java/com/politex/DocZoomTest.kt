@@ -9,6 +9,7 @@ import com.politex.ui.screens.materials.clampPan
 import com.politex.ui.screens.materials.neighborPages
 import com.politex.ui.screens.materials.pageHeightFromWidth
 import com.politex.ui.screens.materials.sheetCount
+import com.politex.ui.screens.materials.zoomOutHeightFactor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -160,5 +161,41 @@ class DocZoomTest {
         assertEquals(1, sheetCount(0f, 1414f, 8f))
         assertEquals(1, sheetCount(-5f, 1414f, 8f))
         assertEquals(1, sheetCount(500f, 0f, 8f)) // ширина ещё не измерена ⇒ pageHeight=0
+    }
+
+    // II3: запас страниц при zoom<1 — высота списка = viewport/MIN.
+    @Test
+    fun `II3 zoomOutHeightFactor - при MIN 0_5 запас 2x, вне 0 до 1 вырождается в 1`() {
+        assertEquals(2f, zoomOutHeightFactor(DocZoom.MIN), eps)
+        assertEquals(1f, zoomOutHeightFactor(1f), eps)
+        assertEquals(1f, zoomOutHeightFactor(1.5f), eps)
+        assertEquals(1f, zoomOutHeightFactor(0f), eps)
+        assertEquals(1f, zoomOutHeightFactor(-1f), eps)
+    }
+
+    // II3: при любом zoom ∈ [MIN, 1] масштабированная высота списка ≥ высоты экрана —
+    // пустот во время pinch нет (якорь transformOrigin сверху, контент top-aligned).
+    @Test
+    fun `II3 покрытие - масштабированный запас закрывает viewport на всем диапазоне zoom`() {
+        val listH = h * zoomOutHeightFactor(DocZoom.MIN)
+        (0..10).forEach { i ->
+            val s = DocZoom.MIN + i * (1f - DocZoom.MIN) / 10f
+            assertTrue("zoom=$s: ${(s * listH)} < $h", s * listH >= h - 1e-3f)
+        }
+        // zoom >= 1: список не меньше viewport сам по себе
+        assertTrue(listH >= h)
+    }
+
+    // II3: viewport в 2 раза выше экрана ⇒ нижний padding возвращает достижимость конца
+    // документа при zoom=1 (maxScroll считается от viewport, а не от экрана).
+    @Test
+    fun `II3 конец документа достижим при zoom 1 благодаря нижнему padding`() {
+        val factor = zoomOutHeightFactor(DocZoom.MIN)
+        val listH = h * factor
+        val endPad = h * (factor - 1f)
+        val contentH = 10_000f
+        val maxScroll = contentH + 12f + endPad - listH // 12f — верхний+нижний 6dp padding
+        // низ экрана при максимальном скролле = maxScroll + viewport (список top-aligned)
+        assertTrue(maxScroll + h >= contentH)
     }
 }

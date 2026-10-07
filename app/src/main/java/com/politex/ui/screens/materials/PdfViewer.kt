@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
@@ -76,6 +77,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -437,6 +439,7 @@ fun MaterialPdfViewer(
             val renderWidthPx = with(density) { maxWidth.roundToPx() }.coerceIn(320, 2800)
             val boxW = with(density) { maxWidth.toPx() }
             val boxH = with(density) { maxHeight.toPx() }
+            val maxHDp = maxHeight
             val center = Offset(boxW / 2f, boxH / 2f)
 
             // HH3: pinch в draw-режиме идёт через AnnotationLayer (центроида нет) — зум вокруг
@@ -532,20 +535,31 @@ fun MaterialPdfViewer(
                     // HH3: scale/pan — draw-фаза, без relayout (как в ImageViewer).
                     // pointerInput выше по цепочке ⇒ центроид/тап в координатах вьюпорта.
                     .graphicsLayer {
+                        // II3: при zoom<1 якорь сверху — список высотой 2*viewport заполняет
+                        // экран при 0.5x без пустот; при zoom=1 оба якоря дают identity ⇒ без скачка.
+                        transformOrigin = if (zoomState.floatValue < 1f) TransformOrigin(0.5f, 0f) else TransformOrigin.Center
                         scaleX = zoomState.floatValue
                         scaleY = zoomState.floatValue
                         translationX = panState.value.x
                         translationY = panState.value.y
                     },
             ) {
+                // II3: высота списка = viewport/MIN (константа, 2x) — запас скомпозированных
+                // страниц покрывает весь видимый экран при любом zoom >= MIN, ноль relayout
+                // на кадр pinch. LazyColumn не клипит draw ниже viewport ⇒ запас и рисуется.
+                // Нижний padding = невидимому остатку viewport при zoom=1: конец документа
+                // достижим скроллом, как и раньше. requiredHeight — входящие constraint'ы
+                // Box'а фиксированы (weight), height(2x) был бы зажат.
+                val zoomOutFactor = zoomOutHeightFactor(DocZoom.MIN)
                 LazyColumn(
                     state = listState,
                     modifier =
                     Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth()
+                        .requiredHeight(maxHDp * zoomOutFactor)
                         .testTag("pdf_page_list"),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(vertical = 6.dp),
+                    contentPadding = PaddingValues(top = 6.dp, bottom = 6.dp + maxHDp * (zoomOutFactor - 1f)),
                 ) {
                     items(count = pageCount, key = { it }) { index ->
                         PdfPageRow(
@@ -678,6 +692,10 @@ internal fun clampPan(
 // GG13b: фоновый прогрев битмапов соседей — при быстром скролле LazyColumn композиции
 // соседних страниц ещё нет, но битмапы уже в LruCache ⇒ страница сразу рисуется из кэша.
 internal const val PREFETCH_RANGE = 3
+
+// II3: множитель высоты списка при zoom<1: 1/MIN = 2 ⇒ запас скомпозированных страниц
+// покрывает весь видимый экран на минимальном зуме без relayout на кадр pinch. Чистая функция.
+internal fun zoomOutHeightFactor(minZoom: Float): Float = if (minZoom > 0f && minZoom < 1f) 1f / minZoom else 1f
 
 // Страницы для прогрева: ±range вокруг видимой, clamp в [0, total). Чистая функция (тесты).
 internal fun neighborPages(
