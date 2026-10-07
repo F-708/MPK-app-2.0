@@ -31,7 +31,7 @@ object TeacherOnboardingLogic {
     ): List<Teacher> {
         val key = TeacherInsights.surnameOf(selected.name)
         val same = all.filter { TeacherInsights.surnameOf(it.name) == key }
-        return if (same.isEmpty()) listOf(selected) else same
+        return if (same.isEmpty()) listOf(selected) else same.sortedByDescending { it.name == selected.name }
     }
 
     fun showOnboarding(

@@ -1,11 +1,7 @@
 package com.politex.ui.teacher
 
-import android.Manifest
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -57,7 +53,7 @@ fun TeacherOnboardingScreen(
     var step by remember { mutableStateOf(0) }
 
     val skip: () -> Unit = {
-        if (step >= 3) onSkipAll() else step++
+        if (step >= 2) onSkipAll() else step++
     }
 
     TeacherTheme {
@@ -95,11 +91,6 @@ fun TeacherOnboardingScreen(
                         TeacherProfileStore.set(context, TeacherOnboardingLogic.profileOf(teacher))
                         onProfileSaved()
                     },
-                    onSkip = skip,
-                )
-                2 -> NotificationsStep(
-                    body = metrics.body,
-                    onNext = { step = 3 },
                     onSkip = skip,
                 )
                 else -> WidgetStep(
@@ -259,38 +250,6 @@ private fun SearchStep(
     }
 }
 
-@Composable
-private fun NotificationsStep(
-    body: androidx.compose.ui.unit.TextUnit,
-    onNext: () -> Unit,
-    onSkip: () -> Unit,
-) {
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { onNext() }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text("Уведомления", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle)
-        Text(
-            "Уведомлять об изменениях расписания?",
-            fontSize = body,
-            color = ColorTextBody,
-        )
-        Spacer(Modifier.weight(1f))
-        OnboardButton("Да", onClick = {
-            if (Build.VERSION.SDK_INT >= 33) {
-                launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else {
-                onNext()
-            }
-        })
-        OnboardButton("Позже", onSkip, filled = false)
-    }
-}
 
 @Composable
 private fun WidgetStep(

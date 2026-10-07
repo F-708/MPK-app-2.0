@@ -48,9 +48,10 @@ class TeacherScheduleWorker(
             var anyOk = false
             var anyFail = false
             targets.forEachIndexed { index, cal ->
-                // Сегодня — всегда force (внутридневные правки не должен блокировать кэш-гейт);
-                // следующий день — force только в утренний прогон.
-                val force = index == 0 || decision == SyncDecision.MORNING_FORCE
+                // Force-перечитывание по SPEC §5.3: утренний прогон (обе цели) + окно
+                // 14:00–18:00 для сегодня (внутридневные правки); прочие тики — кэш-первым.
+                val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                val force = decision == SyncDecision.MORNING_FORCE || (index == 0 && hour in 14..17)
                 repository
                     .syncTeacherScheduleForDate(cal, force = force)
                     .onSuccess { anyOk = true }

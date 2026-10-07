@@ -19,7 +19,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -123,6 +130,23 @@ fun TeacherHomeScreen(
         }
     val eveningTomorrowHint = remember(nowMinutes) { nowMinutes >= 20 * 60 }
 
+    val staleData = remember(state.lastSyncEpoch) {
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+        state.lastSyncEpoch < cal.timeInMillis
+    }
+    val notifPrefs = remember { context.getSharedPreferences("mpk_teacher_profile", android.content.Context.MODE_PRIVATE) }
+    var notifPromptShown by remember { mutableStateOf(notifPrefs.getBoolean("notif_prompt_shown", false)) }
+    val notifGranted =
+        Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+    val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        notifPrefs.edit().putBoolean("notif_prompt_shown", true).apply()
+        notifPromptShown = true
+    }
+
     Column(modifier = modifier.fillMaxSize().background(ColorBgMain)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
@@ -176,6 +200,41 @@ fun TeacherHomeScreen(
             if (idx >= 0) listState.animateScrollToItem(idx)
         }
 
+        if (!notifPromptShown && !notifGranted && !state.loading) {
+            AppCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        "Уведомлять об изменениях расписания?",
+                        style = TextStyle(fontSize = metrics.body, color = ColorTextTitle, fontWeight = FontWeight.SemiBold),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            color = ColorTopBar,
+                            modifier = Modifier.heightIn(min = metrics.hitTarget).bouncyClickable(
+                                onClick = { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                            ).testTag("teacher_notif_enable"),
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 16.dp)) {
+                                Text("Включить", color = Color.White, fontSize = metrics.buttonText, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        TextButton(
+                            onClick = {
+                                notifPrefs.edit().putBoolean("notif_prompt_shown", true).apply()
+                                notifPromptShown = true
+                            },
+                            modifier = Modifier.heightIn(min = metrics.hitTarget),
+                        ) {
+                            Text("Позже", color = ColorTextMuted, fontSize = metrics.buttonText)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
         when {
             state.loading && state.lessons.isEmpty() ->
                 Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -189,7 +248,7 @@ fun TeacherHomeScreen(
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
-                        text = state.error.ifBlank { TeacherDayLogic.emptyDayText(state.dow, state.nextLesson) },
+                        text = state.error.ifBlank { TeacherDayLogic.emptyDayText(state.dow, state.nextLesson, isToday = state.dayOffset == 0) },
                         style = TextStyle(fontSize = metrics.body, color = ColorTextMuted),
                         textAlign = TextAlign.Center,
                     )
@@ -228,12 +287,13 @@ fun TeacherHomeScreen(
                             }
                         }
                     }
-                    itemsIndexed(state.lessons, key = { i, l -> "${l.lessonNumber}_$i" }) { i, lesson ->
+                    itemsIndexed(state.lessons, key = { i, l -> "${l.lessonNumber}_${l.subject}_$i" }) { i, lesson ->
                         TeacherLessonCard(
                             lesson = lesson,
                             status = statuses.getOrElse(i) { LessonStatus.UPCOMING },
                             metrics = metrics,
                             onRoomClick = onRoomClick,
+                            staleData = staleData,
                         )
                     }
                 }
@@ -285,6 +345,7 @@ private fun TeacherLessonCard(
     status: LessonStatus,
     metrics: TeacherMetrics,
     onRoomClick: (String) -> Unit,
+    staleData: Boolean = false,
 ) {
     AppCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -293,6 +354,13 @@ private fun TeacherLessonCard(
                 LessonStatus.NEXT -> StatusLabel("СЛЕДУЮЩАЯ", ColorActiveBlue)
                 LessonStatus.PAST -> StatusLabel("ПРОШЛА", ColorTextMuted)
                 LessonStatus.UPCOMING -> Unit
+            }
+            if (staleData && (status == LessonStatus.NOW || status == LessonStatus.NEXT)) {
+                Text(
+                    "по данным на вчерашний вечер — сверьтесь с чатом учебной части",
+                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                    modifier = Modifier.padding(bottom = 4.dp).testTag("teacher_stale_plate"),
+                )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -345,7 +413,7 @@ private fun StatusLabel(
     text: String,
     color: Color,
 ) {
-    Text(text, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = color), modifier = Modifier.padding(bottom = 4.dp))
+    Text(text, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = color), modifier = Modifier.padding(bottom = 4.dp))
 }
 
 private fun minutesNow(): Int {

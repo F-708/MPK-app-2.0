@@ -126,12 +126,14 @@ object TeacherDayLogic {
     fun emptyDayText(
         dow: Int,
         next: NextLesson?,
+        isToday: Boolean = true,
     ): String = when {
         dow == 7 -> "Выходной"
         next != null ->
-            "Сегодня пар нет. Следующая — ${shortDow(next.dow)} ${next.lesson.start}" +
+            (if (isToday) "Сегодня пар нет." else "На этот день пар нет.") +
+                " Следующая — ${shortDow(next.dow)} ${next.lesson.start}" +
                 if (next.lesson.room.isNotBlank()) ", каб. ${next.lesson.room}" else ""
-        else -> "Сегодня пар нет."
+        else -> if (isToday) "Сегодня пар нет." else "На этот день пар нет."
     }
 }
 

@@ -69,6 +69,7 @@ class TeacherDayLogicTest {
     fun `плейсхолдер пустого дня`() {
         assertEquals("Выходной", TeacherDayLogic.emptyDayText(7, null))
         assertEquals("Сегодня пар нет.", TeacherDayLogic.emptyDayText(3, null))
+        assertEquals("На этот день пар нет.", TeacherDayLogic.emptyDayText(3, null, isToday = false))
         val next = NextLesson("06.10.2026", 2, lesson(1, 9 * 60 + 50, 10 * 60, room = "241"))
         assertEquals("Сегодня пар нет. Следующая — вт 09:50, каб. 241", TeacherDayLogic.emptyDayText(1, next))
         val noRoom = NextLesson("06.10.2026", 2, lesson(1, 9 * 60 + 50, 10 * 60, room = ""))
