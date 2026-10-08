@@ -18,6 +18,7 @@ import com.politex.R
 import com.politex.data.local.MpkDatabase
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.network.MpkScheduleParser
+import com.politex.data.repository.OverrideReset
 import com.politex.data.repository.Teacher
 import com.politex.data.repository.TeacherDayLesson
 import com.politex.data.repository.TeacherDayLogic
@@ -50,7 +51,8 @@ object TeacherNotifier {
     private const val PREFS = "mpk_teacher_profile"
 
     // Неймспейс notification-id и PendingIntent request-кодов teacher-сборки: 7_000_000+
-    // (студенческие: 2026, 3_000_000+ reminder, 5_000_000+ виджеты — не пересекаются).
+    // (студенческие: 2026–2027, 2_000_000+/4_000_000+ PI виджетов, 3_000_000+ reminder;
+    // teacher-виджеты: 5_000_000+/6_000_000+ — не пересекаются).
     private const val ID_SUMMARY = 7_000_001
     private const val PI_SUMMARY_OPEN = 7_000_002
     private const val PI_SUMMARY_MARK = 7_000_003
@@ -58,6 +60,8 @@ object TeacherNotifier {
     private const val PI_CHANGES_OPEN = 7_000_011
     private const val ID_PUBLISHED = 7_000_020
     private const val PI_PUBLISHED_OPEN = 7_000_021
+    private const val ID_RESET = 7_000_030
+    private const val PI_RESET_OPEN = 7_000_031
     private const val PI_REMINDER_ALARM = 7_000_100
     private const val ID_REMINDER_BASE = 7_000_200 // + lessonNumber
     private const val PI_REMINDER_BASE = 7_000_300 // + lessonNumber
@@ -403,8 +407,34 @@ object TeacherNotifier {
         label: String,
         count: Int,
     ) {
-        val text = "Опубликовано пар: $count. Нажмите, чтобы посмотреть."
+        val text = "Опубликовано $count ${TeacherNotifierLogic.pairsWord(count)}. Нажмите, чтобы посмотреть."
         show(context, CHANNEL_CHANGES, ID_PUBLISHED, "Расписание на $label опубликовано", text, mainPi(context, PI_PUBLISHED_OPEN, "today"))
+    }
+
+    /**
+     * SPEC §5.4 условие 2: системное уведомление о сбросе правки — ВСЕГДА при фактическом
+     * сбросе, с любого пути синка (вызывается из TeacherDayLoader.syncDayWithOverrideDiff).
+     * Несколько сбросов склеиваются в одно; дедуп — только против повторной отправки того же
+     * сброса (ключ override_reset_<date>_<lesson>); in-app плашка живёт независимо.
+     */
+    fun sendOverrideResets(
+        context: Context,
+        resets: List<OverrideReset>,
+    ) {
+        if (resets.isEmpty()) return
+        val p = prefs(context)
+        val fresh = resets.filterNot { p.getBoolean(TeacherNotifierLogic.resetKey(it), false) }
+        if (fresh.isEmpty()) return
+        show(
+            context,
+            CHANNEL_CHANGES,
+            ID_RESET,
+            "Расписание обновлено",
+            TeacherNotifierLogic.resetNotificationText(fresh),
+            mainPi(context, PI_RESET_OPEN, "today"),
+        )
+        // ponytail: дедуп-ключи не прунятся (1 bool на сброс); снимаются при повторном saveOverride
+        p.edit().apply { fresh.forEach { putBoolean(TeacherNotifierLogic.resetKey(it), true) } }.apply()
     }
 
     private fun sendReminder(

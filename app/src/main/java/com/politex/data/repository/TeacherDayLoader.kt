@@ -422,7 +422,12 @@ object TeacherDayLoader {
             if (result.isFailure) return@withContext result to emptyList()
             val after = rawLessons(repository, profile, selected, teachers, dateString, dow)
             val resets = TeacherDayLogic.diffOverrideResets(dateString, before, after, overrides)
-            resets.forEach { overrideDao.deleteForLesson(it.dateString, it.lessonNumber) }
+            if (resets.isNotEmpty()) {
+                resets.forEach { overrideDao.deleteForLesson(it.dateString, it.lessonNumber) }
+                // SPEC §5.4: системное уведомление — единственная точка на ВСЕХ путях синка
+                // (воркер, home/week refresh, loadDay). Падение нотификатора не рвёт синк (GG8).
+                runCatching { com.politex.util.TeacherNotifier.sendOverrideResets(context, resets) }
+            }
             result to resets
         }
 

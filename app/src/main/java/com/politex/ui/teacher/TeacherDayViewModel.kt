@@ -97,6 +97,12 @@ class TeacherDayViewModel(
                     room = room.trim(),
                 ),
             )
+            // Новая правка — будущий сброс этой пары должен уведомить повторно: снимаем дедуп-ключ.
+            getApplication<Application>()
+                .getSharedPreferences("mpk_teacher_profile", android.content.Context.MODE_PRIVATE)
+                .edit()
+                .remove(com.politex.util.TeacherNotifierLogic.resetKey(dateKey, lessonNumber))
+                .apply()
             load()
         }
     }
@@ -116,9 +122,8 @@ class TeacherDayViewModel(
         _state.value.dateKey.ifBlank { DateFormats.dotDate(teacherTargetCalendar(_state.value.dayOffset, null)) }
 
     /**
-     * Единственная точка фиксации сбросов: плашка в UI.
-     * ponytail: T4 — здесь же post системного уведомления (NotificationHelper + канал);
-     * сейчас сброс молчаливым не остаётся только благодаря плашке.
+     * Фиксация сбросов для in-app плашки. Системное уведомление (§5.4) отправляет
+     * сам TeacherDayLoader.syncDayWithOverrideDiff — на всех путях синка, с дедупом.
      */
     private fun recordResets(resets: List<OverrideReset>) {
         if (resets.isEmpty()) return

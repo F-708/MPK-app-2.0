@@ -74,7 +74,7 @@ import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorErrorText
-import com.politex.ui.theme.ColorSuccess
+import com.politex.ui.theme.ColorSuccessText
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
@@ -412,7 +412,7 @@ private fun TeacherLessonCard(
                 StatusLabel("ЗАМЕНА", ColorWarningText)
             }
             when (status) {
-                LessonStatus.NOW -> StatusLabel("ИДЁТ", ColorSuccess)
+                LessonStatus.NOW -> StatusLabel("ИДЁТ", ColorSuccessText)
                 LessonStatus.NEXT -> StatusLabel("СЛЕДУЮЩАЯ", ColorActiveBlue)
                 LessonStatus.PAST -> StatusLabel("ПРОШЛА", ColorTextMuted)
                 LessonStatus.UPCOMING -> Unit
@@ -440,13 +440,15 @@ private fun TeacherLessonCard(
                         Spacer(Modifier.height(6.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             lesson.groups.forEach { g ->
-                                // SPEC §4.1 фича 11: тап по чипу группы → «мои пары у этой группы»
+                                // SPEC §4.1 фича 11: тап по чипу группы → «мои пары у этой группы»; §6.6: hit ≥48dp
                                 Surface(
                                     shape = RoundedCornerShape(2.dp),
                                     color = ColorSurfaceHighlight,
-                                    modifier = Modifier.bouncyClickable(scaleDown = 0.95f) { onGroupClick(g) }.testTag("teacher_group_chip_$g"),
+                                    modifier = Modifier.heightIn(min = metrics.hitTarget).bouncyClickable(scaleDown = 0.95f) { onGroupClick(g) }.testTag("teacher_group_chip_$g"),
                                 ) {
-                                    Text(g, style = TextStyle(fontSize = metrics.chipText, color = ColorBrandBlue, fontWeight = FontWeight.Medium), modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
+                                        Text(g, style = TextStyle(fontSize = metrics.chipText, color = ColorBrandBlue, fontWeight = FontWeight.Medium))
+                                    }
                                 }
                             }
                         }

@@ -1,5 +1,6 @@
 package com.politex.util
 
+import com.politex.data.repository.OverrideReset
 import com.politex.data.repository.TeacherDayLesson
 import com.politex.data.repository.TeacherDayLogic
 import java.text.SimpleDateFormat
@@ -169,6 +170,17 @@ object TeacherNotifierLogic {
 
     /** Хэш списка сообщений для дедуп-ключа diff_notified_<date>_<hash> (String.hashCode стабилен). */
     fun diffHash(messages: List<String>): String = messages.joinToString("|").hashCode().toString()
+
+    /** Дедуп-ключ системного уведомления о сбросе правки (prefs «mpk_teacher_profile»). */
+    fun resetKey(
+        dateString: String,
+        lessonNumber: Int,
+    ): String = "override_reset_${dateString}_$lessonNumber"
+
+    fun resetKey(reset: OverrideReset): String = resetKey(reset.dateString, reset.lessonNumber)
+
+    /** Текст системного уведомления о сбросе: несколько сбросов склеиваются в одно (§5.4). */
+    fun resetNotificationText(resets: List<OverrideReset>): String = resets.joinToString("\n") { TeacherDayLogic.resetMessage(it) }
 
     /**
      * Пары, о которых напоминаем (SPEC §5.3): первая пара дня + пары со сменой кабинета

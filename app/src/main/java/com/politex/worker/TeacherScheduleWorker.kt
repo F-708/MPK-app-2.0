@@ -31,7 +31,7 @@ class TeacherScheduleWorker(
 ) : CoroutineWorker(context, workerParams) {
     override suspend fun doWork(): Result =
         withContext(Dispatchers.IO) {
-            TeacherProfileStore.get(applicationContext) ?: return@withContext Result.success()
+            val profile = TeacherProfileStore.get(applicationContext) ?: return@withContext Result.success()
 
             val now = Calendar.getInstance()
             val decision =
@@ -59,8 +59,11 @@ class TeacherScheduleWorker(
                 // 14:00–18:00 для сегодня (внутридневные правки); прочие тики — кэш-первым.
                 val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
                 val force = decision == SyncDecision.MORNING_FORCE || (index == 0 && hour in 14..17)
-                repository
-                    .syncTeacherScheduleForDate(cal, force = force)
+                // SPEC §5.4: синк ТОЛЬКО через diff-обёртку — изменение дока сбрасывает личные
+                // правки с системным уведомлением (уведомление отправляет сама обёртка).
+                com.politex.data.repository.TeacherDayLoader
+                    .syncDayWithOverrideDiff(applicationContext, repository, profile, dates[index], cal, force = force)
+                    .first
                     .onSuccess {
                         anyOk = true
                         if (index == 0) todayOk = true

@@ -1,5 +1,7 @@
 package com.politex
 
+import com.politex.data.repository.OverrideReset
+import com.politex.data.repository.OverrideResetReason
 import com.politex.data.repository.TeacherDayLesson
 import com.politex.util.TeacherNotifierLogic
 import org.junit.Assert.assertEquals
@@ -269,5 +271,36 @@ class TeacherNotifierLogicTest {
         assertEquals(590, TeacherNotifierLogic.nextReminderAt(day, 475, 10)) // окно 1-й пары ещё открыто, но будильник уже на 3-ю
         assertNull(TeacherNotifierLogic.nextReminderAt(day, 595, 10)) // на сегодня всё
         assertNull(TeacherNotifierLogic.nextReminderAt(emptyList(), 460, 10))
+    }
+
+    // ——— §5.4: системное уведомление о сбросе правки (текст, склейка, дедуп-ключ) ———
+
+    @Test
+    fun `reset notification text names day lesson and new room`() {
+        val reset = OverrideReset("05.10.2026", 3, OverrideResetReason.ROOM_CHANGED, newRoom = "305")
+        assertEquals(
+            "Расписание обновлено: ваша правка на 05.10, пн, 3-я пара сброшена — в доке теперь 305",
+            TeacherNotifierLogic.resetNotificationText(listOf(reset)),
+        )
+    }
+
+    @Test
+    fun `several resets are glued into one notification`() {
+        val resets = listOf(
+            OverrideReset("05.10.2026", 1, OverrideResetReason.ROOM_CHANGED, newRoom = "305"),
+            OverrideReset("05.10.2026", 4, OverrideResetReason.LESSON_GONE),
+        )
+        val text = TeacherNotifierLogic.resetNotificationText(resets)
+        assertEquals(2, text.lines().size)
+        assertTrue(text.lines()[1].endsWith("пары больше нет в документе"))
+    }
+
+    @Test
+    fun `reset dedup key is per date and lesson`() {
+        val reset = OverrideReset("05.10.2026", 3, OverrideResetReason.ROOM_CHANGED)
+        assertEquals("override_reset_05.10.2026_3", TeacherNotifierLogic.resetKey(reset))
+        assertEquals(TeacherNotifierLogic.resetKey(reset), TeacherNotifierLogic.resetKey("05.10.2026", 3))
+        assertNotEquals(TeacherNotifierLogic.resetKey(reset), TeacherNotifierLogic.resetKey("06.10.2026", 3))
+        assertNotEquals(TeacherNotifierLogic.resetKey(reset), TeacherNotifierLogic.resetKey("05.10.2026", 4))
     }
 }
