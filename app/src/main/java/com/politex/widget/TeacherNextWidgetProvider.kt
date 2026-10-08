@@ -91,7 +91,7 @@ class TeacherNextWidgetProvider : AppWidgetProvider() {
                     .getAppWidgetOptions(appWidgetId)
                     .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110) < COMPACT_MAX_HEIGHT_DP
             views.setViewVisibility(R.id.tv_next_subject, if (compact) android.view.View.GONE else android.view.View.VISIBLE)
-            views.setViewVisibility(R.id.tv_next_updated, if (compact) android.view.View.GONE else android.view.View.VISIBLE)
+            views.setViewVisibility(R.id.tv_next_updated, android.view.View.VISIBLE)
 
             val snap = TeacherWidgetData.snapshot(context)
             if (snap == null) {

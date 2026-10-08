@@ -223,7 +223,7 @@ class TeacherWidgetLogicTest {
 
     @Test
     fun dayOffText_withoutNext_canonicalMonday() {
-        assertEquals("Выходной.\nДо 1 урока в пн", TeacherWidgetLogic.dayOffText(null))
+        assertEquals("Выходной.\nДо 1-й пары в пн", TeacherWidgetLogic.dayOffText(null))
     }
 
     @Test

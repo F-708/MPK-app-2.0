@@ -69,7 +69,7 @@ object TeacherNotifier {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         // Quiet hours 21:00–07:00 — НЕ уровень канала, а логика откладывания (TeacherNotifierLogic.quietHours).
         listOf(
-            Triple(CHANNEL_SUMMARY, "Утренняя сводка", "Одно уведомление утром: пары на сегодня и свежеть данных сайта"),
+            Triple(CHANNEL_SUMMARY, "Утренняя сводка", "Одно уведомление утром: пары на сегодня и свежесть данных сайта"),
             Triple(CHANNEL_CHANGES, "Изменения расписания", "Публикация документа и изменения пар на сегодня и завтра"),
             Triple(CHANNEL_REMINDER, "Напоминание о паре", "За несколько минут до пары при смене кабинета"),
         ).forEach { (id, name, description) ->

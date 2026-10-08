@@ -3,7 +3,8 @@
      В main-манифест НЕ добавляем — иначе виджеты появятся у студентов.
      Manifest merger (AGP) подхватывает src/teacher/AndroidManifest.xml и сливает
      эти <receiver> в итоговый манифест teacher-сборки. -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application>
         <!-- T4-B: лёгкий точный будильник напоминания о паре (SPEC §5.3 «за N мин до пары»).
@@ -42,5 +43,13 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_teacher_today_info" />
         </receiver>
+        <!-- Релиз-ревью №3: студенческие виджеты в teacher-сборке — мёртвые (профиль группы
+             не выбран) и крашат тапом EXTRA_ROOM. Вырезаются merger'ом. WidgetAlarmReceiver
+             и BOOT остаются: минутный тик обновляет teacher-виджеты (hasWork их учитывает). -->
+        <receiver android:name="com.politex.widget.BellCountdownWidgetProvider" tools:node="remove" />
+        <receiver android:name="com.politex.widget.NowNextWidgetProvider" tools:node="remove" />
+        <receiver android:name="com.politex.widget.TodayScheduleWidgetProvider" tools:node="remove" />
+        <receiver android:name="com.politex.widget.BellsWidgetProvider" tools:node="remove" />
+        <activity android:name="com.politex.widget.WidgetConfigActivity" tools:node="remove" />
     </application>
 </manifest>

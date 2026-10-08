@@ -85,7 +85,7 @@ object TeacherWidgetData {
         val db = MpkDatabase.getInstance(context)
         val overrides = db.teacherOverrideDao().all()
 
-        val key = TeacherWidgetLogic.cacheKey(today, minute, profile.name, overrides.size)
+        val key = TeacherWidgetLogic.cacheKey(today, minute, profile.name, TeacherWidgetLogic.overridesHash(overrides))
         if (key == cacheKey) return cache
 
         val teachers = TeachersRepository(context).loadTeachers()

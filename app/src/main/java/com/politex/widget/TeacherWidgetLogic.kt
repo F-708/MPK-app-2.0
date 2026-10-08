@@ -100,14 +100,17 @@ object TeacherWidgetLogic {
 
     /**
      * Грабли v2.x («виджет отключается через день»): кэш-ключ ОБЯЗАН включать дату, минуту,
-     * профиль и счётчик override — иначе вчерашний снапшот отдаётся на той же минуте суток.
+     * профиль и СОДЕРЖИМОЕ override (hash — правка 241→305 в ту же минуту меняла только содержимое, не счётчик) — иначе вчерашний снапшот отдаётся на той же минуте суток.
      */
     fun cacheKey(
         date: String,
         minute: Int,
         profileName: String,
-        overrideCount: Int,
-    ): String = "$date|$minute|$profileName|$overrideCount"
+        overrideHash: Int,
+    ): String = "$date|$minute|$profileName|$overrideHash"
+
+    fun overridesHash(overrides: List<com.politex.data.local.entity.TeacherOverrideEntity>): Int =
+        overrides.joinToString(";") { "${it.dateString}:${it.lessonNumber}:${it.kind}:${it.room}" }.hashCode()
 
     fun updatedLabel(epochMillis: Long): String =
         if (epochMillis <= 0L) {
@@ -141,6 +144,6 @@ object TeacherWidgetLogic {
     /** Выходной: «Выходной» + следующая пара из кэша, иначе каноническое «До 1 урока в пн». */
     fun dayOffText(next: NextLessonRef?): String {
         val n = nextLessonText(next)
-        return if (n.isBlank()) "Выходной.\nДо 1 урока в пн" else "Выходной.\n$n"
+        return if (n.isBlank()) "Выходной.\nДо 1-й пары в пн" else "Выходной.\n$n"
     }
 }

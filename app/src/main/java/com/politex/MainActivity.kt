@@ -61,8 +61,13 @@ class MainActivity : ComponentActivity() {
             val navController = rememberNavController()
             this@MainActivity.navController = navController
 
-            LaunchedEffect(Unit) {
-                handleIntent(intent, navController)
+            // Релиз-ревью №3: в teacher-сборке нет NavHost-графа — handleIntent с EXTRA_ROOM
+            // уронил бы navigate(); teacher-экстры (EXTRA_OPEN_TAB/EXTRA_MARK_OVERRIDES)
+            // читает TeacherNav сам.
+            if (BuildConfig.FLAVOR != "teacher") {
+                LaunchedEffect(Unit) {
+                    handleIntent(intent, navController)
+                }
             }
 
             // Единственная точка ветвления flavor (долг чести №6: ноль FLAVOR в остальном коде)
