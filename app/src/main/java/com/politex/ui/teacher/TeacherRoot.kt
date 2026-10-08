@@ -25,7 +25,7 @@ fun TeacherRoot(modifier: Modifier = Modifier) {
                 },
             )
         } else {
-            TeacherHomeScreen(
+            TeacherNav(
                 profile = profile,
                 onPickProfile = {
                     TeacherProfileStore.set(context, null)

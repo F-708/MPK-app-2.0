@@ -94,6 +94,7 @@ fun TeacherHomeScreen(
     profile: TeacherProfile?,
     onPickProfile: () -> Unit = {},
     onRoomClick: (String) -> Unit = {},
+    onGroupClick: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: TeacherDayViewModel = viewModel(),
 ) {
@@ -332,6 +333,7 @@ fun TeacherHomeScreen(
                             status = statuses.getOrElse(i) { LessonStatus.UPCOMING },
                             metrics = metrics,
                             onRoomClick = onRoomClick,
+                            onGroupClick = onGroupClick,
                             onEdit = { editing = lesson },
                             staleData = staleData,
                         )
@@ -400,6 +402,7 @@ private fun TeacherLessonCard(
     status: LessonStatus,
     metrics: TeacherMetrics,
     onRoomClick: (String) -> Unit,
+    onGroupClick: (String) -> Unit = {},
     onEdit: () -> Unit = {},
     staleData: Boolean = false,
 ) {
@@ -437,7 +440,12 @@ private fun TeacherLessonCard(
                         Spacer(Modifier.height(6.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             lesson.groups.forEach { g ->
-                                Surface(shape = RoundedCornerShape(2.dp), color = ColorSurfaceHighlight) {
+                                // SPEC §4.1 фича 11: тап по чипу группы → «мои пары у этой группы»
+                                Surface(
+                                    shape = RoundedCornerShape(2.dp),
+                                    color = ColorSurfaceHighlight,
+                                    modifier = Modifier.bouncyClickable(scaleDown = 0.95f) { onGroupClick(g) }.testTag("teacher_group_chip_$g"),
+                                ) {
                                     Text(g, style = TextStyle(fontSize = metrics.chipText, color = ColorBrandBlue, fontWeight = FontWeight.Medium), modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                                 }
                             }
