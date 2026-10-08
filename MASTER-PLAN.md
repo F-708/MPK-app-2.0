@@ -884,3 +884,11 @@ II4. Свайп вкладок влево/вправо слишком резки
 - T4 (оболочка/честность): TeacherNav (Сегодня/Неделя/Ещё), BellsScreen-адапт, карта as-is, About+дисклеймер «неофициальное», честная деградация, OEM-справка; «мои пары у группы» из чипа; каналы уведомлений + сводка 07:15 + quiet hours + action «Пометить».
 - T5 (RC): testTeacherDebugUnitTest + standard, roborazzi teacher + vision-аудит, гейты students.csv=0 в teacher, LiveDocTest, assembleTeacherRelease+StandardRelease (паровоз, versionCode общий), APK в releases/, финальный отчёт.
 - Консилиум: чекпоинт после T2 (демо-ревью) и перед T5 (релиз-ревью 2 критиками); решения — в DECISIONS.md.
+
+## СТАТУС teacher-app (2026-10-08): v2.6 RELEASE-READY
+T0-T5 закрыты. Релиз-ревью консилиума (12/13) — оба блокера исправлены (diff-путь на всех синках +
+системный пуш о сбросе правки; краш-мина студенческих виджетов; метка свежести 4×1; контрасты).
+919/919 тестов в обоих flavor. Гейты: students.csv 0/0/1, dexdump teacher=0 StudentsRepository,
+LiveDoc преподавательский 200/OLE2, versionCode 20015. APK: releases/moy-polytech-teacher-v2.6-release.apk.
+Долги (не блокируют): промер окна публикации 5-7 вечеров (tools/measure-publish-window.sh),
+48ч виджеты Xiaomi/Samsung + онбординг<60с — руки заказчика. v1.1-реестр — в DECISIONS.md.
