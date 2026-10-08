@@ -47,6 +47,8 @@ class MainActivity : ComponentActivity() {
                 .start(this)
         }
         if (BuildConfig.FLAVOR == "teacher") {
+            // T4-B: каналы уведомлений преподавателя (сводка/изменения/напоминание, SPEC §5.3)
+            com.politex.util.TeacherNotifier.createChannels(this)
             MpkWorkManagerHelper.setupTeacherSync(this)
         } else {
             MpkWorkManagerHelper.setupPeriodicScheduleCheck(this)

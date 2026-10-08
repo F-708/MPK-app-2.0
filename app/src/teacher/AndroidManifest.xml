@@ -6,6 +6,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application>
+        <!-- T4-B: лёгкий точный будильник напоминания о паре (SPEC §5.3 «за N мин до пары»).
+             Свой receiver, НЕ WidgetAlarmReceiver — виджетов у преподавателя может не быть.
+             Только в teacher-сборке: в студенческой профиль null, будильник не взводится. -->
+        <receiver
+            android:name="com.politex.util.TeacherReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.politex.util.ACTION_TEACHER_REMINDER" />
+            </intent-filter>
+        </receiver>
+
         <!-- Виджет преподавателя «Следующая пара» (4×1 / 2×2) -->
         <receiver
             android:name="com.politex.widget.TeacherNextWidgetProvider"
