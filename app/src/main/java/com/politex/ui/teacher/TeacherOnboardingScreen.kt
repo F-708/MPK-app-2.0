@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.R
@@ -222,7 +223,8 @@ private fun SearchStep(
                             Text(t.position, fontSize = metrics.chipText, color = ColorTextMuted)
                         }
                         if (t.subjects.isNotBlank()) {
-                            Text(t.subjects, fontSize = metrics.chipText, color = ColorTextMuted, maxLines = 2)
+                            // без overflow текст обрывался на 2-й строке с висячей запятой
+                            Text(t.subjects, fontSize = metrics.chipText, color = ColorTextMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }

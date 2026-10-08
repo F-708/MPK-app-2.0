@@ -73,14 +73,13 @@ import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
-import com.politex.ui.theme.ColorError
+import com.politex.ui.theme.ColorErrorText
 import com.politex.ui.theme.ColorSuccess
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
-import com.politex.ui.theme.ColorWarning
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.DateFormats
 import kotlinx.coroutines.Dispatchers
@@ -409,7 +408,8 @@ private fun TeacherLessonCard(
     AppCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             if (lesson.isReplacement) {
-                StatusLabel("ЗАМЕНА", ColorWarning)
+                // SPEC §6.6 (контраст ≥4.5): ColorWarning #F59E0B на белом даёт ~2.1:1 — берём тёмный янтарь (5.0:1)
+                StatusLabel("ЗАМЕНА", ColorWarningText)
             }
             when (status) {
                 LessonStatus.NOW -> StatusLabel("ИДЁТ", ColorSuccess)
@@ -420,7 +420,7 @@ private fun TeacherLessonCard(
             if (staleData && (status == LessonStatus.NOW || status == LessonStatus.NEXT)) {
                 Text(
                     "по данным на вчерашний вечер — сверьтесь с чатом учебной части",
-                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                    style = TextStyle(fontSize = metrics.chipText, color = ColorTextMuted),
                     modifier = Modifier.padding(bottom = 4.dp).testTag("teacher_stale_plate"),
                 )
             }
@@ -506,6 +506,9 @@ private fun StatusLabel(
 ) {
     Text(text, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = color), modifier = Modifier.padding(bottom = 4.dp))
 }
+
+/** Тёмный янтарь для бейджа ЗАМЕНА: ColorWarning не проходит §6.6 на белом фоне. */
+private val ColorWarningText = Color(0xFFB45309)
 
 private fun minutesNow(): Int {
     val c = Calendar.getInstance()
@@ -624,7 +627,8 @@ private fun OverrideSheetItem(
 ) {
     val textColor =
         when {
-            danger -> ColorError
+            // SPEC §6.6: ColorError #EF4444 на белом = 3.8:1, для текста берём errorText (4.8:1)
+            danger -> ColorErrorText
             selected -> ColorBrandBlue
             else -> ColorTextBody
         }

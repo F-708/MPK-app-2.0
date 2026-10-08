@@ -520,10 +520,10 @@ private fun WeekLoadContent(state: TeacherWeekState) {
                         }
                     }
                     Spacer(Modifier.height(4.dp))
-                    // SPEC §6.4: дисклеймер сразу под цифрами
+                    // SPEC §6.4: дисклеймер сразу под цифрами (§6.6: не мельче chipText)
                     Text(
                         LOAD_DISCLAIMER,
-                        style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                        style = TextStyle(fontSize = metrics.chipText, color = ColorTextMuted),
                         modifier = Modifier.testTag("teacher_week_load_disclaimer"),
                     )
                 }

@@ -215,7 +215,8 @@ private fun NotifSection(
                             shape = RoundedCornerShape(2.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
                             color = if (selected) ColorTopBar else ColorBgMain,
-                            modifier = Modifier.heightIn(min = 40.dp).bouncyClickable {
+                            // SPEC §6.6: hit-зона ≥48dp (было 40dp)
+                            modifier = Modifier.heightIn(min = metrics.hitTarget).bouncyClickable {
                                 minutes = m; prefs.edit().putInt(KEY_REMINDER_MIN, m).apply()
                             }.testTag("notif_min_$m"),
                         ) {
