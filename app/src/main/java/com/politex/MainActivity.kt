@@ -47,7 +47,10 @@ class MainActivity : ComponentActivity() {
                 .start(this)
         }
         if (BuildConfig.FLAVOR == "teacher") {
+            com.politex.ui.teacher.initUiScale(this)
             MpkWorkManagerHelper.setupTeacherSync(this)
+            // TR-W3: «до звонка» в teacher-сборке живой — watchdog возвращает FGS после убийства OEM
+            MpkWorkManagerHelper.setupBellServiceWatchdog(this)
         } else {
             MpkWorkManagerHelper.setupPeriodicScheduleCheck(this)
             MpkWorkManagerHelper.setupBellServiceWatchdog(this)

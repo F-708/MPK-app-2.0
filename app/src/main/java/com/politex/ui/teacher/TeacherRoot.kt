@@ -16,24 +16,26 @@ fun TeacherRoot(modifier: Modifier = Modifier) {
     var skipped by remember { mutableStateOf(false) }
 
     TeacherTheme {
-        if (TeacherOnboardingLogic.showOnboarding(profile, skipped)) {
-            TeacherOnboardingScreen(
-                onProfileSaved = { profile = TeacherProfileStore.get(context) },
-                onSkipAll = {
-                    skipped = true
-                    profile = TeacherProfileStore.get(context)
-                },
-            )
-        } else {
-            TeacherNav(
-                profile = profile,
-                onPickProfile = {
-                    TeacherProfileStore.set(context, null)
-                    profile = null
-                    skipped = false
-                },
-                modifier = modifier.fillMaxSize(),
-            )
+        ScaledDensityProvider {
+            if (TeacherOnboardingLogic.showOnboarding(profile, skipped)) {
+                TeacherOnboardingScreen(
+                    onProfileSaved = { profile = TeacherProfileStore.get(context) },
+                    onSkipAll = {
+                        skipped = true
+                        profile = TeacherProfileStore.get(context)
+                    },
+                )
+            } else {
+                TeacherNav(
+                    profile = profile,
+                    onPickProfile = {
+                        TeacherProfileStore.set(context, null)
+                        profile = null
+                        skipped = false
+                    },
+                    modifier = modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }

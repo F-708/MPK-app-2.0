@@ -1,27 +1,36 @@
 package com.politex.ui.teacher
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import com.politex.util.UiScale
 import com.politex.util.UiScaleStore
 
-@Composable
-fun ScaledDensityProvider(
+// W4: единое состояние масштаба (паттерн paletteState из Color.kt) — настройки пишут,
+// всё teacher-поддерево читает; смена масштаба мгновенно перекладывает UI.
+val uiScaleState = mutableStateOf(UiScale.NORMAL)
+
+fun applyUiScale(
+    context: Context,
     scale: UiScale,
-    content: @Composable () -> Unit,
 ) {
+    UiScaleStore.save(context, scale)
+    uiScaleState.value = scale
+}
+
+fun initUiScale(context: Context) {
+    uiScaleState.value = UiScaleStore.load(context)
+}
+
+@Composable
+fun ScaledDensityProvider(content: @Composable () -> Unit) {
+    val scale = uiScaleState.value
     val base = LocalDensity.current
     CompositionLocalProvider(
         LocalDensity provides Density(base.density * scale.factor, base.fontScale),
         content = content,
     )
-}
-
-@Composable
-fun rememberUiScale(): UiScale {
-    val context = LocalContext.current
-    return UiScaleStore.load(context)
 }
