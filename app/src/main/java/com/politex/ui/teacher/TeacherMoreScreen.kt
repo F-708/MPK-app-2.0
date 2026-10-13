@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
@@ -66,11 +67,9 @@ import java.util.Calendar
 fun TeacherMoreScreen(
     profile: TeacherProfile?,
     onPickProfile: () -> Unit = {},
-    // onOpenBells/onOpenOemHelp сохранены для совместимости сигнатуры с TeacherNav.kt (агент A);
-    // в меню «Ещё» строк «Расписание звонков»/OEM-справки больше нет (решение консилиума §3.2/§10 п.5).
+    // onOpenBells — строка «Расписание звонков» (бриф TR5 дословно: заказчик перечислил её в «Ещё»).
     onOpenBells: () -> Unit = {},
     onOpenMap: () -> Unit = {},
-    onOpenOemHelp: () -> Unit = {},
     // TR5: новые цели меню — подключает агент A подстраницами в TeacherNav (дефолты = no-op).
     onOpenGroupSchedule: () -> Unit = {},
     onOpenTeachers: () -> Unit = {},
@@ -94,6 +93,15 @@ fun TeacherMoreScreen(
                     subtitle = if (profile != null) "Нажмите, чтобы сменить преподавателя" else "Найти себя в списке преподавателей",
                     onClick = onPickProfile,
                     testTag = "more_profile",
+                )
+            }
+            item {
+                MenuCard(
+                    icon = { Icon(Icons.Default.AccessTime, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
+                    title = "Расписание звонков",
+                    subtitle = "Время звонков на сегодня и по дням",
+                    onClick = onOpenBells,
+                    testTag = "more_bells",
                 )
             }
             item {
@@ -127,7 +135,7 @@ fun TeacherMoreScreen(
                 MenuCard(
                     icon = { Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
                     title = "Настройки",
-                    subtitle = "Профиль и уведомление «до звонка»",
+                    subtitle = "Профиль, «до звонка», масштаб и тема",
                     onClick = onOpenSettings,
                     testTag = "more_settings",
                 )
@@ -268,64 +276,6 @@ private fun dowTitle(dow: Int): String =
     }
 
 // ——— OEM-справка (подстраница TeacherNav.OemHelp; в меню «Ещё» строки нет — §10 п.5) ———
-
-@Composable
-fun TeacherOemHelpPage(
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val metrics = LocalTeacherMetrics.current
-    val context = LocalContext.current
-    Column(
-        modifier = modifier.fillMaxSize().background(ColorBgMain).verticalScroll(rememberScrollState()),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BackButton(onBack = onBack, testTag = "oem_back")
-            Spacer(Modifier.width(10.dp))
-            Text("Чтобы приложение не закрывалось", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ColorTextTitle))
-        }
-        Text(
-            "Экономия батареи телефона может останавливать фоновую синхронизацию — и расписание перестаёт обновляться. Настройте один раз:",
-            style = TextStyle(fontSize = metrics.body, color = ColorTextBody),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
-        )
-        OemCard(
-            title = "Xiaomi / MIUI",
-            steps = listOf(
-                "Настройки → Приложения → Все приложения → «Мой Политех» → Автозапуск — включить.",
-                "Настройки → Батарея → (три точки) → Экономия энергии — «Нет ограничений».",
-            ),
-        )
-        OemCard(
-            title = "Samsung / One UI",
-            steps = listOf(
-                "Настройки → Батарея → Спящие приложения — убрать «Мой Политех» из спящих/глубокого сна.",
-                "Настройки → Батарея → Использование приложений → «Мой Политех» → Неограниченно.",
-            ),
-        )
-        Surface(
-            shape = RoundedCornerShape(2.dp),
-            color = ColorTopBar,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp).heightIn(min = metrics.hitTarget).bouncyClickable {
-                runCatching { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
-                    .onFailure { runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS)) } }
-            }.testTag("oem_open_battery"),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text("Открыть настройки батареи", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = metrics.buttonText)
-            }
-        }
-        Text(
-            "Если после настройки обновления всё равно не приходят — напишите нам, укажите модель телефона.",
-            style = TextStyle(fontSize = metrics.chipText, color = ColorTextMuted),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
-        )
-        Spacer(Modifier.height(24.dp))
-    }
-}
 
 @Composable
 private fun OemCard(

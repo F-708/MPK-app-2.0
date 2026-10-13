@@ -77,8 +77,6 @@ private sealed interface TeacherSubPage {
 
     object Bells : TeacherSubPage
 
-    object OemHelp : TeacherSubPage
-
     data class Group(val name: String) : TeacherSubPage
 
     data class FindGroup(val group: String) : TeacherSubPage
@@ -189,7 +187,6 @@ fun TeacherNav(
                     )
 
                 TeacherSubPage.Bells -> TeacherBellsPage(onBack = { subPage = null })
-                TeacherSubPage.OemHelp -> TeacherOemHelpPage(onBack = { subPage = null })
                 is TeacherSubPage.Group ->
                     TeacherGroupLessonsScreen(
                         group = sub.name,
@@ -262,7 +259,6 @@ fun TeacherNav(
                                     onPickProfile = onPickProfile,
                                     onOpenBells = { subPage = TeacherSubPage.Bells },
                                     onOpenMap = { subPage = TeacherSubPage.Map(null) },
-                                    onOpenOemHelp = { subPage = TeacherSubPage.OemHelp },
                                     onOpenGroupSchedule = { subPage = TeacherSubPage.FindGroup("") },
                                     onOpenTeachers = { subPage = TeacherSubPage.Teachers },
                                     onOpenSettings = { subPage = TeacherSubPage.Settings },
