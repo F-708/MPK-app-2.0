@@ -32,13 +32,15 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_teacher_today_info" />
         </receiver>
-        <!-- Релиз-ревью №3: студенческие виджеты в teacher-сборке — мёртвые (профиль группы
-             не выбран) и крашат тапом EXTRA_ROOM. Вырезаются merger'ом. WidgetAlarmReceiver
-             и BOOT остаются: минутный тик обновляет teacher-виджеты (hasWork их учитывает). -->
-        <receiver android:name="com.politex.widget.BellCountdownWidgetProvider" tools:node="remove" />
+        <!-- TR8: в teacher 4 виджета — «до звонка» (общий BellCountdown), «график звонков»
+             (общий Bells), «следующая пара» (TeacherNext), «моё сегодня» (TeacherToday).
+             BellCountdown/Bells группо-независимы (CollegeBellSchedule), WidgetConfigActivity
+             нужен их widget-info XML (android:configure). Режим «все звонки» форсируется
+             TeacherWidgetUpdater.forceCollegeBellDefaults (без FLAVOR-гейта, см. TeacherWidgetData.kt).
+             NowNext/TodaySchedule — групповые, у teacher свои эквиваленты → вырезаются merger'ом.
+             Тап по общим виджетам шлёт EXTRA_OPEN_TAB="BELLS" (не EXTRA_ROOM) → TeacherNav
+             мапит в вкладку «График», краша на NavHost без графа нет. -->
         <receiver android:name="com.politex.widget.NowNextWidgetProvider" tools:node="remove" />
         <receiver android:name="com.politex.widget.TodayScheduleWidgetProvider" tools:node="remove" />
-        <receiver android:name="com.politex.widget.BellsWidgetProvider" tools:node="remove" />
-        <activity android:name="com.politex.widget.WidgetConfigActivity" tools:node="remove" />
     </application>
 </manifest>

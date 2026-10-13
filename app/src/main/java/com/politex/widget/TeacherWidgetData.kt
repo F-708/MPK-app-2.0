@@ -1,6 +1,8 @@
 package com.politex.widget
 
 import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import com.politex.MainActivity
@@ -13,6 +15,7 @@ import com.politex.data.repository.TeacherInsights
 import com.politex.data.repository.TeachersRepository
 import com.politex.data.repository.matchRowsForTeacher
 import com.politex.ui.teacher.TeacherProfileStore
+import com.politex.util.BellCountdownNotifier
 import com.politex.util.DateFormats
 import com.politex.util.Dow
 import kotlinx.coroutines.launch
@@ -43,9 +46,42 @@ object TeacherWidgetUpdater {
     /** Для вызова из уже запущенной корутины (WidgetAlarmReceiver). */
     suspend fun updateAllNow(context: Context) {
         if (TeacherProfileStore.get(context) == null) return
+        // TR8: общие виджеты «до звонка»/«график звонков» в teacher-сборке. У преподавателя
+        // нет выбранной группы → default CountdownMode.GROUP_LESSONS / Scope.MY_LESSONS дают
+        // «Уроков нет». Форсируем режим «все звонки колледжа» (группо-независимый).
+        // Гейт — TeacherProfileStore (выше): в студенческой сборке профиль null → сюда не доходим,
+        // студенческое поведение не меняется. БЕЗ BuildConfig.FLAVOR (правило «ноль FLAVOR вне MainActivity»).
+        runCatching { forceCollegeBellDefaults(context) }
         // GG8(а)-паттерн: падение сборки одного виджета не рвёт обновление второго
         runCatching { TeacherNextWidgetProvider.updateAll(context) }
         runCatching { TeacherTodayWidgetProvider.updateAll(context) }
+    }
+
+    /**
+     * TR8: общий виджет «до звонка» ([BellCountdownWidgetProvider]) и шторка
+     * ([BellCountdownNotifier]) по умолчанию считают «до конца уроков МОЕЙ ГРУППЫ» — у
+     * преподавателя группы нет (getSelectedGroup blank → lastGroupLessonForToday null →
+     * «Уроков нет»). Переводим каждый инстанс виджета в [CountdownMode.ALL_BELLS] и шторку
+     * в [BellCountdownNotifier.Scope.COLLEGE]: оба идут от общего [CollegeBellSchedule],
+     * группо-независимы. Идемпотентно (пишем pref только при расхождении).
+     *
+     * Вызывается ТОЛЬКО из teacher-контекста (гейт — профиль в [updateAllNow]); общие
+     * провайдеры/нотификатор при этом НЕ правятся. Публична, чтобы teacher-ветка
+     * MainActivity могла выставить Scope.COLLEGE («до звонка» в шторке, TR7) сразу при
+     * старте, не дожидаясь минутного тика. Идемпотентна — безопасна к повторным вызовам.
+     */
+    fun forceCollegeBellDefaults(context: Context) {
+        if (TeacherProfileStore.get(context) == null) return
+        val manager = AppWidgetManager.getInstance(context)
+        val ids = manager.getAppWidgetIds(ComponentName(context, BellCountdownWidgetProvider::class.java))
+        ids.forEach { id ->
+            if (CountdownMode.load(context, id) != CountdownMode.ALL_BELLS) {
+                CountdownMode.save(context, id, CountdownMode.ALL_BELLS)
+            }
+        }
+        if (BellCountdownNotifier.getScope(context) != BellCountdownNotifier.Scope.COLLEGE) {
+            BellCountdownNotifier.setScope(context, BellCountdownNotifier.Scope.COLLEGE)
+        }
     }
 
     // T4 сделает deep-link на экран дня; пока тап просто открывает приложение (SPEC §4.1 фича 8)

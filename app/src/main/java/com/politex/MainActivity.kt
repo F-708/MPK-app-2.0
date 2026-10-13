@@ -51,6 +51,9 @@ class MainActivity : ComponentActivity() {
             MpkWorkManagerHelper.setupTeacherSync(this)
             // TR-W3: «до звонка» в teacher-сборке живой — watchdog возвращает FGS после убийства OEM
             MpkWorkManagerHelper.setupBellServiceWatchdog(this)
+            // TR-W3: шторка/виджет «до звонка» — общие звонки колледжа сразу при старте,
+            // а не на первом минутном тике (идемпотентно; в standard профиль null → no-op)
+            com.politex.widget.TeacherWidgetUpdater.forceCollegeBellDefaults(this)
         } else {
             MpkWorkManagerHelper.setupPeriodicScheduleCheck(this)
             MpkWorkManagerHelper.setupBellServiceWatchdog(this)

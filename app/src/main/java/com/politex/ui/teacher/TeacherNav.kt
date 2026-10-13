@@ -43,6 +43,9 @@ import com.politex.AppGraph
 import com.politex.data.model.GroupInfo
 import com.politex.ui.screens.BellsScreen
 import com.politex.ui.screens.CollegeMapScreen
+import com.politex.ui.screens.GroupScheduleRoute
+import com.politex.ui.screens.TeacherCardRoute
+import com.politex.ui.screens.TeachersRoute
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextMuted
@@ -77,6 +80,14 @@ private sealed interface TeacherSubPage {
     object OemHelp : TeacherSubPage
 
     data class Group(val name: String) : TeacherSubPage
+
+    data class FindGroup(val group: String) : TeacherSubPage
+
+    object Teachers : TeacherSubPage
+
+    data class TeacherCard(val name: String) : TeacherSubPage
+
+    object Settings : TeacherSubPage
 }
 
 // Заглушка группы для BellsScreen: звонки группо-независимы, canonicalName "00О" не
@@ -186,6 +197,46 @@ fun TeacherNav(
                         onBack = { subPage = null },
                     )
 
+                // TR5 «Найти группу» = студенческий GroupScheduleRoute 1-в-1 (пустая группа → пикер внутри экрана)
+                is TeacherSubPage.FindGroup ->
+                    GroupScheduleRoute(
+                        group = sub.group,
+                        groupInfo = bellsStubGroup,
+                        scheduleRepository = AppGraph.scheduleRepository,
+                        onGroupPicked = { g -> subPage = TeacherSubPage.FindGroup(g) },
+                        onChangeGroup = { subPage = TeacherSubPage.FindGroup("") },
+                        onTeacherClick = { name -> subPage = TeacherSubPage.TeacherCard(name) },
+                        onRoomClick = { room, _ -> subPage = TeacherSubPage.Map(room) },
+                    )
+
+                // TR5 «Преподаватели» = студенческий TeachersRoute с showLeads=false (без «ведёт у вас»)
+                TeacherSubPage.Teachers ->
+                    TeachersRoute(
+                        groupInfo = bellsStubGroup,
+                        scheduleRepository = AppGraph.scheduleRepository,
+                        onOpenTeacher = { teacher -> subPage = TeacherSubPage.TeacherCard(teacher.name) },
+                        onBack = { subPage = null },
+                        showLeads = false,
+                    )
+
+                is TeacherSubPage.TeacherCard ->
+                    TeacherCardRoute(
+                        teacherName = sub.name,
+                        groupInfo = bellsStubGroup,
+                        scheduleRepository = AppGraph.scheduleRepository,
+                        onOpenRoom = { room -> subPage = TeacherSubPage.Map(room) },
+                        onNotFound = { subPage = null },
+                        onBack = { subPage = TeacherSubPage.Teachers },
+                        showLeads = false,
+                    )
+
+                TeacherSubPage.Settings ->
+                    TeacherSettingsScreen(
+                        profile = profile,
+                        onPickProfile = onPickProfile,
+                        onBack = { subPage = null },
+                    )
+
                 null ->
                     Column(modifier = Modifier.fillMaxSize()) {
                         when (tab) {
@@ -212,6 +263,9 @@ fun TeacherNav(
                                     onOpenBells = { subPage = TeacherSubPage.Bells },
                                     onOpenMap = { subPage = TeacherSubPage.Map(null) },
                                     onOpenOemHelp = { subPage = TeacherSubPage.OemHelp },
+                                    onOpenGroupSchedule = { subPage = TeacherSubPage.FindGroup("") },
+                                    onOpenTeachers = { subPage = TeacherSubPage.Teachers },
+                                    onOpenSettings = { subPage = TeacherSubPage.Settings },
                                     modifier = Modifier.weight(1f).fillMaxWidth(),
                                 )
                         }
