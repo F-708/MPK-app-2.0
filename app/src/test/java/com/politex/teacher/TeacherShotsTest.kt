@@ -2,11 +2,9 @@ package com.politex.teacher
 
 import android.content.Context
 import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -17,7 +15,6 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.politex.AppGraph
 import com.politex.data.local.MpkDatabase
 import com.politex.data.local.entity.TeacherLessonEntity
-import com.politex.data.local.entity.TeacherOverrideEntity
 import com.politex.data.repository.TeacherDayLoader
 import com.politex.ui.teacher.TeacherNav
 import com.politex.ui.teacher.TeacherOnboardingScreen
@@ -69,9 +66,6 @@ class TeacherShotsTest {
             File(root, "_reports/teacher-app-council/shots").apply { mkdirs() }
         }
 
-    /** Снято ли окно bottom sheet (иначе кадр — карточка с ✎/ЗАМЕНА, см. отчёт). */
-    private var sheetCaptured = false
-
     /**
      * Фейковая TimeZone живёт на весь тест-JVM: без восстановления java.time-код чужих тестов
      * (DocxTextExtractorTest, Step7) падает с ZoneRulesException «Unknown time-zone ID».
@@ -83,13 +77,6 @@ class TeacherShotsTest {
         realTz = TimeZone.getDefault()
         freezeAtTuesday1030()
         TeacherProfileStore.set(context, profile)
-        // карточка «Уведомлять об изменениях расписания?» — состояние первого запуска;
-        // в кадре дня гасим, чтобы были видны пары и статусы
-        context
-            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean("notif_prompt_shown", true)
-            .apply()
         runBlocking { seedWeek() }
     }
 
@@ -100,7 +87,7 @@ class TeacherShotsTest {
 
     // ------------------------------------------------------------------ данные
 
-    /** Сегодня (вт): 3-я пара ИДЁТ, 4-я СЛЕДУЮЩАЯ, 3 — правка кабинета, 5 — «веду не я». */
+    /** Сегодня (вт): 3-я пара ИДЁТ, 4-я СЛЕДУЮЩАЯ. */
     private val todayPlan =
         listOf(
             Row(1, "Математика", "41О", "214"),
@@ -153,22 +140,7 @@ class TeacherShotsTest {
         rows.map { it.dateString }.distinct().forEach { lessonDao.deleteForDate(it) }
         lessonDao.insertLessons(rows)
 
-        // личные правки (SPEC §5.4): другой кабинет + «замена — веду не я»
-        val overrides = db.teacherOverrideDao()
-        overrides.deleteForDate(today)
-        overrides.upsert(
-            TeacherOverrideEntity(
-                dateString = today,
-                lessonNumber = 3,
-                kind = TeacherOverrideEntity.KIND_OTHER_ROOM,
-                room = "241",
-            ),
-        )
-        overrides.upsert(
-            TeacherOverrideEntity(dateString = today, lessonNumber = 5, kind = TeacherOverrideEntity.KIND_SOMEONE_ELSE),
-        )
-
-        // «обновлено в HH:MM» в шапке + снятая плашка «по данным на вчерашний вечер»
+        // «обновлено в HH:MM» в шапке
         TeacherDayLoader.markSyncedNow(context)
     }
 
@@ -202,44 +174,9 @@ class TeacherShotsTest {
         setNav()
         waitForText("обновлено в")
         waitForText("ИДЁТ")
-        waitForTag("teacher_edit_3")
-        waitForTag("teacher_override_mark")
+        waitForText("СЛЕДУЮЩАЯ")
         advance(2_000)
         capture("teacher_home_day")
-    }
-
-    @Test
-    fun shotHomeOverrideSheet() {
-        setNav()
-        waitForTag("teacher_edit_3")
-        // автопрокрутка списка к ИДЁТ ещё может идти — даём ей закончиться, иначе клик
-        // уйдёт в движущуюся карточку и sheet не откроется (флейк полного прогона тестов)
-        advance(2_000)
-        var opened = openSheet()
-        if (!opened) opened = openSheet()
-        sheetCaptured = opened
-        println("TeacherShotsTest: bottom sheet в кадре = $sheetCaptured")
-        if (opened) {
-            val dialogs = composeRule.onAllNodes(isDialog())
-            waitForTag("override_other_room")
-            advance(1_000)
-            capture("teacher_home_override_sheet", dialogs.onFirst())
-        } else {
-            // запасной кадр по заданию: карточка с маркером ✎ «ваша правка»
-            waitForTag("teacher_override_mark")
-            advance(1_000)
-            capture("teacher_home_override_sheet")
-        }
-    }
-
-    /** Клик по «Править» 3-й пары + ожидание окна ModalBottomSheet (isDialog). */
-    private fun openSheet(): Boolean {
-        composeRule.onNodeWithTag("teacher_edit_3").performClick()
-        return runCatching {
-            waitFor("открытие bottom sheet", 6_000) {
-                composeRule.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty()
-            }
-        }.isSuccess
     }
 
     @Test
@@ -404,6 +341,5 @@ class TeacherShotsTest {
     companion object {
         private val BASE_TZ: TimeZone = TimeZone.getDefault()
         private const val SURNAME_KEY = "лебедева"
-        private const val PREFS = "mpk_teacher_profile"
     }
 }

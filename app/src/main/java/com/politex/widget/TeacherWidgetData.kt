@@ -23,7 +23,7 @@ data class TeacherWidgetSnapshot(
     val dow: Int,
     val dayOfMonth: Int,
     val month1: Int,
-    val lessons: List<TeacherWidgetLesson>, // сегодня, с применёнными overrides
+    val lessons: List<TeacherWidgetLesson>, // сегодня
     val next: NextLessonRef?, // из кэша следующих ≤7 дней (когда сегодня пар больше нет)
     val lastSyncEpoch: Long,
 )
@@ -66,9 +66,9 @@ object TeacherWidgetUpdater {
 }
 
 /**
- * Снапшот «моего дня» из БД (teacher_lessons + teacher_overrides напрямую, как требует
- * задача T3-C: loader агента A виджеты не проходят). Кэш — по образцу WidgetData.todayLessons:
- * ключ с датой+минутой+профилем+override-счётчиком (грабли v2.x).
+ * Снапшот «моего дня» из БД (teacher_lessons напрямую, как требует задача T3-C: loader
+ * агента A виджеты не проходят). Кэш — по образцу WidgetData.todayLessons: ключ с
+ * датой+минутой+профилем (грабли v2.x).
  */
 object TeacherWidgetData {
     @Volatile private var cacheKey = ""
@@ -83,9 +83,8 @@ object TeacherWidgetData {
         val minute = WidgetData.minuteOfDay(cal)
 
         val db = MpkDatabase.getInstance(context)
-        val overrides = db.teacherOverrideDao().all()
 
-        val key = TeacherWidgetLogic.cacheKey(today, minute, profile.name, TeacherWidgetLogic.overridesHash(overrides))
+        val key = TeacherWidgetLogic.cacheKey(today, minute, profile.name)
         if (key == cacheKey) return cache
 
         val teachers = TeachersRepository(context).loadTeachers()
@@ -93,11 +92,7 @@ object TeacherWidgetData {
         val surnameKey = profile.surnameKey.ifBlank { TeacherInsights.surnameOf(profile.name) }
         val dow = Dow.of(cal)
 
-        val lessons =
-            TeacherWidgetLogic.applyOverrides(
-                matchedRows(db, surnameKey, selected, teachers, today, dow).map { toLesson(it, dow) },
-                overrides.filter { it.dateString == today },
-            )
+        val lessons = matchedRows(db, surnameKey, selected, teachers, today, dow).map { toLesson(it, dow) }
 
         // ponytail: скан следующих дней — только когда сегодня пар больше нет (≤7 дешёвых
         // запросов кэша БД, без сети; синк — работа TeacherScheduleWorker)
@@ -105,7 +100,7 @@ object TeacherWidgetData {
             if (lessons.any { it.startMinutes > minute }) {
                 null
             } else {
-                scanNextDays(db, surnameKey, selected, teachers, cal, overrides)
+                scanNextDays(db, surnameKey, selected, teachers, cal)
             }
 
         val snap =
@@ -129,7 +124,6 @@ object TeacherWidgetData {
         selected: Teacher,
         teachers: List<Teacher>,
         baseCal: Calendar,
-        overrides: List<com.politex.data.local.entity.TeacherOverrideEntity>,
     ): NextLessonRef? {
         val days =
             (1..7).mapNotNull { offset ->
@@ -137,11 +131,7 @@ object TeacherWidgetData {
                 val d = Dow.of(c)
                 if (d == 7) return@mapNotNull null
                 val date = DateFormats.dotDate(c)
-                val lessons =
-                    TeacherWidgetLogic.applyOverrides(
-                        matchedRows(db, surnameKey, selected, teachers, date, d).map { toLesson(it, d) },
-                        overrides.filter { it.dateString == date },
-                    )
+                val lessons = matchedRows(db, surnameKey, selected, teachers, date, d).map { toLesson(it, d) }
                 TeacherDayRef(date, d, lessons)
             }
         return TeacherWidgetLogic.findNextLesson(days)

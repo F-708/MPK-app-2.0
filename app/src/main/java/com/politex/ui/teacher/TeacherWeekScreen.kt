@@ -133,16 +133,11 @@ class TeacherWeekViewModel(
         _state.update { it.copy(refreshing = true) }
         viewModelScope.launch {
             val cal = MpkScheduleParser.parseDotDate(sel)
-            // SPEC §5.4: синк через diff-обёртку — правки сбрасываются по изменившемуся полю
-            // с системным уведомлением (отправляет сама обёртка).
+            // SPEC §4.1 фича 9: force-синк только выбранного дня.
             val ok =
                 cal?.let {
-                    runCatching {
-                        TeacherDayLoader
-                            .syncDayWithOverrideDiff(getApplication(), AppGraph.scheduleRepository, p, sel, it, force = true)
-                            .first
-                            .isSuccess
-                    }.onFailure { if (it is CancellationException) throw it }
+                    runCatching { AppGraph.scheduleRepository.syncTeacherScheduleForDate(it, force = true).isSuccess }
+                        .onFailure { if (it is CancellationException) throw it }
                         .getOrDefault(false)
                 } ?: false
             if (ok) TeacherDayLoader.markSyncedNow(getApplication())

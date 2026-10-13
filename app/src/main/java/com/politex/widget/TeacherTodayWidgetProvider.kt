@@ -10,11 +10,11 @@ import kotlinx.coroutines.launch
 
 /**
  * Виджет преподавателя «Моё сегодня» (SPEC §4.1 фича 8, §6.5), 4×2: список пар дня
- * (время, предмет, группа, кабинет + бейдж ЗАМЕНА), текущая подсвечена. Шапка
+ * (время, предмет, группа, кабинет), текущая подсвечена. Шапка
  * «Сегодня, дд.ММ» + «обновлено в HH:MM». Регистрация ТОЛЬКО в teacher-сборке.
  *
  * Строки переиспользуют студенческий layout widget_row_list.xml: row_number/row_time/
- * row_subject/row_room; row_room2 — бейдж ЗАМЕНА (override SOMEONE_ELSE).
+ * row_subject/row_room.
  */
 class TeacherTodayWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(
@@ -139,17 +139,6 @@ class TeacherTodayWidgetProvider : AppWidgetProvider() {
             } else {
                 row.setTextViewText(R.id.row_room, "")
                 row.setViewVisibility(R.id.row_room, android.view.View.GONE)
-            }
-
-            // row_room2 — бейдж ЗАМЕНА (override SOMEONE_ELSE), тот же chip-стиль
-            if (lesson.replaced) {
-                applyChipPadding(context, row, R.id.row_room2)
-                row.setTextViewText(R.id.row_room2, "ЗАМЕНА")
-                row.setTextColor(R.id.row_room2, style.mainColor)
-                row.setInt(R.id.row_room2, "setBackgroundColor", style.highlightColor)
-                row.setViewVisibility(R.id.row_room2, android.view.View.VISIBLE)
-            } else {
-                row.setViewVisibility(R.id.row_room2, android.view.View.GONE)
             }
             return row
         }

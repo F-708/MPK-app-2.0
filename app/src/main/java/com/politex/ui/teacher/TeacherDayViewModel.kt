@@ -4,16 +4,14 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.politex.AppGraph
-import com.politex.data.local.MpkDatabase
-import com.politex.data.local.entity.TeacherOverrideEntity
 import com.politex.data.repository.NextLesson
-import com.politex.data.repository.OverrideReset
 import com.politex.data.repository.TeacherDayLesson
 import com.politex.data.repository.TeacherDayLoader
 import com.politex.data.repository.defaultTeacherDayOffset
 import com.politex.data.repository.teacherTargetCalendar
 import com.politex.util.DateFormats
 import com.politex.util.Dow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -32,8 +30,6 @@ data class TeacherHomeState(
     val isSynced: Boolean = false,
     val lastSyncEpoch: Long = 0L,
     val nextLesson: NextLesson? = null,
-    /** SPEC §5.4: правки, сброшенные полевым diff'ом. Живут в памяти до закрытия плашки. */
-    val overrideResets: List<OverrideReset> = emptyList(),
 )
 
 class TeacherDayViewModel(
@@ -62,72 +58,20 @@ class TeacherDayViewModel(
 
     // SPEC §4.1 фича 14: force-синк выбранного дня; успех → lastSyncEpoch (пишем сами,
     // если воркер ещё не успел), затем перечитываем день.
-    // SPEC §5.4: синк — через diff-обёртку, правка сбрасывается только по изменившемуся полю.
     fun refresh() {
-        val p = profile ?: return
+        if (profile == null) return
         if (_state.value.refreshing) return
         _state.update { it.copy(refreshing = true) }
         viewModelScope.launch {
             val cal = teacherTargetCalendar(_state.value.dayOffset, null)
-            val dateKey = DateFormats.dotDate(cal)
             val ctx = getApplication<Application>()
-            val (result, resets) =
-                TeacherDayLoader.syncDayWithOverrideDiff(ctx, AppGraph.scheduleRepository, p, dateKey, cal, force = true)
+            val result =
+                runCatching { AppGraph.scheduleRepository.syncTeacherScheduleForDate(cal, force = true) }
+                    .onFailure { if (it is CancellationException) throw it }
+                    .getOrElse { Result.failure(it) }
             if (result.isSuccess) TeacherDayLoader.markSyncedNow(ctx)
-            recordResets(resets)
             load()
         }
-    }
-
-    /** SPEC §4.1 фича 10: сохранение личной правки (unique index dateString+lessonNumber). */
-    fun saveOverride(
-        lessonNumber: Int,
-        kind: String,
-        room: String = "",
-    ) {
-        val dateKey = currentDateKey()
-        if (dateKey.isBlank()) return
-        viewModelScope.launch {
-            // REPLACE в DAO: одна строка на (dateString, lessonNumber)
-            MpkDatabase.getInstance(getApplication()).teacherOverrideDao().upsert(
-                TeacherOverrideEntity(
-                    dateString = dateKey,
-                    lessonNumber = lessonNumber,
-                    kind = kind,
-                    room = room.trim(),
-                ),
-            )
-            // Новая правка — будущий сброс этой пары должен уведомить повторно: снимаем дедуп-ключ.
-            getApplication<Application>()
-                .getSharedPreferences("mpk_teacher_profile", android.content.Context.MODE_PRIVATE)
-                .edit()
-                .remove(com.politex.util.TeacherNotifierLogic.resetKey(dateKey, lessonNumber))
-                .apply()
-            load()
-        }
-    }
-
-    fun cancelOverride(lessonNumber: Int) {
-        val dateKey = currentDateKey()
-        if (dateKey.isBlank()) return
-        viewModelScope.launch {
-            MpkDatabase.getInstance(getApplication()).teacherOverrideDao().deleteForLesson(dateKey, lessonNumber)
-            load()
-        }
-    }
-
-    fun dismissOverrideResets() = _state.update { it.copy(overrideResets = emptyList()) }
-
-    private fun currentDateKey(): String =
-        _state.value.dateKey.ifBlank { DateFormats.dotDate(teacherTargetCalendar(_state.value.dayOffset, null)) }
-
-    /**
-     * Фиксация сбросов для in-app плашки. Системное уведомление (§5.4) отправляет
-     * сам TeacherDayLoader.syncDayWithOverrideDiff — на всех путях синка, с дедупом.
-     */
-    private fun recordResets(resets: List<OverrideReset>) {
-        if (resets.isEmpty()) return
-        _state.update { it.copy(overrideResets = it.overrideResets + resets) }
     }
 
     private fun load() {
@@ -140,7 +84,6 @@ class TeacherDayViewModel(
             val repo = AppGraph.scheduleRepository
             val day = TeacherDayLoader.loadDay(ctx, repo, p, dateKey)
             val next = if (day.lessons.isEmpty()) TeacherDayLoader.findNextLesson(ctx, repo, p, dateKey) else null
-            recordResets(day.resets)
             _state.update {
                 it.copy(
                     dateKey = dateKey,

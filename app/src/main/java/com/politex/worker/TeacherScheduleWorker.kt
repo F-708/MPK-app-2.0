@@ -44,30 +44,18 @@ class TeacherScheduleWorker(
             val repository = com.politex.AppGraph.scheduleRepository
             // ponytail: saturdayIsSchoolDay=true всегда — у преподавателей суббота может быть учебной.
             val targets = listOf(now) + nextDayCandidates(now, saturdayIsSchoolDay = true)
-            val dates = targets.map { com.politex.util.DateFormats.dotDate(it) }
-
-            // T4-B: снапшот кэша ДО синка (для diff-уведомлений) и метка прошлого синка
-            // (для честной freshness-ветки утренней сводки). Профиль null → пустой снапшот.
-            val lastSyncBefore = com.politex.data.repository.TeacherDayLoader.readLastSyncEpoch(applicationContext)
-            val before = com.politex.util.TeacherNotifier.snapshotRaw(applicationContext, dates)
 
             var anyOk = false
             var anyFail = false
-            var todayOk = false
             targets.forEachIndexed { index, cal ->
-                // Force-перечитывание по SPEC §5.3: утренний прогон (обе цели) + окно
-                // 14:00–18:00 для сегодня (внутридневные правки); прочие тики — кэш-первым.
+                // Force-перечитывание: утренний прогон (обе цели) + окно 14:00–18:00 для сегодня
+                // (внутридневные правки); прочие тики — кэш-первым.
                 val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
                 val force = decision == SyncDecision.MORNING_FORCE || (index == 0 && hour in 14..17)
-                // SPEC §5.4: синк ТОЛЬКО через diff-обёртку — изменение дока сбрасывает личные
-                // правки с системным уведомлением (уведомление отправляет сама обёртка).
-                com.politex.data.repository.TeacherDayLoader
-                    .syncDayWithOverrideDiff(applicationContext, repository, profile, dates[index], cal, force = force)
-                    .first
-                    .onSuccess {
-                        anyOk = true
-                        if (index == 0) todayOk = true
-                    }.onFailure { anyFail = true }
+                repository
+                    .syncTeacherScheduleForDate(cal, force)
+                    .onSuccess { anyOk = true }
+                    .onFailure { anyFail = true }
             }
 
             if (anyOk) {
@@ -79,19 +67,6 @@ class TeacherScheduleWorker(
                     .apply()
                 // T3-C: после успешного синка — перерисовать teacher-виджеты (в студенческой сборке профиль null → мгновенный выход)
                 com.politex.widget.TeacherWidgetUpdater.updateAll(applicationContext)
-            }
-            // T4-B: хуки уведомлений (сводка ≥07:15, diff ≤1 на синк, «на завтра опубликовано»,
-            // будильник напоминаний). Даже при провале синка — сводка уходит по кэшу с честной
-            // меткой «от <дата/время кэша>». Падение нотификатора не рвёт синк (GG8-паттерн).
-            runCatching {
-                com.politex.util.TeacherNotifier.onSyncCompleted(
-                    context = applicationContext,
-                    dates = dates,
-                    before = before,
-                    todayOk = todayOk,
-                    lastSyncBefore = lastSyncBefore,
-                    now = Calendar.getInstance(),
-                )
             }
             // Сетевые ошибки тихо: retry/следующий тик, без уведомлений об ошибке (SPEC §4.2 «д»).
             if (anyFail) Result.retry() else Result.success()

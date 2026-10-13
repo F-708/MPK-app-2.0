@@ -1,6 +1,5 @@
 package com.politex.widget
 
-import com.politex.data.local.entity.TeacherOverrideEntity
 import com.politex.data.repository.TeacherDayLogic
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -17,7 +16,6 @@ data class TeacherWidgetLesson(
     val end: String,
     val startMinutes: Int,
     val endMinutes: Int,
-    val replaced: Boolean = false, // бейдж ЗАМЕНА (override SOMEONE_ELSE)
 )
 
 data class TeacherDayRef(
@@ -48,32 +46,6 @@ sealed interface TeacherNextState {
 object TeacherWidgetLogic {
     fun shortDow(dow: Int): String = TeacherDayLogic.shortDow(dow)
 
-    /**
-     * Override-оверлей (§5.4): виджеты читают БД напрямую (минуют loader агента A),
-     * поэтому применяют overrides САМИ тем же правилом — по (dateString, lessonNumber):
-     * OTHER_ROOM → другой кабинет, NO_LESSON → пары нет, SOMEONE_ELSE → бейдж ЗАМЕНА.
-     */
-    fun applyOverrides(
-        lessons: List<TeacherWidgetLesson>,
-        overrides: List<TeacherOverrideEntity>,
-    ): List<TeacherWidgetLesson> {
-        val byNumber = overrides.associateBy { it.lessonNumber }
-        return lessons
-            .mapNotNull { lesson ->
-                when (val o = byNumber[lesson.lessonNumber]) {
-                    null -> lesson
-                    else ->
-                        when (o.kind) {
-                            TeacherOverrideEntity.KIND_NO_LESSON -> null
-                            TeacherOverrideEntity.KIND_OTHER_ROOM ->
-                                if (o.room.isNotBlank()) lesson.copy(room = o.room) else lesson
-                            TeacherOverrideEntity.KIND_SOMEONE_ELSE -> lesson.copy(replaced = true)
-                            else -> lesson
-                        }
-                }
-            }.sortedBy { it.lessonNumber }
-    }
-
     /** ИДЁТ / следующая сегодня / пусто / пары кончились / выходной (конвенция: минуты из Calendar). */
     fun nextState(
         lessons: List<TeacherWidgetLesson>,
@@ -99,18 +71,14 @@ object TeacherWidgetLogic {
             }
 
     /**
-     * Грабли v2.x («виджет отключается через день»): кэш-ключ ОБЯЗАН включать дату, минуту,
-     * профиль и СОДЕРЖИМОЕ override (hash — правка 241→305 в ту же минуту меняла только содержимое, не счётчик) — иначе вчерашний снапшот отдаётся на той же минуте суток.
+     * Грабли v2.x («виджет отключается через день»): кэш-ключ ОБЯЗАН включать дату, минуту
+     * и профиль — иначе вчерашний снапшот отдаётся на той же минуте суток.
      */
     fun cacheKey(
         date: String,
         minute: Int,
         profileName: String,
-        overrideHash: Int,
-    ): String = "$date|$minute|$profileName|$overrideHash"
-
-    fun overridesHash(overrides: List<com.politex.data.local.entity.TeacherOverrideEntity>): Int =
-        overrides.joinToString(";") { "${it.dateString}:${it.lessonNumber}:${it.kind}:${it.room}" }.hashCode()
+    ): String = "$date|$minute|$profileName"
 
     fun updatedLabel(epochMillis: Long): String =
         if (epochMillis <= 0L) {

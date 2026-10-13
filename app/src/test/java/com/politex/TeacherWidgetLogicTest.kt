@@ -1,6 +1,5 @@
 package com.politex
 
-import com.politex.data.local.entity.TeacherOverrideEntity
 import com.politex.widget.NextLessonRef
 import com.politex.widget.TeacherDayRef
 import com.politex.widget.TeacherNextState
@@ -14,7 +13,7 @@ import org.junit.Test
 
 /**
  * T3-C: чистая логика teacher-виджетов. RemoteViews/БД не тестируем (нет инфраструктуры) —
- * только выбор следующей пары, overrides, состояния и состав кэш-ключа.
+ * только выбор следующей пары, состояния и состав кэш-ключа.
  */
 class TeacherWidgetLogicTest {
     private fun lesson(
@@ -36,59 +35,6 @@ class TeacherWidgetLogicTest {
     )
 
     private fun at(h: Int, m: Int) = h * 60 + m
-
-    // ——— overrides (§5.4) ———
-
-    @Test
-    fun override_otherRoom_replacesRoom() {
-        val out = TeacherWidgetLogic.applyOverrides(
-            listOf(lesson(1, at(8, 0), at(9, 0), room = "241")),
-            listOf(TeacherOverrideEntity(dateString = "d", lessonNumber = 1, kind = TeacherOverrideEntity.KIND_OTHER_ROOM, room = "305")),
-        )
-        assertEquals("305", out.single().room)
-        assertFalse(out.single().replaced)
-    }
-
-    @Test
-    fun override_noLesson_removesIt() {
-        val out = TeacherWidgetLogic.applyOverrides(
-            listOf(lesson(1, at(8, 0), at(9, 0)), lesson(2, at(9, 0), at(10, 0))),
-            listOf(TeacherOverrideEntity(dateString = "d", lessonNumber = 1, kind = TeacherOverrideEntity.KIND_NO_LESSON)),
-        )
-        assertEquals(listOf(2), out.map { it.lessonNumber })
-    }
-
-    @Test
-    fun override_someoneElse_setsReplacementBadge() {
-        val out = TeacherWidgetLogic.applyOverrides(
-            listOf(lesson(1, at(8, 0), at(9, 0))),
-            listOf(TeacherOverrideEntity(dateString = "d", lessonNumber = 1, kind = TeacherOverrideEntity.KIND_SOMEONE_ELSE)),
-        )
-        assertTrue(out.single().replaced)
-        assertEquals("241", out.single().room) // кабинет остаётся
-    }
-
-    @Test
-    fun override_unknownKindAndOtherNumber_ignored() {
-        val src = listOf(lesson(1, at(8, 0), at(9, 0)))
-        val out = TeacherWidgetLogic.applyOverrides(
-            src,
-            listOf(
-                TeacherOverrideEntity(dateString = "d", lessonNumber = 9, kind = TeacherOverrideEntity.KIND_NO_LESSON),
-                TeacherOverrideEntity(dateString = "d", lessonNumber = 1, kind = "GARBAGE"),
-            ),
-        )
-        assertEquals(src, out)
-    }
-
-    @Test
-    fun overrides_resultSortedByLessonNumber() {
-        val out = TeacherWidgetLogic.applyOverrides(
-            listOf(lesson(3, at(11, 0), at(12, 0)), lesson(1, at(8, 0), at(9, 0))),
-            emptyList(),
-        )
-        assertEquals(listOf(1, 3), out.map { it.lessonNumber })
-    }
 
     // ——— состояния: идёт / следующая / пусто / выходной ———
 
@@ -181,18 +127,17 @@ class TeacherWidgetLogicTest {
         assertNull(TeacherWidgetLogic.findNextLesson(emptyList()))
     }
 
-    // ——— кэш-ключ: дата + минута + профиль + override-счётчик ———
+    // ——— кэш-ключ: дата + минута + профиль ———
 
     @Test
-    fun cacheKey_includesDateMinuteProfileOverrideCount() {
-        val base = TeacherWidgetLogic.cacheKey("08.10.2026", 500, "Иванов И.И.", 2)
+    fun cacheKey_includesDateMinuteProfile() {
+        val base = TeacherWidgetLogic.cacheKey("08.10.2026", 500, "Иванов И.И.")
         // каждая компонента меняет ключ (грабли v2.x «виджет отключается через день»)
-        assertFalse(base == TeacherWidgetLogic.cacheKey("09.10.2026", 500, "Иванов И.И.", 2)) // дата
-        assertFalse(base == TeacherWidgetLogic.cacheKey("08.10.2026", 501, "Иванов И.И.", 2)) // минута
-        assertFalse(base == TeacherWidgetLogic.cacheKey("08.10.2026", 500, "Петров П.П.", 2)) // профиль
-        assertFalse(base == TeacherWidgetLogic.cacheKey("08.10.2026", 500, "Иванов И.И.", 3)) // overrides
+        assertFalse(base == TeacherWidgetLogic.cacheKey("09.10.2026", 500, "Иванов И.И.")) // дата
+        assertFalse(base == TeacherWidgetLogic.cacheKey("08.10.2026", 501, "Иванов И.И.")) // минута
+        assertFalse(base == TeacherWidgetLogic.cacheKey("08.10.2026", 500, "Петров П.П.")) // профиль
         // стабилен при тех же входах
-        assertEquals(base, TeacherWidgetLogic.cacheKey("08.10.2026", 500, "Иванов И.И.", 2))
+        assertEquals(base, TeacherWidgetLogic.cacheKey("08.10.2026", 500, "Иванов И.И."))
     }
 
     // ——— тексты плашек ———
