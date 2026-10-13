@@ -1170,8 +1170,25 @@ object MpkScheduleParser {
                 else -> ""
             }
 
-            val subjectRaw = subject1.ifBlank { subject2.ifBlank { trimmed } }
-            val normalizedSubject = SubjectFormatter.normalize(subjectRaw)
+            // v2.0 (баг «ДЗ не показывается на split-уроках», путь №2): раньше
+            // subjectRaw = ТОЛЬКО предмет 1-й подгруппы — предмет 2-й терялся, и ДЗ
+            // по нему не матчилось никогда; карточка показывала предмет 1-й подгруппы
+            // в обеих панелях. Теперь формат как у grid-пути (parseTableCell:1005):
+            // склейка «A / B» ТОЛЬКО когда предметы разные; HomeworkMarkers.subjectsMatch
+            // матчит каждую часть отдельно.
+            val normSubj1 = SubjectFormatter.normalize(subject1.ifBlank { subject2.ifBlank { trimmed } })
+            val normSubj2 =
+                if (subject2.isNotBlank() && subject2 != subject1 && !subject2.contains("---")) {
+                    SubjectFormatter.normalize(subject2)
+                } else {
+                    normSubj1
+                }
+            val subjectRaw =
+                if (normSubj2.isNotBlank() && !normSubj2.equals(normSubj1, ignoreCase = true)) {
+                    "$normSubj1 / $normSubj2"
+                } else {
+                    normSubj1
+                }
 
             return LessonEntity(
                 groupName = GroupParser.cleanRawGroupName(groupName),
@@ -1179,7 +1196,7 @@ object MpkScheduleParser {
                 lessonNumber = lessonNumber,
                 timeStart = timeStart,
                 timeEnd = timeEnd,
-                subjectRaw = normalizedSubject,
+                subjectRaw = subjectRaw,
                 roomFirst = finalRoom1,
                 teacherFirst = teacher1,
                 roomSecond = finalRoom2,

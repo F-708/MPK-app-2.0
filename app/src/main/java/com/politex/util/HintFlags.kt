@@ -8,6 +8,9 @@ object HintFlags {
     const val KEY_SWIPE_TASKS = "swipe_tasks"
     const val KEY_SCHEDULE_TAPS = "schedule_taps"
 
+    // v2.0: туториал «Тестовый урок» в оценках — учит удалять оценку двойным нажатием.
+    const val KEY_GRADES_TUTORIAL = "grades_tutorial"
+
     fun isDone(
         context: Context,
         key: String,

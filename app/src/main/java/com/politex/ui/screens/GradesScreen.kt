@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -84,6 +85,7 @@ import com.politex.ui.util.rememberToday
 import com.politex.util.GradeAggregator
 import com.politex.util.GradeCategory
 import com.politex.util.GradeSettings
+import com.politex.util.HintFlags
 import com.politex.util.MpkCurriculum
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -116,6 +118,10 @@ internal fun gradeDeleteAction(
 
 private const val DELETE_ARM_TIMEOUT_MS = 500L
 
+// v2.0: туториал «Тестовый урок» — фиктивный предмет (в Room не пишется), учит
+// удалять оценку двойным нажатием. Показывается один раз, после выхода исчезает.
+internal const val TUTORIAL_SUBJECT = "Тестовый урок"
+
 @Composable
 fun GradesScreen(
     groupInfo: GroupInfo,
@@ -129,7 +135,11 @@ fun GradesScreen(
     var openSubject by rememberSaveable { mutableStateOf<String?>(null) }
     var settingsSubject by rememberSaveable { mutableStateOf<String?>(null) }
 
-    val detail = openSubject != null || settingsSubject != null
+    // v2.0: туториал «Тестовый урок» — учит удалять оценку двойным нажатием.
+    // Показывается один раз (HintFlags.KEY_GRADES_TUTORIAL), после выхода больше не всплывает.
+    var showTutorial by rememberSaveable { mutableStateOf(false) }
+
+    val detail = openSubject != null || settingsSubject != null || showTutorial
     DisposableEffect(detail) {
         GradeDetailMode.active = detail
         onDispose { GradeDetailMode.active = false }
@@ -142,6 +152,8 @@ fun GradesScreen(
             .background(ColorBgMain),
     ) {
         when {
+            showTutorial ->
+                GradeTutorialScreen(onBack = { showTutorial = false })
             settingsSubject != null ->
                 GradeSubjectSettingsScreen(
                     subject = settingsSubject!!,
@@ -163,6 +175,7 @@ fun GradesScreen(
                     dao = dao,
                     globalWeights = globalWeights,
                     onOpenSubject = { openSubject = it },
+                    onOpenTutorial = { showTutorial = true },
                 )
         }
     }
@@ -174,13 +187,19 @@ private fun GradeSubjectList(
     dao: GradeDao,
     globalWeights: Boolean,
     onOpenSubject: (String) -> Unit,
+    onOpenTutorial: () -> Unit,
 ) {
+    val context = LocalContext.current
     val entries by dao.allEntries().collectAsState(initial = emptyList())
     val configs by dao.allConfigs().collectAsState(initial = emptyList())
     val subjects =
         remember(groupInfo.specialtyCode, groupInfo.course) {
             MpkCurriculum.getSubjects(groupInfo.specialtyCode, groupInfo.course)
         }
+
+    // v2.0: «Тестовый урок» пульсирует вверху списка, пока туториал не пройден.
+    // Список пересоздаётся при возврате из туториала → флаг читается заново и строка исчезает.
+    val tutorialPending = remember { !HintFlags.isDone(context, HintFlags.KEY_GRADES_TUTORIAL) }
 
     LazyColumn(
         modifier =
@@ -190,6 +209,38 @@ private fun GradeSubjectList(
         contentPadding = PaddingValues(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (tutorialPending) {
+            item {
+                AppCard(
+                    modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .pulseHalo(true)
+                        .testTag("grades_tutorial_row")
+                        .bouncyClickable { onOpenTutorial() },
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = TUTORIAL_SUBJECT,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(fontSize = 14.sp, color = ColorTextTitle),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = GradeAggregator.format(4.0),
+                            style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = gradeColor(4.0)),
+                            modifier = Modifier.testTag("grades_tutorial_avg"),
+                        )
+                    }
+                }
+            }
+        }
+
         items(subjects) { subject ->
 
             val avg =
@@ -242,6 +293,123 @@ private fun GradeSubjectList(
                             modifier = Modifier.testTag("grades_avg_$subject"),
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+// v2.0: туториал оценок. Зеркалит реальный GradeSubjectScreen, но работает на одной
+// фиктивной оценке «4» (id = -1, в Room НЕ пишется ни при каких условиях). Учит удалять
+// оценку двойным нажатием. При выходе (в т.ч. системным Back) помечает HintFlags — больше
+// не показывается. Стиль пульсации тот же, что у подсказки выбора кабинета (pulseHalo).
+@Composable
+private fun GradeTutorialScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    // Пометить пройденным при ЛЮБОМ выходе из туториала — заказчик: «больше не отображается».
+    val finish: () -> Unit = {
+        HintFlags.markDone(context, HintFlags.KEY_GRADES_TUTORIAL)
+        onBack()
+    }
+    BackHandler { finish() }
+
+    var gradeVisible by remember { mutableStateOf(true) }
+    var armed by remember { mutableStateOf(false) }
+    LaunchedEffect(armed) {
+        if (armed) {
+            delay(DELETE_ARM_TIMEOUT_MS)
+            armed = false
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().testTag("grades_tutorial_screen"),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = finish, modifier = Modifier.size(Tokens.HitTarget).testTag("grades_tutorial_back")) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад", tint = ColorTextTitle)
+            }
+            Text(
+                text = TUTORIAL_SUBJECT,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
+                modifier = Modifier.weight(1f).padding(end = 4.dp),
+            )
+        }
+
+        // Средний балл туториала — «4» (по брифу), тот же фикс-бокс 96dp, что и в реальном экране.
+        Box(
+            modifier = Modifier.fillMaxWidth().height(96.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = GradeAggregator.format(4.0),
+                style = TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold, color = gradeColor(4.0)),
+                modifier = Modifier.testTag("grades_tutorial_avg_big"),
+            )
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        AppCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .testTag("grades_tutorial_panel"),
+        ) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                Text(
+                    text = "Двойное нажатие по оценке удалит её",
+                    style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
+                    modifier = Modifier.fillMaxWidth().testTag("grades_tutorial_hint"),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (gradeVisible) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .pulseHalo(!armed)
+                            .testTag("grades_tutorial_chip")
+                            .bouncyClickable {
+                                if (!armed) {
+                                    armed = true
+                                } else {
+                                    armed = false
+                                    gradeVisible = false
+                                }
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            color = if (armed) ColorDangerFill else ColorBgMain,
+                            border = BorderStroke(1.dp, if (armed) ColorDangerFill else ColorBorderLight),
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "4",
+                                    maxLines = 1,
+                                    style = TextStyle(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (armed) Color.White else gradeColor(4.0),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Оценка удалена. Готово!",
+                        style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
+                        modifier = Modifier.height(28.dp).testTag("grades_tutorial_done"),
+                    )
                 }
             }
         }
@@ -775,10 +943,12 @@ private fun GradeSubjectSettingsScreen(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // v2.0: переключатель «весов категорий» — явный Switch со статусом «Вкл/Выкл».
+                // Прежняя версия лишь подсвечивала строку — состояние читалось неоднозначно.
                 Surface(
                     shape = RoundedCornerShape(2.dp),
-                    color = if (weightsEnabled) ColorSurfaceHighlight else ColorBgMain,
-                    border = BorderStroke(1.dp, if (weightsEnabled) ColorTopBar else ColorBorderLight),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
                     modifier =
                     Modifier
                         .fillMaxWidth()
@@ -787,18 +957,23 @@ private fun GradeSubjectSettingsScreen(
                         .bouncyClickable { weightsEnabled = !weightsEnabled },
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = "Веса категорий",
-                            style =
-                            TextStyle(
-                                fontSize = 13.sp,
-                                fontWeight = if (weightsEnabled) FontWeight.Bold else FontWeight.Normal,
-                                color = if (weightsEnabled) ColorTextTitle else ColorTextBody,
-                            ),
-                            modifier = Modifier.weight(1f),
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Веса категорий",
+                                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
+                            )
+                            Text(
+                                text = if (weightsEnabled) "Включено" else "Выключено",
+                                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                            )
+                        }
+                        Switch(
+                            checked = weightsEnabled,
+                            onCheckedChange = { weightsEnabled = it },
+                            modifier = Modifier.testTag("grades_weights_switch"),
                         )
                     }
                 }
