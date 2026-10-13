@@ -5,13 +5,25 @@
      DD: idle-блок (колокольчик + надпись) — вертикальный LinearLayout,
      центрируется gravity="center" корня; в обычном состоянии его дети
      GONE и блок схлопывается в ноль, не влияя на раскладку. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- v2.0: фон со скруглением (shape + setColorFilter в провайдере) -->
+    <ImageView
+        android:id="@+id/iv_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_bg_r0" />
+
+<LinearLayout
     android:id="@+id/now_next_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:background="#FFFFFFFF"
     android:paddingLeft="12dp"
     android:paddingRight="12dp"
     android:paddingTop="8dp"
@@ -231,3 +243,4 @@
             android:visibility="gone" />
     </LinearLayout>
 </LinearLayout>
+</FrameLayout>

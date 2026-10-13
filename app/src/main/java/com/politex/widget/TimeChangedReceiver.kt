@@ -33,7 +33,11 @@ class TimeChangedReceiver : BroadcastReceiver() {
 
     companion object {
 
-        internal fun onTimeChanged(context: Context) {
+        internal suspend fun onTimeChanged(context: Context) {
+
+            // RC1 (v2.0): смена даты/времени — типичный момент «сброса» виджета;
+            // проверяем наличие сегодняшних уроков в БД до перерисовки.
+            runCatching { WidgetUpdateHelper.ensureTodaySchedule(context) }
 
             WidgetUpdateHelper.updateAllWidgets(context)
 

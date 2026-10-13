@@ -54,10 +54,11 @@ class NowNextWidgetProvider : AppWidgetProvider() {
         ): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_now_next)
 
-            val style = WidgetStyle.load(context, appWidgetId)
+            val style = WidgetStyle.load(context, appWidgetId).colors(context)
             val showRoom = WidgetOptions.showRoom(context, appWidgetId)
 
-            views.setInt(R.id.now_next_root, "setBackgroundColor", style.backgroundColor)
+            // v2.0: фон со скруглением (iv_bg) вместо setBackgroundColor корня.
+            WidgetUpdateHelper.applyWidgetBackground(views, context, appWidgetId, style.backgroundColor)
             views.setViewVisibility(R.id.iv_idle, android.view.View.GONE)
             views.setTextColor(R.id.tv_now_label, style.subColor)
             views.setTextColor(R.id.tv_next_label, style.subColor)
@@ -104,7 +105,9 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 }
             if (emptyText != null) {
                 views.setTextViewText(R.id.tv_empty, emptyText)
-                views.setTextColor(R.id.tv_empty, if (groupBlank) style.mainColor else style.subColor)
+                // v2.0 (ж): пустое состояние — всегда mainColor. subColor на тёмных стилях
+                // сливался с фоном («Уроки закончились» читалось с трудом).
+                views.setTextColor(R.id.tv_empty, style.mainColor)
                 views.setViewVisibility(R.id.tv_empty, android.view.View.VISIBLE)
                 listOf(R.id.ll_now_block, R.id.ll_next_block, R.id.v_divider).forEach {
                     views.setViewVisibility(it, android.view.View.GONE)

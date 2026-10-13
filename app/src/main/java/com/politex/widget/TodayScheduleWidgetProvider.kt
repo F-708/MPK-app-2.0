@@ -48,10 +48,11 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             appWidgetId: Int,
         ): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_today_schedule)
-            val style = WidgetStyle.load(context, appWidgetId)
+            val style = WidgetStyle.load(context, appWidgetId).colors(context)
             val showRoom = WidgetOptions.showRoom(context, appWidgetId)
 
-            views.setInt(R.id.today_root, "setBackgroundColor", style.backgroundColor)
+            // v2.0: фон со скруглением (iv_bg) вместо setBackgroundColor корня.
+            WidgetUpdateHelper.applyWidgetBackground(views, context, appWidgetId, style.backgroundColor)
             views.setTextColor(R.id.tv_today_header, style.subColor)
             views.setTextColor(R.id.tv_today_empty, style.subColor)
 
@@ -113,7 +114,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             context: Context,
             lesson: LessonEntity,
             now: Int,
-            style: WidgetStyle,
+            style: WidgetColors,
             showRoom: Boolean,
             appWidgetId: Int,
             pref: com.politex.util.SubgroupPref,
@@ -131,10 +132,12 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                     else -> style.mainColor
                 }
 
+            // v2.0: не-текущие строки ПРОЗРАЧНЫЕ — фон (iv_bg со скруглением) просвечивает
+            // тем же backgroundColor; иначе квадратные row-подложки перекрывали скругление углов.
             row.setInt(
                 R.id.row_root,
                 "setBackgroundColor",
-                if (isCurrent) style.highlightColor else style.backgroundColor,
+                if (isCurrent) style.highlightColor else android.graphics.Color.TRANSPARENT,
             )
 
             row.setTextViewText(R.id.row_number, "${lesson.lessonNumber}")
@@ -194,11 +197,12 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
 
         private fun buildMoreRow(
             context: Context,
-            style: WidgetStyle,
+            style: WidgetColors,
             hiddenCount: Int,
         ): RemoteViews {
             val row = RemoteViews(context.packageName, R.layout.widget_row_list)
-            row.setInt(R.id.row_root, "setBackgroundColor", style.backgroundColor)
+            // v2.0: прозрачный фон — iv_bg просвечивает (скругление углов не перекрыто).
+            row.setInt(R.id.row_root, "setBackgroundColor", android.graphics.Color.TRANSPARENT)
             row.setTextViewText(R.id.row_number, "")
             row.setTextViewText(R.id.row_time, "")
             row.setTextViewText(R.id.row_subject, "…ещё $hiddenCount")

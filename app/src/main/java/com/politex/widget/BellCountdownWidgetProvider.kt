@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
+import androidx.compose.ui.graphics.toArgb
 import com.politex.R
 import com.politex.data.model.BellItem
 import com.politex.data.model.CollegeBellSchedule
@@ -219,7 +220,9 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                     }
                 }
             } catch (_: Exception) {
-                null
+                // RC4 (v2.0): временный сбой Room НЕ кэшируем — иначе null прибивает
+                // «Уроков нет» до полуночи даже после восстановления БД.
+                return null
             }
 
             cacheLastLesson = result
@@ -229,9 +232,15 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
 
         private fun buildViews(context: Context, appWidgetId: Int): RemoteViews {            val views = RemoteViews(context.packageName, R.layout.widget_bell_countdown)
 
-            val style = WidgetStyle.load(context, appWidgetId)
-            views.setInt(R.id.widget_countdown_root, "setBackgroundColor", style.backgroundColor)
+            val style = WidgetStyle.load(context, appWidgetId).colors(context)
+            // v2.0: фон со скруглением (iv_bg) вместо setBackgroundColor корня.
+            WidgetUpdateHelper.applyWidgetBackground(views, context, appWidgetId, style.backgroundColor)
             views.setViewVisibility(R.id.iv_idle, android.view.View.GONE)
+            // RC3b (v2.0): RemoteViews применяются НАКОПИТЕЛЬНО поверх предыдущего
+            // состояния — ветки GONE («Уроков нет») прятали число навсегда, пока виджет
+            // не пересоздан. Восстанавливаем видимость каждый цикл, ветки GONE её
+            // перебивают заново.
+            views.setViewVisibility(R.id.tv_countdown_value, android.view.View.VISIBLE)
             views.setTextColor(R.id.tv_countdown_label, style.subColor)
             views.setTextColor(R.id.tv_countdown_value, style.mainColor)
 
@@ -289,9 +298,15 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                             WidgetUpdateHelper.showIdle(views)
                         }
                         else -> {
-
-                            views.setTextViewText(R.id.tv_countdown_label, "")
-                            views.setTextViewText(R.id.tv_countdown_value, "")
+                            // RC3 (v2.0): ветка была абсолютно пустой — например, воскресенье
+                            // до 07:00 (tomorrow-лейбл gated по SHOW_FROM_MINUTE, night не
+                            // работает в вс). Виджет обязан иметь текст всегда.
+                            views.setTextViewText(
+                                R.id.tv_countdown_label,
+                                if (dow == 7) "Выходной" else "Сегодня уроков нет",
+                            )
+                            views.setViewVisibility(R.id.tv_countdown_value, android.view.View.GONE)
+                            WidgetUpdateHelper.showIdle(views)
                         }
                     }
                 }
@@ -407,6 +422,19 @@ enum class WidgetStyle(
         0xFF8FB8DD.toInt(),
         "Яркий синий",
     ),
+
+    // v2.0: цвета берутся из выбранного стиля приложения при каждой отрисовке виджета
+    // (APP.colors(context)). Поля-заглушки здесь дублируют LIGHT — если какой-то
+    // провайдер (в т.ч. teacher-виджеты) читает style.backgroundColor напрямую,
+    // APP деградирует в читаемый белый, а не в чёрный (0).
+    APP(
+        0xFFFFFFFF.toInt(),
+        0xFF111827.toInt(),
+        0xFF6B7280.toInt(),
+        0xFFE8F0FA.toInt(),
+        0xFF6B7280.toInt(),
+        "Как в приложении",
+    ),
     ;
 
     companion object {
@@ -424,7 +452,31 @@ enum class WidgetStyle(
                 .apply()
         }
     }
+
+    /** Реальные цвета виджета: у фиксированных стилей — поля enum, у APP — палитра приложения. */
+    fun colors(context: Context): WidgetColors =
+        if (this != APP) {
+            WidgetColors(backgroundColor, mainColor, subColor, highlightColor, pastColor)
+        } else {
+            val p = com.politex.util.AppThemeStore.load(context).palette
+            WidgetColors(
+                backgroundColor = p.bgMain.toArgb(),
+                mainColor = p.textTitle.toArgb(),
+                subColor = p.textMuted.toArgb(),
+                highlightColor = p.surfaceHighlight.toArgb(),
+                pastColor = p.textDisabled.toArgb(),
+            )
+        }
 }
+
+/** Разрешённые цвета виджета; имена полей совпадают с WidgetStyle — вызовы style.X не меняются. */
+data class WidgetColors(
+    val backgroundColor: Int,
+    val mainColor: Int,
+    val subColor: Int,
+    val highlightColor: Int,
+    val pastColor: Int,
+)
 
 object WidgetAlarm {
 
@@ -501,6 +553,12 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
                 val pending = goAsync()
                 WidgetUpdateHelper.widgetScope.launch {
                     try {
+
+                        // RC1 (v2.0): перед рендером проверяем, что уроки сегодняшней даты
+                        // есть в БД; если нет — синхроним (с суточным done-флагом и
+                        // 15-мин кулдауном между попытками). Без этого виджет после
+                        // полуночи показывает «Уроков нет» до вечернего воркера.
+                        runCatching { WidgetUpdateHelper.ensureTodaySchedule(context) }
 
                         if (WidgetUpdateHelper.isFullUpdateStale(context)) {
                             WidgetUpdateHelper.updateAllWidgets(context)

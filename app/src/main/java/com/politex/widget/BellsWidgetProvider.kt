@@ -36,9 +36,10 @@ class BellsWidgetProvider : AppWidgetProvider() {
             appWidgetId: Int,
         ): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_bells)
-            val style = WidgetStyle.load(context, appWidgetId)
+            val style = WidgetStyle.load(context, appWidgetId).colors(context)
 
-            views.setInt(R.id.bells_root, "setBackgroundColor", style.backgroundColor)
+            // v2.0: фон со скруглением (iv_bg) вместо setBackgroundColor корня.
+            WidgetUpdateHelper.applyWidgetBackground(views, context, appWidgetId, style.backgroundColor)
             views.setTextColor(R.id.tv_bells_header, style.subColor)
 
             val now = WidgetData.minuteOfDay(context)
@@ -58,10 +59,11 @@ class BellsWidgetProvider : AppWidgetProvider() {
                 val isPast = !isSunday && now > bell.endMinutes
 
                 val row = RemoteViews(context.packageName, R.layout.widget_row_bell)
+                // v2.0: не-текущие строки прозрачные — iv_bg со скруглением просвечивает.
                 row.setInt(
                     R.id.row_root,
                     "setBackgroundColor",
-                    if (isCurrent) style.highlightColor else style.backgroundColor,
+                    if (isCurrent) style.highlightColor else android.graphics.Color.TRANSPARENT,
                 )
 
                 val textColor =

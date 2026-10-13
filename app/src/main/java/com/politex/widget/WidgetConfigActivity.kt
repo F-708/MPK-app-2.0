@@ -73,6 +73,7 @@ class WidgetConfigActivity : ComponentActivity() {
                     var countdownMode by remember { mutableStateOf(CountdownMode.load(this@WidgetConfigActivity, appWidgetId)) }
                     var showRoom by remember { mutableStateOf(WidgetOptions.showRoom(this@WidgetConfigActivity, appWidgetId)) }
                     var showSeconds by remember { mutableStateOf(WidgetOptions.seconds(this@WidgetConfigActivity, appWidgetId)) }
+                    var radius by remember { mutableStateOf(WidgetOptions.radius(this@WidgetConfigActivity, appWidgetId)) }
 
                     Column(
                         modifier =
@@ -99,6 +100,9 @@ class WidgetConfigActivity : ComponentActivity() {
 
                         WidgetStyle.entries.forEach { option ->
                             val isSelected = style == option
+                            // v2.0: свотч показывает РЕАЛЬНЫЕ цвета (у «Как в приложении» —
+                            // из палитры выбранной темы, не из полей-заглушек enum).
+                            val colors = option.colors(this@WidgetConfigActivity)
                             OptionRow(
                                 selected = isSelected,
                                 title = option.title,
@@ -109,18 +113,71 @@ class WidgetConfigActivity : ComponentActivity() {
                                         modifier =
                                         Modifier
                                             .size(32.dp)
-                                            .background(Color(option.backgroundColor), RoundedCornerShape(2.dp)),
+                                            .background(Color(colors.backgroundColor), RoundedCornerShape(2.dp)),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Text(
                                             text = "12",
-                                            color = Color(option.mainColor),
+                                            color = Color(colors.mainColor),
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 14.sp,
                                         )
                                     }
                                 },
                             )
+                        }
+
+                        // v2.0: скругление углов виджета с живым превью.
+                        Spacer(modifier = Modifier.height(18.dp))
+                        SectionTitle("Скругление углов")
+                        val previewColors = style.colors(this@WidgetConfigActivity)
+                        Box(
+                            modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                                .height(64.dp)
+                                .background(Color(previewColors.backgroundColor), RoundedCornerShape(radius.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "12 мин",
+                                color = Color(previewColors.mainColor),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            WidgetOptions.RADII_DP.forEach { r ->
+                                val selected = radius == r
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .bouncyClickable { radius = r },
+                                ) {
+                                    Box(
+                                        modifier =
+                                        Modifier
+                                            .size(40.dp)
+                                            .background(
+                                                if (selected) ColorBrandBlue else ColorBorderLight,
+                                                RoundedCornerShape(r.dp),
+                                            ),
+                                    )
+                                    Text(
+                                        text = if (r == 0) "0" else "$r",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (selected) ColorTextTitle else ColorTextMuted,
+                                        modifier = Modifier.padding(top = 4.dp),
+                                    )
+                                }
+                            }
                         }
 
                         if (kind == WidgetKind.COUNTDOWN) {
@@ -200,6 +257,7 @@ class WidgetConfigActivity : ComponentActivity() {
                                 .bouncyClickable {
                                     WidgetStyle.save(this@WidgetConfigActivity, appWidgetId, style)
                                     WidgetOptions.setShowRoom(this@WidgetConfigActivity, appWidgetId, showRoom)
+                                    WidgetOptions.setRadius(this@WidgetConfigActivity, appWidgetId, radius)
                                     if (kind == WidgetKind.COUNTDOWN) {
                                         CountdownMode.save(this@WidgetConfigActivity, appWidgetId, countdownMode)
                                         WidgetOptions.setSeconds(this@WidgetConfigActivity, appWidgetId, showSeconds)
@@ -287,6 +345,29 @@ enum class WidgetKind(
 object WidgetOptions {
     private const val PREF_SHOW_ROOM = "widget_show_room_"
     private const val PREF_SECONDS = "widget_seconds_"
+
+    // v2.0: скругление углов виджета, dp (0 = квадратные, как раньше).
+    private const val PREF_RADIUS = "widget_radius_"
+
+    /** Допустимые радиусы (чипы в конфигураторе). */
+    val RADII_DP = listOf(0, 8, 16, 24, 28)
+
+    fun radius(
+        context: android.content.Context,
+        appWidgetId: Int,
+    ): Int = WidgetUpdateHelper.getPrefs(context).getInt(PREF_RADIUS + appWidgetId, 0)
+
+    fun setRadius(
+        context: android.content.Context,
+        appWidgetId: Int,
+        value: Int,
+    ) {
+        WidgetUpdateHelper
+            .getPrefs(context)
+            .edit()
+            .putInt(PREF_RADIUS + appWidgetId, value)
+            .apply()
+    }
 
     fun showRoom(
         context: android.content.Context,

@@ -8,6 +8,7 @@
     android:minResizeWidth="180dp"
     android:minResizeHeight="40dp"
     android:previewImage="@drawable/widget_preview_countdown"
+    android:previewLayout="@layout/widget_bell_countdown"
     android:resizeMode="horizontal"
     android:targetCellWidth="3"
     android:targetCellHeight="1"

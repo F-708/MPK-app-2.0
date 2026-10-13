@@ -40,6 +40,7 @@
         <!-- Виджет «До звонка» (2x1, настраиваемый цвет фона) -->
         <receiver
             android:name=".widget.BellCountdownWidgetProvider"
+            android:icon="@mipmap/ic_launcher"
             android:exported="true"
             android:label="До звонка">
             <intent-filter>
@@ -53,6 +54,7 @@
         <!-- Виджет «Сейчас / дальше» (3x2): что идёт сейчас и что будет следующим -->
         <receiver
             android:name=".widget.NowNextWidgetProvider"
+            android:icon="@mipmap/ic_launcher"
             android:exported="true"
             android:label="Сейчас и дальше">
             <intent-filter>
@@ -66,6 +68,7 @@
         <!-- Виджет «Расписание на сегодня» (4x4): весь день списком -->
         <receiver
             android:name=".widget.TodayScheduleWidgetProvider"
+            android:icon="@mipmap/ic_launcher"
             android:exported="true"
             android:label="Расписание на сегодня">
             <intent-filter>
@@ -79,6 +82,7 @@
         <!-- Виджет «Звонки» (2x4): расписание звонков с подсветкой текущего -->
         <receiver
             android:name=".widget.BellsWidgetProvider"
+            android:icon="@mipmap/ic_launcher"
             android:exported="true"
             android:label="Звонки">
             <intent-filter>

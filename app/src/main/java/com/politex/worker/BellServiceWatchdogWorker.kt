@@ -6,6 +6,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.politex.util.BellCountdownNotifier
 import com.politex.util.BellTimerService
+import com.politex.widget.WidgetAlarm
 import com.politex.widget.WidgetUpdateHelper
 
 class BellServiceWatchdogWorker(
@@ -21,6 +22,14 @@ class BellServiceWatchdogWorker(
                 BellTimerService.scheduleFallbackAlarm(ctx)
             }
         }
+
+        // RC2 (v2.0): минутный будильник мог быть дропнут (force-stop/restricted bucket,
+        // деградация exact-аларма на Android 12+) — watchdog раз в 15 мин его перевзводит.
+        runCatching { WidgetAlarm.scheduleNext(ctx) }
+
+        // RC1 (v2.0): уроки сегодняшней даты могли не успеть синхронизироваться —
+        // fallback-проверка (основной вызов живёт в минутном TICK).
+        runCatching { WidgetUpdateHelper.ensureTodaySchedule(ctx) }
 
         WidgetUpdateHelper.updateAllWidgets(ctx)
         return Result.success()

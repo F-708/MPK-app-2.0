@@ -3,6 +3,15 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- v2.0: фон со скруглением (shape + setColorFilter в провайдере) -->
+    <ImageView
+        android:id="@+id/iv_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_bg_r0" />
+
     <LinearLayout
         android:id="@+id/bells_root"
         android:layout_width="match_parent"
