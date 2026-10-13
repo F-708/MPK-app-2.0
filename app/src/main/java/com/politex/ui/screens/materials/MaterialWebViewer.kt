@@ -107,6 +107,9 @@ fun MaterialWebViewer(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val isPdf = item.ext == "pdf"
+    // v2.0: рисование и закладки — и в PDF, и в DOCX (docx-preview раскладывает страницы
+    // section.docx; mpk-ink.js работает с обоими). PDF-only: minimumFontSize, resume, pdf.html.
+    val canAnnotate = isPdf || item.ext == "docx"
     val density = LocalDensity.current.density
 
     val tool = remember(item.id) { InkToolState() }
@@ -128,9 +131,9 @@ fun MaterialWebViewer(
 
     // ---------------------------------------------------------------- аннотации (Room, формат нативного PdfViewer)
     val annotationsFlow: Flow<List<MaterialAnnotationEntity>> =
-        remember(item.id) { if (isPdf) dao.getAnnotationsFlow(item.id) else flowOf(emptyList()) }
+        remember(item.id) { if (canAnnotate) dao.getAnnotationsFlow(item.id) else flowOf(emptyList()) }
     val bookmarksFlow: Flow<List<MaterialBookmarkEntity>> =
-        remember(item.id) { if (isPdf) dao.getBookmarksFlow(item.id) else flowOf(emptyList()) }
+        remember(item.id) { if (canAnnotate) dao.getBookmarksFlow(item.id) else flowOf(emptyList()) }
     val annotations by annotationsFlow.collectAsState(initial = emptyList())
     val bookmarks by bookmarksFlow.collectAsState(initial = emptyList())
 
@@ -324,7 +327,7 @@ fun MaterialWebViewer(
                     }
                 }
             }
-            if (isPdf) {
+            if (canAnnotate) {
                 ViewerAction(
                     icon = Icons.Default.BookmarkAdd,
                     description = "Закладка на этой странице",
@@ -348,7 +351,7 @@ fun MaterialWebViewer(
             }
         }
 
-        if (drawMode && isPdf) {
+        if (drawMode && canAnnotate) {
             AnnotationToolbar(
                 color = drawColor,
                 widthDp = drawWidth,
@@ -384,7 +387,7 @@ fun MaterialWebViewer(
             )
         }
 
-        if (showBookmarkList && isPdf) {
+        if (showBookmarkList && canAnnotate) {
             BookmarkPanel(
                 bookmarks = bookmarks,
                 onJump = { page ->
@@ -405,7 +408,7 @@ fun MaterialWebViewer(
         ) {
             key(item.id) {
                 AndroidView(
-                    factory = { ctx -> createDocWebView(ctx, item, isPdf, webRef, ::openPort) { rendererGone = true } },
+                    factory = { ctx -> createDocWebView(ctx, item, isPdf, canAnnotate, webRef, ::openPort) { rendererGone = true } },
                     onRelease = { v ->
                         // LOW #7: закрыть порт (иначе Handler+callback живут до GC) и снять WebView.
                         runCatching { portRef[0]?.close() }
@@ -449,6 +452,7 @@ private fun createDocWebView(
     ctx: android.content.Context,
     item: MaterialItemEntity,
     isPdf: Boolean,
+    canAnnotate: Boolean,
     webRef: Array<WebView?>,
     openPort: (WebView) -> Unit,
     onRendererGone: () -> Unit,
@@ -494,7 +498,8 @@ private fun createDocWebView(
         webViewClient =
             object : WebViewClientCompat() {
                 override fun onPageFinished(view: WebView, url: String) {
-                    if (isPdf) openPort(view)
+                    // Порт нужен и DOCX: mpk-ink.js (рисование/закладки) и find.js слушают его.
+                    if (canAnnotate) openPort(view)
                 }
 
                 override fun shouldInterceptRequest(view: WebView, request: android.webkit.WebResourceRequest): WebResourceResponse? {

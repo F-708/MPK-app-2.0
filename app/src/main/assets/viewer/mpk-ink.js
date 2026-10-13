@@ -33,19 +33,43 @@
   var wNorm = 0.01;
   var strokes = {};    // page0 -> [{c,w,pts}]
   var root = null;
+  var kind = null;     // "pdf" (#pages > .pg) | "docx" (.docx-wrapper > section.docx)
   var live = null;     // {page0, box, pointerId, cv, ctx, pts, rect} | {page0, box, pointerId, erasing:true}
   var layoutSent = 0;  // последняя отправленная физическая ширина бокса
+  var lastPageMsg = ""; // anti-spam для docx-репортинга страницы
   var MIN_DIST = 0.004; // как MIN_POINT_DIST в AnnotationLayer
 
+  /* v2.0: тот же слой работает и в DOCX — docx-preview раскладывает страницы как
+     .docx-wrapper > section.docx. PDF определяет себя #pages сразу, DOCX — когда
+     документ отрендерился, поэтому kind resolved лениво. */
   function pagesRoot() {
-    return root || (root = document.getElementById("pages"));
+    if (root) return root;
+    var p = document.getElementById("pages");
+    if (p) { root = p; kind = "pdf"; return root; }
+    var w = document.querySelector(".docx-wrapper");
+    if (w) { root = w; kind = "docx"; return root; }
+    return null;
+  }
+
+  function isPageBox(box) {
+    return !!box && box.classList && (box.classList.contains("pg") || box.classList.contains("docx"));
+  }
+
+  /* Список page-боксов. PDF: #pages содержит только .pg (children == боксы).
+     DOCX: у .docx-wrapper детьми могут быть не только section.docx — берём селектором. */
+  function pageBoxes() {
+    var r = pagesRoot();
+    if (!r) return [];
+    return kind === "docx" ? r.querySelectorAll("section.docx") : r.children;
   }
 
   function pageIndexOf(box) {
     if (box._mpkIdx === undefined) {
-      var i = 0;
-      for (var el = box.previousElementSibling; el; el = el.previousElementSibling) i++;
-      box._mpkIdx = i;
+      var boxes = pageBoxes();
+      for (var i = 0; i < boxes.length; i++) {
+        if (boxes[i] === box) { box._mpkIdx = i; break; }
+      }
+      if (box._mpkIdx === undefined) box._mpkIdx = -1;
     }
     return box._mpkIdx;
   }
@@ -58,6 +82,11 @@
   function ensureOverlay(box) {
     var cv = box.querySelector(":scope > canvas.mpk-ink");
     if (!cv) {
+      /* Overlay абсолютно позиционирован — бокс страницы обязан быть позиционирован.
+         .pg у pdf.mjs имеет position:relative из pdf.html; section.docx у docx-preview
+         может быть static — ставим relative сами (минимальное вмешательство в стиль). */
+      var pos = window.getComputedStyle(box).position;
+      if (!pos || pos === "static") box.style.position = "relative";
       cv = document.createElement("canvas");
       cv.className = "mpk-ink";
       cv.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%;z-index:2;pointer-events:none";
@@ -95,10 +124,9 @@
   }
 
   function redrawPage(page0, extra) {
-    var r = pagesRoot();
-    if (!r) return;
-    var box = r.children[page0];
-    if (!box || !box.classList.contains("pg")) return;
+    var boxes = pageBoxes();
+    var box = boxes[page0];
+    if (!isPageBox(box)) return;
     var list = strokes[page0];
     if ((!list || !list.length) && !extra) {
       var old = box.querySelector(":scope > canvas.mpk-ink");
@@ -123,9 +151,8 @@
      не перекладывает при ротации, поэтому источник истины — это измерение, а не
      Compose-размер viewer'а. */
   function reportLayout() {
-    var r = pagesRoot();
-    if (!r || !port) return;
-    var box = r.children[0];
+    if (!port) return;
+    var box = pageBoxes()[0];
     if (!box) return;
     var rect = box.getBoundingClientRect();
     if (!rect.width) return;
@@ -163,6 +190,15 @@
         strokes[page0 | 0] = JSON.parse(data.slice(sp + 1));
       } catch (e) { return; }
       redrawPage(page0 | 0);
+    } else if (verb === "g" && kind === "docx") {
+      /* Переход к странице (закладки/индикатор). В pdf.mjs «g» обрабатывает сам
+         pdf.mjs — здесь только DOCX, иначе был бы двойной скролл. */
+      var n = Math.floor(Number(data.slice(1)));
+      var boxes = pageBoxes();
+      if (isFinite(n) && n >= 1 && n <= boxes.length) {
+        boxes[n - 1].scrollIntoView({ block: "start", behavior: "auto" });
+        requestAnimationFrame(reportDocxPage);
+      }
     }
   }
 
@@ -181,6 +217,7 @@
   var mo = new MutationObserver(function () {
     redrawAllocated();
     requestAnimationFrame(reportLayout);
+    requestAnimationFrame(reportDocxPage);
   });
   function observeRoot() {
     var r = pagesRoot();
@@ -198,6 +235,28 @@
     });
   }
 
+  /* v2.0 DOCX: pdf.mjs сам шлёт «page N OF»; docx — нет, поэтому для закладок и
+     индикатора страницы считаем её здесь: страница, чей бокс ближе к верху вьюпорта. */
+  function reportDocxPage() {
+    if (kind !== "docx" || !port) return;
+    var boxes = pageBoxes();
+    if (!boxes.length) return;
+    var top = window.visualViewport ? window.visualViewport.pageTop : window.scrollY;
+    var mid = top + (window.visualViewport ? window.visualViewport.height : window.innerHeight) / 3;
+    var idx = 0;
+    for (var i = 0; i < boxes.length; i++) {
+      var rect = boxes[i].getBoundingClientRect();
+      var abs = rect.top + top;
+      if (abs <= mid) idx = i; else break;
+    }
+    var msg = "page " + (idx + 1) + " " + boxes.length;
+    if (msg !== lastPageMsg) { lastPageMsg = msg; send(msg); }
+  }
+
+  window.addEventListener("scroll", function () {
+    if (kind === "docx") requestAnimationFrame(reportDocxPage);
+  }, { passive: true });
+
   /* ---- указатель ---- */
 
   function normPoint(e, rect) {
@@ -211,7 +270,7 @@
   document.addEventListener("pointerdown", function (e) {
     if (!mode || !port) return;
     if (live) return; // MED #4: второй палец не перезаписывает первый штрих (иначе ghost)
-    var box = e.target && e.target.closest ? e.target.closest(".pg") : null;
+    var box = e.target && e.target.closest ? e.target.closest(".pg, .docx") : null;
     if (!box || !pagesRoot() || !pagesRoot().contains(box)) return;
     e.preventDefault();
     var page0 = pageIndexOf(box);

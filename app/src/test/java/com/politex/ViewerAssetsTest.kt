@@ -52,8 +52,10 @@ class ViewerAssetsTest {
     }
 
     @Test
-    fun `mpk-ink js подключён к pdf html`() {
+    fun `mpk-ink js подключён к pdf и docx html`() {
         assertTrue(assetText("viewer/pdf.html").contains("mpk-ink.js"))
+        // v2.0: рисование и закладки работают и в DOCX-вьювере
+        assertTrue(assetText("viewer/docx.html").contains("mpk-ink.js"))
     }
 
     @Test
