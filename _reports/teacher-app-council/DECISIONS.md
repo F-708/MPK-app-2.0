@@ -99,3 +99,41 @@ W1 (минимальный видимый результат): выбор пре
 + чистка уведомлений (сводка/diff/reminder). W3: виджеты + «до звонка» в шторке (минуты/секунды,
 выпадающий список тем). W4: масштаб 75/100/125% + тема + иконка (шапка мельче).
 Gradle делится с параллельной сессией последовательными блоками (один владелец на блок, координация SendMessage).
+
+## 2026-10-08 | TR: карта переиспользования оригинала (15-TR-reuse-map) | КОНСИЛИУМ (UX-архитектор + босс)
+UI teacher = вызов/копия ОРИГИНАЛЬНЫХ студенческих composable из main (они не flavor-гейчены).
+- Карточка пары: копия LessonCard (ScheduleScreen.kt:866), TeacherChip→GroupChip (данные groups из
+  teacher_lessons, split ", "); кнопка кабинета = оригинальный чип «каб. N» (:1023) +4dp/+2sp/+2dp иконка;
+  клик → CollegeMapScreen(room) ТО ЖЕ поведение что оригинал (MainScreen.kt:437). НЕТ «Править»/⚑/✎/ЗАМЕНА.
+- Сегодня/Завтра = DaySlotCell 1-в-1, subtitle только «dd.MM» БЕЗ дня недели (TR3 «не писать день недели»);
+  календарь = CalendarArchiveDialog+MonthGrid 1-в-1.
+- «График» = BellsScreen 1-в-1 (НЕЗАВИСИМОЕ подтверждение решения от 2026-10-08 выше). Следствие: строку
+  «Расписание звонков» из «Ещё» УБРАТЬ (дубль вкладки).
+- «Ещё» = клон OtherMenu (CollegeScreen.kt:223): Профиль→Карта→Найти группу(GroupScheduleScreen)→
+  Преподаватели→Настройки, те же MenuCard. «Преподаватели» без «ведёт у вас» = параметр showLeads=false
+  в 3 точках (:744,:838,:1164), ноль форка.
+- МАСШТАБ 75/100/125% = uniform LocalDensity override (Density(density*k, fontScale)) + UiScaleStore
+  (клон AppThemeStore). dp и sp растут одинаково → пересечений нет по построению. Проверка roborazzi ×3.
+  (Уточнение к решению критика: критик рекомендовал fontScale-only; UX-архитектор — uniform density.
+  ПРИНЯТО uniform density — заказчик хочет масштаб ВСЕГО интерфейса, не только шрифтов; риск px-математики
+  карты mitigated тем что карта рисуется as-is в своём поддереве и roborazzi ×3 поймает налезания.)
+- ТЕМА уже работает в teacher (MainActivity:33 применяет paletteState до flavor-ветвления, 7 палитр);
+  не хватает UI — копируем swatches-блок SettingsScreen.kt:610-668 вниз teacher-настроек, тот же AppThemeStore.
+- Уведомление «до звонка»: оставить Style.COMPACT + WITH_SECONDS, выкинуть WITH_APP_NAME/WITH_LESSON/
+  WITH_PROGRESS; выбор темы+стиля = ExposedDropdownMenuBox (образец MaterialDialogs.kt:196). Звука нет — не добавляем.
+- Виджеты (4): те же layout XML + WidgetStyle, данные → TeacherWidgetData.snapshot(); «график звонков» =
+  BellsWidgetProvider 1-в-1 (группо-независим); вернуть вырезанные провайдеры в teacher-манифест.
+- УДАЛИТЬ: TeacherWeekScreen/Logic, TeacherNotifier(+Logic), override-механику, «Не нашли себя», OEM-экран,
+  notif-секцию настроек. СОХРАНИТЬ: воркер синка, лоадер, профиль+surnameKey-фикс, онбординг+fuzzy
+  (усилить MAX_DISTANCE 2→3 ТОЛЬКО в teacher-ветке — грубые опечатки по TR1), виджет-логику.
+- teacher_overrides (Room v10) = DORMANT (подтверждение решения выше): таблица+DAO+Entity в схеме, удаляем callers.
+- Иконка: масштаб 0.80 от центра (54,54) — шапка 66→52dp, поля 28dp (против 17dp оригинала: сплошная navy-шапка
+  оптически тяжелее воздушного здания — компенсируем бо́льшим полем). Ручка калибровки 0.80→0.90, проверка PIL ink-bbox ~50-55%.
+- «число листа» (неразобранная фраза брифа) = трактуем «только число dd.MM без дня недели» на кнопках Сегодня/Завтра (совпадает с TR3).
+
+## 2026-10-08 | TR: координация с параллельной сессией mpk-app-f2 | БОСС
+Версия: defaultConfig 20015/"2.6" (учительское наследует +suffix), standard/admin уехали во flavor-overrides
+20016/"2.0" (их зона). Зоны: мои ui/teacher/*, worker/Teacher*, util/TeacherNotifier* (удаляю), widget/Teacher*,
+src/teacher/*, CollegeScreen-блок «ведёт у вас»; их materials/*, PdfViewer, CollegeMapScreen/RouteBuilder,
+MainScreen, SettingsScreen, widget/* (не-teacher). SettingsScreen/MainScreen мне на правку НЕ нужны — копирую
+блоки в teacher-файлы. Gradle-протокол: предупредить перед тяжёлым прогоном, ретрай на lock 60-90с.
