@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -54,6 +55,10 @@ object BellCountdownNotifier {
         BRAND("brand", "Фирменный синий", 0xFF0B3564.toInt(), true),
         SKY("sky", "Яркий синий", 0xFF0072CE.toInt(), true),
         DARK("dark", "Тёмная", 0xFF232527.toInt(), true),
+
+        // v2.0: акцент берётся из выбранного стиля приложения (AppThemeStore.palette.brandFill)
+        // при каждой сборке уведомления; accent=0 здесь — маркер динамического резолва.
+        APP("app", "Как в приложении", 0, true),
         ;
 
         companion object {
@@ -291,6 +296,14 @@ object BellCountdownNotifier {
             )
 
         val theme = getTheme(context)
+        // v2.0: «Как в приложении» (APP) — акцент берётся из палитры выбранного стиля
+        // приложения при каждой сборке уведомления, а не из фиксированного поля enum.
+        val accent =
+            if (theme == Theme.APP) {
+                AppThemeStore.load(context).palette.brandFill.toArgb()
+            } else {
+                theme.accent
+            }
 
         val builder =
             NotificationCompat
@@ -305,8 +318,8 @@ object BellCountdownNotifier {
 
                 .setStyle(NotificationCompat.DecoratedCustomViewStyle())
 
-        if (theme.accent != 0) {
-            builder.color = theme.accent
+        if (accent != 0) {
+            builder.color = accent
             if (theme.colorize) {
                 builder.setColorized(true)
             }
