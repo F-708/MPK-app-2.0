@@ -132,6 +132,8 @@ internal fun TeachersRoute(
     scheduleRepository: ScheduleRepository,
     onOpenTeacher: (Teacher) -> Unit,
     onBack: () -> Unit,
+    // TR6: teacher-приложение вызывает с showLeads=false — «Преподаватели» без «ведёт у вас».
+    showLeads: Boolean = true,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
         TeachersPage(
@@ -139,6 +141,7 @@ internal fun TeachersRoute(
             scheduleRepository = scheduleRepository,
             onBack = onBack,
             onOpenTeacher = onOpenTeacher,
+            showLeads = showLeads,
         )
     }
 }
@@ -151,6 +154,8 @@ internal fun TeacherCardRoute(
     onOpenRoom: (String) -> Unit,
     onNotFound: () -> Unit,
     onBack: () -> Unit,
+    // TR6: teacher-приложение — без шильда/секции «ведёт у вас».
+    showLeads: Boolean = true,
 ) {
     var teacher by remember(teacherName) { mutableStateOf<Teacher?>(null) }
     LaunchedEffect(teacherName) {
@@ -175,6 +180,7 @@ internal fun TeacherCardRoute(
                 scheduleRepository = scheduleRepository,
                 onOpenRoom = onOpenRoom,
                 onBack = onBack,
+                showLeads = showLeads,
             )
         }
     }
@@ -687,7 +693,7 @@ private fun MySpecialtyPage(
     }
 }
 
-private sealed interface TeacherRow {
+internal sealed interface TeacherRow {
     data class Header(
         val title: String,
     ) : TeacherRow
@@ -697,66 +703,96 @@ private sealed interface TeacherRow {
     ) : TeacherRow
 }
 
+/**
+ * TR6: чистая функция построения строк списка преподавателей (покрыта TeacherLeadsRowsTest).
+ * [insights] == null — учительский режим (showLeads=false): нет группировки «ВЕДУТ У ГРУППЫ»,
+ * весь список = отсортированные Item'ы, шильд «ведёт у вас» на карточках не рисуется (isActive=false).
+ */
+internal fun buildTeacherRows(
+    teachers: List<Teacher>,
+    query: String,
+    insights: TeacherInsights?,
+    groupName: String,
+): List<TeacherRow> {
+    val q = query.trim().lowercase()
+    val filtered =
+        if (q.isBlank()) {
+            teachers
+        } else {
+            teachers.filter {
+                it.name.lowercase().contains(q) ||
+                    it.subjects.lowercase().contains(q) ||
+                    it.position.lowercase().contains(q) ||
+                    it.department.lowercase().contains(q) ||
+                    insights?.rooms(it.name)?.any { room -> room.contains(q) } == true
+            }
+        }
+
+    if (insights == null) {
+        return filtered.sortedBy { it.name }.map<Teacher, TeacherRow> { TeacherRow.Item(it) }
+    }
+
+    val active = filtered.filter { insights.isActive(it.name) }.sortedBy { it.name }
+    val rest = filtered.filterNot { insights.isActive(it.name) }.sortedBy { it.name }
+    return buildList {
+        if (active.isNotEmpty()) {
+            add(TeacherRow.Header("ВЕДУТ У ГРУППЫ $groupName (${active.size})"))
+            active.forEach { add(TeacherRow.Item(it)) }
+        }
+        if (rest.isNotEmpty()) {
+            if (active.isNotEmpty()) {
+                add(TeacherRow.Header("ВСЕ ПРЕПОДАВАТЕЛИ (${rest.size})"))
+            }
+            rest.forEach { add(TeacherRow.Item(it)) }
+        }
+    }
+}
+
 @Composable
 private fun TeachersPage(
     groupInfo: GroupInfo,
     scheduleRepository: ScheduleRepository,
     onBack: () -> Unit,
     onOpenTeacher: (Teacher) -> Unit,
+    // TR6: false — учительский режим: нет «ведёт у вас» (ни шильда, ни секций, ни TeacherInsights).
+    showLeads: Boolean = true,
 ) {
     val context = LocalContext.current
 
     // R2#8: асинхронная загрузка базы преподавателей (была синхронно в композиции)
     val teachers = com.politex.ui.util.rememberTeachers()
 
-    val allLessons by scheduleRepository
-        .getAllLessonsForGroup(groupInfo.canonicalName)
-        .collectAsState(initial = emptyList())
+    // showLeads=false — уроки группы не нужны вообще, запрос не выполняем.
+    val allLessons by
+        if (showLeads) {
+            scheduleRepository
+                .getAllLessonsForGroup(groupInfo.canonicalName)
+                .collectAsState(initial = emptyList())
+        } else {
+            remember { mutableStateOf<List<com.politex.data.local.entity.LessonEntity>>(emptyList()) }
+        }
 
     val insights =
-        remember(teachers, allLessons) {
-            TeacherInsights(teachers, allLessons)
+        remember(teachers, allLessons, showLeads) {
+            if (showLeads) TeacherInsights(teachers, allLessons) else null
         }
 
     var searchQuery by rememberSaveable { mutableStateOf("") }
 
+    // TR6: логика построения строк вынесена в чистую buildTeacherRows (покрыта тестом).
     val rows =
-        remember(teachers, searchQuery, insights) {
-            val q = searchQuery.trim().lowercase()
-            val filtered =
-                if (q.isBlank()) {
-                    teachers
-                } else {
-                    teachers.filter {
-                        it.name.lowercase().contains(q) ||
-                            it.subjects.lowercase().contains(q) ||
-                            it.position.lowercase().contains(q) ||
-                            it.department.lowercase().contains(q) ||
-                            insights.rooms(it.name).any { room -> room.contains(q) }
-                    }
-                }
-
-            val active = filtered.filter { insights.isActive(it.name) }.sortedBy { it.name }
-            val rest = filtered.filterNot { insights.isActive(it.name) }.sortedBy { it.name }
-
-            buildList {
-                if (active.isNotEmpty()) {
-                    add(TeacherRow.Header("ВЕДУТ У ГРУППЫ ${groupInfo.canonicalName} (${active.size})"))
-                    active.forEach { add(TeacherRow.Item(it)) }
-                }
-                if (rest.isNotEmpty()) {
-                    if (active.isNotEmpty()) {
-                        add(TeacherRow.Header("ВСЕ ПРЕПОДАВАТЕЛИ (${rest.size})"))
-                    }
-                    rest.forEach { add(TeacherRow.Item(it)) }
-                }
-            }
+        remember(teachers, searchQuery, insights, showLeads, groupInfo.canonicalName) {
+            buildTeacherRows(teachers, searchQuery, insights, groupInfo.canonicalName)
         }
 
     Column(modifier = Modifier.fillMaxSize()) {
         SubPageHeader(
             title = "Преподаватели",
-            subtitle = "${teachers.size} сотрудников • ${insights.activeNames.size} ведут у ${groupInfo.canonicalName}",
+            subtitle = if (showLeads) {
+                "${teachers.size} сотрудников • ${insights?.activeNames?.size ?: 0} ведут у ${groupInfo.canonicalName}"
+            } else {
+                "${teachers.size} сотрудников"
+            },
             onBack = onBack,
         )
 
@@ -799,8 +835,8 @@ private fun TeachersPage(
                         is TeacherRow.Item ->
                             TeacherCard(
                                 teacher = row.teacher,
-                                isActive = insights.isActive(row.teacher.name),
-                                roomsFromSchedule = insights.rooms(row.teacher.name),
+                                isActive = insights?.isActive(row.teacher.name) == true,
+                                roomsFromSchedule = insights?.rooms(row.teacher.name).orEmpty(),
                                 onClick = { onOpenTeacher(row.teacher) },
                             )
                     }
@@ -963,45 +999,58 @@ private fun TeacherCardPageWrapper(
     scheduleRepository: ScheduleRepository,
     onOpenRoom: (String) -> Unit,
     onBack: () -> Unit,
+    // TR6: false — карточка без шильда «ведёт у вас» (учительский режим).
+    showLeads: Boolean = true,
 ) {
     val context = LocalContext.current
 
     // R2#8: асинхронная загрузка базы преподавателей (была синхронно в композиции)
     val teachers = com.politex.ui.util.rememberTeachers()
-    val allLessons by scheduleRepository
-        .getAllLessonsForGroup(groupInfo.canonicalName)
-        .collectAsState(initial = emptyList())
+    val allLessons by
+        if (showLeads) {
+            scheduleRepository
+                .getAllLessonsForGroup(groupInfo.canonicalName)
+                .collectAsState(initial = emptyList())
+        } else {
+            remember { mutableStateOf<List<com.politex.data.local.entity.LessonEntity>>(emptyList()) }
+        }
 
     var leadsTick by remember { mutableIntStateOf(0) }
 
     val insights =
-        remember(teachers, allLessons, leadsTick) {
-            TeacherInsights(
-                teachers,
-                allLessons,
+        remember(teachers, allLessons, leadsTick, showLeads) {
+            if (!showLeads) {
+                null
+            } else {
+                TeacherInsights(
+                    teachers,
+                    allLessons,
 
-                leadsOffTs = { LeadsMarks.offTs(context, it) },
-                leadsOn = { LeadsMarks.isOn(context, it) },
-            )
+                    leadsOffTs = { LeadsMarks.offTs(context, it) },
+                    leadsOn = { LeadsMarks.isOn(context, it) },
+                )
+            }
         }
 
     TeacherCardPage(
         teacher = teacher,
-        roomsFromSchedule = insights.rooms(teacher.name),
-        subjectsFromSchedule = insights.subjects(teacher.name),
-        isActive = insights.isLeadsNow(teacher.name),
-        autoActive = insights.isActive(teacher.name),
-        lessonsWithGroup = insights.lessonCount(teacher.name),
+        roomsFromSchedule = insights?.rooms(teacher.name).orEmpty(),
+        subjectsFromSchedule = insights?.subjects(teacher.name).orEmpty(),
+        isActive = insights?.isLeadsNow(teacher.name) == true,
+        autoActive = insights?.isActive(teacher.name) == true,
+        lessonsWithGroup = insights?.lessonCount(teacher.name) ?: 0,
         onLeadsChipClick = {
 
             val name = teacher.name
+            val ins = insights
             when {
-                insights.isLeadsNow(name) -> LeadsMarks.markOff(context, name, System.currentTimeMillis())
-                insights.isActive(name) -> LeadsMarks.clear(context, name)
+                ins?.isLeadsNow(name) == true -> LeadsMarks.markOff(context, name, System.currentTimeMillis())
+                ins?.isActive(name) == true -> LeadsMarks.clear(context, name)
                 else -> LeadsMarks.markOn(context, name)
             }
             leadsTick++
         },
+        showLeadsChip = showLeads,
         onOpenRoom = onOpenRoom,
         onBack = onBack,
     )
@@ -1077,6 +1126,8 @@ private fun TeacherCardPage(
     onLeadsChipClick: () -> Unit = {},
     onOpenRoom: (String) -> Unit = {},
     onBack: () -> Unit,
+    // TR6: false — без шильда «ведёт у вас» и без секции «ВЕДЁТ У ВАШЕЙ ГРУППЫ» (учительский режим).
+    showLeadsChip: Boolean = true,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf("О преподавателе", "Расписание")
@@ -1161,12 +1212,14 @@ private fun TeacherCardPage(
                     }
                 }
             }
-            item {
-                LeadsChip(
-                    leadsNow = isActive,
-                    autoActive = autoActive,
-                    onClick = onLeadsChipClick,
-                )
+            if (showLeadsChip) {
+                item {
+                    LeadsChip(
+                        leadsNow = isActive,
+                        autoActive = autoActive,
+                        onClick = onLeadsChipClick,
+                    )
+                }
             }
         }
 
@@ -1181,6 +1234,7 @@ private fun TeacherCardPage(
                     roomsFromSchedule,
                     subjectsFromSchedule,
                     onOpenRoom,
+                    showLeads = showLeadsChip,
                 )
             1 -> TeacherScheduleTab(teacher, onOpenRoom)
         }
@@ -1245,6 +1299,8 @@ private fun AboutTeacherTab(
     roomsFromSchedule: List<String>,
     subjectsFromSchedule: List<String>,
     onOpenRoom: (String) -> Unit = {},
+    // TR6: false — без секции «ВЕДЁТ У ВАШЕЙ ГРУППЫ» (учительский режим).
+    showLeads: Boolean = true,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1376,7 +1432,7 @@ private fun AboutTeacherTab(
             }
         }
 
-        if (!isActive) {
+        if (showLeads && !isActive) {
             item {
                 EmptyCard(
                     text =
@@ -1384,7 +1440,7 @@ private fun AboutTeacherTab(
                         "Откройте вкладку «Расписание», чтобы посмотреть его полное расписание.",
                 )
             }
-        } else {
+        } else if (showLeads) {
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),

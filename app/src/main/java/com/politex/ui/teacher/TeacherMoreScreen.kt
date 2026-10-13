@@ -1,13 +1,12 @@
 package com.politex.ui.teacher
 
-import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,41 +16,38 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.BuildConfig
-import com.politex.R
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.ui.components.AppCard
 import com.politex.ui.components.BackButton
-import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
-import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
+import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
@@ -61,250 +57,149 @@ import com.politex.ui.util.bouncyClickable
 import com.politex.util.Dow
 import java.util.Calendar
 
-// Экран «Ещё» (SPEC §6.1, фичи 11/13/14/17/18). Секции как в студенческих настройках (AppCard).
-
-// Контракт с T4-B (уведомления): ОДИН prefs-файл, ключи ниже. Мы только читаем/пишем.
-private const val PREFS = "mpk_teacher_profile"
-private const val KEY_SUMMARY = "notif_summary_enabled"
-private const val KEY_CHANGES = "notif_changes_enabled"
-private const val KEY_REMINDER = "notif_reminder_enabled"
-private const val KEY_REMINDER_MIN = "notif_reminder_minutes"
+// Экран «Ещё» teacher-приложения = КОПИЯ студенческого «Другое» (CollegeScreen.OtherMenu:223).
+// Порядок/состав/стиль MenuCard — 1-в-1 как у студентов, минус «Моя специальность», «Расписание
+// звонков» (стало вкладкой «График»), «База данных учащихся» (teacher flavor не admin).
+// Сверху — строка профиля (якорь личности, тап → onPickProfile = сброс TeacherProfileStore).
 
 @Composable
 fun TeacherMoreScreen(
     profile: TeacherProfile?,
     onPickProfile: () -> Unit = {},
+    // onOpenBells/onOpenOemHelp сохранены для совместимости сигнатуры с TeacherNav.kt (агент A);
+    // в меню «Ещё» строк «Расписание звонков»/OEM-справки больше нет (решение консилиума §3.2/§10 п.5).
     onOpenBells: () -> Unit = {},
     onOpenMap: () -> Unit = {},
     onOpenOemHelp: () -> Unit = {},
+    // TR5: новые цели меню — подключает агент A подстраницами в TeacherNav (дефолты = no-op).
+    onOpenGroupSchedule: () -> Unit = {},
+    onOpenTeachers: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val metrics = LocalTeacherMetrics.current
-    val context = LocalContext.current
-    val email = stringResource(R.string.teacher_feedback_email)
-    val prefs = remember { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
-
     Column(
-        modifier = modifier.fillMaxSize().background(ColorBgMain).verticalScroll(rememberScrollState()),
+        modifier = modifier.fillMaxSize().background(ColorBgMain),
     ) {
-        Text("Ещё", style = TextStylePageTitle, modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 8.dp))
+        Header(title = "Ещё", subtitle = "Профиль, преподаватели и настройки")
 
-        // ——— Профиль ———
-        SectionLabel("ПРОФИЛЬ")
-        AppCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-            Column {
-                MoreRow(
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                MenuCard(
+                    icon = { Icon(Icons.Default.AccountCircle, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
                     title = profile?.name ?: "Выберите себя",
-                    subtitle = if (profile != null) "Нажмите, чтобы сменить" else "Найти себя в списке преподавателей",
-                    metrics = metrics.body,
-                    tag = "more_profile",
+                    subtitle = if (profile != null) "Нажмите, чтобы сменить преподавателя" else "Найти себя в списке преподавателей",
                     onClick = onPickProfile,
-                    chevron = true,
-                )
-                MoreDivider()
-                MoreRow(
-                    title = "Не нашли себя или заметили неточность?",
-                    subtitle = "Напишите нам — $email",
-                    metrics = metrics.body,
-                    tag = "more_feedback",
-                    onClick = { openMailto(context, email) },
+                    testTag = "more_profile",
                 )
             }
-        }
-
-        // ——— Уведомления ———
-        SectionLabel("УВЕДОМЛЕНИЯ")
-        NotifSection(prefs = prefs, metrics = metrics)
-
-        // ——— Звонки / Карта ———
-        SectionLabel("СПРАВОЧНИК")
-        AppCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-            Column {
-                MoreRow(
-                    title = "Расписание звонков",
-                    subtitle = "По стандартному расписанию колледжа",
-                    metrics = metrics.body,
-                    tag = "more_bells",
-                    onClick = onOpenBells,
-                    chevron = true,
-                )
-                MoreDivider()
-                MoreRow(
+            item {
+                MenuCard(
+                    icon = { Icon(Icons.Default.LocationOn, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
                     title = "Карта колледжа",
-                    subtitle = "Кабинеты, корпуса, маршруты",
-                    metrics = metrics.body,
-                    tag = "more_map",
+                    subtitle = "Планы этажей и поиск кабинета",
                     onClick = onOpenMap,
-                    chevron = true,
+                    testTag = "more_map",
                 )
             }
-        }
-
-        // ——— OEM-справка ———
-        SectionLabel("СТАБИЛЬНОСТЬ")
-        AppCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-            MoreRow(
-                title = "Как запретить системе убивать приложение",
-                subtitle = "Xiaomi (MIUI), Samsung (One UI) — автозапуск и батарея",
-                metrics = metrics.body,
-                tag = "more_oem",
-                onClick = onOpenOemHelp,
-                chevron = true,
-            )
-        }
-
-        // ——— О программе ———
-        SectionLabel("О ПРОГРАММЕ")
-        AppCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Text("Мой Политех — Преподавателю", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = metrics.body, color = ColorTextTitle))
-                Text("Версия ${BuildConfig.VERSION_NAME}", style = TextStyle(fontSize = metrics.chipText, color = ColorTextMuted), modifier = Modifier.padding(top = 2.dp))
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Неофициальное приложение. Данные из открытых источников guo-mpk.by. Может отставать от приказов о заменах.",
-                    style = TextStyle(fontSize = metrics.chipText, color = ColorTextBody),
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Удалить мои контакты: $email",
-                    style = TextStyle(fontSize = metrics.chipText, color = ColorActiveBlue),
-                    modifier = Modifier.heightIn(min = metrics.hitTarget).bouncyClickable { openMailto(context, email) }.testTag("more_delete_contacts"),
+            item {
+                MenuCard(
+                    icon = { Icon(Icons.Default.DateRange, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
+                    title = "Найти группу",
+                    subtitle = "Расписание любой группы колледжа",
+                    onClick = onOpenGroupSchedule,
+                    testTag = "more_group",
                 )
             }
-        }
-
-        Spacer(Modifier.height(24.dp))
-    }
-}
-
-@Composable
-private fun NotifSection(
-    prefs: android.content.SharedPreferences,
-    metrics: TeacherMetrics,
-) {
-    var summary by remember { mutableStateOf(prefs.getBoolean(KEY_SUMMARY, true)) }
-    var changes by remember { mutableStateOf(prefs.getBoolean(KEY_CHANGES, true)) }
-    var reminder by remember { mutableStateOf(prefs.getBoolean(KEY_REMINDER, true)) }
-    var minutes by remember { mutableIntStateOf(prefs.getInt(KEY_REMINDER_MIN, 10)) }
-
-    fun putBool(key: String, value: Boolean) = prefs.edit().putBoolean(key, value).apply()
-
-    AppCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-        Column {
-            ToggleRow("Утренняя сводка", "Один раз около 07:15", summary, metrics, "notif_summary") {
-                summary = it; putBool(KEY_SUMMARY, it)
+            item {
+                MenuCard(
+                    icon = { Icon(Icons.Default.Person, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
+                    title = "Преподаватели",
+                    subtitle = "Поиск по базе, избранное и фотографии",
+                    onClick = onOpenTeachers,
+                    testTag = "more_teachers",
+                )
             }
-            MoreDivider()
-            ToggleRow("Изменения расписания", "Когда пара изменилась в доке", changes, metrics, "notif_changes") {
-                changes = it; putBool(KEY_CHANGES, it)
-            }
-            MoreDivider()
-            ToggleRow("Напоминание до пары", "Смена кабинета или первая пара", reminder, metrics, "notif_reminder") {
-                reminder = it; putBool(KEY_REMINDER, it)
-            }
-            if (reminder) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("За", style = TextStyle(fontSize = metrics.chipText, color = ColorTextMuted))
-                    listOf(5, 10, 20).forEach { m ->
-                        val selected = minutes == m
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
-                            color = if (selected) ColorTopBar else ColorBgMain,
-                            // SPEC §6.6: hit-зона ≥48dp (было 40dp)
-                            modifier = Modifier.heightIn(min = metrics.hitTarget).bouncyClickable {
-                                minutes = m; prefs.edit().putInt(KEY_REMINDER_MIN, m).apply()
-                            }.testTag("notif_min_$m"),
-                        ) {
-                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 14.dp)) {
-                                Text("$m мин", style = TextStyle(fontSize = metrics.chipText, color = if (selected) Color.White else ColorTextBody))
-                            }
-                        }
-                    }
-                }
+            item {
+                MenuCard(
+                    icon = { Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
+                    title = "Настройки",
+                    subtitle = "Профиль и уведомление «до звонка»",
+                    onClick = onOpenSettings,
+                    testTag = "more_settings",
+                )
             }
         }
     }
 }
 
+// ——— Клоны приватных MenuCard/Header из CollegeScreen.kt (1-в-1, + необязательный testTag) ———
+
 @Composable
-private fun ToggleRow(
+private fun MenuCard(
+    icon: @Composable () -> Unit,
     title: String,
     subtitle: String,
-    checked: Boolean,
-    metrics: TeacherMetrics,
-    tag: String,
-    onChange: (Boolean) -> Unit,
+    onClick: () -> Unit,
+    testTag: String? = null,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = metrics.hitTarget).padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    AppCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .bouncyClickable(onClick = onClick)
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = metrics.body, color = ColorTextTitle))
-            Text(subtitle, style = TextStyle(fontSize = metrics.chipText, color = ColorTextMuted))
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(ColorBrandFill, RoundedCornerShape(2.dp)),
+                contentAlignment = Alignment.Center,
+            ) { icon() }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),
+                )
+                Text(
+                    text = subtitle,
+                    style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
+                    maxLines = 2,
+                )
+            }
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = ColorTextMuted,
+                modifier = Modifier.size(20.dp),
+            )
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = onChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = ColorBrandBlue,
-                uncheckedTrackColor = ColorBorderLight,
-                uncheckedThumbColor = ColorTextMuted,
-            ),
-            modifier = Modifier.testTag("${tag}_switch"),
+    }
+}
+
+@Composable
+private fun Header(
+    title: String,
+    subtitle: String,
+) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Text(text = title, style = TextStylePageTitle, maxLines = 1)
+        Text(
+            text = subtitle,
+            style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = ColorBrandBlue),
+            maxLines = 1,
         )
     }
 }
 
-@Composable
-private fun MoreRow(
-    title: String,
-    subtitle: String,
-    metrics: androidx.compose.ui.unit.TextUnit,
-    tag: String,
-    onClick: () -> Unit,
-    chevron: Boolean = false,
-) {
-    val m = LocalTeacherMetrics.current
-    Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = m.hitTarget).bouncyClickable(onClick = onClick).testTag(tag).padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = metrics, color = ColorTextTitle))
-            Text(subtitle, style = TextStyle(fontSize = m.chipText, color = ColorTextMuted))
-        }
-        if (chevron) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = ColorTextMuted, modifier = Modifier.size(22.dp))
-        }
-    }
-}
-
-@Composable
-private fun MoreDivider() {
-    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).height(1.dp).background(ColorBorderLight))
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ColorTextMuted),
-        modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 6.dp),
-    )
-}
-
-private fun openMailto(context: Context, email: String) {
-    runCatching { context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$email"))) }
-}
-
-// ——— Звонки (SPEC фича 13): сетка дня + честный текст, БЕЗ студенческих баннеров ———
+// ——— Звонки (подстраница TeacherNav.Bells; в меню «Ещё» строки нет — вкладка «График») ———
 
 @Composable
 fun TeacherBellsPage(
@@ -372,7 +267,7 @@ private fun dowTitle(dow: Int): String =
         else -> "воскресенье"
     }
 
-// ——— OEM-справка (SPEC фича 18) ———
+// ——— OEM-справка (подстраница TeacherNav.OemHelp; в меню «Ещё» строки нет — §10 п.5) ———
 
 @Composable
 fun TeacherOemHelpPage(
@@ -451,3 +346,9 @@ private fun OemCard(
     }
 }
 
+// ——— «О программе»: версия + дисклеймер (используется TeacherSettingsScreen) ———
+
+internal const val TEACHER_ABOUT_DISCLAIMER =
+    "Неофициальное приложение. Данные из открытых источников guo-mpk.by. Может отставать от приказов о заменах."
+
+internal fun teacherAboutVersion(): String = BuildConfig.VERSION_NAME

@@ -6,10 +6,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.politex.AppGraph
@@ -147,23 +147,28 @@ class TeacherShotsTest {
     // ------------------------------------------------------------------ кадры
 
     @Test
-    fun shotOnboardingWelcome() {
+    fun shotOnboardingPick() {
+        // TR1: онбординг = один экран выбора преподавателя (визард убран)
         setOnboarding()
-        waitForText("Добро пожаловать!")
-        waitForText("Неофициальное приложение")
-        capture("teacher_onboarding_welcome")
+        waitForText("Выберите себя")
+        waitForTag("teacher_onboarding_search")
+        // список грузится асинхронно из assets/teachers.csv — ждём первую карточку
+        val first = AppGraph.teachersRepository.loadTeachers().firstOrNull()?.name ?: error("teachers.csv пуст")
+        waitForText(first)
+        advance(500)
+        capture("teacher_onboarding_pick")
     }
 
     @Test
     fun shotOnboardingSearch() {
         setOnboarding()
-        waitForText("Добро пожаловать!")
-        composeRule.onNodeWithText("Продолжить").performClick()
-        advance(1_000)
-        waitForText("Найдите себя в списке")
+        waitForText("Выберите себя")
         waitForTag("teacher_onboarding_search")
-        // список грузится асинхронно из assets/teachers.csv — ждём первую карточку
         val first = AppGraph.teachersRepository.loadTeachers().firstOrNull()?.name ?: error("teachers.csv пуст")
+        waitForText(first)
+        // грубая опечатка в фамилии — живой список всё равно подсказывает (TR1)
+        composeRule.onNodeWithTag("teacher_onboarding_search").performTextInput(first.substringBefore(' ').lowercase() + "а")
+        advance(500)
         waitForText(first)
         advance(500)
         capture("teacher_onboarding_search")
@@ -173,34 +178,25 @@ class TeacherShotsTest {
     fun shotHomeDay() {
         setNav()
         waitForText("обновлено в")
-        waitForText("ИДЁТ")
-        waitForText("СЛЕДУЮЩАЯ")
+        // TR3: карточка пары = копия студенческой LessonCard — НЕТ текстов «ИДЁТ»/«СЛЕДУЮЩАЯ»
+        // (у студентов текущая пара подсвечивается рамкой ColorActiveBlue, без статус-текста).
+        // Ждём сам список пар: бейдж номера + предмет.
+        waitForText("Математика")
+        waitForTag("lesson_card_3")
         advance(2_000)
         capture("teacher_home_day")
     }
 
     @Test
-    fun shotWeek() {
+    fun shotBells() {
+        // TR5: вкладка 2 = «График» = BellsScreen (таймлайн звонков), замена старой «Неделе».
         setNav()
-        waitForTag("teacher_tab_week")
-        composeRule.onNodeWithTag("teacher_tab_week").performClick()
+        waitForTag("teacher_tab_bells")
+        composeRule.onNodeWithTag("teacher_tab_bells").performClick()
         advance(2_000)
-        waitForTag("teacher_week_tab_load")
-        // дни грузятся последовательно: ждём карточку выбранного дня И бейджи всех 6 ячеек,
-        // иначе кадр ловит спиннер и пустую полосу (первый прогон так и снял)
-        waitForText("Математика")
-        waitFor("бейджи Пн–Сб") {
-            composeRule.onAllNodesWithText("4", substring = false).fetchSemanticsNodes().size >= 5 &&
-                composeRule.onAllNodesWithText("6", substring = false).fetchSemanticsNodes().size >= 1
-        }
+        waitForText("Расписание звонков")
         advance(500)
-        capture("teacher_week")
-
-        composeRule.onNodeWithTag("teacher_week_tab_load").performClick()
-        advance(1_500)
-        waitForTag("teacher_week_load_disclaimer")
-        waitForTag("teacher_week_by_subject")
-        capture("teacher_week_load")
+        capture("teacher_bells")
     }
 
     @Test
@@ -211,12 +207,13 @@ class TeacherShotsTest {
         waitForTag("teacher_tab_more")
         composeRule.onNodeWithTag("teacher_tab_more").performClick()
         advance(1_500)
-        waitForText("Утренняя сводка")
+        // TR5: «Ещё» = клон студенческого «Другое»: Профиль → Карта → Найти группу → Преподаватели → Настройки.
+        waitForText("Карта колледжа")
         waitForTag("more_profile")
         capture("teacher_more")
 
-        // низ экрана отдельным кадром: секции СТАБИЛЬНОСТЬ и О ПРОГРАММЕ
-        composeRule.onNodeWithTag("more_delete_contacts").performScrollTo()
+        // низ меню отдельным кадром: строка «Настройки»
+        composeRule.onNodeWithTag("more_settings").performScrollTo()
         composeRule.waitForIdle()
         capture("teacher_more_bottom")
     }
