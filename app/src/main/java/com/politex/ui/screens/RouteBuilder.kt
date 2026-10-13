@@ -1,5 +1,7 @@
 package com.politex.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,12 +16,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -32,6 +37,7 @@ import com.politex.data.model.CollegeRouteFinder
 import com.politex.data.model.FloorMap
 import com.politex.data.model.MapPoint
 import com.politex.data.model.MapRoom
+import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandFill
@@ -222,6 +228,7 @@ fun RoutePairPanel(
     onValueB: (String) -> Unit,
     onBuild: () -> Unit,
     modifier: Modifier = Modifier,
+    highlightTick: Int = 0,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
@@ -232,7 +239,7 @@ fun RoutePairPanel(
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PairField(placeholder = "Откуда (пусто = вход)", value = valueA, onValueChange = onValueA, modifier = Modifier.weight(1f))
-                PairField(placeholder = "Куда", value = valueB, onValueChange = onValueB, modifier = Modifier.weight(1f))
+                PairField(placeholder = "Куда", value = valueB, onValueChange = onValueB, modifier = Modifier.weight(1f), highlightTick = highlightTick)
             }
             Surface(
                 shape = RoundedCornerShape(2.dp),
@@ -258,11 +265,21 @@ private fun PairField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    highlightTick: Int = 0,
 ) {
+    // З3: разовая пульсация подсветки при смене highlightTick (автоподстановка «Куда»).
+    val pulse = remember { Animatable(0f) }
+    LaunchedEffect(highlightTick) {
+        if (highlightTick > 0) {
+            pulse.snapTo(0f)
+            pulse.animateTo(1f, tween(220))
+            pulse.animateTo(0f, tween(380))
+        }
+    }
     Surface(
         shape = RoundedCornerShape(2.dp),
-        color = ColorSurfaceVariantLight,
-        border = androidx.compose.foundation.BorderStroke(1.dp, ColorBorderLight),
+        color = lerp(ColorSurfaceVariantLight, ColorActiveBlue.copy(alpha = 0.35f), pulse.value),
+        border = androidx.compose.foundation.BorderStroke(1.dp, lerp(ColorBorderLight, ColorActiveBlue, pulse.value)),
         modifier = modifier.height(com.politex.ui.theme.Tokens.SearchHeight),
     ) {
         // BB10: без постоянной подписи сверху — полупрозрачный placeholder внутри поля

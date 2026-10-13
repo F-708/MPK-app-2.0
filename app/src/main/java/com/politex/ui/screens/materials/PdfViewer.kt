@@ -77,6 +77,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -792,7 +793,8 @@ private fun PdfReaderBar(
     // BB1: WindowInsets.statusBars — @Composable-геттер, поднимаем до drawBehind.
     val statusBars = WindowInsets.statusBars
     Surface(
-        shape = RoundedCornerShape(2.dp),
+        // v2.0: квадратный топбар (скругление давало пиксели фона по углам)
+        shape = RectangleShape,
         color = ColorTopBar,
         modifier =
         Modifier

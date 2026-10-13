@@ -169,60 +169,6 @@ fun tabSlideDir(from: Int, to: Int): Int = when {
     else -> -1
 }
 
-/** II4: сопротивление drag (Telegram-style): 1.0 = контент 1-в-1 за пальцем (дёргано). */
-private const val DRAG_RESISTANCE = 0.65f
-
-private fun Modifier.tabSwipeGesture(
-    onDrag: (Float) -> Unit,
-    onSwipeLeft: () -> Unit,
-    onSwipeRight: () -> Unit,
-    onRelease: (dx: Float) -> Unit,
-): Modifier = composed {
-    val density = LocalDensity.current
-    val slop = LocalViewConfiguration.current.touchSlop
-    val edgePx = with(density) { 24.dp.toPx() }
-    pointerInput(Unit) {
-        val width = size.width.toFloat()
-        awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false)
-            // Зона системного back-жеста — не перехватываем.
-            if (down.position.x < edgePx) return@awaitEachGesture
-            var dx = 0f
-            var dy = 0f
-            var lastDx = 0f
-            var claimed = false
-            // HH7: Initial-pass — родитель видит события РАНЬШЕ детей. Старый Main-pass
-            // abort-ился на первом же isConsumed (любая кликабельная карточка потребляла
-            // down), поэтому жест не срабатывал почти нигде. Claim — только строгая
-            // горизонталь; после claim consume не пускает детей к событиям вообще.
-            while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
-                if (event.changes.none { it.pressed }) break
-                val change = event.changes.first()
-                lastDx = change.position.x - change.previousPosition.x
-                dx = change.position.x - down.position.x
-                dy = change.position.y - down.position.y
-                if (!claimed && abs(dx) > slop * 2f && abs(dx) > abs(dy) * 1.2f) {
-                    claimed = true
-                }
-                if (claimed) {
-                    event.changes.forEach { it.consume() }
-                    // II4: сопротивление 0.65 — контент тяжелее пальца, микро-рывки гасятся
-                    onDrag(dx * DRAG_RESISTANCE)
-                }
-            }
-            if (!claimed) return@awaitEachGesture
-            val flick = abs(lastDx) > 18f
-            val commit = abs(dx) > width * 0.25f || (flick && abs(dx) > slop)
-            when {
-                commit && dx < 0 -> { onRelease(dx); onSwipeLeft() }
-                commit && dx > 0 -> { onRelease(dx); onSwipeRight() }
-                else -> onRelease(dx)
-            }
-        }
-    }
-}
-
 @Composable
 fun MainScreen(
     viewModel: AppViewModel,
@@ -277,7 +223,9 @@ fun MainScreen(
             modifier = Modifier.fillMaxSize(),
 
             topBar = {
-                if (!ViewerMode.active) MainTopBar()
+                // З1а: на карте баннер колледжа скрыт — у карты своя синяя верхняя полоса.
+                val onMap = backStackEntry?.destination?.route?.substringBefore("?") == ROUTE_MAP.substringBefore("?")
+                if (!ViewerMode.active && !onMap) MainTopBar()
             },
             bottomBar = {
                 // FF1: нижняя навигация скрывается ТОЛЬКО в полноэкранном чтении;
@@ -345,49 +293,17 @@ fun MainScreen(
                 }
             },
         ) { innerPadding ->
-            val swipeEnabled = remember(context, backStackEntry) {
-                WidgetUpdateHelper.getPrefs(context).getBoolean("swipe_tabs_enabled", true)
-            }
-            val curIdx = ownerTabIndex(backStackEntry?.destination?.route)
-            // R2#4: деталь оценок (GradeDetailMode) гасит свайп — иначе жест уносит из раскрытой оценки
-            val gestureActive = swipeEnabled && curIdx >= 0 && !ViewerMode.active && !RouteBuilderMode.active && !GradeDetailMode.active
-            val dragOffset = remember { mutableFloatStateOf(0f) }
-            var settleTick by remember { mutableIntStateOf(0) }
-            LaunchedEffect(settleTick) {
-                if (settleTick == 0) return@LaunchedEffect
-                Animatable(dragOffset.floatValue).animateTo(0f, tween(220)) {
-                    dragOffset.floatValue = value
-                }
-            }
-            Box(
-                modifier =
-                if (gestureActive) {
-                    Modifier.tabSwipeGesture(
-                        onDrag = { dragOffset.floatValue = it },
-                        onRelease = { settleTick++ },
-                        onSwipeLeft = {
-                            val i = ownerTabIndex(backStackEntry?.destination?.route)
-                            if (i in 0 until AppTab.entries.size - 1) {
-                                navController.navigateToTab(AppTab.entries[i + 1].route)
-                            }
-                        },
-                        onSwipeRight = {
-                            val i = ownerTabIndex(backStackEntry?.destination?.route)
-                            if (i > 0) navController.navigateToTab(AppTab.entries[i - 1].route)
-                        },
-                    )
-                } else {
-                    Modifier
-                },
-            ) {
+            // v2.0: свайп-жест смены вкладок удалён (срабатывал через раз и конфликтовал
+            // со скроллом/картами). Переход по кнопкам нижней панели остался — его анимация
+            // живёт в enterTransition/exitTransition NavHost ниже, она НЕ тронута.
+            Box {
                 NavHost(
                     navController = navController,
                     startDestination = ROUTE_SCHEDULE,
                     modifier =
                     Modifier
                         .fillMaxSize()
-                        .padding(innerPadding)
-                        .graphicsLayer { translationX = dragOffset.floatValue },
+                        .padding(innerPadding),
                     enterTransition = {
                         val d = tabSlideDir(ownerTabIndex(initialState.destination.route), ownerTabIndex(targetState.destination.route))
                         if (d == 0) fadeIn(tween(150)) else slideInHorizontally(tween(280)) { if (d > 0) it else -it }

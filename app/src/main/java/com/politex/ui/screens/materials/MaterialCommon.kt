@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
@@ -91,7 +92,8 @@ fun MaterialViewerTopBar(
     // BB1: WindowInsets.statusBars — @Composable-геттер, поднимаем до drawBehind.
     val statusBars = WindowInsets.statusBars
     Surface(
-        shape = RoundedCornerShape(2.dp),
+        // v2.0: квадратные углы — скругление давало видимые пиксели фона по углам синего бара.
+        shape = RectangleShape,
         color = ColorTopBar,
         modifier = Modifier
             .fillMaxWidth()

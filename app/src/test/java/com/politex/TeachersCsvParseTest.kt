@@ -80,14 +80,28 @@ class TeachersCsvParseTest {
     }
 
     @Test
-    fun `строки 48 и 93 дают корректные имя и должность после фикса данных`() {
-        val galimova = teachers.first { it.name.startsWith("Галимова") }
-        assertEquals("Преподаватель", galimova.position)
-        assertEquals("ЦК физической культуры и здоровья", galimova.department)
+    fun `синхронизация 2026-10-13 каталог 108 записей, ключевые строки корректны`() {
+        // База обновлена из Teachers/teachers_catalog.csv (108 записей):
+        // Галимова выбыла из штата (её в каталоге больше нет), Бачило перешла в другую ЦК.
+        assertEquals(108, teachers.size)
 
         val bachilo = teachers.first { it.name.startsWith("Бачило") }
         assertEquals("Преподаватель", bachilo.position)
-        assertEquals("ЦК городского электрического транспорта и электроприводов", bachilo.department)
+        assertEquals("ЦК монтажа и эксплуатации электрооборудования", bachilo.department)
+        assertEquals("338", bachilo.room)
+
+        val shatko = teachers.first { it.name.startsWith("Шатько") }
+        assertEquals("229", shatko.room)
+        assertEquals("338-33-42", shatko.phone)
+    }
+
+    @Test
+    fun `каждая непустая ссылка на фото разрешается файлом в ассетах`() {
+        val assets = RuntimeEnvironment.getApplication().assets
+        val photos = assets.list("teachers_photos")!!.toSet()
+        for (t in teachers.filter { it.photo.isNotBlank() }) {
+            assertTrue("нет фото ${t.photo} у ${t.name}", t.photo in photos)
+        }
     }
 
     @Test

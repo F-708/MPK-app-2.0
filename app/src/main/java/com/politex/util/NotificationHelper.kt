@@ -146,9 +146,12 @@ object NotificationHelper {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
+        // v2.0: без префикса «Напоминание:» (иконка канала и так говорит, что это напоминание).
+        // Заголовок — урок КАПСОМ (о чём), текст — сама задача (что сделать):
+        // «МАТЕМАТИКА · Решить задачи 15-20» читается одним взглядом.
         val subject = task.shortSubjectName.ifBlank { task.subjectName }
-        val title = "Напоминание: ${task.title}"
-        val body = if (subject.isNotBlank()) "($subject)" else "Задание"
+        val title = if (subject.isNotBlank()) subject.uppercase() else "ЗАДАНИЕ"
+        val body = task.title.ifBlank { "Посмотри задание" }
 
         val notification =
             NotificationCompat
@@ -156,7 +159,7 @@ object NotificationHelper {
                 .setSmallIcon(R.drawable.ic_mpk_emblem)
                 .setContentTitle(title)
                 .setContentText(body)
-                .setStyle(NotificationCompat.BigTextStyle().bigText("$title $body"))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)

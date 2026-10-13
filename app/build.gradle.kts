@@ -20,11 +20,17 @@ android {
         create("standard") {
             dimension = "version"
             isDefault = true
+            // v2.0 — раздаточная линия для студентов (бриф 2026-10-13).
+            // Версия живёт в flavor'ах, чтобы не пересекаться с линией teacher (v2.6).
+            versionCode = 20016
+            versionName = "2.0"
         }
         create("admin") {
             dimension = "version"
             applicationIdSuffix = ".admin"
             versionNameSuffix = "-admin"
+            versionCode = 20016
+            versionName = "2.0"
         }
         create("teacher") {
             dimension = "version"
@@ -34,6 +40,7 @@ android {
     }
     minSdk = 24
     targetSdk = 36
+    // Дефолт — линия teacher-flavor; standard/admin переопределяют версию в своих flavor'ах.
     versionCode = 20015
     versionName = "2.6"
 

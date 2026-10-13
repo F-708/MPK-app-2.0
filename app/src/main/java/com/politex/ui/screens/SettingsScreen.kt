@@ -23,8 +23,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,7 +38,6 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
@@ -48,7 +45,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -110,7 +106,6 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var showGroupDialog by remember { mutableStateOf(false) }
-    var showViewerLicences by remember { mutableStateOf(false) }
     var isNotificationEnabled by remember {
         mutableStateOf(WidgetUpdateHelper.isNotificationEnabled(context))
     }
@@ -311,29 +306,6 @@ fun SettingsScreen(
                                 )
                             }
                         }
-                    }
-                }
-            }
-
-            item { SectionCaption("УПРАВЛЕНИЕ", Modifier.padding(top = 4.dp)) }
-            item {
-                AppCard(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
-                        SettingsSwitchRow(
-                            title = "Свайп между вкладками",
-                            subtitle = "Переключение вкладок горизонтальным свайпом",
-                            checked = swipeTabsEnabled,
-                            onCheckedChange = { on ->
-                                swipeTabsEnabled = on
-                                WidgetUpdateHelper.getPrefs(context)
-                                    .edit()
-                                    .putBoolean("swipe_tabs_enabled", on)
-                                    .apply()
-                            },
-                            modifier = Modifier.testTag("swipe_tabs_toggle"),
-                        )
                     }
                 }
             }
@@ -767,6 +739,55 @@ fun SettingsScreen(
                         }
                     }
                 }
+                // v2.0 (admin): сброс выбранной группы/подгруппы + закрытие приложения —
+                // при следующем входе снова появится выбор группы (проверка онбординга).
+                item {
+                    AppCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("reset_group_card"),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Сбросить группу",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = ColorTextTitle,
+                                    ),
+                                )
+                                Text(
+                                    text = "Приложение закроется, а при следующем входе снова спросит группу и подгруппу.",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 11.sp,
+                                        color = ColorTextMuted,
+                                    ),
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            ActionChip(
+                                text = "СБРОСИТЬ",
+                                filled = false,
+                                modifier = Modifier.testTag("reset_group_btn"),
+                                onClick = {
+                                    // remove, а не putString(""): hasSelectedGroup() = contains(key)
+                                    WidgetUpdateHelper.getPrefs(context).edit()
+                                        .remove("selected_group")
+                                        .apply()
+                                    SubgroupSettings.set(context, SubgroupPref.NEUTRAL)
+                                    (context as? android.app.Activity)?.finishAffinity()
+                                },
+                            )
+                        }
+                    }
+                }
             }
 
             item { SectionCaption("О ПРИЛОЖЕНИИ", Modifier.padding(top = 4.dp)) }
@@ -826,46 +847,10 @@ fun SettingsScreen(
                             title = "Версия",
                             value = BuildConfig.VERSION_NAME,
                         )
-                        // READER-PLAN D10: лицензии вендоренного рендера документов (pdf.js,
-                        // docx-preview, JSZip, Gander) — тексты едут в APK (assets/viewer-licences.md).
-                        LinkItem(
-                            title = "Лицензии просмотрщика документов",
-                            subtitle = "pdf.js, docx-preview, JSZip, Gander",
-                            onClick = { showViewerLicences = true },
-                        )
                     }
                 }
             }
         }
-    }
-
-    if (showViewerLicences) {
-        // 17 КБ текста из ассетов — одноразовое локальное чтение, корутина не нужна.
-        val licencesText = remember {
-            runCatching { context.assets.open("viewer-licences.md").bufferedReader().use { it.readText() } }
-                .getOrDefault("Не удалось открыть текст лицензий.")
-        }
-        AlertDialog(
-            onDismissRequest = { showViewerLicences = false },
-            shape = RoundedCornerShape(2.dp),
-            containerColor = ColorBgMain,
-            title = {
-                Text(
-                    "Лицензии просмотрщика документов",
-                    style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ColorTextTitle),
-                )
-            },
-            text = {
-                Box(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    Text(licencesText, style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = ColorTextBody))
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showViewerLicences = false }) {
-                    Text("ЗАКРЫТЬ", style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ColorBrandBlue))
-                }
-            },
-        )
     }
 
     if (showGroupDialog) {
@@ -1441,9 +1426,9 @@ private fun ActionChip(
             .bouncyClickable(onClick = onClick),
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 10.dp),
+            // v2.0: компактная ширина по тексту (fillMaxWidth растягивал чип на всю
+            // строку, вертикаль дублировал heightIn) — масштаб кнопки «СБРОСИТЬ» в норме.
+            modifier = Modifier.padding(horizontal = 16.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(

@@ -21,13 +21,14 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,7 +40,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -58,10 +58,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
@@ -290,6 +292,8 @@ fun CollegeMapScreen(
     var builderActive by rememberSaveable { mutableStateOf(false) }
     var pairA by rememberSaveable { mutableStateOf("") }
     var pairB by rememberSaveable { mutableStateOf("") }
+    // З3: инкремент при автоподстановке найденного кабинета в «Куда» → разовая пульсация поля.
+    var pairBPulseTick by remember { mutableIntStateOf(0) }
     var manualA by rememberSaveable { mutableStateOf<String?>(null) }
     var manualB by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -375,60 +379,75 @@ fun CollegeMapScreen(
             .background(ColorBgMain),
     ) {
 
-        Row(
+        // З1б: чисто-синяя верхняя полоса (как MaterialViewerTopBar материалов);
+        // статусбар залит тем же цветом через drawBehind — без белой полосы.
+        val statusBars = WindowInsets.statusBars
+        Surface(
+            shape = RectangleShape,
+            color = ColorTopBar,
             modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Box(
-                modifier =
-                Modifier
-                    .size(44.dp)
-                    .bouncyClickable(onClick = onBack),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Назад",
-                    tint = ColorBrandBlue,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-            SearchField(
-                value = query,
-                onValueChange = {
-                    query = it
-                    searchFailed = false
+                .drawBehind {
+                    val top = statusBars.getTop(this).toFloat()
+                    if (top > 0f) drawRect(color = ColorTopBar, topLeft = Offset(0f, -top), size = Size(size.width, top))
                 },
-                notFound = searchFailed,
-                modifier = Modifier.weight(1f),
-            )
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorBrandFill,
+        ) {
+            Row(
                 modifier =
                 Modifier
-                    .height(Tokens.ButtonHeight)
-                    .bouncyClickable {
-                        val found = query.trim()
-                        if (found.isNotBlank()) {
-                            // FF3: поиск лишь выбирает кабинет — запиненный маршрут
-                            // (авто/ручной) живёт до «Отменить маршрут»/выхода, как и при тапе.
-                            target = found
-                            searchFailed = findRoomEverywhere(mapData, found) == null
-                        }
-                    },
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text(
-                    text = "НАЙТИ",
-                    softWrap = false,
-                    maxLines = 1,
-                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                Box(
+                    modifier =
+                    Modifier
+                        .size(44.dp)
+                        .bouncyClickable(onClick = onBack),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Назад",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                SearchField(
+                    value = query,
+                    onValueChange = {
+                        query = it
+                        searchFailed = false
+                    },
+                    notFound = searchFailed,
+                    modifier = Modifier.weight(1f),
                 )
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBrandFill,
+                    modifier =
+                    Modifier
+                        .height(Tokens.ButtonHeight)
+                        .bouncyClickable {
+                            val found = query.trim()
+                            if (found.isNotBlank()) {
+                                // FF3: поиск лишь выбирает кабинет — запиненный маршрут
+                                // (авто/ручной) живёт до «Отменить маршрут»/выхода, как и при тапе.
+                                target = found
+                                searchFailed = findRoomEverywhere(mapData, found) == null
+                            }
+                        },
+                ) {
+                    Text(
+                        text = "НАЙТИ",
+                        softWrap = false,
+                        maxLines = 1,
+                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                    )
+                }
             }
         }
 
@@ -444,6 +463,11 @@ fun CollegeMapScreen(
                 pairB = ""
             } else {
                 builderActive = true
+                // З3: найденный кабинет сам подставляется в «Куда», если оно пустое.
+                if (pairB.isBlank() && target.isNotBlank()) {
+                    pairB = target
+                    pairBPulseTick++
+                }
             }
         }
 
@@ -465,6 +489,7 @@ fun CollegeMapScreen(
                 onValueA = { pairA = it },
                 valueB = pairB,
                 onValueB = { pairB = it },
+                highlightTick = pairBPulseTick,
                 onBuild = doBuild,
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -1163,22 +1188,7 @@ private fun MapCanvas(
             }
         }
 
-        Column(
-            modifier =
-            Modifier
-                .align(Alignment.BottomEnd)
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            ZoomButton(Icons.Default.ZoomOutMap) {
-                scope.launch {
-                    val z = restZoom()
-                    scale.animateTo(z, tween(250))
-                    offsetX.animateTo(clampX((viewW - imgW * z) / 2f, z), tween(250))
-                    offsetY.animateTo(clampY((viewH - imgH * z) / 2f, z), tween(250))
-                }
-            }
-        }
+        // v2.0: кнопка «во весь экран» (BottomEnd) удалена по брифу — работала криво.
 
         // EE4: чипы ШАГОВ маршрута («Шаг 1..N») у самого верха карты — без подписей
         // этажей (этаж и так виден в чипах этажей сверху). Видны всегда при активном
@@ -1225,28 +1235,6 @@ private fun MapCanvas(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun ZoomButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit,
-) {
-    AppCard(
-        modifier = Modifier
-
-            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-            .bouncyClickable(onClick = onClick),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = ColorBrandBlue,
-                modifier = Modifier.size(20.dp),
-            )
         }
     }
 }
