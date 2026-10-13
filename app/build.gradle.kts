@@ -36,6 +36,8 @@ android {
             dimension = "version"
             applicationIdSuffix = ".teacher"
             versionNameSuffix = "-teacher"
+            versionCode = 20016
+            versionName = "2.0"
         }
     }
     minSdk = 24
