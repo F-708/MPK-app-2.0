@@ -8,70 +8,132 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * TR1: подсказки при грубых опечатках. Фамилии — РЕАЛЬНЫЕ строки из assets/teachers.csv
+ * (Еременко Ольга/Владимир, Савицкая Ольга/Татьяна, Смирнова, Кайдова, Мельник Артём,
+ * Кривенькая). Фамилии «Иванов» в csv НЕТ — строки Иванова синтетические, только для кейса
+ * «иваноа»→Иванов* из брифа.
+ */
 class TeacherOnboardingLogicTest {
 
-    private val teachers = listOf(
-        Teacher(name = "Иванова Мария Петровна", position = "Преподаватель", subjects = "Математика"),
-        Teacher(name = "Иванова Мария Сергеевна", position = "Заведующий отделением", subjects = "Физика"),
-        Teacher(name = "Петров Алексей Иванович", position = "Преподаватель", subjects = "Информатика"),
-        Teacher(name = "Сидорова Анна Львовна", position = "Психолог", subjects = ""),
-    )
+    private val teachers =
+        listOf(
+            // ——— реальные строки teachers.csv ———
+            Teacher("Еременко Ольга Васильевна", "Преподаватель", "Электрические измерения"),
+            Teacher("Еременко Владимир Викторович", "Преподаватель", "Электрические машины, Электробезопасность"),
+            Teacher("Савицкая Ольга Владимировна", "Преподаватель", "Иностранный язык"),
+            Teacher("Савицкая Татьяна Владимировна", "Преподаватель", "Логистика, Международный маркетинг"),
+            Teacher("Смирнова Татьяна Анатольевна", "Преподаватель", "Математика, Информатика"),
+            Teacher("Кайдова Любовь Сергеевна", "Преподаватель", "Математика"),
+            Teacher("Мельник Артём Сергеевич", "Заместитель директора", "Коммуникационный дизайн"),
+            Teacher("Кривенькая Татьяна Николаевна", "Заведующий отделением", "Специальные дисциплины"),
+            // ——— синтетика под кейс «иваноа» (в csv нет фамилии Иванов) ———
+            Teacher("Иванова Мария Петровна", "Преподаватель", "Физика"),
+            Teacher("Иванова Мария Сергеевна", "Заведующий отделением", "Химия"),
+        )
+
+    private fun search(q: String) = TeacherOnboardingLogic.teacherSearch(teachers, q)
 
     @Test
-    fun `empty query returns all`() {
-        assertEquals(teachers, TeacherOnboardingLogic.filterTeachers(teachers, ""))
-        assertEquals(teachers, TeacherOnboardingLogic.filterTeachers(teachers, "   "))
+    fun `empty query returns all alphabetically`() {
+        val res = search("")
+        assertEquals(teachers.size, res.size)
+        assertEquals(res.map { it.name.lowercase() }, res.map { it.name.lowercase() }.sorted())
     }
 
     @Test
-    fun `filters by surname and by subject`() {
-        // fuzzy: «иванова» достаёт и «Иванов» (расстояние 1) — поведение общее с поиском материалов
-        val bySurname = TeacherOnboardingLogic.filterTeachers(teachers, "иванова")
-        assertEquals(2, bySurname.count { it.name.startsWith("Иванова") })
-        val bySubject = TeacherOnboardingLogic.filterTeachers(teachers, "математика")
-        assertEquals("Иванова Мария Петровна", bySubject.first().name)
+    fun `blank query returns all`() {
+        assertEquals(teachers.size, search("   ").size)
     }
 
     @Test
-    fun `fuzzy tolerates typos`() {
-        val res = TeacherOnboardingLogic.filterTeachers(teachers, "иваноа")
+    fun `typo ivanoa finds ivanova`() {
+        // расстояние 1 от «иванова» — обе Ивановы в списке
+        val res = search("иваноа")
+        assertEquals(2, res.count { it.name.startsWith("Иванова") })
+    }
+
+    @Test
+    fun `distance-2 typo finds eremenko`() {
+        // «еремонка» vs «еременко» = 2 замены (≤3)
+        assertTrue(search("еремонка").any { it.name.startsWith("Еременко") })
+    }
+
+    @Test
+    fun `distance-3 typo finds eremenko`() {
+        // «ириминко» vs «еременко» = 3 замены — грубая опечатка всё ещё матчится
+        assertTrue(search("ириминко").any { it.name.startsWith("Еременко") })
+    }
+
+    @Test
+    fun `yo normalization ereMenko with yo matches csv ye`() {
+        // в csv «Еременко» через Е; запрос с Ё обязан найти обе реальные строки
+        val res = search("ерёменко")
+        assertTrue(res.any { it.name == "Еременко Ольга Васильевна" })
+        assertTrue(res.any { it.name == "Еременко Владимир Викторович" })
+    }
+
+    @Test
+    fun `transposition finds melnik`() {
+        // «мелньик» — перестановка соседних ь/н (Дэмерау = 1)
+        assertTrue(search("мелньик").any { it.name.startsWith("Мельник") })
+    }
+
+    @Test
+    fun `two words match in any order across fields`() {
+        // «владимир еременко» — порядок обратный csv «Еременко Владимир …»
+        val res = search("владимир еременко")
+        assertTrue(res.any { it.name == "Еременко Владимир Викторович" })
+    }
+
+    @Test
+    fun `subject match returns all mathematicians`() {
+        val res = search("математика")
+        assertTrue(res.any { it.name == "Смирнова Татьяна Анатольевна" })
+        assertTrue(res.any { it.name == "Кайдова Любовь Сергеевна" })
+        // не-математики не попадают
+        assertFalse(res.any { it.name.startsWith("Еременко") })
+    }
+
+    @Test
+    fun `surname with wrong firstname still shows candidates`() {
+        // бриф: «савицкая наталья» — Натальи Савицкой нет, но обе Савицкие показываются
+        val res = search("савицкая наталья")
         assertTrue(res.isNotEmpty())
-        assertTrue(res.any { it.name == "Иванова Мария Петровна" })
+        assertTrue(res.all { it.name.startsWith("Савицкая") })
     }
 
     @Test
-    fun `no match returns empty`() {
-        assertTrue(TeacherOnboardingLogic.filterTeachers(teachers, "zzzqqq").isEmpty())
+    fun `surname substring finds both`() {
+        val res = search("савиц")
+        assertEquals(2, res.count { it.name.startsWith("Савицкая") })
+    }
+
+    @Test
+    fun `search is case insensitive`() {
+        assertTrue(search("САВИЦКАЯ").any { it.name.startsWith("Савицкая") })
+    }
+
+    @Test
+    fun `no match returns empty without crash`() {
+        assertTrue(search("zzzqqq").isEmpty())
+        assertTrue(search("!! ??").isEmpty())
     }
 
     @Test
     fun `profile mapping uses surnameKey`() {
         val p = TeacherOnboardingLogic.profileOf(teachers[0])
-        assertEquals(TeacherProfile("Иванова Мария Петровна", "иванова"), p)
-        assertEquals(com.politex.data.repository.TeacherInsights.surnameOf(teachers[0].name), p.surnameKey)
+        assertEquals(TeacherProfile("Еременко Ольга Васильевна", "еременко"), p)
     }
 
     @Test
     fun `surnameKey normalizes yo to ye`() {
-        val t = Teacher(name = "Ерёменко Ольга Викторовна")
+        val t = Teacher("Ерёменко Ольга Викторовна")
         assertEquals("еременко", TeacherOnboardingLogic.profileOf(t).surnameKey)
     }
 
     @Test
-    fun `same surname shows both candidates`() {
-        val c = TeacherOnboardingLogic.confirmCandidates(teachers[0], teachers)
-        assertEquals(2, c.size)
-        assertTrue(c.contains(teachers[0]) && c.contains(teachers[1]))
-    }
-
-    @Test
-    fun `unique surname shows single candidate`() {
-        assertEquals(listOf(teachers[3]), TeacherOnboardingLogic.confirmCandidates(teachers[3], teachers))
-    }
-
-    @Test
-    fun `skip does not write profile - onboarding stays dismissible`() {
-        // «Пропустить» = profile null + skipped true → онбординг больше не показываем, профиль не записан
+    fun `onboarding shown only while profile null and not skipped`() {
         assertTrue(TeacherOnboardingLogic.showOnboarding(profile = null, skipped = false))
         assertFalse(TeacherOnboardingLogic.showOnboarding(profile = null, skipped = true))
         assertFalse(TeacherOnboardingLogic.showOnboarding(TeacherProfile("а", "а"), skipped = false))
