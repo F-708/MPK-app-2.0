@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.politex.AppGraph
+import com.politex.data.network.MpkScheduleParser
 import com.politex.data.repository.NextLesson
 import com.politex.data.repository.TeacherDayLesson
 import com.politex.data.repository.TeacherDayLoader
@@ -20,8 +21,12 @@ import java.util.Calendar
 
 data class TeacherHomeState(
     val dayOffset: Int = 0,
+    // TR3: дата из архив-календаря (dd.MM.yyyy); пустая = активен слот Сегодня/Завтра (как у студентов selectedDateString)
+    val selectedDate: String = "",
     val dateKey: String = "",
     val dow: Int = 0,
+    // true когда видимый день = сегодня (нужно для подсветки ИДЁТ/СЛЕДУЮЩАЯ, как у студентов)
+    val isToday: Boolean = true,
     val loading: Boolean = true,
     val refreshing: Boolean = false,
     val lessons: List<TeacherDayLesson> = emptyList(),
@@ -51,8 +56,15 @@ class TeacherDayViewModel(
     }
 
     fun selectDay(offset: Int) {
-        if (offset == _state.value.dayOffset) return
-        _state.update { it.copy(dayOffset = offset) }
+        if (offset == _state.value.dayOffset && _state.value.selectedDate.isEmpty()) return
+        _state.update { it.copy(dayOffset = offset, selectedDate = "") }
+        load()
+    }
+
+    /** Выбор даты из календаря (dd.MM.yyyy) — аналог студенческого onDateChange. */
+    fun selectDate(dateKey: String) {
+        if (dateKey == _state.value.selectedDate) return
+        _state.update { it.copy(selectedDate = dateKey) }
         load()
     }
 
@@ -63,7 +75,7 @@ class TeacherDayViewModel(
         if (_state.value.refreshing) return
         _state.update { it.copy(refreshing = true) }
         viewModelScope.launch {
-            val cal = teacherTargetCalendar(_state.value.dayOffset, null)
+            val (cal, _) = resolveDate(_state.value)
             val ctx = getApplication<Application>()
             val result =
                 runCatching { AppGraph.scheduleRepository.syncTeacherScheduleForDate(cal, force = true) }
@@ -77,9 +89,9 @@ class TeacherDayViewModel(
     private fun load() {
         val p = profile ?: return
         viewModelScope.launch {
-            val cal = teacherTargetCalendar(_state.value.dayOffset, null)
-            val dateKey = DateFormats.dotDate(cal)
+            val (cal, dateKey) = resolveDate(_state.value)
             val dow = Dow.of(cal)
+            val isToday = DateFormats.dotDate(Calendar.getInstance()) == dateKey
             val ctx = getApplication<Application>()
             val repo = AppGraph.scheduleRepository
             val day = TeacherDayLoader.loadDay(ctx, repo, p, dateKey)
@@ -88,6 +100,7 @@ class TeacherDayViewModel(
                 it.copy(
                     dateKey = dateKey,
                     dow = dow,
+                    isToday = isToday,
                     loading = false,
                     refreshing = false,
                     lessons = day.lessons,
@@ -99,5 +112,18 @@ class TeacherDayViewModel(
                 )
             }
         }
+    }
+
+    /**
+     * Активный день: выбранная в календаре дата (dd.MM.yyyy) или слот Сегодня/Завтра.
+     * Копия студенческой логики ScheduleScreen (parsedSelectedDate ?: leftCal/rightCal).
+     */
+    private fun resolveDate(state: TeacherHomeState): Pair<Calendar, String> {
+        val picked = state.selectedDate
+        if (picked.isNotEmpty()) {
+            MpkScheduleParser.parseDotDate(picked)?.let { return it to DateFormats.dotDate(it) }
+        }
+        val cal = teacherTargetCalendar(state.dayOffset, null)
+        return cal to DateFormats.dotDate(cal)
     }
 }

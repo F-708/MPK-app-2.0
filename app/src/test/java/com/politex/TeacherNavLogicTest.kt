@@ -8,22 +8,28 @@ import org.junit.Test
 class TeacherNavLogicTest {
     @Test
     fun `deep-link extra maps to tab`() {
-        assertEquals(TeacherTab.TODAY, TeacherNavLogic.tabForExtra("today"))
-        assertEquals(TeacherTab.WEEK, TeacherNavLogic.tabForExtra("week"))
+        assertEquals(TeacherTab.SCHEDULE, TeacherNavLogic.tabForExtra("schedule"))
+        assertEquals(TeacherTab.BELLS, TeacherNavLogic.tabForExtra("bells"))
         assertEquals(TeacherTab.MORE, TeacherNavLogic.tabForExtra("more"))
     }
 
     @Test
-    fun `unknown or null extra falls back to TODAY (root)`() {
-        assertEquals(TeacherTab.TODAY, TeacherNavLogic.tabForExtra(null))
-        assertEquals(TeacherTab.TODAY, TeacherNavLogic.tabForExtra(""))
-        assertEquals(TeacherTab.TODAY, TeacherNavLogic.tabForExtra("SCHEDULE"))
-        assertEquals(TeacherTab.TODAY, TeacherNavLogic.tabForExtra("garbage"))
+    fun `legacy widget tab strings still resolve`() {
+        // Виджеты v2.x шлют "today"/"week" — принимаютcя как SCHEDULE/BELLS.
+        assertEquals(TeacherTab.SCHEDULE, TeacherNavLogic.tabForExtra("today"))
+        assertEquals(TeacherTab.BELLS, TeacherNavLogic.tabForExtra("week"))
+    }
+
+    @Test
+    fun `unknown or null extra falls back to SCHEDULE (root)`() {
+        assertEquals(TeacherTab.SCHEDULE, TeacherNavLogic.tabForExtra(null))
+        assertEquals(TeacherTab.SCHEDULE, TeacherNavLogic.tabForExtra(""))
+        assertEquals(TeacherTab.SCHEDULE, TeacherNavLogic.tabForExtra("garbage"))
     }
 
     @Test
     fun `case and whitespace tolerant`() {
-        assertEquals(TeacherTab.WEEK, TeacherNavLogic.tabForExtra("WEEK"))
+        assertEquals(TeacherTab.BELLS, TeacherNavLogic.tabForExtra("BELLS"))
         assertEquals(TeacherTab.MORE, TeacherNavLogic.tabForExtra("  More "))
     }
 }

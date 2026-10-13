@@ -126,4 +126,27 @@ class TeacherDayLogicTest {
         val (matched, _) = matchRowsForTeacher(rows, t, listOf(t), dow = 1)
         assertEquals(listOf(1, 3), matched.map { it.lessonNumber })
     }
+
+    // TR3: кнопки Сегодня/Завтра показывают ТОЛЬКО dd.MM, БЕЗ дня недели.
+    @Test
+    fun `subtitle слота — только dd_MM без дня недели`() {
+        val base = java.util.Calendar.getInstance().apply { clear(); set(2026, java.util.Calendar.OCTOBER, 13) } // вт
+        assertEquals("13.10", com.politex.ui.teacher.slotSubtitle(0, base))
+        assertEquals("14.10", com.politex.ui.teacher.slotSubtitle(1, base))
+        // ни запятой, ни короткого дня недели (пн/вт/…) — чистое число+месяц
+        listOf(0, 1).forEach { off ->
+            val s = com.politex.ui.teacher.slotSubtitle(off, base)
+            assertTrue("«$s» не должно содержать запятую", !s.contains(","))
+            assertTrue("«$s» = только dd.MM", s.matches(Regex("""\d{2}\.\d{2}""")))
+        }
+    }
+
+    @Test
+    fun `teacherSlots — слоты 1_max с дырками как студенческий lessonSlots`() {
+        val slots = com.politex.ui.teacher.teacherSlots(listOf(lesson(1, 0, 0), lesson(3, 0, 0)))
+        assertEquals(listOf(1, 2, 3), slots.map { it.first })
+        // номер 2 — «дырка» (null) → NoLessonCard; 1 и 3 — заполнены
+        assertTrue(slots[1].second == null)
+        assertTrue(slots[0].second != null && slots[2].second != null)
+    }
 }
