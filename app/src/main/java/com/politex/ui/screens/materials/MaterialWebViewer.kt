@@ -10,7 +10,6 @@ import android.webkit.CookieManager
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,10 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,9 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -55,45 +47,19 @@ import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import androidx.webkit.WebViewCompat
 import com.politex.data.local.dao.MaterialDao
-import com.politex.data.local.entity.MaterialAnnotationEntity
 import com.politex.data.local.entity.MaterialBookmarkEntity
 import com.politex.data.local.entity.MaterialItemEntity
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.util.bouncyClickable
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.File
 
 // WebView-просмотр PDF (pdf.js) и DOCX (docx-preview) — рендер из gander (MIT),
-// своя обвязка: READER-PLAN.md D3/D4/D6/D9. Security-инварианты — в комментарии к WebView.
-
-/** Тул-состояние для колбэков порта: снимок UI-состояния, который читают JS-обработчики. */
-private class InkToolState {
-    @Volatile var color: Int = ANNOTATION_COLORS.first()
-    @Volatile var widthDp: Float = 4f
-    @Volatile var eraser: Boolean = false
-    @Volatile var mode: Boolean = false
-
-    @Volatile var viewerWidthPx: Float = 0f
-    @Volatile var density: Float = 1f
-
-    // Ревью MED #3: авторитетная база — физическая ширина .pg-бокса, которую JS меряет
-    // сам (pdf.mjs фиксирует её при загрузке и НЕ перекладывает при ротации). Compose
-    // viewerWidthPx — только fallback до первого layout-сообщения.
-    @Volatile var jsBoxWidthPx: Float = 0f
-
-    fun boxWidthPx(): Float = (jsBoxWidthPx.takeIf { it > 0f } ?: viewerWidthPx).coerceAtLeast(1f)
-
-    fun widthNorm(widthDp: Float): Float {
-        val w = jsBoxWidthPx.takeIf { it > 0f } ?: viewerWidthPx
-        return if (w > 0f) widthDp * density / w else 0.01f
-    }
-}
+// своя обвязка: READER-PLAN.md D3/D6/D9. Security-инварианты — в комментарии к WebView.
+// v2.0-ит2: рисование убрано (лагало) — закладки и счётчик страниц остались.
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -104,120 +70,31 @@ fun MaterialWebViewer(
     onFallbackNative: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val isPdf = item.ext == "pdf"
-    // v2.0: рисование и закладки — и в PDF, и в DOCX (docx-preview раскладывает страницы
-    // section.docx; mpk-ink.js работает с обоими). PDF-only: minimumFontSize, resume, pdf.html.
-    val canAnnotate = isPdf || item.ext == "docx"
-    val density = LocalDensity.current.density
-
-    val tool = remember(item.id) { InkToolState() }
-    LaunchedEffect(density) { tool.density = density }
+    // Закладки/страницы — и в PDF, и в DOCX (mpk-page.js шлёт «page N OF» для docx).
+    val canBookmark = isPdf || item.ext == "docx"
 
     // ---------------------------------------------------------------- страницы / тулбар
     var pageAt by remember(item.id) { mutableIntStateOf(0) } // 0-based
     var pageTotal by remember(item.id) { mutableIntStateOf(0) }
-    var drawMode by remember(item.id) { mutableStateOf(false) }
-    var drawColor by remember(item.id) { mutableIntStateOf(tool.color) }
-    var drawWidth by remember(item.id) { mutableFloatStateOf(tool.widthDp) }
-    var eraserActive by remember(item.id) { mutableStateOf(false) }
     var showBookmarkList by remember(item.id) { mutableStateOf(false) }
     var showAddBookmark by remember(item.id) { mutableStateOf(false) }
     var showPageJump by remember(item.id) { mutableStateOf(false) }
     var rendererGone by remember(item.id) { mutableStateOf(false) }
 
-    val undoSession = remember(item.id) { AnnotationUndoSession() }
-
-    // ---------------------------------------------------------------- аннотации (Room, формат нативного PdfViewer)
-    val annotationsFlow: Flow<List<MaterialAnnotationEntity>> =
-        remember(item.id) { if (canAnnotate) dao.getAnnotationsFlow(item.id) else flowOf(emptyList()) }
     val bookmarksFlow: Flow<List<MaterialBookmarkEntity>> =
-        remember(item.id) { if (canAnnotate) dao.getBookmarksFlow(item.id) else flowOf(emptyList()) }
-    val annotations by annotationsFlow.collectAsState(initial = emptyList())
+        remember(item.id) { if (canBookmark) dao.getBookmarksFlow(item.id) else flowOf(emptyList()) }
     val bookmarks by bookmarksFlow.collectAsState(initial = emptyList())
 
-    val pageStrokes = remember(item.id) { mutableStateMapOf<Int, List<Stroke>>() }
-    val dirtyPages = remember(item.id) { mutableStateListOf<Int>() }
-    var saveVersion by remember(item.id) { mutableIntStateOf(0) }
-
-    LaunchedEffect(annotations) {
-        annotations.forEach { if (it.pageIndex !in dirtyPages) pageStrokes[it.pageIndex] = Stroke.parse(it.strokesJson) }
-    }
-
-    suspend fun persistPages(pages: List<Int>) {
-        pages.forEach { p ->
-            dao.upsertAnnotation(
-                MaterialAnnotationEntity(
-                    itemId = item.id,
-                    pageIndex = p,
-                    strokesJson = Stroke.serialize(pageStrokes[p].orEmpty()),
-                ),
-            )
-        }
-    }
-
-    fun markDirty(page: Int) {
-        if (page !in dirtyPages) dirtyPages += page
-        saveVersion++
-    }
-
-    LaunchedEffect(saveVersion) {
-        if (saveVersion == 0) return@LaunchedEffect
-        delay(500)
-        val pages = dirtyPages.toList()
-        // MED #2: страницы остаются dirty НА ВРЕМЯ персиста — иначе запоздавшая эмиссия
-        // Room (LaunchedEffect(annotations)) в окне «clear → upsert» перезаписала бы
-        // pageStrokes старым JSON, и persistPages сохранил бы stale. Чистим после.
-        persistPages(pages)
-        dirtyPages.removeAll(pages)
-    }
-
-    var flushing by remember(item.id) { mutableStateOf(false) }
-    val flushAndBack: () -> Unit = {
-        if (!flushing) {
-            flushing = true
-            val pages = dirtyPages.toList()
-            scope.launch {
-                try {
-                    if (pages.isNotEmpty()) withContext(Dispatchers.IO) { persistPages(pages) }
-                } finally {
-                    dirtyPages.removeAll(pages)
-                    onBack()
-                }
-            }
-        }
-    }
-    BackHandler(enabled = dirtyPages.isNotEmpty() || flushing) { flushAndBack() }
-
-    // HIGH #1: при смерти рендер-процесса уходим в нативный viewer — но СНАЧАЛА сохраняем
-    // несохранённые штрихи, иначе MaterialPdfViewer прочитает Room без последних правок.
-    LaunchedEffect(rendererGone) {
-        if (rendererGone) {
-            val pages = dirtyPages.toList()
-            if (pages.isNotEmpty()) withContext(Dispatchers.IO) { persistPages(pages) }
-            dirtyPages.removeAll(pages)
-            onFallbackNative()
-        }
-    }
+    LaunchedEffect(rendererGone) { if (rendererGone) onFallbackNative() }
 
     // ---------------------------------------------------------------- порт / WebView
     val portRef = remember(item.id) { arrayOfNulls<WebMessagePortCompat>(1) }
     val webRef = remember(item.id) { arrayOfNulls<WebView>(1) }
-    var portReady by remember(item.id) { mutableStateOf(false) }
 
     fun send(cmd: String) {
         runCatching { portRef[0]?.postMessage(WebMessageCompat(cmd)) }
-    }
-
-    fun sendStrokesPage(page0: Int) {
-        send(PortCommand.inkStrokes(page0, inkWireJson(pageStrokes[page0].orEmpty()) { tool.widthNorm(it) }))
-    }
-
-    fun sendTool() {
-        send(PortCommand.inkMode(tool.mode))
-        send(PortCommand.inkTool(tool.color, tool.widthNorm(tool.widthDp)))
-        send(PortCommand.inkEraser(tool.eraser))
     }
 
     fun jumpTo(page0: Int) {
@@ -230,37 +107,6 @@ fun MaterialWebViewer(
                 pageAt = pageFromPort(said.n)
                 pageTotal = said.of
                 scope.launch { dao.setLastPage(item.id, pageFromPort(said.n)) }
-            }
-
-            is PortMessage.Ink -> {
-                val stroke = Stroke(tool.color, tool.widthDp, said.pts)
-                undoSession.record(AnnotationAction.Add(said.page0, stroke))
-                pageStrokes[said.page0] = pageStrokes[said.page0].orEmpty() + stroke
-                markDirty(said.page0)
-                sendStrokesPage(said.page0)
-            }
-
-            is PortMessage.Zap -> {
-                val list = pageStrokes[said.page0].orEmpty()
-                if (list.isEmpty()) return
-                val threshold =
-                    eraserThresholdNorm(tool.widthDp, ERASER_TOUCH_EXTRA_DP, tool.density, tool.boxWidthPx(), 1f)
-                val idx = list.indexOfLast { eraserHitTest(it, said.at, threshold, said.aspect) }
-                if (idx < 0) return
-                undoSession.record(AnnotationAction.Erase(said.page0, idx, list[idx]))
-                pageStrokes[said.page0] = list.filterIndexed { i, _ -> i != idx }
-                markDirty(said.page0)
-                sendStrokesPage(said.page0)
-            }
-
-            // Ревью MED #3: JS сообщил физическую ширину page-бокса. База нормировки
-            // толщины/ластика меняется — пересылаем инструмент и все штрихи с новой шириной.
-            is PortMessage.Layout -> {
-                if (tool.jsBoxWidthPx != said.boxWidthPx.toFloat()) {
-                    tool.jsBoxWidthPx = said.boxWidthPx.toFloat()
-                    sendTool()
-                    pageStrokes.keys.toList().forEach { sendStrokesPage(it) }
-                }
             }
 
             // PDF с паролем: pdf.mjs сам показывает карточку ввода пароля внутри страницы
@@ -286,28 +132,11 @@ fun MaterialWebViewer(
         portRef[0] = ends[0]
         // Порт адресуется своему origin, не «*»: его не должна получить чужая страница.
         WebViewCompat.postWebMessage(w, WebMessageCompat("vw-search-port", arrayOf(ends[1])), Uri.parse("https://$ASSET_HOST"))
-        portReady = true
-        sendTool()
-        pageStrokes.keys.toList().forEach { sendStrokesPage(it) }
-    }
-
-    // синхронизация тула с JS-слоем
-    LaunchedEffect(drawMode, drawColor, drawWidth, eraserActive) {
-        tool.mode = drawMode
-        tool.color = drawColor
-        tool.widthDp = drawWidth
-        tool.eraser = eraserActive
-        if (portReady) sendTool()
-    }
-
-    // пуш канонических штрихов, когда Room догнал локальные правки
-    LaunchedEffect(annotations, portReady) {
-        if (portReady) pageStrokes.keys.toList().forEach { sendStrokesPage(it) }
     }
 
     // ---------------------------------------------------------------- UI
     Column(modifier = modifier.fillMaxSize().background(ColorBgMain)) {
-        MaterialViewerTopBar(title = item.title, testTag = if (isPdf) "web_pdf_top_bar" else "web_docx_top_bar", onBack = flushAndBack) {
+        MaterialViewerTopBar(title = item.title, testTag = if (isPdf) "web_pdf_top_bar" else "web_docx_top_bar", onBack = onBack) {
             if (pageTotal > 0) {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -327,7 +156,7 @@ fun MaterialWebViewer(
                     }
                 }
             }
-            if (canAnnotate) {
+            if (canBookmark) {
                 ViewerAction(
                     icon = Icons.Default.BookmarkAdd,
                     description = "Закладка на этой странице",
@@ -339,55 +168,13 @@ fun MaterialWebViewer(
                     testTag = "web_bookmarks_btn",
                     active = showBookmarkList,
                 ) { showBookmarkList = !showBookmarkList }
-                ViewerAction(
-                    icon = Icons.Default.Edit,
-                    description = "Рисование",
-                    testTag = "web_draw_btn",
-                    active = drawMode,
-                ) {
-                    drawMode = !drawMode
-                    if (drawMode) showBookmarkList = false else eraserActive = false
-                }
             }
         }
 
-        if (drawMode && canAnnotate) {
-            AnnotationToolbar(
-                color = drawColor,
-                widthDp = drawWidth,
-                eraserActive = eraserActive,
-                onEraserToggle = { eraserActive = !eraserActive },
-                onColor = { drawColor = it },
-                onWidth = { drawWidth = it },
-                onUndo = {
-                    val action = undoSession.pop()
-                    if (action != null) {
-                        val updated = applyUndo(action, pageStrokes.toMap())
-                        updated.forEach { (p, list) ->
-                            if (pageStrokes[p] != list) {
-                                pageStrokes[p] = list
-                                markDirty(p)
-                                sendStrokesPage(p)
-                            }
-                        }
-                    }
-                },
-                onClear = {
-                    val snapshot = pageStrokes.toMap().filterValues { it.isNotEmpty() }
-                    if (snapshot.isNotEmpty()) {
-                        undoSession.record(AnnotationAction.ClearAll(snapshot))
-                        snapshot.keys.forEach { p ->
-                            pageStrokes[p] = emptyList()
-                            markDirty(p)
-                            sendStrokesPage(p)
-                        }
-                    }
-                },
-                onExit = { drawMode = false },
-            )
-        }
+        // v2.0-ит2 (best-effort #18): панель закладок — в Column поверх WebView, как и раньше;
+        // тёмный кадр при закрытии лечится фоном контейнера WebView (ColorBgMain у Column).
 
-        if (showBookmarkList && canAnnotate) {
+        if (showBookmarkList && canBookmark) {
             BookmarkPanel(
                 bookmarks = bookmarks,
                 onJump = { page ->
@@ -398,19 +185,11 @@ fun MaterialWebViewer(
             )
         }
 
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .onSizeChanged {
-                        tool.viewerWidthPx = it.width.toFloat()
-                    },
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
             key(item.id) {
                 AndroidView(
-                    factory = { ctx -> createDocWebView(ctx, item, isPdf, canAnnotate, webRef, ::openPort) { rendererGone = true } },
+                    factory = { ctx -> createDocWebView(ctx, item, isPdf, canBookmark, webRef, ::openPort) { rendererGone = true } },
                     onRelease = { v ->
-                        // LOW #7: закрыть порт (иначе Handler+callback живут до GC) и снять WebView.
                         runCatching { portRef[0]?.close() }
                         portRef[0] = null
                         runCatching { (v.parent as? ViewGroup)?.removeView(v) }
@@ -452,7 +231,7 @@ private fun createDocWebView(
     ctx: android.content.Context,
     item: MaterialItemEntity,
     isPdf: Boolean,
-    canAnnotate: Boolean,
+    canBookmark: Boolean,
     webRef: Array<WebView?>,
     openPort: (WebView) -> Unit,
     onRendererGone: () -> Unit,
@@ -498,8 +277,8 @@ private fun createDocWebView(
         webViewClient =
             object : WebViewClientCompat() {
                 override fun onPageFinished(view: WebView, url: String) {
-                    // Порт нужен и DOCX: mpk-ink.js (рисование/закладки) и find.js слушают его.
-                    if (canAnnotate) openPort(view)
+                    // Порт: pdf.mjs (страницы/поиск) и mpk-page.js/find.js в docx.
+                    if (canBookmark) openPort(view)
                 }
 
                 override fun shouldInterceptRequest(view: WebView, request: android.webkit.WebResourceRequest): WebResourceResponse? {

@@ -2,10 +2,7 @@ package com.politex.ui.screens.materials
 
 import android.content.Context
 import android.webkit.MimeTypeMap
-import androidx.compose.ui.geometry.Offset
 import androidx.webkit.WebViewCompat
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.Closeable
 import java.io.File
 import java.io.InputStream
@@ -148,29 +145,20 @@ internal fun pageFromPort(oneBased: Int): Int = oneBased - 1
 
 // ---------------------------------------------------------------- Протокол порта
 
-/** Что шлёт native. Одна буква verb, затем payload (у gander: q/n/p/c/g/i; ink-глаголы MPK: M/S/E/K). */
+// v2.0-ит2: ink-протокол (M/S/E/K, ink/zap/layout) удалён вместе с рисованием —
+// остался контракт gander: страница/поиск/пароль + переход «g<n>».
+
+/** Что шлёт native. Одна буква verb, затем payload (контракт gander: q/n/p/c/g/i). */
 internal object PortCommand {
     fun query(q: String) = "q$q"
     fun next() = "n"
     fun prev() = "p"
     fun clear() = "c"
 
-    /** К странице, 1-based. */
+    /** К странице, 1-based. В PDF обрабатывает pdf.mjs, в DOCX — mpk-page.js. */
     fun goToPage(n: Int) = "g$n"
 
     fun nightMode(on: Boolean) = if (on) "i1" else "i0"
-
-    /** Режим рисования: JS перехватывает pointer-события страниц. */
-    fun inkMode(on: Boolean) = "M" + if (on) "1" else "0"
-
-    /** Текущий инструмент: цвет ARGB (signed int) и толщина, нормированная к ФИЗИЧЕСКОЙ ширине
-     *  page-бокса (её JS меряет сам и шлёт сообщением layout) — не зависит от ротации (ревью MED #3). */
-    fun inkTool(colorArgb: Int, widthNorm: Float) = "S $colorArgb $widthNorm"
-
-    fun inkEraser(on: Boolean) = "E" + if (on) "1" else "0"
-
-    /** Канонические штрихи страницы (0-based): JSON [{"c":argb,"w":norm,"pts":[x,y,…]}]. */
-    fun inkStrokes(page0: Int, json: String) = "K$page0 $json"
 }
 
 /** Что прислала страница, уже прочитанное и признанное годным. */
@@ -180,63 +168,17 @@ internal sealed interface PortMessage {
 
     data class SearchCount(val at: Int, val total: Int, val done: Boolean) : PortMessage
 
-    /** PDF запросил пароль: WebView-путь отступает в нативный viewer (plaque/поведение как раньше). */
+    /** PDF запросил пароль: pdf.mjs сам показывает карточку ввода; native не вмешивается. */
     data object Locked : PortMessage
-
-    /** Готовый штрих с overlay-канваса: страница 0-based + нормализованные 0..1 точки. */
-    data class Ink(val page0: Int, val pts: List<Offset>) : PortMessage
-
-    /** Точка ластика (норм. 0..1) + aspect страницы (h/w) для изотропного hit-test. */
-    data class Zap(val page0: Int, val at: Offset, val aspect: Float) : PortMessage
-
-    /** Физическая ширина page-бокса (.pg), измеренная JS: rect.width*devicePixelRatio.
-     *  База нормировки толщины штриха и порога ластика — фиксирована у pdf.mjs, не
-     *  меняется при ротации, поэтому источник истины — JS, а не Compose onSizeChanged. */
-    data class Layout(val boxWidthPx: Int) : PortMessage
 }
 
 /**
  * Граница безопасности: всё, что говорит документ, читается как маленькая фиксированная
- * форма или молча дропается. Ошибок наружу нет намеренно (порт из gander, расширен ink).
+ * форма или молча дропается. Ошибок наружу нет намеренно (порт из gander).
  */
 internal fun parsePortMessage(data: String?): PortMessage? {
     if (data == "locked") return PortMessage.Locked
     val said = data?.split(" ") ?: return null
-
-    // «ink <page0> <x1> <y1> <x2> <y2> …» — нормализованные 0..1 координаты.
-    if (said.firstOrNull() == "ink") {
-        if (said.size < 4 || said.size % 2 != 0) return null
-        val page0 = said[1].toIntOrNull() ?: return null
-        if (page0 < 0) return null
-        val pts = ArrayList<Offset>((said.size - 2) / 2)
-        for (i in 2 until said.size step 2) {
-            val x = said[i].toFloatOrNull() ?: return null
-            val y = said[i + 1].toFloatOrNull() ?: return null
-            if (!x.isFinite() || !y.isFinite()) return null
-            pts.add(Offset(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f)))
-        }
-        return PortMessage.Ink(page0, pts)
-    }
-
-    // «zap <page0> <x> <y> <aspect=h/w>» — точка ластика.
-    if (said.firstOrNull() == "zap") {
-        if (said.size != 5) return null
-        val page0 = said[1].toIntOrNull() ?: return null
-        val x = said[2].toFloatOrNull() ?: return null
-        val y = said[3].toFloatOrNull() ?: return null
-        val aspect = said[4].toFloatOrNull() ?: return null
-        if (page0 < 0 || !x.isFinite() || !y.isFinite() || !aspect.isFinite() || aspect <= 0f) return null
-        return PortMessage.Zap(page0, Offset(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f)), aspect)
-    }
-
-    // «layout <boxWidthPhysPx>» — физическая ширина page-бокса, измеренная JS.
-    if (said.firstOrNull() == "layout") {
-        if (said.size != 2) return null
-        val w = said[1].toIntOrNull() ?: return null
-        if (w <= 0) return null
-        return PortMessage.Layout(w)
-    }
-
     if (said.size != 3) return null
 
     if (said[0] == "page") {
@@ -250,22 +192,4 @@ internal fun parsePortMessage(data: String?): PortMessage? {
     val total = said[1].toIntOrNull() ?: return null
     if (at < 0 || total < 0) return null
     return PortMessage.SearchCount(at, total, said[2] == "1")
-}
-
-/**
- * Штрихи страницы в wire-формат mpk-ink.js: [{"c":argb,"w":<норм. к ширине страницы>,"pts":[x,y,…]}].
- * [widthNorm] переводит хранимую widthDp в безразмерную долю ширины страницы — JS умножит на
- * ширину своего page-бокса (в CSS px), и толщина останется постоянной в экранных dp.
- */
-internal fun inkWireJson(strokes: List<Stroke>, widthNorm: (Float) -> Float): String {
-    val arr = JSONArray()
-    strokes.forEach { s ->
-        val pts = JSONArray()
-        s.pts.forEach {
-            pts.put(it.x.toDouble())
-            pts.put(it.y.toDouble())
-        }
-        arr.put(JSONObject().put("c", s.color).put("w", widthNorm(s.widthDp).toDouble()).put("pts", pts))
-    }
-    return arr.toString()
 }

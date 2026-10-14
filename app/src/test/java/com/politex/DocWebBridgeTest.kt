@@ -1,6 +1,5 @@
 package com.politex
 
-import androidx.compose.ui.geometry.Offset
 import com.politex.ui.screens.materials.PortMessage
 import com.politex.ui.screens.materials.chromiumMajor
 import com.politex.ui.screens.materials.docxRouteWeb
@@ -45,43 +44,12 @@ class DocWebBridgeTest {
         assertEquals(PortMessage.Locked, parsePortMessage("locked"))
     }
 
-    // ---- parsePortMessage: ink-глаголы MPK ----
+    // v2.0-ит2: ink/zap удалены вместе с рисованием; неизвестные глаголы должны дропаться.
     @Test
-    fun `ink — чётное число координат, нормализация и clamp`() {
-        val one = parsePortMessage("ink 0 0.1 0.2")
-        assertTrue(one is PortMessage.Ink)
-        assertEquals(0, (one as PortMessage.Ink).page0)
-        assertEquals(listOf(Offset(0.1f, 0.2f)), one.pts)
-
-        val two = parsePortMessage("ink 2 0.1 0.2 0.3 0.4") as PortMessage.Ink
-        assertEquals(2, two.page0)
-        assertEquals(2, two.pts.size)
-
-        // за пределами 0..1 клампится, а не дропается
-        val clamped = parsePortMessage("ink 0 5 -3") as PortMessage.Ink
-        assertEquals(Offset(1f, 0f), clamped.pts[0])
-    }
-
-    @Test
-    fun `ink невалидный дропается`() {
-        assertNull(parsePortMessage("ink 0 0.1")) // <4 токенов
-        assertNull(parsePortMessage("ink 0 0.1 0.2 0.3")) // нечётное (5)
-        assertNull(parsePortMessage("ink -1 0.1 0.2")) // page0<0
-        assertNull(parsePortMessage("ink 0 a 0.2")) // не число
-        assertNull(parsePortMessage("ink x 0.1 0.2"))
-    }
-
-    @Test
-    fun `zap — 5 полей, aspect положителен`() {
-        val z = parsePortMessage("zap 1 0.5 0.25 1.414") as PortMessage.Zap
-        assertEquals(1, z.page0)
-        assertEquals(Offset(0.5f, 0.25f), z.at)
-        assertEquals(1.414f, z.aspect, eps)
-
-        assertNull(parsePortMessage("zap 0 0.5 0.5")) // 4 токена
-        assertNull(parsePortMessage("zap 0 0.5 0.5 0")) // aspect<=0
-        assertNull(parsePortMessage("zap 0 0.5 0.5 -1"))
-        assertNull(parsePortMessage("zap -1 0.5 0.5 1"))
+    fun `ink-глаголы старого протокола больше не разбираются`() {
+        assertNull(parsePortMessage("ink 0 0.1 0.2"))
+        assertNull(parsePortMessage("zap 0 0.5 0.5 1.4"))
+        assertNull(parsePortMessage("layout 1080"))
     }
 
     @Test
@@ -138,15 +106,6 @@ class DocWebBridgeTest {
         assertTrue(docxRouteWeb(false, true, 100, true)) // Huawei, но версия известна и ≥ пола
         assertFalse(docxRouteWeb(true, true, 130, false)) // textEdited → плоский рендер из БД (QA CRITICAL #1)
         assertFalse(docxRouteWeb(false, false, 130, false)) // файла нет
-    }
-
-    @Test
-    fun `layout — физическая ширина бокса от JS`() {
-        assertEquals(PortMessage.Layout(1080), parsePortMessage("layout 1080"))
-        assertNull(parsePortMessage("layout 0"))
-        assertNull(parsePortMessage("layout -5"))
-        assertNull(parsePortMessage("layout abc"))
-        assertNull(parsePortMessage("layout 100 200")) // лишнее поле
     }
 
     // ---- chromiumMajor ----
