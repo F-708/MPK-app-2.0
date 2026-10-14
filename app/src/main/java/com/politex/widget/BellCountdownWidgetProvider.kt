@@ -458,13 +458,18 @@ enum class WidgetStyle(
         if (this != APP) {
             WidgetColors(backgroundColor, mainColor, subColor, highlightColor, pastColor)
         } else {
+            // v2.0-ит2 (#14): раньше фон брался из bgMain, а он БЕЛЫЙ во всех 7 темах
+            // (темы различаются только акцентами) → виджет оставался белым с чёрным текстом,
+            // хотя превью скругления показывало цвет темы. Теперь фон = насыщенный акцент
+            // темы (brandFill: фирменный синий / изумрудный / бордовый / …), текст белый,
+            // чипы кабинетов — более тёмный topBar той же темы. Контраст проверен для всех 7.
             val p = com.politex.util.AppThemeStore.load(context).palette
             WidgetColors(
-                backgroundColor = p.bgMain.toArgb(),
-                mainColor = p.textTitle.toArgb(),
-                subColor = p.textMuted.toArgb(),
-                highlightColor = p.surfaceHighlight.toArgb(),
-                pastColor = p.textDisabled.toArgb(),
+                backgroundColor = p.brandFill.toArgb(),
+                mainColor = 0xFFFFFFFF.toInt(),
+                subColor = 0xFFD6E2F0.toInt(),
+                highlightColor = p.topBar.toArgb(),
+                pastColor = 0xFF9FB0C4.toInt(),
             )
         }
 }

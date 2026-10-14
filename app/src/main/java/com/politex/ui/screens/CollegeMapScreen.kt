@@ -77,6 +77,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
@@ -85,6 +86,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -379,8 +381,9 @@ fun CollegeMapScreen(
             .background(ColorBgMain),
     ) {
 
-        // З1б: чисто-синяя верхняя полоса (как MaterialViewerTopBar материалов);
-        // статусбар залит тем же цветом через drawBehind — без белой полосы.
+        // v2.0-ит2: синий баннер — ТОЛЬКО «назад + Карта колледжа» (как MaterialViewerTopBar).
+        // Поиск кабинета с кнопкой «НАЙТИ» переехал строкой ниже, на светлый фон контента —
+        // в синей полосе поле ввода и тёмно-синяя кнопка выглядели неразборчиво.
         val statusBars = WindowInsets.statusBars
         Surface(
             shape = RectangleShape,
@@ -397,15 +400,15 @@ fun CollegeMapScreen(
                 modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Box(
                     modifier =
                     Modifier
                         .size(44.dp)
-                        .bouncyClickable(onClick = onBack),
+                        .bouncyClickable(onClick = onBack)
+                        .testTag("map_top_bar_back"),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -415,43 +418,63 @@ fun CollegeMapScreen(
                         modifier = Modifier.size(22.dp),
                     )
                 }
-                SearchField(
-                    value = query,
-                    onValueChange = {
-                        query = it
-                        searchFailed = false
-                    },
-                    notFound = searchFailed,
-                    modifier = Modifier.weight(1f),
-                )
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorBrandFill,
+                Text(
+                    text = "Карта колледжа",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White),
                     modifier =
                     Modifier
-                        .height(Tokens.ButtonHeight)
-                        .bouncyClickable {
-                            val found = query.trim()
-                            if (found.isNotBlank()) {
-                                // FF3: поиск лишь выбирает кабинет — запиненный маршрут
-                                // (авто/ручной) живёт до «Отменить маршрут»/выхода, как и при тапе.
-                                target = found
-                                searchFailed = findRoomEverywhere(mapData, found) == null
-                            }
-                        },
-                ) {
-                    Text(
-                        text = "НАЙТИ",
-                        softWrap = false,
-                        maxLines = 1,
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                    )
-                }
+                        .weight(1f)
+                        .padding(end = 12.dp)
+                        .testTag("map_top_bar_title"),
+                )
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        // Строка поиска кабинета — на светлом фоне, под баннером.
+        Row(
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            SearchField(
+                value = query,
+                onValueChange = {
+                    query = it
+                    searchFailed = false
+                },
+                notFound = searchFailed,
+                modifier = Modifier.weight(1f),
+            )
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBrandFill,
+                modifier =
+                Modifier
+                    .height(Tokens.ButtonHeight)
+                    .bouncyClickable {
+                        val found = query.trim()
+                        if (found.isNotBlank()) {
+                            // FF3: поиск лишь выбирает кабинет — запиненный маршрут
+                            // (авто/ручной) живёт до «Отменить маршрут»/выхода, как и при тапе.
+                            target = found
+                            searchFailed = findRoomEverywhere(mapData, found) == null
+                        }
+                    },
+            ) {
+                Text(
+                    text = "НАЙТИ",
+                    softWrap = false,
+                    maxLines = 1,
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                )
+            }
+        }
         // BB10: «Отменить» показывается и при открытой форме (даже с пустыми полями)
         RouteActionButton(active = routeActive || builderActive) {
             if (routeActive || builderActive) {

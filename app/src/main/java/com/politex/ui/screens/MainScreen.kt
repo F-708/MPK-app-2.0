@@ -312,14 +312,14 @@ fun MainScreen(
                         val d = tabSlideDir(ownerTabIndex(initialState.destination.route), ownerTabIndex(targetState.destination.route))
                         if (d == 0) fadeOut(tween(150)) else slideOutHorizontally(tween(280)) { if (d > 0) -it else it }
                     },
-                    popEnterTransition = {
-                        val d = tabSlideDir(ownerTabIndex(initialState.destination.route), ownerTabIndex(targetState.destination.route))
-                        if (d == 0) fadeIn(tween(150)) else slideInHorizontally(tween(280)) { if (d > 0) it else -it }
-                    },
-                    popExitTransition = {
-                        val d = tabSlideDir(ownerTabIndex(initialState.destination.route), ownerTabIndex(targetState.destination.route))
-                        if (d == 0) fadeOut(tween(150)) else slideOutHorizontally(tween(280)) { if (d > 0) -it else it }
-                    },
+                    // v2.0-ит2 (#13): возврат (pop) — быстрый cross-fade вместо слайда.
+                    // Механика стека НЕ меняется (куда ведёт «Назад» — как было), но при
+                    // возврате на несколько уровней подряд промежуточные вкладки больше не
+                    // «пролетают» слайдом по кадру. Слайд остался только для перехода ВПЕРЁД
+                    // по кнопкам нижней панели (enterTransition/exitTransition) — заказчик
+                    // эту анимацию просил сохранить как есть.
+                    popEnterTransition = { fadeIn(tween(120)) },
+                    popExitTransition = { fadeOut(tween(120)) },
                 ) {
                 val scrollArg =
                     listOf(

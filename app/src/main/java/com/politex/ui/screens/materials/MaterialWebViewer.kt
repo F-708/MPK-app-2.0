@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -171,20 +172,9 @@ fun MaterialWebViewer(
             }
         }
 
-        // v2.0-ит2 (best-effort #18): панель закладок — в Column поверх WebView, как и раньше;
-        // тёмный кадр при закрытии лечится фоном контейнера WebView (ColorBgMain у Column).
-
-        if (showBookmarkList && canBookmark) {
-            BookmarkPanel(
-                bookmarks = bookmarks,
-                onJump = { page ->
-                    showBookmarkList = false
-                    jumpTo(page)
-                },
-                onDelete = { id -> scope.launch { dao.deleteBookmarkById(id) } },
-            )
-        }
-
+        // v2.0-ит2 (#18): панель закладок — ОВЕРЛЕЙ поверх WebView (Box), а не элемент
+        // Column: WebView больше не ресайзится при открытии/закрытии, и тёмный кадр
+        // недорендера (фон страницы pdf.js) при закрытии панели исчез физически.
         Box(modifier = Modifier.fillMaxSize()) {
             key(item.id) {
                 AndroidView(
@@ -198,6 +188,19 @@ fun MaterialWebViewer(
                     },
                     modifier = Modifier.fillMaxSize().testTag(if (isPdf) "web_pdf_view" else "web_docx_view"),
                 )
+            }
+
+            if (showBookmarkList && canBookmark) {
+                Box(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter)) {
+                    BookmarkPanel(
+                        bookmarks = bookmarks,
+                        onJump = { page ->
+                            showBookmarkList = false
+                            jumpTo(page)
+                        },
+                        onDelete = { id -> scope.launch { dao.deleteBookmarkById(id) } },
+                    )
+                }
             }
         }
     }

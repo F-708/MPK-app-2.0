@@ -795,13 +795,17 @@ private fun MaterialSubjectContent(
                     style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                 )
             }
-            // GG15: «ДОБАВИТЬ» — только иконка Plus в квадрате Tokens.IconHit, справа
+            // GG15: «ДОБАВИТЬ» — только иконка Plus в квадрате Tokens.IconHit, справа.
+            // v2.0-ит2 (#17): end-padding 12dp — Row имеет horizontal=4dp, а карточки списка
+            // и «+» главного экрана выровнены по 16dp; без этого кнопка уезжала вправо и
+            // стояла не вровень с остальными окошками.
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 border = BorderStroke(1.dp, ColorBrandBlue),
                 color = ColorBrandFill,
                 modifier =
                 Modifier
+                    .padding(end = 12.dp)
                     .size(Tokens.IconHit)
                     .bouncyClickable(onClick = onAdd)
                     .testTag("material_add_btn"),
