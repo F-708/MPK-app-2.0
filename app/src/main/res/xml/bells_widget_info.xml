@@ -8,7 +8,7 @@
     android:targetCellHeight="4"
     android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/widget_bells"
-    android:previewImage="@drawable/widget_preview_countdown"
+    android:previewImage="@drawable/widget_preview_bells"
     android:previewLayout="@layout/widget_bells"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen" />
