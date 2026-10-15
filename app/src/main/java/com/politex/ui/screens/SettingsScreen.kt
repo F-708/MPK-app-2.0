@@ -1160,12 +1160,9 @@ private fun BellCountdownNotificationCard() {
 
                 com.politex.util.BellCountdownNotifier.Theme.entries.forEach { theme ->
                     val isSelected = selectedTheme == theme
-                    // v2.0-ит2 (#15): кружок «Как в приложении» показывает ЦВЕТ ТЕМЫ приложения
-                    // (раньше accent==0 → светло-серый, сливался с «Системной»).
-                    val appThemePalette = remember { AppThemeStore.load(context).palette }
                     val swatchColor =
                         when {
-                            theme == com.politex.util.BellCountdownNotifier.Theme.APP -> appThemePalette.brandFill
+                            theme == com.politex.util.BellCountdownNotifier.Theme.APP -> ColorBrandFill
                             theme.accent != 0 -> Color(theme.accent)
                             else -> ColorSurfaceVariantLight
                         }

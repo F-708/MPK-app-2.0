@@ -64,4 +64,22 @@ class AppThemeTest {
         val palettes: List<MpkPalette> = AppTheme.entries.map { it.palette }
         assertEquals(palettes.size, palettes.toSet().size)
     }
+
+    @Test
+    fun `смена темы сразу меняет глобальные цвета`() {
+        AppTheme.entries.forEach { theme ->
+            com.politex.ui.theme.applyAppTheme(theme)
+            assertEquals(
+                "${theme.title}: ColorBrandFill обязан следовать за applyAppTheme без перекомпоновки",
+                theme.palette.brandFill,
+                com.politex.ui.theme.ColorBrandFill,
+            )
+            assertEquals(
+                "${theme.title}: ColorTopBar обязан следовать за applyAppTheme",
+                theme.palette.topBar,
+                com.politex.ui.theme.ColorTopBar,
+            )
+        }
+        com.politex.ui.theme.applyAppTheme(AppTheme.COLLEGE)
+    }
 }

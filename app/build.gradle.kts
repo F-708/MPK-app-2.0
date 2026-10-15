@@ -20,31 +20,34 @@ android {
         create("standard") {
             dimension = "version"
             isDefault = true
-            // v2.0 — раздаточная линия для студентов (бриф 2026-10-13).
-            // Версия живёт в flavor'ах, чтобы не пересекаться с линией teacher (v2.6).
-            versionCode = 20016
-            versionName = "2.0"
+            versionCode = 21000
+            versionName = "2.1"
         }
         create("admin") {
             dimension = "version"
             applicationIdSuffix = ".admin"
             versionNameSuffix = "-admin"
-            versionCode = 20016
-            versionName = "2.0"
+            versionCode = 21000
+            versionName = "2.1"
         }
         create("teacher") {
             dimension = "version"
             applicationIdSuffix = ".teacher"
             versionNameSuffix = "-teacher"
-            versionCode = 20016
-            versionName = "2.0"
+            versionCode = 21000
+            versionName = "2.1"
         }
     }
     minSdk = 24
     targetSdk = 36
-    // Дефолт — линия teacher-flavor; standard/admin переопределяют версию в своих flavor'ах.
-    versionCode = 20015
-    versionName = "2.6"
+    versionCode = 21000
+    versionName = "2.1"
+
+    buildConfigField(
+      "String",
+      "UPDATE_MANIFEST_URL",
+      "\"https://raw.githubusercontent.com/F-708/MPK-app-2.0/main/update.json\"",
+    )
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
