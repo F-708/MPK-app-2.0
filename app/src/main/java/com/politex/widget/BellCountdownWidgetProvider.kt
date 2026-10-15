@@ -580,9 +580,11 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
                         // T3-C: teacher-виджеты обновляем тем же минутным тиком, БЕЗ flavor-гейта —
                         // в студенческой сборке профиль null → updateAllNow мгновенно выходит (дёшево:
                         // одно чтение prefs). Держать тик живым для teacher-виджетов — см. hasWork().
-                        TeacherWidgetUpdater.updateAllNow(context)
-                        WidgetAlarm.scheduleNext(context)
+                        runCatching { TeacherWidgetUpdater.updateAllNow(context) }
                     } finally {
+                        // GG8(а) для главного минутного пути: перевзвод будильника обязан
+                        // переживать любое падение выше — иначе цепочка тиков обрывается.
+                        runCatching { WidgetAlarm.scheduleNext(context) }
                         pending.finish()
                     }
                 }

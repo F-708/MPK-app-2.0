@@ -102,6 +102,10 @@ object WidgetUpdateHelper {
      */
     private const val SYNC_RETRY_MS = 15 * 60_000L
 
+    // goAsync() живёт ~10с; сетевой sync обязан уложиться и оставить время на
+    // рендер и перевзвод будильника, иначе receiver рвётся системой на середине.
+    internal const val SYNC_BUDGET_MS = 6_000L
+
     suspend fun ensureTodaySchedule(context: Context) {
         val group = getSelectedGroup(context)
         if (group.isBlank()) return
@@ -133,7 +137,12 @@ object WidgetUpdateHelper {
         // syncScheduleForDate возвращает success даже когда документ ещё не опубликован
         // (пустой результат) — поэтому «готово» ставим ТОЛЬКО если в БД реально появились
         // строки сегодняшней даты. Иначе ретраим в следующий тик (через кулдаун).
-        runCatching { com.politex.AppGraph.scheduleRepository.syncScheduleForDate(group, cal) }
+        // Бюджет по времени: сеть внутри окна goAsync() (~10с) не должна рвать receiver.
+        runCatching {
+            kotlinx.coroutines.withTimeoutOrNull(SYNC_BUDGET_MS) {
+                com.politex.AppGraph.scheduleRepository.syncScheduleForDate(group, cal)
+            }
+        }
         val nowHas = runCatching {
             com.politex.data.local.MpkDatabase.getInstance(context)
                 .lessonDao().getLessonsForDaySync(group, dow)
@@ -142,6 +151,7 @@ object WidgetUpdateHelper {
         if (nowHas) {
             prefs.edit().putBoolean(doneKey, true).apply()
             pruneTodaySyncKeys(prefs, today)
+            WidgetData.invalidateCache()
             updateAllWidgets(context)
         }
     }

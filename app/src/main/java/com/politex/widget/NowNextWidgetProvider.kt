@@ -48,7 +48,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             ids.forEach { id -> runCatching { manager.updateAppWidget(id, buildViews(context, id)) } }
         }
 
-        private fun buildViews(
+        internal fun buildViews(
             context: Context,
             appWidgetId: Int,
         ): RemoteViews {
@@ -60,6 +60,12 @@ class NowNextWidgetProvider : AppWidgetProvider() {
             // v2.0: фон со скруглением (iv_bg) вместо setBackgroundColor корня.
             WidgetUpdateHelper.applyWidgetBackground(views, context, appWidgetId, style.backgroundColor)
             views.setViewVisibility(R.id.iv_idle, android.view.View.GONE)
+            // RemoteViews применяются накопительно поверх предыдущего состояния:
+            // ветка «Уроки закончились» прятала блоки навсегда (см. RC3b в BellCountdown).
+            views.setViewVisibility(R.id.tv_empty, android.view.View.GONE)
+            listOf(R.id.ll_now_block, R.id.ll_next_block, R.id.v_divider).forEach {
+                views.setViewVisibility(it, android.view.View.VISIBLE)
+            }
             views.setTextColor(R.id.tv_now_label, style.subColor)
             views.setTextColor(R.id.tv_next_label, style.subColor)
             views.setTextColor(R.id.tv_now_subject, style.mainColor)
@@ -232,6 +238,12 @@ object WidgetData {
         date: String,
     ): String = "$date|$minute|$group"
 
+    // После записи новых строк в БД (ensureTodaySchedule) минутный ключ кэша
+    // может быть ещё жив — сбрасываем, чтобы следующий рендер не показал старое «уроков нет».
+    fun invalidateCache() {
+        cacheKey = ""
+    }
+
     fun todayLessons(context: Context): List<LessonEntity> {
         val group = WidgetUpdateHelper.getSelectedGroup(context)
         if (group.isBlank()) return emptyList()
@@ -297,7 +309,9 @@ object WidgetData {
     ): List<LessonEntity> {
         val today = all.filter { normalizeDate(it.dateString) == todayString }
         val source = if (today.isNotEmpty()) today else all.filter { it.dateString.isBlank() }
-        return source.sortedBy { it.lessonNumber }
+        return source
+            .filter { it.startMinutes() >= 0 && it.endMinutes() >= 0 }
+            .sortedBy { it.lessonNumber }
     }
 
     fun breakInfo(
