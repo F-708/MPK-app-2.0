@@ -67,6 +67,7 @@ import com.politex.util.GradeCategory
 import com.politex.util.HintFlags
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -99,13 +100,21 @@ class PromoShotsTest {
         File(root, "promo/shots").apply { mkdirs() }
     }
 
+    private var realTz: TimeZone = TimeZone.getDefault()
+
     @Before
     fun setUp() {
+        realTz = TimeZone.getDefault()
         freezeAtTuesday1030()
 
         HintFlags.markDone(context, HintFlags.KEY_SCHEDULE_TAPS)
         HintFlags.markDone(context, HintFlags.KEY_SWIPE_TASKS)
         runBlocking { seedDemoData() }
+    }
+
+    @After
+    fun tearDown() {
+        TimeZone.setDefault(realTz)
     }
 
     private fun freezeAtTuesday1030() {
