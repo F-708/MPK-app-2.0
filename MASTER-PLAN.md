@@ -927,3 +927,42 @@ TR10. Параллельно работает другой агент — при
 Все TR1-TR9 выполнены: 897/897 тестов обоих flavor, гейты (students.csv=0, dexdump=0, LiveDoc 200),
 roborazzi 6 кадров + vision-аудит «похоже на оригинал, группа вместо ФИО ✓», versionCode 20016/2.0-teacher.
 Устаревшие teacher-APK (v2.5-DEMO, v2.6) удалены из releases/. Коммиты: 639e73f..bbb947e.
+
+---
+
+# РЕЛИЗ v2.1 (сессия 2026-10-16)
+
+Закрыто в этой волне (все гейты зелёные: 905 юнит-тестов, compileStandardDebugKotlin):
+
+- **[x] Виджет застывал на «Уроки закончились» после дня занятий** — root cause:
+  RemoteViews применяются накопительно; ветка empty-state прятала блоки навсегда,
+  ветки с данными не возвращали их в VISIBLE (фикс RC3b был только в BellCountdown).
+  NowNext.buildViews делает per-cycle сброс видимости; фильтр отбрасывает строки с
+  непарсящимся временем; scheduleNext перенесён в finally в WidgetAlarmReceiver;
+  бюджет 6с на сетевой sync внутри окна goAsync. Тест-ловушка: NowNextEmptyStateRecoveryTest.
+- **[x] Кружок темы «Как в приложении» в настройках уведомлений** обновлялся только
+  при входе на вкладку — remember-снапшот палитры заменён на реактивный ColorBrandFill.
+  Тест-ловушка в AppThemeTest.
+- **[x] Автообновление из GitHub** — update.json в корне репо, AppUpdateWorker
+  (12ч, только standard, unmetered), скачивание APK + валидация пакета, уведомление,
+  установка через FileProvider. update/ (4 файла) + 5 тестов. Решение — в DECISIONS.md.
+- **[x] Визуальное/адаптивное ревью** — adjustResize (клавиатура), heightIn на нижней
+  навигации (inset не съедает подписи), overflow=Ellipsis на 139 maxLines-текстах в
+  36 файлах, heightIn на чипах и DaySlotCell, widthIn на номере звонка, ellipsize в
+  виджет-XML. Регресс DaySlotCell (fillMaxSize в скролле = бесконечная высота) пойман
+  промо-тестами и исправлен; TZ-гигиена PromoShotsTest (@After).
+- **[x] Ревью слоя данных — топ-5 находок закрыт**: извлечение текста документа один
+  раз на все 62 группы (было ×62 на синк), CancellationException больше не глотается
+  (3 места), pruneOldLessons одним DELETE ... IN, хвостовой ран BinaryTextExtract
+  проходит accept (+тест). Мелкие находки (СРЕД: getAllItems тащит textContent в
+  список, probeDocument без portal-fallback, SimpleDateFormat в HomeworkMarkers) —
+  в отчёте ревью, не блокируют релиз.
+- **[x] Комментарии убраны из всех .kt** (токенайзер; строки/интерполяции не тронуты).
+- **[x] PII**: students.csv и tools/students-original.csv убраны из индекса git
+  (репо ПУБЛИЧНОЕ — файлы остались на диске для admin-сборки); тестовый fixture
+  обезличен; .gitignore дополнен. ВНИМАНИЕ: старая история origin/v2.4-stable всё ещё
+  содержит students.csv — при публикации нужна новая чистая история (см. отчёт сессии).
+- **[x] Размер**: 6.7 МБ, дальше жать некуда без потерь (cmaps 954КБ удалять нельзя —
+  тихий баг CJK-PDF #21; фото — чужая зона). Детали в задаче #7.
+- **[x] Документы релиза**: README.md, RELEASE.md (порядок публикации APK+update.json),
+  CHANGELOG.md. Версия 2.1 (versionCode 21000) во всех flavor'ах.
