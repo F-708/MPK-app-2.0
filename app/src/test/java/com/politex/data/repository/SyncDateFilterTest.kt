@@ -63,6 +63,7 @@ private class RecordingLessonDao : LessonDao {
     override suspend fun getAllDistinctDatesSync(): List<String> = emptyList()
     override suspend fun getLessonCountForDate(groupName: String, dateString: String): Int = 0
     override suspend fun deleteLessonsByDate(dateString: String) = Unit
+    override suspend fun deleteLessonsByDates(dates: List<String>) = Unit
 
     override suspend fun replaceForDate(groupName: String, dateString: String, lessons: List<LessonEntity>) {
         replacedDates += dateString

@@ -444,7 +444,10 @@ class ScheduleRepository(
 
             writeByGroup(finalLessons, days.map { formatDate(it.first) }.toSet())
 
-            days.forEach { (calendar, _) -> runCatching { syncTeacherScheduleForDate(calendar) } }
+            days.forEach { (calendar, _) ->
+                runCatching { syncTeacherScheduleForDate(calendar) }
+                    .onFailure { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
+            }
             pruneOldLessons()
         }
 
@@ -651,13 +654,10 @@ class ScheduleRepository(
 
     suspend fun pruneOldLessons(keepDays: Long = ARCHIVE_KEEP_DAYS) = withContext(Dispatchers.IO) {
         val cutoff = System.currentTimeMillis() - keepDays * 24L * 60L * 60L * 1000L
-        for (date in lessonDao.getAllDistinctDatesSync()) {
-            if (isStaleDate(date, cutoff)) {
-                lessonDao.deleteLessonsByDate(date)
-
-                teacherLessonDao?.deleteForDate(date)
-            }
-        }
+        val staleDates = lessonDao.getAllDistinctDatesSync().filter { isStaleDate(it, cutoff) }
+        if (staleDates.isEmpty()) return@withContext
+        lessonDao.deleteLessonsByDates(staleDates)
+        teacherLessonDao?.deleteForDates(staleDates)
     }
 
     internal fun formatDate(calendar: Calendar): String = DateFormats.dotDate(calendar)

@@ -36,7 +36,7 @@ object BinaryTextExtract {
                 i += 2
             }
         }
-        if (buffer.size >= minRunBytes) runs.add(String(buffer.toByteArray(), Charsets.UTF_16LE))
+        flushUtf16(buffer, minRunBytes, accept)?.let(runs::add)
         return runs
     }
 
@@ -68,7 +68,10 @@ object BinaryTextExtract {
                 buffer.clear()
             }
         }
-        if (buffer.size >= minRunBytes) runs.add(String(buffer.toByteArray(), CP1251))
+        if (buffer.size >= minRunBytes) {
+            val decoded = String(buffer.toByteArray(), CP1251)
+            if (accept(decoded)) runs.add(decoded)
+        }
         return runs
     }
 

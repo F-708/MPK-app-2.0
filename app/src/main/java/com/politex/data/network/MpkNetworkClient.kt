@@ -296,6 +296,8 @@ open class MpkNetworkClient {
                 )
 
                 return@withContext Result.success(distinctLessons)
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 lastException = e
                 if (attempt < maxRetries) delay(300)
@@ -338,12 +340,13 @@ open class MpkNetworkClient {
 
     open suspend fun downloadFileBytes(url: String): ByteArray? = withContext(Dispatchers.IO) {
         try {
-
             executeRequest(url).use { response ->
                 if (response.isSuccessful) {
                     return@withContext response.body?.bytes()
                 }
             }
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
         } catch (_: Exception) {}
         null
     }
@@ -391,6 +394,8 @@ open class MpkNetworkClient {
                 lastMismatch != null -> Result.failure(IOException(lastMismatch!!))
                 else -> Result.failure(IOException("Документ не найден: ${lastUrl.ifBlank { ddMmYyyy }}"))
             }
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }

@@ -222,9 +222,12 @@ object MpkScheduleParser {
     ): List<LessonEntity> {
         if (bytes.isEmpty() || candidateGroups.isEmpty()) return emptyList()
 
+        val texts = runCatching { extractDocTexts(bytes) }.getOrNull()
         val out = LinkedHashMap<String, LessonEntity>()
         for (group in candidateGroups) {
-            val lessons = runCatching { parseFileRaw(bytes, group, targetDate) }.getOrDefault(emptyList())
+            val lessons = runCatching {
+                if (texts != null) parseFileRawTexts(texts, group, targetDate) else parseFileRaw(bytes, group, targetDate)
+            }.getOrDefault(emptyList())
             for (lesson in lessons) {
                 if (lesson.groupName.isBlank()) continue
 
@@ -233,6 +236,140 @@ object MpkScheduleParser {
             }
         }
         return applyHeaderDate(out.values.toList(), bytes, targetDate)
+    }
+
+    internal class DocTexts(
+        val wasHtml: Boolean,
+        val isZip: Boolean,
+        val docxXml: String?,
+        val isOle: Boolean,
+        val utf16Runs: List<String>,
+        val utf16Text: String,
+        val cp1251Runs: List<String>,
+        val cp1251Text: String,
+        val utf8Text: String,
+        val cp1251RawText: String,
+    )
+
+    internal fun extractDocTexts(bytes: ByteArray): DocTexts {
+        val head = String(bytes.copyOfRange(0, minOf(600, bytes.size)), Charsets.UTF_8)
+            .lowercase(Locale.ROOT)
+        if (head.contains("<!doctype html") || head.contains("<html")) {
+            return DocTexts(true, false, null, false, emptyList(), "", emptyList(), "", "", "")
+        }
+        val isZip = Docx.isZip(bytes)
+        val docxXml = if (isZip) Docx.readDocumentXml(bytes) else null
+        val utf16Runs = extractUtf16LeRuns(bytes)
+        val cp1251Runs = extractCp1251Runs(bytes)
+        val isOle = bytes.size >= 4 &&
+            bytes[0] == 0xD0.toByte() &&
+            bytes[1] == 0xCF.toByte() &&
+            bytes[2] == 0x11.toByte() &&
+            bytes[3] == 0xE0.toByte()
+        return DocTexts(
+            wasHtml = false,
+            isZip = isZip,
+            docxXml = docxXml,
+            isOle = isOle,
+            utf16Runs = utf16Runs,
+            utf16Text = utf16Runs.joinToString("\n"),
+            cp1251Runs = cp1251Runs,
+            cp1251Text = cp1251Runs.joinToString("\n"),
+            utf8Text = String(bytes, Charsets.UTF_8),
+            cp1251RawText = String(bytes, CP1251),
+        )
+    }
+
+    internal fun parseFileRawTexts(
+        texts: DocTexts,
+        targetGroup: String,
+        targetDate: String = "",
+    ): List<LessonEntity> {
+        if (texts.wasHtml) {
+            mutateStats { ParseStats(format = "html", wasHtml = true, groupFound = false) }
+            return emptyList()
+        }
+
+        if (texts.isZip) {
+            resetStats("docx")
+            val docxLessons = if (texts.docxXml.isNullOrBlank()) {
+                emptyList()
+            } else {
+                parseDocxXml(texts.docxXml, targetGroup, targetDate)
+            }
+            if (docxLessons.isNotEmpty()) return docxLessons
+        }
+
+        resetStats("doc")
+        val docLessons = parseDocBinaryTexts(texts, targetGroup, targetDate)
+        if (docLessons.isNotEmpty()) return docLessons
+
+        if (texts.isOle) return emptyList()
+
+        resetStats("text")
+        val textLessons = runCatching { parsePlainTextSchedule(texts.utf8Text, targetGroup, targetDate) }
+            .onFailure {
+                mutateStats { s ->
+                    s.copy(parseError = (s.parseError + "; text:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '))
+                }
+            }
+            .getOrDefault(emptyList())
+        if (textLessons.isNotEmpty()) return textLessons
+
+        resetStats("text-cp1251")
+        return runCatching { parsePlainTextSchedule(texts.cp1251RawText, targetGroup, targetDate) }
+            .onFailure {
+                mutateStats { s ->
+                    s.copy(parseError = (s.parseError + "; cp1251-text:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '))
+                }
+            }
+            .getOrDefault(emptyList())
+    }
+
+    private fun parseDocBinaryTexts(
+        texts: DocTexts,
+        targetGroup: String,
+        targetDate: String,
+    ): List<LessonEntity> {
+        mutateStats { it.copy(format = "doc-utf16", runsExtracted = texts.utf16Runs.size) }
+        if (texts.utf16Text.isNotBlank()) {
+            val utf16Lessons = runCatching { parsePlainTextSchedule(texts.utf16Text, targetGroup, targetDate) }
+                .onFailure {
+                    mutateStats { s ->
+                        s.copy(parseError = (s.parseError + "; utf16:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '))
+                    }
+                }
+                .getOrDefault(emptyList())
+            if (utf16Lessons.isNotEmpty()) return utf16Lessons
+        }
+
+        val utf16Stats = statsSnapshot()
+        mutateStats { it.copy(format = "doc-cp1251", runsExtracted = texts.cp1251Runs.size) }
+        if (texts.cp1251Text.isNotBlank()) {
+            val cp1251Lessons = runCatching { parsePlainTextSchedule(texts.cp1251Text, targetGroup, targetDate) }
+                .onFailure {
+                    mutateStats { s ->
+                        s.copy(parseError = (s.parseError + "; cp1251:${it.javaClass.simpleName}: ${it.message}").trim(';', ' '))
+                    }
+                }
+                .getOrDefault(emptyList())
+            if (cp1251Lessons.isNotEmpty()) return cp1251Lessons
+        }
+
+        synchronized(statsLock) {
+            lastParseStats = if (lastParseStats.parseError.isBlank() && lastParseStats.textPreview.isBlank()) {
+                utf16Stats
+            } else if (utf16Stats.textPreview.isNotBlank()) {
+                lastParseStats.copy(
+                    textPreview = utf16Stats.textPreview,
+                    runsExtracted = utf16Stats.runsExtracted,
+                )
+            } else {
+                lastParseStats
+            }
+        }
+
+        return emptyList()
     }
 
     fun parseFileRaw(

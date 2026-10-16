@@ -123,6 +123,9 @@ interface LessonDao {
     @Query("DELETE FROM lessons WHERE dateString = :dateString")
     suspend fun deleteLessonsByDate(dateString: String)
 
+    @Query("DELETE FROM lessons WHERE dateString IN (:dates)")
+    suspend fun deleteLessonsByDates(dates: List<String>)
+
     @Transaction
     suspend fun replaceScheduleForGroup(
         groupName: String,

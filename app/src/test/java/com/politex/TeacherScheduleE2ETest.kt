@@ -37,6 +37,10 @@ class TeacherScheduleE2ETest {
             rows.removeAll { it.dateString == dateString }
         }
 
+        override suspend fun deleteForDates(dates: List<String>) {
+            rows.removeAll { it.dateString in dates }
+        }
+
         override suspend fun getPresentDates(dates: List<String>): List<String> =
             rows.map { it.dateString }.toSet().filter { it in dates }
     }

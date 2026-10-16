@@ -132,6 +132,7 @@ private class FakeLessonDao(
     ): Int = rows.count { it.groupName == groupName && it.dateString == dateString }
 
     override suspend fun deleteLessonsByDate(dateString: String) = Unit
+    override suspend fun deleteLessonsByDates(dates: List<String>) = Unit
 
     private fun dateOrDay(
         l: LessonEntity,
