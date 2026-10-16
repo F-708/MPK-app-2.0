@@ -22,6 +22,11 @@ keystore.properties
 *.keystore
 *.apk
 
+# Персональные данные: репозиторий публичный — ФИО учащихся не трекаются.
+# Файлы остаются на диске для сборки admin, но в git не попадают.
+app/src/admin/assets/students.csv
+tools/students-original.csv
+
 # Тестовое окружение редактора
 .testenv/node_modules/
 .testenv/shots/
