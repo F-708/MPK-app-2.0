@@ -274,12 +274,10 @@ fun CollegeMapScreen(
             } else {
                 run {
                     val to = findRoomEverywhere(mapData, pinnedTarget) ?: return@run null
-                    val from =
-                        if (!fromRoom.isNullOrBlank()) {
-                            findRoomEverywhere(mapData, fromRoom)
-                        } else {
-                            mainEntranceRoom(mapData)
-                        }
+                    val from = fromRoom
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { findRoomEverywhere(mapData, it) }
+                        ?: mainEntranceRoom(mapData)
                     from?.let { CollegeRouteFinder.findMultiFloorRoute(it, to, floors) }
                 }
             }
