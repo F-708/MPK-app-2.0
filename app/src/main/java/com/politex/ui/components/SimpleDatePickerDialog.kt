@@ -45,6 +45,7 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import java.util.Calendar
+import androidx.compose.ui.text.style.TextOverflow
 
 @Composable
 fun SimpleDatePickerDialog(
@@ -210,6 +211,7 @@ private fun ActionButton(
             text = text,
             softWrap = false,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             style =
             TextStyle(
                 fontWeight = FontWeight.Bold,

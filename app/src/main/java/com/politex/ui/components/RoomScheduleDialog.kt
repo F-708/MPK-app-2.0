@@ -109,6 +109,7 @@ fun RoomScheduleDialog(
                             text = "кабинет",
                             style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             text = roomNumber,
@@ -228,6 +229,7 @@ private fun DayToggle(
                         text = title,
                         softWrap = false,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style =
                         TextStyle(
                             fontWeight = FontWeight.Bold,
@@ -293,6 +295,7 @@ private fun RoomLessonCard(
                 text = lesson.timeRangeDisplay,
                 style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
 
             Spacer(modifier = Modifier.height(6.dp))

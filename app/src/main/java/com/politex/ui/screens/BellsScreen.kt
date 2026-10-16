@@ -73,6 +73,7 @@ import com.politex.ui.util.bouncyClickable
 import com.politex.util.Dow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import androidx.compose.ui.text.style.TextOverflow
 
 private val RAIL_BLUE: Color get() = ColorActiveBlue
 private val RAIL_BLUE_SOFT: Color get() = ColorActiveBlue.copy(alpha = 0.30f)
@@ -266,6 +267,7 @@ fun BellsScreen(
                 text = "Расписание звонков",
                 style = TextStylePageTitle,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
 
@@ -309,6 +311,7 @@ fun BellsScreen(
                                 },
                                 softWrap = false,
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 style =
                                 androidx.compose.ui.text.TextStyle(
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
@@ -647,6 +650,7 @@ private fun LessonBellCard(
                     text = item.displayRange,
                     softWrap = false,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     style =
                     androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,

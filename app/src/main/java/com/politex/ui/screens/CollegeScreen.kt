@@ -348,6 +348,7 @@ private fun MenuCard(
                         color = ColorTextMuted,
                     ),
                     maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             Icon(
@@ -426,6 +427,7 @@ private fun AdminMenuCard(
                         color = Color(0xFFB8A87F),
                     ),
                     maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             Icon(
@@ -615,6 +617,7 @@ private fun MySpecialtyPage(
                                     text = "$course КУРС",
                                     softWrap = false,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     style =
                                     androidx.compose.ui.text.TextStyle(
                                         fontWeight = if (isSelected || isCurrent) FontWeight.Bold else FontWeight.Medium,
@@ -1723,6 +1726,7 @@ private fun TeacherScheduleTab(
                                             color = ColorTextTitle,
                                         ),
                                         maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                     Text(
                                         text =
@@ -1743,6 +1747,7 @@ private fun TeacherScheduleTab(
                                             color = ColorTextMuted,
                                         ),
                                         maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                 }
                                 if (slot.room.isNotBlank()) {
@@ -1834,6 +1839,7 @@ private fun Header(
             text = title,
             style = TextStylePageTitle,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = subtitle,
@@ -1844,6 +1850,7 @@ private fun Header(
                 color = ColorBrandBlue,
             ),
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

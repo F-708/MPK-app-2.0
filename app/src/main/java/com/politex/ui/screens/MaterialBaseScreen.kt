@@ -703,6 +703,7 @@ private fun MaterialRootList(
                             Text(
                                 text = "$archiveCount ${deferredWord(archiveCount)}",
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                             )
                         }
@@ -732,6 +733,7 @@ private fun SubjectRow(
             Text(
                 text = subjectName,
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
                 style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ColorTextTitle),
             )
@@ -792,6 +794,7 @@ private fun MaterialSubjectContent(
                         "${items.size} ${pluralWord(items.size, "материал", "материала", "материалов")}"
                     },
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                 )
             }
@@ -1000,6 +1003,7 @@ private fun MaterialItemRow(
                             Text(
                                 text = "${matchCount.first}/${matchCount.second}",
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 10.sp, color = ColorBrandBlue),
                             )
                         }

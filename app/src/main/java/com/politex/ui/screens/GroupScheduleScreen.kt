@@ -367,6 +367,7 @@ fun GroupScheduleScreen(
                     text = "Расписание группы",
                     style = TextStyleSubPageTitle,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text =
@@ -382,6 +383,7 @@ fun GroupScheduleScreen(
                         color = ColorBrandBlue,
                     ),
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             if (selectedGroupName.isNotBlank()) {
@@ -462,6 +464,7 @@ fun GroupScheduleScreen(
                                 color = Color.White,
                             ),
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
 
                         val spec = foreignInfo?.let { MpkCurriculum.getSpecialty(it.specialtyCode) }
@@ -757,6 +760,7 @@ private fun GroupSchedulePicker(
                 ),
                 color = if (inCatalog) ColorSuccess else ColorTextTitle,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.testTag("group_picker_code"),
             )
             if (inCatalog) {
@@ -959,6 +963,7 @@ private fun PickerChip(
                     color = if (selected) Color.White else ColorTextBody,
                 ),
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

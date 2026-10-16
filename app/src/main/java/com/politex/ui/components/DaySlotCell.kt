@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -25,6 +26,7 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
+import androidx.compose.ui.text.style.TextOverflow
 
 /**
  * R2-дубль6: ячейка слота «СЕГОДНЯ/ЗАВТРА» (была DaySlotCell в ScheduleScreen
@@ -44,7 +46,7 @@ fun DaySlotCell(
         color = if (selected) ColorTopBar else ColorBgMain,
         modifier =
             modifier
-                .height(Tokens.ButtonHeight) // FF2: вровень с кнопкой календаря (44dp)
+                .heightIn(min = Tokens.ButtonHeight) // FF2: вровень с кнопкой календаря (44dp); min — крупный шрифт не клипается
                 .bouncyClickable(onClick = onClick),
     ) {
         Column(
@@ -56,6 +58,7 @@ fun DaySlotCell(
                 text = title,
                 softWrap = false,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 style =
                     TextStyle(
                         fontWeight = FontWeight.Bold,
@@ -68,6 +71,7 @@ fun DaySlotCell(
                 text = subtitle,
                 softWrap = false,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 style =
                     TextStyle(
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,

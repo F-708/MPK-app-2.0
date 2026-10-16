@@ -43,6 +43,7 @@ import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.AppThemeStore
 import com.politex.util.UiScale
+import androidx.compose.ui.text.style.TextOverflow
 
 /**
  * TR-W4: «Масштаб интерфейса» 75/100/125% — три сегмента одним рядом (заказчик:
@@ -142,6 +143,7 @@ fun ThemeSwatchesCard(modifier: Modifier = Modifier) {
                             Text(
                                 text = theme.title,
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 style = TextStyle(
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                     fontSize = 11.sp,

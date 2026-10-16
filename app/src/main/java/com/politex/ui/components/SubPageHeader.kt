@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.TextStyleSubPageTitle
+import androidx.compose.ui.text.style.TextOverflow
 
 /**
  * R4 §10: единая шапка подстраницы — «назад» + заголовок 24sp + акцентный подзаголовок + разделитель.
@@ -45,6 +46,7 @@ fun SubPageHeader(
                     Text(
                         text = subtitle,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = accent),
                     )
                 }

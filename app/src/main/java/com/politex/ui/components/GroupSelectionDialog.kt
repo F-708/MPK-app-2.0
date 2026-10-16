@@ -248,6 +248,7 @@ fun GroupSelectionDialog(
                                             color = if (isCurrent) ColorBrandBlue else ColorTextTitle,
                                         ),
                                         maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                         softWrap = false,
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))

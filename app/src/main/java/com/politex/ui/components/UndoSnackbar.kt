@@ -83,6 +83,7 @@ fun UndoSnackbar(
                         Text(
                             text = label,
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             style =
                             TextStyle(
                                 fontWeight = FontWeight.Bold,

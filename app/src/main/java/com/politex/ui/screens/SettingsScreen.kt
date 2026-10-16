@@ -97,6 +97,7 @@ import com.politex.worker.MpkWorkManagerHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.text.style.TextOverflow
 
 @Composable
 fun SettingsScreen(
@@ -219,10 +220,6 @@ fun SettingsScreen(
         MpkCurriculum.getSpecialty(groupInfo.specialtyCode)
     }
 
-    var swipeTabsEnabled by remember {
-        mutableStateOf(WidgetUpdateHelper.getPrefs(context).getBoolean("swipe_tabs_enabled", true))
-    }
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -277,6 +274,7 @@ fun SettingsScreen(
                                             color = ColorTextMuted,
                                         ),
                                         maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                 }
                             }
@@ -298,6 +296,7 @@ fun SettingsScreen(
                                     text = "СМЕНИТЬ",
                                     softWrap = false,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp,
@@ -624,6 +623,7 @@ fun SettingsScreen(
                                 Text(
                                     text = theme.title,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                         fontSize = 11.sp,
@@ -1072,6 +1072,7 @@ private fun BellCountdownNotificationCard() {
                                     text = "РАЗРЕШИТЬ",
                                     softWrap = false,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp,
@@ -1438,6 +1439,7 @@ private fun ActionChip(
                 text = text,
                 softWrap = false,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 style = androidx.compose.ui.text.TextStyle(
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
@@ -1463,7 +1465,7 @@ private fun SubgroupChip(
         color = if (selected) ColorTopBar else ColorBgMain,
         modifier =
         modifier
-            .height(Tokens.ChipScreen)
+            .heightIn(min = Tokens.ChipScreen)
             .bouncyClickable(onClick = onClick)
             .testTag(tag),
     ) {
@@ -1472,6 +1474,7 @@ private fun SubgroupChip(
                 text = title,
                 softWrap = false,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 style = androidx.compose.ui.text.TextStyle(
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                     fontSize = 11.sp,

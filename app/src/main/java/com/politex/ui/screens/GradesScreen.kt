@@ -395,6 +395,7 @@ private fun GradeTutorialScreen(onBack: () -> Unit) {
                                 Text(
                                     text = "4",
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     style = TextStyle(
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
@@ -594,12 +595,14 @@ private fun GradeSubjectScreen(
                             Text(
                                 text = "Удалена оценка «${deleted.value}»",
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 style = TextStyle(fontSize = 12.sp, color = ColorTextBody),
                                 modifier = Modifier.weight(1f),
                             )
                             Text(
                                 text = "ОТМЕНИТЬ",
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 style =
                                 TextStyle(
                                     fontSize = 12.sp,
@@ -670,6 +673,7 @@ private fun GradeSubjectScreen(
                                         Text(
                                             text = e.value.toString(),
                                             maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                             style =
                                             TextStyle(
                                                 fontSize = 13.sp,
@@ -757,8 +761,9 @@ private fun RowScope.CategorySegment(
         modifier =
         Modifier
             .weight(1f)
-            // Вёрстка: 40dp (ChipScreen) — две строки 10sp влезают без рубки.
-            .height(Tokens.ChipScreen)
+            // Вёрстка: 40dp (ChipScreen) — две строки 10sp влезают; min, чтобы
+            // крупный системный шрифт не рубился.
+            .heightIn(min = Tokens.ChipScreen)
             .testTag("grades_chip_${category.name}")
             .bouncyClickable(onClick = onClick),
     ) {
@@ -768,6 +773,7 @@ private fun RowScope.CategorySegment(
                 text = if (count > 0) "$short · $count" else short,
                 // Вёрстка: 2 строки 10sp в чипе 40dp — короткие имена не рубятся.
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 style =
                 TextStyle(
                     fontSize = 10.sp,
@@ -905,6 +911,7 @@ private fun GradeSubjectSettingsScreen(
                 Text(
                     text = "Настройки предмета",
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
                 )
                 Text(
@@ -1034,6 +1041,7 @@ private fun GradeSubjectSettingsScreen(
                         Text(
                             text = CATEGORY_SHORT[category.name] ?: category.title,
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             style =
                             TextStyle(
                                 fontSize = 12.sp,
@@ -1052,6 +1060,7 @@ private fun GradeSubjectSettingsScreen(
                         Text(
                             text = "${ws[i]}%",
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.End,
                             style =
                             TextStyle(
@@ -1134,6 +1143,7 @@ private fun RowScope.RoundingSegment(
             Text(
                 text = label,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 style =
                 TextStyle(
                     fontSize = 11.sp,

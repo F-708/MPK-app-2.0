@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,6 +58,7 @@ import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.Dow
 import java.util.Calendar
+import androidx.compose.ui.text.style.TextOverflow
 
 // Экран «Ещё» teacher-приложения = КОПИЯ студенческого «Другое» (CollegeScreen.OtherMenu:223).
 // Порядок/состав/стиль MenuCard — 1-в-1 как у студентов, минус «Моя специальность», «Расписание
@@ -180,6 +182,7 @@ private fun MenuCard(
                     text = subtitle,
                     style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                     maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             Icon(
@@ -198,11 +201,12 @@ private fun Header(
     subtitle: String,
 ) {
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Text(text = title, style = TextStylePageTitle, maxLines = 1)
+        Text(text = title, style = TextStylePageTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(
             text = subtitle,
             style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = ColorBrandBlue),
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -247,7 +251,7 @@ fun TeacherBellsPage(
                         Text(
                             "${bell.lessonNumber}",
                             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp, color = ColorBrandBlue),
-                            modifier = Modifier.width(34.dp),
+                            modifier = Modifier.widthIn(min = 34.dp),
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(bell.title, style = TextStyle(fontSize = metrics.body, color = ColorTextBody))

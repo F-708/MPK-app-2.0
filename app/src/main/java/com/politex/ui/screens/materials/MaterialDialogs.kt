@@ -367,6 +367,7 @@ private fun DialogButton(
             Text(
                 text = text,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 style = TextStyle(
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,

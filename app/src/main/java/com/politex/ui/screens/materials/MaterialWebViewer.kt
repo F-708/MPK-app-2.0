@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import java.io.ByteArrayInputStream
 import java.io.File
+import androidx.compose.ui.text.style.TextOverflow
 
 // WebView-просмотр PDF (pdf.js) и DOCX (docx-preview) — рендер из gander (MIT),
 // своя обвязка: READER-PLAN.md D3/D6/D9. Security-инварианты — в комментарии к WebView.
@@ -152,6 +153,7 @@ fun MaterialWebViewer(
                         Text(
                             "${pageAt + 1}/$pageTotal",
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
                         )
                     }

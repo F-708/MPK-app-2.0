@@ -470,6 +470,7 @@ fun CollegeMapScreen(
                     text = "НАЙТИ",
                     softWrap = false,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
                 )
@@ -634,6 +635,7 @@ private fun RoomPanel(
                                 color = Color.White,
                             ),
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -643,6 +645,7 @@ private fun RoomPanel(
                         text = room.title.ifBlank { "Кабинет ${room.number}" },
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ColorTextTitle),
                         maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     val sub = room.title.ifBlank { "" }
                     if (sub.isNotBlank()) {
@@ -650,6 +653,7 @@ private fun RoomPanel(
                             text = sub,
                             style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                             maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -723,6 +727,7 @@ private fun RouteActionButton(
             text = if (active) "ОТМЕНИТЬ МАРШРУТ" else "ПРОЛОЖИТЬ МАРШРУТ",
             textAlign = TextAlign.Center,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             softWrap = false,
             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = if (active) ColorTextBody else Color.White),
             modifier = Modifier.padding(vertical = 10.dp),
@@ -875,12 +880,14 @@ private fun SearchField(
                         text = "Номер кабинета, например 214",
                         style = TextStyle(fontSize = 14.sp, color = ColorTextMuted),
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 } else if (notFound) {
                     Text(
                         text = "Кабинета $value нет на плане",
                         style = TextStyle(fontSize = 14.sp, color = DEAD_COLOR),
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 BasicTextField(
@@ -944,6 +951,7 @@ private fun FloorRow(
                     text = f.title,
                     textAlign = TextAlign.Center,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     softWrap = false,
                     style =
                     TextStyle(
@@ -1052,6 +1060,7 @@ private fun MapCanvas(
                                 color = ColorBrandBlue,
                             ),
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                 }
             }
@@ -1246,6 +1255,7 @@ private fun MapCanvas(
                             Text(
                                 text = label,
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 softWrap = false,
                                 style =
                                 TextStyle(

@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -235,8 +235,10 @@ fun MainScreen(
                     NavigationBar(
                         containerColor = ColorBgMain,
                         tonalElevation = 0.dp,
-                        // BB17: высота −10% (80dp → 72dp) — место под контент
-                        modifier = Modifier.testTag("main_bottom_nav").height(72.dp),
+                        // BB17: высота −10% (80dp → 72dp) — место под контент.
+                        // heightIn, а не height: NavigationBar сам добавляет inset
+                        // навигационной панели, жёсткая высота его съедала.
+                        modifier = Modifier.testTag("main_bottom_nav").heightIn(min = 72.dp),
                     ) {
                         val tabs =
                             listOf(

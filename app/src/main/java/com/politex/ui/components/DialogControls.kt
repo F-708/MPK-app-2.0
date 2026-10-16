@@ -31,6 +31,7 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
+import androidx.compose.ui.text.style.TextOverflow
 
 /** R2-дубли: общий чип-переключатель (MaterialSubjectDialog / TaskEditDialog). */
 @Composable
@@ -50,7 +51,7 @@ fun ToggleChip(
             .bouncyClickable(onClick = onClick),
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
-            Text(text, maxLines = 1, style = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp))
+            Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp))
         }
     }
 }

@@ -43,6 +43,7 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.util.DateFormats
 import java.util.Calendar
+import androidx.compose.ui.text.style.TextOverflow
 
 // ——— «Мои пары у этой группы» (SPEC §4.1 фича 11): чип группы в карточке пары → сегодня+завтра.
 // Данные — из уже загруженного кэша teacher_lessons через TeacherDayLoader.loadDay, ноль новых загрузок.
@@ -119,7 +120,7 @@ fun TeacherGroupLessonsScreen(
         ) {
             BackButton(onBack = onBack, testTag = "group_back")
             Spacer(Modifier.width(10.dp))
-            Text("Мои пары у «$group»", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ColorTextTitle), maxLines = 2)
+            Text("Мои пары у «$group»", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ColorTextTitle), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
 
         when {

@@ -59,6 +59,7 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.BellCountdownNotifier
+import androidx.compose.ui.text.style.TextOverflow
 
 // Настройки teacher-приложения (TR6/TR7). Стиль строк — копия студенческого SettingsScreen:
 // AppCard (Surface + BorderStroke 1dp ColorBorderLight) + SectionCaption-заголовки секций.
@@ -119,6 +120,7 @@ fun TeacherSettingsScreen(
                                     text = "СМЕНИТЬ",
                                     softWrap = false,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.White),
                                 )
                             }

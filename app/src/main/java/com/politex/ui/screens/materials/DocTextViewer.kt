@@ -84,6 +84,7 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import kotlin.math.ceil
 import kotlin.math.roundToInt
+import androidx.compose.ui.text.style.TextOverflow
 
 private val TEXT_LIKE_EXT = setOf("txt", "md", "markdown", "csv", "log", "json", "xml")
 
@@ -259,6 +260,7 @@ fun MaterialDocTextViewer(
                         Text(
                             "${(docZoomState.floatValue * 100).roundToInt()}%",
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
                         )
                     }

@@ -182,6 +182,7 @@ private fun CorruptedPdfPlaque(
                             text = "НАЗАД",
                             softWrap = false,
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = Tokens.ButtonText, color = Color.White),
                         )
                     }
@@ -842,6 +843,7 @@ private fun PdfReaderBar(
                         Text(
                             text = "${currentPage + 1}/$pageCount",
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White),
                         )
                     }
@@ -865,6 +867,7 @@ private fun PdfReaderBar(
                         Text(
                             text = "$docZoomPercent%",
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
                         )
                     }

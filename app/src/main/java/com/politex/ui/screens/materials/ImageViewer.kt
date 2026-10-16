@@ -64,6 +64,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.max
 import kotlin.math.min
+import androidx.compose.ui.text.style.TextOverflow
 
 @Composable
 fun MaterialImageViewer(
@@ -224,6 +225,7 @@ fun MaterialImageViewer(
                     Text(
                         text = "${pagerState.currentPage + 1}/${paths.size}",
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White),
                         modifier = Modifier.testTag("image_page_counter"),
                     )
@@ -434,6 +436,7 @@ fun MaterialImageViewer(
                     Text(
                         text = "СБРОСИТЬ МАСШТАБ",
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.White),
                     )
                 }

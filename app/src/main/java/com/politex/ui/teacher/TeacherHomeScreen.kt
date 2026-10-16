@@ -158,6 +158,7 @@ fun TeacherHomeScreen(
                         },
                     style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             // Копия sync-кнопки ScheduleScreen.kt:537-563.

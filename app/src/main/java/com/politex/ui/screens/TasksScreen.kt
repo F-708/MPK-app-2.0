@@ -343,6 +343,7 @@ fun TasksScreen(
                                         text = "СБРОСИТЬ ФИЛЬТР",
                                         softWrap = false,
                                         maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                         style =
                                         androidx.compose.ui.text.TextStyle(
                                             fontWeight = FontWeight.Bold,
@@ -488,6 +489,7 @@ fun TasksScreen(
                         text = "УДАЛИТЬ",
                         softWrap = false,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style =
                         androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
@@ -509,6 +511,7 @@ fun TasksScreen(
                         text = "ОТМЕНА",
                         softWrap = false,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style =
                         androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
@@ -614,6 +617,7 @@ fun TaskItemCard(
                             text = task.taskTypeEnum.badge,
                             softWrap = false,
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             style =
                             androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
@@ -1150,6 +1154,7 @@ fun TaskEditDialog(
                     text = if (isEdit) "СОХРАНИТЬ" else "ДОБАВИТЬ",
                     softWrap = false,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     style =
                     androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
@@ -1302,6 +1307,7 @@ private fun TimeChip(
                 text = label,
                 softWrap = false,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 style =
                 androidx.compose.ui.text.TextStyle(
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
@@ -1444,6 +1450,7 @@ private fun ReminderComposer(
                         text = "ОТМЕНА",
                         softWrap = false,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style =
                         androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
@@ -1473,6 +1480,7 @@ private fun ReminderComposer(
                         text = "ДОБАВИТЬ",
                         softWrap = false,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style =
                         androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,

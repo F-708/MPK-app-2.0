@@ -46,6 +46,7 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.util.bouncyClickable
 import kotlin.math.hypot
+import androidx.compose.ui.text.style.TextOverflow
 
 data class Waypoint(
     val key: String,
@@ -250,6 +251,7 @@ fun RoutePairPanel(
                     text = "ПОСТРОИТЬ",
                     textAlign = TextAlign.Center,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     softWrap = false,
                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White),
                     modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
@@ -292,6 +294,7 @@ private fun PairField(
                     text = placeholder,
                     style = TextStyle(fontSize = 11.sp, color = ColorTextMuted.copy(alpha = 0.7f)),
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     softWrap = false,
                 )
             }

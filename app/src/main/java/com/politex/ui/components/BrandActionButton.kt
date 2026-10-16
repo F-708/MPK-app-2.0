@@ -25,6 +25,7 @@ import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
+import androidx.compose.ui.text.style.TextOverflow
 
 /** R4 §10: фирменная кнопка действия — переехала из MaterialDialogs, текст по Tokens.ButtonText. */
 @Composable
@@ -59,6 +60,7 @@ fun BrandActionButton(
                 Text(
                     text = label.uppercase(),
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     softWrap = false,
                     style = TextStyle(
                         fontWeight = FontWeight.Bold,

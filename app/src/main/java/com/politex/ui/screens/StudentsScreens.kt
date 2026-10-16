@@ -79,6 +79,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.text.style.TextOverflow
 
 private val ADMIN_ACCENT = Color(0xFF7A5C00)
 private val ADMIN_BG = Color(0xFF2A2313)
@@ -142,6 +143,7 @@ fun StudentsDatabaseScreen(
                         text = "База данных учащихся",
                         style = TextStyleSubPageTitle,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 Text(
@@ -302,6 +304,8 @@ private fun StudentRow(student: Student, onClick: () -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = student.fullName,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
@@ -648,6 +652,7 @@ fun StudentCardScreen(
                                         color = ColorTextMuted,
                                     ),
                                     maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                             if (rooms.isNotEmpty()) {
@@ -658,6 +663,7 @@ fun StudentCardScreen(
                                         color = ColorBrandBlue,
                                     ),
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                         }
