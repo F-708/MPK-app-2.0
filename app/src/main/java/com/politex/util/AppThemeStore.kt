@@ -25,9 +25,7 @@ object AppThemeStore {
             .putString(KEY_THEME, theme.id)
             .apply()
         applyAppTheme(theme)
-        // v2.0-ит2 (#14): виджеты со стилем «Как в приложении» читают палитру на каждой
-        // отрисовке, но без толчка обновятся только на следующем тике. Перерисовываем сразу,
-        // чтобы смена темы приложения мгновенно отражалась на виджетах.
+
         com.politex.widget.WidgetUpdateHelper.widgetScope.launch {
             com.politex.widget.WidgetUpdateHelper.updateAllWidgets(context.applicationContext)
         }

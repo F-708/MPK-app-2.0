@@ -49,7 +49,7 @@ class TeacherGroupLogicTest {
         val cal = Calendar.getInstance().apply { set(2026, Calendar.OCTOBER, 8, 12, 0, 0) }
         assertTrue(TeacherGroupLogic.dayLabel(0, cal).startsWith("Сегодня"))
         assertTrue(TeacherGroupLogic.dayLabel(1, cal).startsWith("Завтра"))
-        // формат даты дд.ММ без года
+
         assertTrue(TeacherGroupLogic.dayLabel(0, cal).contains(DateFormats.dotDate(cal).dropLast(5)))
     }
 }

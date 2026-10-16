@@ -177,14 +177,14 @@ class SyncCacheFirstTest {
     @Test
     fun `уроки даты уже в БД — Ok из кэша, сеть не тронута`() = runBlocking {
         val today = Calendar.getInstance()
-        // покрываем оба варианта кандидатов (суббота учебная/нет), репозиторий сам выберет
+
         val candidates = (nextDayCandidates(today, false) + nextDayCandidates(today, true)).distinctBy { fmt(it) }
         val rows = buildList {
             (1..3).forEach { add(lesson(group, today, it)) }
             candidates.forEach { cal -> (1..5).forEach { add(lesson(group, cal, it)) } }
         }
         val sat = saturdayIsSchoolDayFor(group, rows.any { it.dayOfWeek == 6 })
-        // BB14: исход — про ЦЕЛЕВУЮ дату (первый кандидат), счёт только её уроков
+
         val expected = SyncOutcome.Ok(5, fmt(nextDayCandidates(today, sat).first()))
 
         val client = CountingNetworkClient()
@@ -199,7 +199,7 @@ class SyncCacheFirstTest {
     @Test
     fun `день разобран по каталогу без нашей группы — FoundNoGroup из кэша, сеть не тронута`() = runBlocking {
         val today = Calendar.getInstance()
-        // у группы строк нет — saturdaySchool как в репозитории: только из имени группы
+
         val sat = GroupParser.parse(group)?.hasSaturdayClasses == true
         val candidates = nextDayCandidates(today, sat)
         val dates = listOf(today) + candidates

@@ -8,14 +8,6 @@ import android.widget.RemoteViews
 import com.politex.R
 import kotlinx.coroutines.launch
 
-/**
- * Виджет преподавателя «Моё сегодня» (SPEC §4.1 фича 8, §6.5), 4×2: список пар дня
- * (время, предмет, группа, кабинет), текущая подсвечена. Шапка
- * «Сегодня, дд.ММ» + «обновлено в HH:MM». Регистрация ТОЛЬКО в teacher-сборке.
- *
- * Строки переиспользуют студенческий layout widget_row_list.xml: row_number/row_time/
- * row_subject/row_room.
- */
 class TeacherTodayWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(
         context: Context,
@@ -129,7 +121,6 @@ class TeacherTodayWidgetProvider : AppWidgetProvider() {
             row.setTextViewText(R.id.row_subject, if (groups.isBlank()) lesson.subject else "${lesson.subject} • $groups")
             row.setTextColor(R.id.row_subject, textColor)
 
-            // Кабинет — контрастный chip (v2.3 «белое на белом» не повторить)
             if (lesson.room.isNotBlank()) {
                 applyChipPadding(context, row, R.id.row_room)
                 row.setTextViewText(R.id.row_room, lesson.room)

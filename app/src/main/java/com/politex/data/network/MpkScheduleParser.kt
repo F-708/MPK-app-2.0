@@ -49,7 +49,6 @@ object MpkScheduleParser {
         mutateStats { ParseStats(format = format) }
     }
 
-    /** СРЕД14: диагностика читает статистику одним синхронным снапшотом, а не 6 отдельными volatile-чтениями. */
     internal fun statsSnapshot(): ParseStats = synchronized(statsLock) { lastParseStats }
 
     private val CP1251 = Charset.forName("windows-1251")
@@ -554,8 +553,6 @@ object MpkScheduleParser {
         return result
     }
 
-    // СРЕД6: третья альтернатива заякорена на начало ячейки/строки и не пускает вторую цифру —
-    // номер кабинета («205», «каб. 4») больше не становится номером урока.
     private val LESSON_NUMBER_IN_TEXT = Regex(
         "(?:(10|[1-9])\\s*урок|(10|[1-9])\\s*пара|^№?\\s*(10|[1-9])(?![0-9]))",
         RegexOption.IGNORE_CASE,
@@ -598,8 +595,6 @@ object MpkScheduleParser {
             }
         }
 
-        // R1: fallback «дата словом (15 сентября)» удалён как мёртвый — все реальные документы
-        // несут числовую дату, а вызывающие всегда передают targetDate.
         if (detectedDate.isBlank()) {
             val dateMatch = DATE_IN_TEXT_REGEX.find(searchScopeText)
             if (dateMatch != null) {
@@ -1108,7 +1103,7 @@ object MpkScheduleParser {
             val isLineForGroup = !isPureHeader && (GroupParser.matchesGroup(line, targetGroup) || isCurrentGroupActive)
 
             if (isLineForGroup) {
-                // СРЕД6: общий заякоренный шаблон — цифра кабинета не становится номером урока
+
                 val numMatch = LESSON_NUMBER_IN_TEXT.find(line)
                 val lessonNum = numMatch?.groupValues?.get(1)?.ifEmpty {
                     numMatch.groupValues.getOrNull(2)?.ifEmpty { numMatch.groupValues.getOrNull(3) }
@@ -1170,12 +1165,6 @@ object MpkScheduleParser {
                 else -> ""
             }
 
-            // v2.0 (баг «ДЗ не показывается на split-уроках», путь №2): раньше
-            // subjectRaw = ТОЛЬКО предмет 1-й подгруппы — предмет 2-й терялся, и ДЗ
-            // по нему не матчилось никогда; карточка показывала предмет 1-й подгруппы
-            // в обеих панелях. Теперь формат как у grid-пути (parseTableCell:1005):
-            // склейка «A / B» ТОЛЬКО когда предметы разные; HomeworkMarkers.subjectsMatch
-            // матчит каждую часть отдельно.
             val normSubj1 = SubjectFormatter.normalize(subject1.ifBlank { subject2.ifBlank { trimmed } })
             val normSubj2 =
                 if (subject2.isNotBlank() && subject2 != subject1 && !subject2.contains("---")) {

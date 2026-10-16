@@ -80,14 +80,9 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 
-/**
- * ПРОМО-КАДРЫ реальных экранов «Мой Политех» (Robolectric + Roborazzi, без эмулятора).
- * Демо-данные вымышленные, без персональных данных. PNG → <корень>/promo/shots/.
- * Запись: sh ./gradlew :app:recordRoborazziStandardDebug --tests "*PromoShots*"
- */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-// xxxhdpi (4x): PNG ≈1648×3660 — запас резкости для hero-кропов в промо-видео.
+
 @Config(sdk = [35], qualifiers = "w412dp-h915dp-xxxhdpi")
 class PromoShotsTest {
     @get:Rule
@@ -96,8 +91,6 @@ class PromoShotsTest {
     private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
     private val db get() = MpkDatabase.getInstance(context)
 
-    // course=1 (а не 4): в учебном плане «О»-4 нет «Математики», а кадры оценок/материалов
-    // строятся от MpkCurriculum.getSubjects(code, course) — демо-предметы должны быть в списке.
     private val group = GroupInfo(rawName = "ИС-99", course = 1, groupNumber = 9, specialtyCode = 'О')
 
     private val outDir: File = run {
@@ -109,21 +102,15 @@ class PromoShotsTest {
     @Before
     fun setUp() {
         freezeAtTuesday1030()
-        // обучающие подсказки (пульс кнопок, демо-задание «Свайпните…») в промо-кадрах не нужны
+
         HintFlags.markDone(context, HintFlags.KEY_SCHEDULE_TAPS)
         HintFlags.markDone(context, HintFlags.KEY_SWIPE_TASKS)
         runBlocking { seedDemoData() }
     }
 
-    /**
-     * «Заморозка» на ближайший вторник 10:30 (идёт 3 урок, 10:20–11:05).
-     * ShadowSystemClock не подходит: экраны читают Calendar.getInstance(), а JDK-код
-     * Роботрект не инструментрует. Сдвигаем дефолтный TimeZone на дельту до цели —
-     * Calendar/SimpleDateFormat начинают показывать вторник 10:30 при любом реальном времени.
-     */
     private fun freezeAtTuesday1030() {
         val real = System.currentTimeMillis()
-        // BASE_TZ — зона ДО любых сдвигов: @Before идёт на каждый тест, а дефолт уже мог быть сдвинут
+
         val target = Calendar.getInstance(BASE_TZ).apply {
             timeInMillis = real
             set(Calendar.DAY_OF_WEEK, Calendar.TUESDAY)
@@ -170,7 +157,6 @@ class PromoShotsTest {
         fun dayIso(plusDays: Int): String =
             iso.format((now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, plusDays) }.time)
 
-        // 5 уроков на сегодня (вт) и завтра (ср); время — по CollegeBellSchedule
         val plan = listOf(
             Triple("Математика", "214", "Иванова И.И."),
             Triple("Физика", "305", "Петров П.П."),
@@ -237,7 +223,7 @@ class PromoShotsTest {
                     subjectName = "Математика", textContent = TEXT_MATERIAL, sortOrder = 0,
                 ),
             )
-            // один архивный FILE — чтобы в корне материалов была секция «Архив» (в кадр не открывается)
+
             insertItem(
                 MaterialItemEntity(
                     kind = MaterialKind.FILE.name, title = "Презентация: основы ТОЭ",
@@ -247,8 +233,6 @@ class PromoShotsTest {
             )
         }
     }
-
-    // ------------------------------------------------------------------ кадры
 
     @Test
     fun shotScheduleToday() = shoot("shot_schedule_today", tab = 0, interact = { waitForText("ЦИФРОВЫХ") }) {
@@ -291,9 +275,9 @@ class PromoShotsTest {
         tab = 1,
         interact = {
             composeRule.onNodeWithText("Оценки").performClick()
-            // часы теста стоят: после клика крутим кадры вручную, иначе секция не пересоберётся
+
             waitForTag("grades_root_list")
-            // Математика — 8-я в списке плана; скроллим до неё и ждём средний балл (4.2)
+
             waitForTag("grades_subject_row_Математика")
             composeRule.onNodeWithTag("grades_subject_row_Математика").performScrollTo()
             waitForText("4.2")
@@ -302,13 +286,11 @@ class PromoShotsTest {
         LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao(), db.taskReminderDao()))
     }
 
-    // чистая подложка списка заданий (без демо-подсказки — HintFlags погашен в setUp) для реплики свайпа
     @Test
     fun shotTasksSwipe() = shoot("shot_tasks_swipe", tab = 1, interact = { waitForText("Параграф 12") }) {
         LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao(), db.taskReminderDao()))
     }
 
-    // экран предмета оценок: GradeSubjectScreen приватный, но открывается кликом по строке предмета
     @Test
     fun shotGradesSubject() = shoot(
         "shot_grades_subject",
@@ -331,7 +313,7 @@ class PromoShotsTest {
     fun shotMapRoute() = shoot(
         "shot_map_route",
         tab = 0,
-        // шевроны маршрута от главного входа живут на 1 этаже (шаг 1); на 2-м крыло с 214 вне канваса
+
         interact = {
             composeRule.onNodeWithText("Шаг 1").performClick()
             composeRule.mainClock.advanceTimeBy(2_000)
@@ -349,17 +331,12 @@ class PromoShotsTest {
     @Test
     fun shotViewerText() {
         val item = runBlocking { db.materialDao().getAllItems().first().first { it.kind == MaterialKind.TEXT.name } }
-        // в приложении вьюверы полноэкранные (ViewerMode скрывает топбар и навбар)
+
         shoot("shot_viewer_text", topBar = false, interact = { waitForText("Электрическая цепь") }) {
             MaterialDocTextViewer(item = item, dao = db.materialDao(), onBack = {})
         }
     }
 
-    // shot_teachers — ПРОПУЩЕН: TeachersPage читает реальные ФИО из assets/teachers.csv (ПД).
-
-    // ------------------------------------------------------------------ обвязка
-
-    /** Кадр как в MainScreen: Scaffold + MainTopBar + навбар (подсветка таба) + экран в контенте. */
     private fun shoot(
         name: String,
         tab: Int = -1,
@@ -384,8 +361,7 @@ class PromoShotsTest {
         }
         composeRule.mainClock.advanceTimeBy(3_000)
         composeRule.waitForIdle()
-        // баннер: Coil в Robolectric всегда падает в error→fallback, но асинхронно —
-        // ждём fallback-текст, иначе кадр изредка ловит пустой слот загрузки
+
         if (topBar) runCatching { waitForText("ПОЛИТЕХНИЧЕСКИЙ", 10_000) }
         if (interact != null) {
             interact()
@@ -395,7 +371,6 @@ class PromoShotsTest {
         composeRule.onRoot().captureRoboImage(File(outDir, "$name.png").absolutePath)
     }
 
-    /** Ждём появления текста (Room/IO асинхронны); часы теста стоят — крутим кадры вручную. */
     private fun waitForText(text: String, timeoutMs: Long = 20_000) {
         val deadline = System.nanoTime() + timeoutMs * 1_000_000
         while (System.nanoTime() < deadline) {
@@ -416,7 +391,6 @@ class PromoShotsTest {
         throw AssertionError("Узел «$tag» не появился за ${timeoutMs}мс")
     }
 
-    /** Реплика навбара для кадра: 1-в-1 блок bottomBar из MainScreen (оригинал приватный). */
     @Composable
     private fun PromoNavBar(selected: Int) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -471,10 +445,9 @@ class PromoShotsTest {
     }
 
     companion object {
-        /** Зона по умолчанию до сдвигов — снимается один раз при загрузке класса. */
+
         private val BASE_TZ: TimeZone = TimeZone.getDefault()
 
-        /** TEXT-материал «Конспект: основы ТОЭ» — 3 абзаца. */
         private val TEXT_MATERIAL = listOf(
             "Электрическая цепь — совокупность устройств, образующих путь для электрического тока. " +
                 "Основные элементы цепи: источник энергии, приёмник (нагрузка) и соединительные проводники.",

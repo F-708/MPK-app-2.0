@@ -74,7 +74,7 @@ class Step5OfficialDocTest {
 
     @Test
     fun testGetTimeForLessonNumber() {
-        // М25: getTimeForNumber (время «пар») удалён как мёртвый — проверяем живой getTimeForLessonNumber
+
         val lesson1Mon = CollegeBellSchedule.getTimeForLessonNumber(1, dayOfWeek = 1)
         assertEquals("08:15", lesson1Mon.first)
         assertEquals("09:00", lesson1Mon.second)

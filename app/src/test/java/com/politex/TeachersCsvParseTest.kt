@@ -81,8 +81,7 @@ class TeachersCsvParseTest {
 
     @Test
     fun `синхронизация 2026-10-13 каталог 108 записей, ключевые строки корректны`() {
-        // База обновлена из Teachers/teachers_catalog.csv (108 записей):
-        // Галимова выбыла из штата (её в каталоге больше нет), Бачило перешла в другую ЦК.
+
         assertEquals(108, teachers.size)
 
         val bachilo = teachers.first { it.name.startsWith("Бачило") }

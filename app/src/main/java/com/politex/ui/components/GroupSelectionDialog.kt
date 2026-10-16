@@ -125,7 +125,7 @@ fun GroupSelectionDialog(
                     )
                 }
                 if (showClose) {
-                    // R2#20: IconButton сам обрабатывает клик — bouncyClickable дубль убран
+
                     IconButton(
                         onClick = onDismissRequest,
                         modifier = Modifier.size(Tokens.HitTarget),

@@ -10,8 +10,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-// READER-PLAN D12: ассеты viewer на месте, CSP дословно совпадает с meta-тегом страниц
-// (иначе pdf.js-worker останется без политики — молчаливая дыра), mpk-page.js подключён к DOCX.
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class ViewerAssetsTest {
@@ -35,7 +33,7 @@ class ViewerAssetsTest {
             "viewer/lib/wasm/openjpeg.wasm", "viewer/lib/wasm/jbig2.wasm",
             "viewer-licences.md",
         ).forEach { assertTrue("нет ассета $it", exists(it)) }
-        // CJK/скан-шрифты: каталог cmaps не пуст
+
         val cmaps = ctx.assets.list("viewer/lib/cmaps").orEmpty()
         assertTrue("cmaps пуст", cmaps.isNotEmpty())
     }
@@ -48,9 +46,9 @@ class ViewerAssetsTest {
 
     @Test
     fun `mpk-page js подключён к docx, рисование удалено везде`() {
-        // v2.0-ит2: учёт страниц DOCX (закладки/индикатор) — mpk-page.js в docx.html.
+
         assertTrue(assetText("viewer/docx.html").contains("mpk-page.js"))
-        // Рисование убрано из WebView-вьюверов (лагало): ink-слоя нет ни на одной странице.
+
         assertFalse(assetText("viewer/pdf.html").contains("mpk-ink.js"))
         assertFalse(assetText("viewer/docx.html").contains("mpk-ink.js"))
         assertFalse(exists("viewer/mpk-ink.js"))

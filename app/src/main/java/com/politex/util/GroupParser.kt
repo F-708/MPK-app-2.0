@@ -59,8 +59,7 @@ object GroupParser {
         text: String,
         targetGroup: String,
     ): Boolean {
-        // СРЕД11: contains-шорткат убран — «211О» содержит «11О», но это другая группа;
-        // regex с границами уже покрывает все настоящие совпадения.
+
         val regex = createGroupSearchRegex(targetGroup)
         return regex.containsMatchIn(text)
     }

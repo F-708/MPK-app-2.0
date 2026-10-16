@@ -122,7 +122,7 @@ import java.util.Locale
 fun ScheduleScreen(
     groupInfo: GroupInfo,
     scheduleRepository: ScheduleRepository,
-    // BB14: колбэк получает дату видимого слота — ручное обновление синкает именно её
+
     onSyncRequest: (String) -> Unit,
     isSyncing: Boolean = false,
 
@@ -146,9 +146,6 @@ fun ScheduleScreen(
 ) {
     val context = LocalContext.current
 
-    // BB15: подсказка тапа — кнопка кабинета и чип преподавателя первого подходящего
-    // урока пульсируют (без затемнения и блокировки ввода); первый же переход на
-    // карту/карточку ставит флаг и снимает пульс, в т.ч. после возврата.
     var scheduleHintDone by remember { mutableStateOf(HintFlags.isDone(context, HintFlags.KEY_SCHEDULE_TAPS)) }
     fun markScheduleHintDone() {
         if (!scheduleHintDone) {
@@ -157,12 +154,10 @@ fun ScheduleScreen(
         }
     }
 
-    // R2#8: общая асинхронная загрузка + кэш с инвалидацией (см. util/KnownTeachers.kt)
     val isTeacherKnown: (String) -> Boolean = rememberIsTeacherKnown()
 
     val realNow = rememberToday()
 
-    // R2#13 (CC7): null — данных ещё не было ни из ВМ, ни из локального fallback-потока
     val allGroupLessons: List<com.politex.data.local.entity.LessonEntity>? =
         groupLessonsFromVm
             ?: scheduleRepository
@@ -176,7 +171,6 @@ fun ScheduleScreen(
 
     fun calendarDayOfWeek(cal: Calendar): Int = groupScheduleDayOfWeek(cal)
 
-    // R2-дубль3: общий хелпер слотов «сегодня/завтра» (util/DaySlots.kt)
     val daySlots =
         remember(groupInfo.canonicalName, saturdayIsSchoolDay, realNow, allGroupLessons) {
             com.politex.ui.util.daySlots(realNow, saturdayIsSchoolDay) { cal ->
@@ -209,13 +203,8 @@ fun ScheduleScreen(
     }
     var showArchiveDialog by remember { mutableStateOf(false) }
 
-    // AA2/GG2: источник маршрута — если ПРЕДЫДУЩИЙ урок split и подгруппа не выбрана,
-    // спрашиваем, из какого кабинета идти (tappedRoom, prevRoomFirst, prevRoomSecond)
     var pendingSplit by remember { mutableStateOf<Triple<String, String, String>?>(null) }
 
-    // R2#6: когда дата выбрана из архив-календаря, активный день недели и календарь берутся
-    // из самой даты (parse dd.MM.yyyy), а не из слота сегодня/завтра — иначе уроки и метки
-    // дз фильтруются чужим dow; fallback — текущий слот
     val parsedSelectedDate =
         remember(selectedDateString) {
             if (selectedDateString.isNotBlank()) {
@@ -228,7 +217,6 @@ fun ScheduleScreen(
     val activeCal = parsedSelectedDate ?: if (selectedSlot == 0) leftCal else rightCal
     val activeDayOfWeek = calendarDayOfWeek(activeCal)
 
-    // R2-дубль7: общий формат dd.MM.yyyy (util/DateFormats)
     val activeDateString =
         remember(selectedDateString, parsedSelectedDate, activeCal) {
             when {
@@ -270,8 +258,6 @@ fun ScheduleScreen(
             }
         }
 
-    // R2#13 (CC7): null до первой эмиссии ВМ/fallback-потока — показываем лоадер,
-    // а не вспышку «нет уроков» на первом кадре
     val isInitialLoad = allGroupLessons == null
 
     val lessons: List<com.politex.data.local.entity.LessonEntity> =
@@ -282,7 +268,6 @@ fun ScheduleScreen(
     val roomClick: (String, String?) -> Unit = { room, fromRoom -> markScheduleHintDone(); onRoomClick(room, fromRoom) }
     val teacherClick: (String) -> Unit = { name -> markScheduleHintDone(); onTeacherClick(name) }
 
-    // BB15: цель пульса — первый урок, у которого есть кабинет или преподаватель
     val pulseLessonNumber =
         remember(lessons) {
             lessons.firstOrNull { it.roomFirst.isNotBlank() || it.teacherFirst.isNotBlank() }?.lessonNumber
@@ -347,9 +332,6 @@ fun ScheduleScreen(
             }.first { it }
     }
 
-    // Вёрстка: скролл к целевой карточке ТОЛЬКО если она не видна целиком уже сейчас.
-    // Иначе scrollToItem клампится к maxScroll (контент чуть выше вьюпорта) и верхняя
-    // карточка остаётся «съеденной» шапкой; при полном visibility скролл = 0.
     suspend fun scrollToLessonFullyVisible(idx: Int) {
         val info = listState.layoutInfo
         val visible = info.visibleItemsInfo.firstOrNull { it.index == idx }
@@ -420,7 +402,7 @@ fun ScheduleScreen(
         }
         val idx = autoScrollLessonIndex(lessonNumbers, currentLessonNumber, true)
         if (idx != null) {
-            // Вёрстка: индекс 0 / уже видимая целиком карточка → скролл 0.
+
             scrollToLessonFullyVisible(idx)
         }
 
@@ -435,7 +417,7 @@ fun ScheduleScreen(
             scheduleRepository = scheduleRepository,
             onDismiss = { showArchiveDialog = false },
             onDateSelected = { _, dateStr ->
-                // R2-дубль7: dd.MM.yyyy через общий DateFormats
+
                 onDateChange(
                     com.politex.data.network.MpkScheduleParser
                         .parseDotDate(dateStr)
@@ -673,8 +655,7 @@ fun ScheduleScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            // BB14: статус всегда про ЭТУ дату — глобальный diagnosticInfo.statusMessage
-                            // здесь больше не показывается, он мог быть про другой день (противоречие)
+
                             text =
                             when {
                                 isSyncing -> checkingStatusFor(activeDateString)
@@ -761,7 +742,7 @@ fun ScheduleScreen(
                     }
                 }
             } else {
-                // R2-дубль4: общий билдер слотов (ScheduleScreen + GroupScheduleScreen)
+
                 val slots = remember(lessons) { lessonSlots(lessons) }
 
                 LazyColumn(
@@ -788,7 +769,7 @@ fun ScheduleScreen(
                                 pulse = showPulse(scheduleHintDone, lesson.lessonNumber == pulseLessonNumber),
 
                                 onRoomClick = { room ->
-                                    // GG1: маршруты выключены — никакого диалога, просто выбор кабинета
+
                                     val routesOn =
                                         com.politex.widget.WidgetUpdateHelper
                                             .getPrefs(context)
@@ -796,8 +777,7 @@ fun ScheduleScreen(
                                     if (!routesOn) {
                                         roomClick(room, null)
                                     } else {
-                                        // GG2/GG3 + II1: «откуда» — кабинет урока, ПРЕДЫДУЩЕГО
-                                        // относительно тапнутого (время суток не влияет)
+
                                         when (
                                             val start =
                                                 com.politex.ui.util.RouteStartResolver.startForLesson(
@@ -985,7 +965,7 @@ fun LessonCard(
                     )
                 }
             } else {
-                // GG5: пустой/цифровой «предмет» — заглушка, НИКОГДА не номер урока
+
                 val subject = lesson.shortSubjectName
                 val noSubject = subject.isBlank()
                 Text(
@@ -1220,7 +1200,6 @@ private fun SubgroupPane(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // GG5: пустой/цифровой «предмет» — заглушка, НИКОГДА не номер урока
         run {
             val noSubject = subject.isBlank()
             Text(
@@ -1280,25 +1259,17 @@ fun lessonsForDay(
     }
 }
 
-// R2-дубль4: общий билдер слотов 1..max с «дырками» (ScheduleScreen + GroupScheduleScreen)
 fun lessonSlots(lessons: List<LessonEntity>): List<Pair<Int, LessonEntity?>> {
     if (lessons.isEmpty()) return emptyList()
     val byNumber = lessons.associateBy { it.lessonNumber }
     return (1..lessons.maxOf { it.lessonNumber }).map { number -> number to byNumber[number] }
 }
 
-// BB15: условие пульсации — чистая функция (тестируется без Compose)
 internal fun showPulse(
     flagDone: Boolean,
     isTargetLesson: Boolean,
 ): Boolean = !flagDone && isTargetLesson
 
-/**
- * CC12: мягкое кольцо по контуру цели (эталон — точка «сейчас» в BellsScreen):
- * плавная осцилляция RepeatMode.Reverse (tween 1000), alpha 0.15→0.45, scale 1.0→1.05.
- * Stroke 1.5dp (без заливки) точно по контуру элемента (RoundedCornerShape 2dp),
- * чуть снаружи границы — без перекрывания фоном. При active=false transition не создаётся.
- */
 @Composable
 internal fun Modifier.pulseHalo(active: Boolean): Modifier {
     if (!active) return this
@@ -1310,8 +1281,7 @@ internal fun Modifier.pulseHalo(active: Boolean): Modifier {
             label = "HintPulseT",
         )
     return drawBehind {
-        // DD5: ЗАПОЛНЕННЫЙ прямоугольник за кнопкой (не контур-линия) — нет белого
-        // зазора между кольцом и кнопкой; inflate 3dp, пульс alpha 0.12→0.30, scale 1→1.04
+
         val inflate = 3.dp.toPx()
         val scale = 1f + 0.04f * t
         val w = size.width * scale + inflate * 2
@@ -1373,8 +1343,6 @@ private fun HomeworkBadge(
                 }
             }
 
-            // Вёрстка: при ОДНОМ типе цвет бейджа уже кодирует тип — осиротевшая
-            // точка не рисуется; ряд точек только при 2+ типах.
             if (distinctTypes.size > 1) {
                 Spacer(modifier = Modifier.height(3.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {

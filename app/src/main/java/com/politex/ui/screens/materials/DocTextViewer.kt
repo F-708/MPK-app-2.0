@@ -88,16 +88,12 @@ import androidx.compose.ui.text.style.TextOverflow
 
 private val TEXT_LIKE_EXT = setOf("txt", "md", "markdown", "csv", "log", "json", "xml")
 
-// GG14: листы-подложки DOCX — чистые формулы (тесты в DocZoomTest).
 internal const val A4_RATIO = 1.414f
 internal const val DOC_SHEET_GAP_DP = 8
 internal const val DOC_SHEET_MARGIN_DP = 24
 
-// Высота листа A4 из его ширины.
 internal fun pageHeightFromWidth(widthPx: Float): Float = widthPx * A4_RATIO
 
-// Число листов, покрывающих текст высотой textHeightPx (с зазорами между листами);
-// до измерения текста и на вырожденных входах — 1.
 internal fun sheetCount(textHeightPx: Float, pageHeightPx: Float, gapPx: Float): Int {
     if (textHeightPx <= 0f || pageHeightPx <= 0f) return 1
     return ceil((textHeightPx + gapPx) / (pageHeightPx + gapPx)).toInt().coerceAtLeast(1)
@@ -127,17 +123,12 @@ fun MaterialDocTextViewer(
     val undoStack = remember(item.id) { ArrayDeque<String>() }
     val redoStack = remember(item.id) { ArrayDeque<String>() }
 
-    // CC4+FF4: зум как в ImageViewer — graphicsLayer (scale+pan) на колонке абзацев, двухфазный:
-    // фаза 1 (жест) — liveZoom/livePan фокально, без рекомпозиций и без docZoom;
-    // фаза 2 (отпускание) — ОДИН commit: свёртка live в постоянный docZoom/docPan.
-    // fontSize не масштабируется: визуальный масштаб даёт только graphicsLayer.
     val docZoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
     val docPanState = remember(item.id) { mutableStateOf(Offset.Zero) }
     val liveZoomState = remember(item.id) { mutableFloatStateOf(1f) }
     val livePanState = remember(item.id) { mutableStateOf(Offset.Zero) }
     var containerSize by remember(item.id) { mutableStateOf(IntSize.Zero) }
 
-    // FF4: плавный сброс (двойной тап / индикатор) — docZoom→1 и docPan→0 анимацией, без скачка.
     fun resetZoomSmooth() {
         val fromZoom = docZoomState.floatValue
         val fromPan = docPanState.value
@@ -150,8 +141,6 @@ fun MaterialDocTextViewer(
         }
     }
 
-    // FF4: commit на отпускании — свёртка ТОЧНАЯ: композиция «scale вокруг центра + translate»
-    // даёт S' = L*S, T' = L*T + Tp, поэтому в кадре commit визуального скачка нет.
     fun commitLiveTransform() {
         val liveZoom = liveZoomState.floatValue
         val livePan = livePanState.value
@@ -230,21 +219,18 @@ fun MaterialDocTextViewer(
     fun save() {
         val text = textValue.text
         scope.launch { dao.updateTextContent(item.id, text) }
-        // HH4: правленый текст показываем плоским рендером (textEdited=1)
+
         content = text.split('\n').map { DocxParagraph(it.trimEnd()) }
         failed = false
         editMode = false
     }
 
-    // READER-PLAN D2: docx-редактор удалён — docx открывается просмотром в WebView
-    // (MaterialWebViewer). Редактор остаётся только для заметок (TEXT) и плоских текстовых файлов.
     val canEdit = item.kindEnum == MaterialKind.TEXT || item.ext in TEXT_LIKE_EXT
 
     BackHandler(enabled = editMode) { requestExitEdit() }
 
     Column(modifier = modifier.fillMaxSize().background(ColorBgMain)) {
-        // R2 #1: кнопка топбара в editMode идёт через requestExitEdit — защита
-        // несохранённых правок работает и для системного Back, и для стрелки
+
         MaterialViewerTopBar(title = item.title, testTag = "doc_top_bar", onBack = { if (editMode) requestExitEdit() else onBack() }) {
             if (!editMode) {
 
@@ -351,9 +337,7 @@ fun MaterialDocTextViewer(
                             onReset = { resetZoomSmooth() },
                         ),
                 ) {
-                    // GG14: вид готового документа — листы-подложки A4 (белые, тень 2dp, зазор 8dp),
-                    // поверх них течёт ОДНА непрерывная колонка абзацев. Точной пагинации нет:
-                    // число листов = ceil от измеренной высоты текста (дешёво и стабильно).
+
                     val density = LocalDensity.current
                     val scrollState = rememberScrollState()
                     var textHeightPx by remember(item.id) { mutableIntStateOf(0) }
@@ -365,8 +349,7 @@ fun MaterialDocTextViewer(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            // CC4+FF4: суммарный трансформ doc∘live читается в draw-фазе —
-                            // без рекомпозиции и переразметки текста при pinch.
+
                             .graphicsLayer {
                                 val live = liveZoomState.floatValue
                                 val doc = docZoomState.floatValue
@@ -378,7 +361,7 @@ fun MaterialDocTextViewer(
                             .verticalScroll(scrollState)
                             .testTag("doc_paragraph_list"),
                     ) {
-                        // Листы-подложки: текст течёт поверх них, как страница документа.
+
                         Column(modifier = Modifier.fillMaxWidth()) {
                             repeat(sheets) { i ->
                                 Surface(
@@ -467,7 +450,6 @@ fun MaterialDocTextViewer(
     }
 }
 
-// HH4: компактная панель правки, группы: форматирование | списки | undo/redo | сохранить.
 @Composable
 private fun TextEditToolbar(
     onBold: () -> Unit,
@@ -607,8 +589,7 @@ private fun loadContent(item: MaterialItemEntity): List<DocxParagraph>? {
     if (!file.exists()) return null
 
     return when (item.ext) {
-        // READER-PLAN D1: основной рендер docx — WebView (docx-preview) в MaterialWebViewer.
-        // Сюда попадаем только как fallback (древний WebView <80) — плоский текст, как textEdited.
+
         "docx" -> runCatching { DocxTextExtractor.extract(ByteArrayInputStream(file.readBytes())) }.getOrNull()
 
         in TEXT_LIKE_EXT -> runCatching {

@@ -26,7 +26,7 @@ fun rememberToday(): Calendar {
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    // R2#12: приложение может не покидать экран через полночь — раз в минуту сверяем dayKey
+
     LaunchedEffect(Unit) {
         while (true) {
             delay(60_000)
@@ -41,11 +41,6 @@ internal fun dayKeyOf(cal: Calendar): Long = cal.get(Calendar.YEAR) * 1000L + ca
 
 internal fun minutesOfDay(cal: Calendar = Calendar.getInstance()): Int = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
 
-/**
- * R2#12: первый тик выровнен по границе минуты (иначе «минута» наступает через
- * period после открытия экрана); период параметризован (R2-дубль1: 30с в BellsScreen,
- * 60с в остальном).
- */
 @Composable
 fun rememberNowMinutes(periodMillis: Long = 60_000): Int {
     var nowMinutes by remember { mutableIntStateOf(minutesOfDay()) }

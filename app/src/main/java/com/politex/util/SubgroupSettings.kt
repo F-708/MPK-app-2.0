@@ -2,11 +2,6 @@ package com.politex.util
 
 import android.content.Context
 
-/**
- * GG3: предпочтение подгруппы пользователя для split-уроков (маршруты и виджеты).
- * NEUTRAL — приложение спрашивает/показывает обе; FIRST/SECOND — авто-выбор комнаты подгруппы.
- * Хранится в общих prefs виджетов, чтобы и виджеты и экраны читали один источник.
- */
 enum class SubgroupPref {
     NEUTRAL,
     FIRST,
@@ -31,11 +26,10 @@ object SubgroupSettings {
         pref: SubgroupPref,
     ) {
         com.politex.widget.WidgetUpdateHelper.getPrefs(context).edit().putString(KEY, pref.name).apply()
-        // HH2: pref влияет на split-кнопки в NowNext+Today — перерисовать сразу, не ждать тика.
+
         com.politex.widget.WidgetUpdateHelper.refreshScheduleWidgets(context)
     }
 
-    /** Индекс подгруппы для split-комнат (0=roomFirst, 1=roomSecond); null если NEUTRAL. */
     fun splitIndex(pref: SubgroupPref): Int? =
         when (pref) {
             SubgroupPref.FIRST -> 0

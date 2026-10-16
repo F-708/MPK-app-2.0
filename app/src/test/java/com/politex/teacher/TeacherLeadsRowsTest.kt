@@ -10,17 +10,11 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * TR6: showLeads=false скрывает «ведёт у вас». Проверяем чистую buildTeacherRows:
- * с insights (студенческий режим) активный преподаватель даёт заголовок «ВЕДУТ У ГРУППЫ»;
- * с insights=null (учительский режим) заголовков-секций нет вовсе — только отсортированные Item'ы.
- */
 class TeacherLeadsRowsTest {
     private val ivanova = Teacher(name = "Иванова Анна Петровна")
     private val petrov = Teacher(name = "Петров Сергей Иванович")
     private val teachers = listOf(petrov, ivanova)
 
-    /** Урок, который TeacherInsights помечает активным: пустая dateString → weekly=true → activeNow. */
     private val activeLesson =
         LessonEntity(
             groupName = "41О",

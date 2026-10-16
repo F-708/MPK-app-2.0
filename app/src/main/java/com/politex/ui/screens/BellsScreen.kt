@@ -102,16 +102,13 @@ private fun railColor(
     return if (blueEnd != null && minutes <= blueEnd) RAIL_BLUE else RAIL_GRAY
 }
 
-/** BB5: звонки всегда показываются для выбранного типа; в воскресенье — неактивный вид (Z5), не пустое состояние. */
 fun bellsForDisplay(type: BellScheduleType): List<BellItem> = CollegeBellSchedule.getBellsForType(type)
 
-/** BB5: плашка «Сегодня воскресенье — уроков нет» — только в воскресенье при выбранном типе «сегодня». */
 fun sundayNoteVisible(
     todayDow: Int,
     isTodaySelected: Boolean,
 ): Boolean = todayDow == 7 && isTodaySelected
 
-/** CC2: индикатор «сегодня» под чипом типа — в воскресенье сегодня не относится ни к одному типу. */
 fun indicatorVisible(todayDow: Int): Boolean = todayDow != 7
 
 private fun dotProgressIn(
@@ -155,13 +152,11 @@ fun BellsScreen(
         }
 
     val todayType = remember(todayDow) { CollegeBellSchedule.getTypeForDay(todayDow) }
-    // R2#17: rememberSaveable(todayDow) — после смены дня (и смерти процесса) тип пересчитывается от нового сегодня
+
     var selectedScheduleType by rememberSaveable(todayDow) { mutableStateOf(todayType) }
 
-    // R2-дубль1: общий минутный тикер (30с — как было), вместо своего LaunchedEffect-цикла
     val currentTimeMinutes = com.politex.ui.util.rememberNowMinutes(30_000)
 
-    // Z5: в воскресенье уроков нет — не показывать «идёт урок» понедельника
     val isTodaySelected = selectedScheduleType == todayType && todayDow != 7
     val activeSlot =
         remember(currentTimeMinutes, selectedScheduleType, isTodaySelected) {
@@ -177,8 +172,7 @@ fun BellsScreen(
     val todayTypeSelected = selectedScheduleType == todayType
     val bells = bellsForDisplay(selectedScheduleType)
     val showSundayNote = sundayNoteVisible(todayDow, todayTypeSelected)
-    // R2#16: без уроков группы сегодня рельс СЕРЫЙ (fallback на последний звонок
-    // красил его синим, как будто уроки идут); fallback только до загрузки списка
+
     val blueEndNum =
         if (isTodaySelected) {
             lastLessonToday
@@ -222,9 +216,6 @@ fun BellsScreen(
     LaunchedEffect(scrollToCurrentRequested, activeSlot, rows) {
         if (!scrollToCurrentRequested) return@LaunchedEffect
 
-        // R2#5: дождаться реальной раскладки; если контент не прокручивается (maxValue==0) —
-        // snapshotFlow ниже не завершится никогда и флаг CURRENT_BELL залипнет в
-        // savedStateHandle, поэтому потребляем сразу после первого замера
         snapshotFlow { viewportPx > 0 }.first { it }
         if (scrollState.maxValue == 0) {
             onScrollToCurrentConsumed()
@@ -332,7 +323,7 @@ fun BellsScreen(
                             .width(28.dp)
                             .height(3.dp)
                             .background(
-                                if (isToday && indicatorVisible(todayDow)) ColorActiveBlue else Color.Transparent, // GG16: индикатор выбранного = ColorActiveBlue (как фильтр заданий)
+                                if (isToday && indicatorVisible(todayDow)) ColorActiveBlue else Color.Transparent,
                                 RoundedCornerShape(2.dp),
                             ),
                     )
@@ -375,7 +366,7 @@ fun BellsScreen(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (showSundayNote) {
-                // BB5: воскресенье — звонки видны, но неактивны; короткая пометка первой строкой
+
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorSurfaceVariantLight,

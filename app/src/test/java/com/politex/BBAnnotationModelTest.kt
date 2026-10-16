@@ -22,8 +22,7 @@ class BBAnnotationModelTest {
 
     @Test
     fun `CC5 ImageViewer — штрих константен НА ЭКРАНЕ при graphicsLayer scale (layerScale = zoom)`() {
-        // ImageViewer рисует внутри слоя, масштабированного graphicsLayer'ом:
-        // экранная толщина = compensated * layerScale = widthDp * pxPerDp — константа.
+
         val pxPerDp = 3f
         listOf(0.5f, 1f, 2f, 4f).forEach { scale ->
             val drawn = compensatedStrokeWidthPx(4f, pxPerDp, scale)
@@ -33,9 +32,7 @@ class BBAnnotationModelTest {
 
     @Test
     fun `DD2+HH3 PDF — толщина штриха константна ОТНОСИТЕЛЬНО СТРАНИЦЫ (экранная ~ zoom)`() {
-        // HH3: layout постоянный (страница = containerW, fit = 1.0), зум — graphicsLayer(zoom).
-        // layerScale = 1 ⇒ толщина в координатах страницы = widthDp*pxPerDp; экранная = *zoom
-        // (тоньше на экране при 0.5, толще при 2 — «нарисовано на бумаге»).
+
         val containerW = 1080f
         val pxPerDp = 3f
         listOf(0.5f, 1f, 2f, 4f).forEach { zoom ->
@@ -53,8 +50,7 @@ class BBAnnotationModelTest {
 
     @Test
     fun `DD2+HH3 PDF eraser — порог в page-координатах, нормализованный не зависит от zoom`() {
-        // HH3: boxWidthPx = containerW (layout постоянный), layerScale = 1 ⇒
-        // нормализованный порог (widthDp/2+extra)*pxPerDp/containerW — константа «на бумаге».
+
         val containerW = 1080f
         val norm =
             listOf(0.5f, 1f, 2f, 4f).map {
@@ -84,11 +80,11 @@ class BBAnnotationModelTest {
 
     @Test
     fun `BB3 clamp к границам страницы — симметрично со всех четырёх сторон`() {
-        assertEquals(Offset(0f, 10f), clampToBox(Offset(-50f, 10f), 100f, 100f)) // влево
-        assertEquals(Offset(100f, 10f), clampToBox(Offset(150f, 10f), 100f, 100f)) // вправо
-        assertEquals(Offset(10f, 0f), clampToBox(Offset(10f, -50f), 100f, 100f)) // вверх
-        assertEquals(Offset(10f, 100f), clampToBox(Offset(10f, 150f), 100f, 100f)) // вниз
-        assertEquals(Offset(10f, 10f), clampToBox(Offset(10f, 10f), 100f, 100f)) // внутри
+        assertEquals(Offset(0f, 10f), clampToBox(Offset(-50f, 10f), 100f, 100f))
+        assertEquals(Offset(100f, 10f), clampToBox(Offset(150f, 10f), 100f, 100f))
+        assertEquals(Offset(10f, 0f), clampToBox(Offset(10f, -50f), 100f, 100f))
+        assertEquals(Offset(10f, 100f), clampToBox(Offset(10f, 150f), 100f, 100f))
+        assertEquals(Offset(10f, 10f), clampToBox(Offset(10f, 10f), 100f, 100f))
     }
 
     @Test
@@ -101,7 +97,7 @@ class BBAnnotationModelTest {
         assertNull(session.pop())
 
         session.record(AnnotationAction.Add(0, s1))
-        session.clear() // выход из viewer
+        session.clear()
         assertNull("история сессии не переживает выход из документа", session.pop())
     }
 
@@ -126,7 +122,7 @@ class BBAnnotationModelTest {
     @Test
     fun `BB3 корзина — undo ClearAll восстанавливает аннотации всего документа`() {
         val before = mapOf(0 to listOf(s1), 2 to listOf(s2), 5 to listOf(s1, s2))
-        val cleared = before.mapValues { emptyList<Stroke>() } // состояние сразу после корзины
+        val cleared = before.mapValues { emptyList<Stroke>() }
         val snapshot = before.filterValues { it.isNotEmpty() }
         val restored = applyUndo(AnnotationAction.ClearAll(snapshot), cleared)
         assertEquals(before, restored)

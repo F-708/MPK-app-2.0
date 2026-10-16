@@ -28,10 +28,6 @@ import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import androidx.compose.ui.text.style.TextOverflow
 
-/**
- * R2-дубль6: ячейка слота «СЕГОДНЯ/ЗАВТРА» (была DaySlotCell в ScheduleScreen
- * и GroupDaySlotCell в GroupScheduleScreen).
- */
 @Composable
 fun DaySlotCell(
     title: String,
@@ -46,7 +42,7 @@ fun DaySlotCell(
         color = if (selected) ColorTopBar else ColorBgMain,
         modifier =
             modifier
-                .heightIn(min = Tokens.ButtonHeight) // FF2: вровень с кнопкой календаря (44dp); min — крупный шрифт не клипается
+                .heightIn(min = Tokens.ButtonHeight)
                 .bouncyClickable(onClick = onClick),
     ) {
         Column(

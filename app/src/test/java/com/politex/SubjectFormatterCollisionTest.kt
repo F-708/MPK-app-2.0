@@ -8,14 +8,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * GG4: «Программирование цифровых устройств» (ПЦУ) показывалось как «Системы ЧПУ».
- * Корень — двусторонний contains в getShortName/getAcronym: короткое усечение «Програм»
- * попадало внутрь длинного ключа «Системы числового программного управления».
- * Здесь — коллизион-прогон куррикулума 41О/41Г/21Д/11О и проверка ПЦУ на фикстуре.
- */
 class SubjectFormatterCollisionTest {
-    // Первая цифра номера группы = курс, последняя буква = шифр специальности.
+
     private val targetGroups =
         listOf(
             "41О" to Pair('О', 4),
@@ -84,10 +78,10 @@ class SubjectFormatterCollisionTest {
                 short.contains("ПЦУ") || short.contains("Программ") || short.contains("цифров", ignoreCase = true),
             )
         }
-        // Канонический предмет куррикулума даёт именно «ПЦУ».
+
         assertEquals("ПЦУ", SubjectFormatter.getShortName("Программируемые цифровые устройства"))
         assertEquals("ПЦУ", SubjectFormatter.getAcronym("Программируемые цифровые устройства"))
-        // «Программирование для станков с ЧПУ» — ДРУГОЙ предмет, остаётся про ЧПУ.
+
         assertTrue(SubjectFormatter.getShortName("Программирование для станков с ЧПУ").contains("ЧПУ"))
     }
 

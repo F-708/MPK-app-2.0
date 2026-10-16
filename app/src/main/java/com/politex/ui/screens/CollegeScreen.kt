@@ -132,7 +132,7 @@ internal fun TeachersRoute(
     scheduleRepository: ScheduleRepository,
     onOpenTeacher: (Teacher) -> Unit,
     onBack: () -> Unit,
-    // TR6: teacher-приложение вызывает с showLeads=false — «Преподаватели» без «ведёт у вас».
+
     showLeads: Boolean = true,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
@@ -154,12 +154,12 @@ internal fun TeacherCardRoute(
     onOpenRoom: (String) -> Unit,
     onNotFound: () -> Unit,
     onBack: () -> Unit,
-    // TR6: teacher-приложение — без шильда/секции «ведёт у вас».
+
     showLeads: Boolean = true,
 ) {
     var teacher by remember(teacherName) { mutableStateOf<Teacher?>(null) }
     LaunchedEffect(teacherName) {
-        // R2#8: общий кэш + загрузка вне main thread
+
         teacher =
             com.politex.ui.util.TeachersCache
                 .load()
@@ -171,7 +171,7 @@ internal fun TeacherCardRoute(
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
         val found = teacher
         if (found == null) {
-            // R2#19: пока карточка грузится (и до popBackStack при onNotFound) — лоадер, не пустой экран
+
             com.politex.ui.components.CenteredLoader(modifier = Modifier.fillMaxSize())
         } else {
             TeacherCardPageWrapper(
@@ -706,11 +706,6 @@ internal sealed interface TeacherRow {
     ) : TeacherRow
 }
 
-/**
- * TR6: чистая функция построения строк списка преподавателей (покрыта TeacherLeadsRowsTest).
- * [insights] == null — учительский режим (showLeads=false): нет группировки «ВЕДУТ У ГРУППЫ»,
- * весь список = отсортированные Item'ы, шильд «ведёт у вас» на карточках не рисуется (isActive=false).
- */
 internal fun buildTeacherRows(
     teachers: List<Teacher>,
     query: String,
@@ -757,15 +752,13 @@ private fun TeachersPage(
     scheduleRepository: ScheduleRepository,
     onBack: () -> Unit,
     onOpenTeacher: (Teacher) -> Unit,
-    // TR6: false — учительский режим: нет «ведёт у вас» (ни шильда, ни секций, ни TeacherInsights).
+
     showLeads: Boolean = true,
 ) {
     val context = LocalContext.current
 
-    // R2#8: асинхронная загрузка базы преподавателей (была синхронно в композиции)
     val teachers = com.politex.ui.util.rememberTeachers()
 
-    // showLeads=false — уроки группы не нужны вообще, запрос не выполняем.
     val allLessons by
         if (showLeads) {
             scheduleRepository
@@ -782,7 +775,6 @@ private fun TeachersPage(
 
     var searchQuery by rememberSaveable { mutableStateOf("") }
 
-    // TR6: логика построения строк вынесена в чистую buildTeacherRows (покрыта тестом).
     val rows =
         remember(teachers, searchQuery, insights, showLeads, groupInfo.canonicalName) {
             buildTeacherRows(teachers, searchQuery, insights, groupInfo.canonicalName)
@@ -1002,12 +994,11 @@ private fun TeacherCardPageWrapper(
     scheduleRepository: ScheduleRepository,
     onOpenRoom: (String) -> Unit,
     onBack: () -> Unit,
-    // TR6: false — карточка без шильда «ведёт у вас» (учительский режим).
+
     showLeads: Boolean = true,
 ) {
     val context = LocalContext.current
 
-    // R2#8: асинхронная загрузка базы преподавателей (была синхронно в композиции)
     val teachers = com.politex.ui.util.rememberTeachers()
     val allLessons by
         if (showLeads) {
@@ -1129,7 +1120,7 @@ private fun TeacherCardPage(
     onLeadsChipClick: () -> Unit = {},
     onOpenRoom: (String) -> Unit = {},
     onBack: () -> Unit,
-    // TR6: false — без шильда «ведёт у вас» и без секции «ВЕДЁТ У ВАШЕЙ ГРУППЫ» (учительский режим).
+
     showLeadsChip: Boolean = true,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -1147,8 +1138,7 @@ private fun TeacherCardPage(
             Spacer(modifier = Modifier.width(10.dp))
             TeacherAvatar(teacher = teacher, size = 52.dp, highlight = isActive)
             Spacer(modifier = Modifier.width(10.dp))
-            // EE5: шильд «Ведёт у вас» перенесён в ряд кнопок-секций ниже —
-            // ФИО занимает всю ширину шапки без перекрытия.
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = teacher.name,
@@ -1250,8 +1240,7 @@ private fun LeadsChip(
     autoActive: Boolean,
     onClick: () -> Unit,
 ) {
-    // AA4: авто-факт активен и пользователь его не снимал — шильд не кликабельен
-    // («скрипт уверен, что ведёт»); возврат/установка отметки — только в остальных состояниях.
+
     val enabled = canToggleLeads(autoActive, manualOff = autoActive && !leadsNow)
     val text =
         when {
@@ -1265,7 +1254,7 @@ private fun LeadsChip(
         border = BorderStroke(1.dp, if (leadsNow) ColorActiveBlue else ColorBorderLight),
         modifier =
         Modifier
-            // EE5: в ряду кнопок-секций — та же высота и отступы, что у соседних кнопок.
+
             .heightIn(min = 44.dp)
             .then(
                 if (enabled) {
@@ -1302,7 +1291,7 @@ private fun AboutTeacherTab(
     roomsFromSchedule: List<String>,
     subjectsFromSchedule: List<String>,
     onOpenRoom: (String) -> Unit = {},
-    // TR6: false — без секции «ВЕДЁТ У ВАШЕЙ ГРУППЫ» (учительский режим).
+
     showLeads: Boolean = true,
 ) {
     LazyColumn(
@@ -1468,7 +1457,6 @@ private fun AboutTeacherTab(
     }
 }
 
-// AA4: авто-факт уверен (weekly/recent) и пользователь его не снимал — шильд не кликабельен.
 internal fun canToggleLeads(
     autoActive: Boolean,
     manualOff: Boolean,
@@ -1509,14 +1497,9 @@ private fun TeacherScheduleTab(
                 .dowOfCalendar(targetCalendar)
         }
 
-    // R2#18: ключ today — после полуночи (rememberToday обновляется) расписание перечитывается,
-    // «СЕГОДНЯ» не показывает вчерашний день; R2-дубль7: dd.MM.yyyy через общий DateFormats
     LaunchedEffect(teacher.name, dayOffset, customDate, today, allTeachers) {
         val dateKey = com.politex.util.DateFormats.dotDate(targetCalendar)
 
-        // AA5: loading под try/finally — ни отмена эффекта (смена дня), ни исключение
-        // больше не оставляют вечный спиннер; ошибка сети становится честным текстом.
-        // T2-A: загрузка вынесена в TeacherDayLoader (общий со студенческим экраном путь).
         loading = true
         try {
             val day =
@@ -1751,9 +1734,7 @@ private fun TeacherScheduleTab(
                                     )
                                 }
                                 if (slot.room.isNotBlank()) {
-                                    // CC3: узкий комнат-чип как в LessonCard расписания
-                                    // (Surface 2dp + h6/v2 + 11sp bold + иконка 12dp);
-                                    // hitbox 44dp остаётся на внешнем Box
+
                                     Box(
                                         modifier =
                                         Modifier

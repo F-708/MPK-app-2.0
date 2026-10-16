@@ -26,50 +26,26 @@ data class TeacherWidgetSnapshot(
     val dow: Int,
     val dayOfMonth: Int,
     val month1: Int,
-    val lessons: List<TeacherWidgetLesson>, // сегодня
-    val next: NextLessonRef?, // из кэша следующих ≤7 дней (когда сегодня пар больше нет)
+    val lessons: List<TeacherWidgetLesson>,
+    val next: NextLessonRef?,
     val lastSyncEpoch: Long,
 )
 
-/**
- * Обновление обоих teacher-виджетов. Регистрация провайдеров — ТОЛЬКО в teacher-сборке
- * (src/teacher/AndroidManifest.xml), поэтому вызовы из общих точек (WidgetAlarmReceiver,
- * TeacherScheduleWorker) идут БЕЗ flavor-гейта: в студенческой сборке профиль null →
- * мгновенный выход (одно чтение prefs, без БД и корутин).
- */
 object TeacherWidgetUpdater {
     fun updateAll(context: Context) {
         if (TeacherProfileStore.get(context) == null) return
         WidgetUpdateHelper.widgetScope.launch { updateAllNow(context) }
     }
 
-    /** Для вызова из уже запущенной корутины (WidgetAlarmReceiver). */
     suspend fun updateAllNow(context: Context) {
         if (TeacherProfileStore.get(context) == null) return
-        // TR8: общие виджеты «до звонка»/«график звонков» в teacher-сборке. У преподавателя
-        // нет выбранной группы → default CountdownMode.GROUP_LESSONS / Scope.MY_LESSONS дают
-        // «Уроков нет». Форсируем режим «все звонки колледжа» (группо-независимый).
-        // Гейт — TeacherProfileStore (выше): в студенческой сборке профиль null → сюда не доходим,
-        // студенческое поведение не меняется. БЕЗ BuildConfig.FLAVOR (правило «ноль FLAVOR вне MainActivity»).
+
         runCatching { forceCollegeBellDefaults(context) }
-        // GG8(а)-паттерн: падение сборки одного виджета не рвёт обновление второго
+
         runCatching { TeacherNextWidgetProvider.updateAll(context) }
         runCatching { TeacherTodayWidgetProvider.updateAll(context) }
     }
 
-    /**
-     * TR8: общий виджет «до звонка» ([BellCountdownWidgetProvider]) и шторка
-     * ([BellCountdownNotifier]) по умолчанию считают «до конца уроков МОЕЙ ГРУППЫ» — у
-     * преподавателя группы нет (getSelectedGroup blank → lastGroupLessonForToday null →
-     * «Уроков нет»). Переводим каждый инстанс виджета в [CountdownMode.ALL_BELLS] и шторку
-     * в [BellCountdownNotifier.Scope.COLLEGE]: оба идут от общего [CollegeBellSchedule],
-     * группо-независимы. Идемпотентно (пишем pref только при расхождении).
-     *
-     * Вызывается ТОЛЬКО из teacher-контекста (гейт — профиль в [updateAllNow]); общие
-     * провайдеры/нотификатор при этом НЕ правятся. Публична, чтобы teacher-ветка
-     * MainActivity могла выставить Scope.COLLEGE («до звонка» в шторке, TR7) сразу при
-     * старте, не дожидаясь минутного тика. Идемпотентна — безопасна к повторным вызовам.
-     */
     fun forceCollegeBellDefaults(context: Context) {
         if (TeacherProfileStore.get(context) == null) return
         val manager = AppWidgetManager.getInstance(context)
@@ -84,7 +60,6 @@ object TeacherWidgetUpdater {
         }
     }
 
-    // T4 сделает deep-link на экран дня; пока тап просто открывает приложение (SPEC §4.1 фича 8)
     fun openAppIntent(
         context: Context,
         code: Int,
@@ -101,17 +76,11 @@ object TeacherWidgetUpdater {
     }
 }
 
-/**
- * Снапшот «моего дня» из БД (teacher_lessons напрямую, как требует задача T3-C: loader
- * агента A виджеты не проходят). Кэш — по образцу WidgetData.todayLessons: ключ с
- * датой+минутой+профилем (грабли v2.x).
- */
 object TeacherWidgetData {
     @Volatile private var cacheKey = ""
 
     @Volatile private var cache: TeacherWidgetSnapshot? = null
 
-    /** null — профиль не выбран (виджет показывает «Выберите себя в приложении»). */
     suspend fun snapshot(context: Context): TeacherWidgetSnapshot? {
         val profile = TeacherProfileStore.get(context) ?: return null
         val cal = Calendar.getInstance()
@@ -130,8 +99,6 @@ object TeacherWidgetData {
 
         val lessons = matchedRows(db, surnameKey, selected, teachers, today, dow).map { toLesson(it, dow) }
 
-        // ponytail: скан следующих дней — только когда сегодня пар больше нет (≤7 дешёвых
-        // запросов кэша БД, без сети; синк — работа TeacherScheduleWorker)
         val next =
             if (lessons.any { it.startMinutes > minute }) {
                 null
@@ -173,7 +140,6 @@ object TeacherWidgetData {
         return TeacherWidgetLogic.findNextLesson(days)
     }
 
-    // Фильтр однофамильцев ОБЯЗАТЕЛЕН (matchRowToTeacher YES/NO/AMBIGUOUS через matchRowsForTeacher)
     private suspend fun matchedRows(
         db: MpkDatabase,
         surnameKey: String,

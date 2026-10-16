@@ -100,8 +100,6 @@ object GradeDetailMode {
 
 private val UI_CATEGORIES = GradeCategory.values().filter { it != GradeCategory.LAB }
 
-// CC1: механика двойного тапа удаления оценки (по образцу корзины PDF).
-// NONE --tap--> ARMED --tap(в окне)--> DELETED; ARMED --expired--> NONE.
 internal enum class DeleteArmState { NONE, ARMED, DELETED }
 
 internal fun gradeDeleteAction(
@@ -118,8 +116,6 @@ internal fun gradeDeleteAction(
 
 private const val DELETE_ARM_TIMEOUT_MS = 500L
 
-// v2.0: туториал «Тестовый урок» — фиктивный предмет (в Room не пишется), учит
-// удалять оценку двойным нажатием. Показывается один раз, после выхода исчезает.
 internal const val TUTORIAL_SUBJECT = "Тестовый урок"
 
 @Composable
@@ -135,8 +131,6 @@ fun GradesScreen(
     var openSubject by rememberSaveable { mutableStateOf<String?>(null) }
     var settingsSubject by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // v2.0: туториал «Тестовый урок» — учит удалять оценку двойным нажатием.
-    // Показывается один раз (HintFlags.KEY_GRADES_TUTORIAL), после выхода больше не всплывает.
     var showTutorial by rememberSaveable { mutableStateOf(false) }
 
     val detail = openSubject != null || settingsSubject != null || showTutorial
@@ -197,8 +191,6 @@ private fun GradeSubjectList(
             MpkCurriculum.getSubjects(groupInfo.specialtyCode, groupInfo.course)
         }
 
-    // v2.0: «Тестовый урок» пульсирует вверху списка, пока туториал не пройден.
-    // Список пересоздаётся при возврате из туториала → флаг читается заново и строка исчезает.
     val tutorialPending = remember { !HintFlags.isDone(context, HintFlags.KEY_GRADES_TUTORIAL) }
 
     LazyColumn(
@@ -274,8 +266,7 @@ private fun GradeSubjectList(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     if (avg == null) {
-                        // Вёрстка: трейлинг «•••» читался как overflow-меню —
-                        // явный текст вместо точек (width wrap).
+
                         Text(
                             text = "нет оценок",
                             style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
@@ -299,14 +290,10 @@ private fun GradeSubjectList(
     }
 }
 
-// v2.0: туториал оценок. Зеркалит реальный GradeSubjectScreen, но работает на одной
-// фиктивной оценке «4» (id = -1, в Room НЕ пишется ни при каких условиях). Учит удалять
-// оценку двойным нажатием. При выходе (в т.ч. системным Back) помечает HintFlags — больше
-// не показывается. Стиль пульсации тот же, что у подсказки выбора кабинета (pulseHalo).
 @Composable
 private fun GradeTutorialScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    // Пометить пройденным при ЛЮБОМ выходе из туториала — заказчик: «больше не отображается».
+
     val finish: () -> Unit = {
         HintFlags.markDone(context, HintFlags.KEY_GRADES_TUTORIAL)
         onBack()
@@ -341,7 +328,6 @@ private fun GradeTutorialScreen(onBack: () -> Unit) {
             )
         }
 
-        // Средний балл туториала — «4» (по брифу), тот же фикс-бокс 96dp, что и в реальном экране.
         Box(
             modifier = Modifier.fillMaxWidth().height(96.dp),
             contentAlignment = Alignment.Center,
@@ -430,7 +416,7 @@ private fun GradeSubjectScreen(
     BackHandler { onBack() }
     val scope = rememberCoroutineScope()
     val today = rememberToday()
-    // CC7: до первой эмиссии Room не показываем empty-состояния, только нейтральный placeholder
+
     val entriesState by dao.entriesForSubject(subject).collectAsState(initial = null)
     val loaded = entriesState != null
     val entries = entriesState ?: emptyList()
@@ -463,8 +449,6 @@ private fun GradeSubjectScreen(
         scope.launch { dao.insert(entry) }
     }
 
-    // R2 #9: undo-стек вместо одной записи — второе быстрое удаление не хоронит первое.
-    // Плашка показывает верх стека, «ОТМЕНИТЬ» pop'ает его; таймер очищает весь стек.
     var undoStack by remember { mutableStateOf(ArrayDeque<GradeEntryEntity>()) }
     LaunchedEffect(undoStack) {
         if (undoStack.isNotEmpty()) {
@@ -482,7 +466,6 @@ private fun GradeSubjectScreen(
         scope.launch { dao.insert(e) }
     }
 
-    // CC1: удаление чипа двойным тапом — 1-й тап взводит чип на 0.5с, 2-й в окне удаляет
     var armedId by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(armedId) {
         if (armedId != null) {
@@ -542,7 +525,6 @@ private fun GradeSubjectScreen(
             }
         }
 
-        // Фикс-высота: позиция среднего балла не зависит от содержимого ниже
         Box(
             modifier =
             Modifier
@@ -551,7 +533,7 @@ private fun GradeSubjectScreen(
             contentAlignment = Alignment.Center,
         ) {
             when {
-                // CC7: neutral placeholder — тот же Box96dp, без точек и без цифры
+
                 !loaded -> Unit
                 avg == null -> EmptyDots(modifier = Modifier.testTag("grades_current_avg"))
                 else ->
@@ -570,7 +552,6 @@ private fun GradeSubjectScreen(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Нижняя панель прижата к низу контента (последний элемент Column, без weight)
         AppCard(
             modifier = Modifier
                 .fillMaxWidth()
@@ -579,7 +560,6 @@ private fun GradeSubjectScreen(
         ) {
             Column(modifier = Modifier.padding(8.dp)) {
 
-                // CC1: undo-плашка НАД строкой оценок (панель растёт вверх, средний балл не сдвигает)
                 undoStack.lastOrNull()?.let { deleted ->
                     AppCard(
                         modifier = Modifier
@@ -622,7 +602,7 @@ private fun GradeSubjectScreen(
 
                 val activeEntries = remember(entries, activeCategory) { entries.filter { it.category == activeCategory } }
                 if (!loaded) {
-                    // CC7: placeholder фикс-высоты 28dp без точек
+
                     Box(
                         modifier =
                         Modifier
@@ -761,8 +741,7 @@ private fun RowScope.CategorySegment(
         modifier =
         Modifier
             .weight(1f)
-            // Вёрстка: 40dp (ChipScreen) — две строки 10sp влезают; min, чтобы
-            // крупный системный шрифт не рубился.
+
             .heightIn(min = Tokens.ChipScreen)
             .testTag("grades_chip_${category.name}")
             .bouncyClickable(onClick = onClick),
@@ -771,7 +750,7 @@ private fun RowScope.CategorySegment(
             val short = CATEGORY_SHORT[category.name] ?: category.title
             Text(
                 text = if (count > 0) "$short · $count" else short,
-                // Вёрстка: 2 строки 10sp в чипе 40dp — короткие имена не рубятся.
+
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 style =
@@ -950,8 +929,6 @@ private fun GradeSubjectSettingsScreen(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // v2.0: переключатель «весов категорий» — явный Switch со статусом «Вкл/Выкл».
-                // Прежняя версия лишь подсвечивала строку — состояние читалось неоднозначно.
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
@@ -1205,7 +1182,7 @@ private fun weightsPreviewLine(ws: List<Int>): String {
 
 private val CATEGORY_SHORT =
     mapOf(
-        // Вёрстка: полные короткие имена (чипы 40dp/2 строки) вместо рубленых.
+
         GradeCategory.REGULAR.name to "Обычные",
         GradeCategory.PRACTICAL.name to "Практич.",
         GradeCategory.CONTROL.name to "Контр.",

@@ -15,15 +15,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
 
-/**
- * AA5 — вся цепочка расписания преподавателя на ЖИВОМ документе за понедельник
- * 05.10.2026 (curl https://guo-mpk.by/wp-content/uploads/2026/10/05.10.2026-raspisanie-prepodavatelej.doc
- * → 200, md5 байт-в-байт совпадает с фикстурой; воскресенье 04.10 — 404, документа не существует):
- * фикстура → TeacherScheduleParser.parse → ScheduleRepository.teacherRows →
- * dao.replaceForDate → dao.getForSurnameOnDate(surnameKey+date) → слоты непустые.
- * Плюс «loading сбрасывается при ошибке сети»: loadTeacherDay на любой ошибке возвращает
- * текст, а не зависает (в UI обёрнут в try/finally).
- */
 class TeacherScheduleE2ETest {
     private class FakeTeacherLessonDao : TeacherLessonDao {
         val rows = mutableListOf<TeacherLessonEntity>()
@@ -65,7 +56,6 @@ class TeacherScheduleE2ETest {
         val dao = FakeTeacherLessonDao()
         dao.replaceForDate(date, rows)
 
-        // Карточка в teachers.csv — «Автушко Наталья Александровна», ключ дока — «Автушко …».
         val cardKey = TeacherInsights.surnameOf("Автушко Наталья Александровна")
         val docKey = parsed.keys.first { it.startsWith("Автушко") }
         assertEquals("запись и чтение идут по одному surnameKey", cardKey, TeacherInsights.surnameOf(docKey))

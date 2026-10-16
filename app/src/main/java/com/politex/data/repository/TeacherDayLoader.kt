@@ -14,8 +14,6 @@ import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.Calendar
 
-// ——— Перенос из CollegeScreen (AA5/R2#18), семантика не изменилась ———
-
 internal fun teacherTargetCalendar(
     dayOffset: Int,
     customDate: Calendar?,
@@ -23,8 +21,6 @@ internal fun teacherTargetCalendar(
 ): Calendar =
     customDate ?: (base.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, dayOffset) }
 
-// AA5: в воскресенье документа преподавателей не существует (проверено curl: вс — 404,
-// сб/пн — 200), поэтому по умолчанию сразу открываем понедельник, а не «сегодня».
 internal fun defaultTeacherDayOffset(todayDow: Int): Int = if (todayDow == 7) 1 else 0
 
 internal fun teacherSyncErrorMessage(
@@ -44,8 +40,6 @@ internal data class TeacherDayLoad(
     val error: String,
 )
 
-// AA5: кэш-первым, сеть один раз; ЛЮБАЯ ошибка (Result.failure или исключение)
-// превращается в текст — вызывающий код всегда может сбросить loading.
 internal suspend fun loadTeacherDay(
     dateKey: String,
     fromDatabase: suspend () -> List<TeacherSlot>,
@@ -65,8 +59,6 @@ internal suspend fun loadTeacherDay(
         )
     return TeacherDayLoad(slots, error)
 }
-
-// ——— Экран «Мой день» преподавателя (SPEC §4.1 фича 3, §5.2, §6.3) ———
 
 data class TeacherDayLesson(
     val lessonNumber: Int,
@@ -95,11 +87,9 @@ data class NextLesson(
 
 enum class LessonStatus { PAST, NOW, NEXT, UPCOMING }
 
-/** Чистые функции экрана «Мой день» — без Android, покрыты юнит-тестами. */
 object TeacherDayLogic {
     private val SHORT_DOW = listOf("пн", "вт", "ср", "чт", "пт", "сб", "вс")
 
-    // Конвенция проекта: сравнение только по минутам дня из Calendar, dd.MM.yyyy.
     fun statuses(
         lessons: List<TeacherDayLesson>,
         nowMinutes: Int,
@@ -109,7 +99,7 @@ object TeacherDayLogic {
         var nextAssigned = false
         return lessons.map { l ->
             when {
-                // Пара без времени не занимает ИДЁТ/СЛЕДУЮЩАЯ.
+
                 l.startMinutes < 0 -> LessonStatus.UPCOMING
                 nowMinutes in l.startMinutes..l.endMinutes -> LessonStatus.NOW
                 nowMinutes > l.endMinutes -> LessonStatus.PAST
@@ -138,8 +128,6 @@ object TeacherDayLogic {
     }
 }
 
-// Фильтр строк teacher_lessons через matchRowToTeacher (однофамильцы) + день недели.
-// Точная копия прежней логики CollegeScreen.TeacherScheduleTab.
 internal fun matchRowsForTeacher(
     rows: List<TeacherLessonEntity>,
     selected: Teacher,
@@ -245,7 +233,6 @@ object TeacherDayLoader {
             )
         }
 
-    /** Следующая пара в пределах maxDays дней (кэш; одна попытка синка, если кэш совсем пуст). */
     suspend fun findNextLesson(
         context: Context,
         repository: ScheduleRepository,
@@ -270,7 +257,7 @@ object TeacherDayLoader {
                 firstRow(repository, profile, selected, teachers, dateKey, dow)
                     ?.let { return@withContext NextLesson(dateKey, dow, toLesson(it, dow)) }
             }
-            // ponytail: одна попытка синка ближайшего учебного дня; остальное доделает воркер
+
             val cal = firstSchoolCal
             if (!anyCached && cal != null) {
                 val dateKey = DateFormats.dotDate(cal)

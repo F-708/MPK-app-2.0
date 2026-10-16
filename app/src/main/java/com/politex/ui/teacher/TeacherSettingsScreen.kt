@@ -61,9 +61,6 @@ import com.politex.ui.util.bouncyClickable
 import com.politex.util.BellCountdownNotifier
 import androidx.compose.ui.text.style.TextOverflow
 
-// Настройки teacher-приложения (TR6/TR7). Стиль строк — копия студенческого SettingsScreen:
-// AppCard (Surface + BorderStroke 1dp ColorBorderLight) + SectionCaption-заголовки секций.
-
 @Composable
 fun TeacherSettingsScreen(
     profile: TeacherProfile?,
@@ -132,8 +129,6 @@ fun TeacherSettingsScreen(
             item { SectionCaption("ДО ЗВОНКА") }
             item { BellCountdownCard(context) }
 
-            // TR-W4: масштаб 75/100/125% и тема (копия студенческих свотчей) —
-            // компоненты в TeacherAppearance.kt (после «ДО ЗВОНКА», перед «О ПРОГРАММЕ»)
             item { SectionCaption("ВНЕШНИЙ ВИД") }
             item { ScaleCard() }
             item { ThemeSwatchesCard() }
@@ -167,12 +162,6 @@ fun TeacherSettingsScreen(
     }
 }
 
-/**
- * TR7: тумблер «Показывать в шторке» (общая система BellCountdownNotifier, default false — как у
- * студентов) + выбор стиля ТОЛЬКО из двух вариантов («В минутах» / «С секундами»).
- * Тема уведомления = тема приложения (общая), отдельного выбора темы и звука здесь НЕТ —
- * заказчик: «выбор темы для уведомления и для звонка менее замысловатый».
- */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun BellCountdownCard(context: Context) {
@@ -238,7 +227,6 @@ private fun BellCountdownCard(context: Context) {
                 Text("СТИЛЬ СТРОКИ", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = ColorBrandBlue))
                 Spacer(Modifier.height(6.dp))
 
-                // образец dropdown — MaterialDialogs.kt:196
                 var expanded by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     OutlinedTextField(
@@ -275,7 +263,6 @@ private fun BellCountdownCard(context: Context) {
     }
 }
 
-/** TR7: ровно два варианта стиля в teacher-UI. Чистый маппинг — покрыт TeacherBellStyleTest. */
 enum class BellStyleChoice(val title: String) {
     MINUTES("В минутах"),
     SECONDS("С секундами"),
@@ -287,6 +274,5 @@ internal fun bellStyleForChoice(choice: BellStyleChoice): BellCountdownNotifier.
         BellStyleChoice.SECONDS -> BellCountdownNotifier.Style.WITH_SECONDS
     }
 
-/** Всё, кроме WITH_SECONDS (в т.ч. студенческие WITH_LESSON/WITH_PROGRESS), схлопывается в «В минутах». */
 internal fun choiceForStyle(style: BellCountdownNotifier.Style): BellStyleChoice =
     if (style == BellCountdownNotifier.Style.WITH_SECONDS) BellStyleChoice.SECONDS else BellStyleChoice.MINUTES

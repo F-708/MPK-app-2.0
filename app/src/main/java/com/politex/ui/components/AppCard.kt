@@ -10,7 +10,6 @@ import androidx.compose.ui.unit.dp
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 
-/** R4 §10: единственная карточка приложения — скругление 2dp, рамка 1dp ColorBorderLight. */
 @Composable
 fun AppCard(
     modifier: Modifier = Modifier,

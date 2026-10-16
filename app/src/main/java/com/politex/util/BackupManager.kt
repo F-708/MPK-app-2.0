@@ -140,7 +140,7 @@ object BackupManager {
         if (settings?.has("notificationsEnabled") == true) {
             WidgetUpdateHelper.setNotificationEnabled(context, settings.optBoolean("notificationsEnabled"))
         }
-        // СРЕД8: стиль/тема уведомления восстанавливаются симметрично экспорту
+
         settings?.optString("notificationsStyle")?.takeIf { it.isNotBlank() }?.let {
             BellCountdownNotifier.setStyle(context, BellCountdownNotifier.Style.from(it))
         }

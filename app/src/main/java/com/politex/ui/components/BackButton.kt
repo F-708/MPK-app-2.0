@@ -20,7 +20,6 @@ import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 
-/** R4 §10: единая кнопка «назад» — хитбокс 44dp, стрелка 20dp. */
 @Composable
 fun BackButton(
     onBack: () -> Unit,

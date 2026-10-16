@@ -27,7 +27,6 @@ import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import androidx.compose.ui.text.style.TextOverflow
 
-/** R4 §10: фирменная кнопка действия — переехала из MaterialDialogs, текст по Tokens.ButtonText. */
 @Composable
 fun BrandActionButton(
     icon: ImageVector,

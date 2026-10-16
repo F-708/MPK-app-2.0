@@ -137,25 +137,14 @@ fun buildLegs(
 internal fun laneOffsetDp(i: Int): Float =
     if (i == 0) 0f else ((i + 1) / 2) * 6f * if (i % 2 == 1) 1f else -1f
 
-/** FF3: состояние полей конструктора маршрута. */
 data class BuilderFields(
     val active: Boolean,
     val a: String,
     val b: String,
 )
 
-/** FF3: откуда берётся отображаемый на карте маршрут после тапа по кабинету. */
 enum class RouteSource { PINNED, BUILDER, NONE }
 
-/**
- * FF3: результат тапа по кабинету — что показать и какие поля обновить.
- *
- * - [source] — источник маршрута (PINNED — запиненный авто/ручной, BUILDER —
- *   конструктор, NONE — маршрута нет).
- * - [target] — новый выбранный кабинет (панель/подсветка) — всегда равен тапнутому.
- * - [pairA]/[pairB] — если не null, записать в соответствующее поле конструктора.
- * - [build] — вызвать build-логику (как кнопка «ПОСТРОИТЬ»).
- */
 data class RouteSourceResult(
     val source: RouteSource,
     val target: String,
@@ -164,17 +153,6 @@ data class RouteSourceResult(
     val build: Boolean,
 )
 
-/**
- * FF3: чистая функция разрешения тапа по кабинету на карте.
- *
- * Поведение:
- * - Конструктор ВЫКЛЮЧЕН: тап только ВЫБИРАЕТ кабинет — запиненный маршрут
- *   (авто из расписания/виджета или ручной построенный) НЕ перестраивается.
- * - Конструктор ВКЛЮЧЁН: тап заполняет поля — первый (A пусто) → A, иначе → B;
- *   при обоих непустых инициирует build. Тап по кабинету уже в поле — не дублирует.
- *
- * Тестируется без Compose.
- */
 fun resolveRouteSource(
     pinnedRouteActive: Boolean,
     builderFields: BuilderFields,
@@ -192,7 +170,7 @@ fun resolveRouteSource(
     val a = builderFields.a.trim()
     val b = builderFields.b.trim()
     return if (a.isEmpty()) {
-        // первый тап → A; build если B уже заполнено (и это не тот же кабинет)
+
         RouteSourceResult(
             source = RouteSource.BUILDER,
             target = tapRoom,
@@ -201,7 +179,7 @@ fun resolveRouteSource(
             build = b.isNotEmpty() && tapRoom != b,
         )
     } else if (tapRoom == a || tapRoom == b) {
-        // A заполнено, тап по кабинету уже в поле — не дублируем
+
         RouteSourceResult(
             source = RouteSource.BUILDER,
             target = tapRoom,
@@ -210,7 +188,7 @@ fun resolveRouteSource(
             build = false,
         )
     } else {
-        // A заполнено → B; обе непустые → build
+
         RouteSourceResult(
             source = RouteSource.BUILDER,
             target = tapRoom,
@@ -269,7 +247,7 @@ private fun PairField(
     modifier: Modifier = Modifier,
     highlightTick: Int = 0,
 ) {
-    // З3: разовая пульсация подсветки при смене highlightTick (автоподстановка «Куда»).
+
     val pulse = remember { Animatable(0f) }
     LaunchedEffect(highlightTick) {
         if (highlightTick > 0) {
@@ -284,7 +262,7 @@ private fun PairField(
         border = androidx.compose.foundation.BorderStroke(1.dp, lerp(ColorBorderLight, ColorActiveBlue, pulse.value)),
         modifier = modifier.height(com.politex.ui.theme.Tokens.SearchHeight),
     ) {
-        // BB10: без постоянной подписи сверху — полупрозрачный placeholder внутри поля
+
         Box(
             modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
             contentAlignment = Alignment.CenterStart,

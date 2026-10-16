@@ -10,7 +10,7 @@ class BellServiceAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_START_SERVICE) return
         if (!BellCountdownNotifier.isEnabled(context) || BellTimerService.isRunning) return
-        // SRED8: даже из exempt-контекста старт может не удаться — ретрай через минуту.
+
         if (!BellTimerService.start(context)) BellTimerService.scheduleFallbackAlarm(context)
     }
 

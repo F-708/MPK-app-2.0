@@ -56,8 +56,6 @@ object BellCountdownNotifier {
         SKY("sky", "Яркий синий", 0xFF0072CE.toInt(), true),
         DARK("dark", "Тёмная", 0xFF232527.toInt(), true),
 
-        // v2.0: акцент берётся из выбранного стиля приложения (AppThemeStore.palette.brandFill)
-        // при каждой сборке уведомления; accent=0 здесь — маркер динамического резолва.
         APP("app", "Как в приложении", 0, true),
         ;
 
@@ -147,8 +145,6 @@ object BellCountdownNotifier {
             .apply()
         if (isEnabled(context)) show(context)
     }
-
-
 
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -296,8 +292,7 @@ object BellCountdownNotifier {
             )
 
         val theme = getTheme(context)
-        // v2.0: «Как в приложении» (APP) — акцент берётся из палитры выбранного стиля
-        // приложения при каждой сборке уведомления, а не из фиксированного поля enum.
+
         val accent =
             if (theme == Theme.APP) {
                 AppThemeStore.load(context).palette.brandFill.toArgb()

@@ -5,8 +5,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// ——— Чистые данные teacher-виджетов (SPEC §4.1 фича 8, §6.5) ———
-
 data class TeacherWidgetLesson(
     val lessonNumber: Int,
     val subject: String,
@@ -42,11 +40,9 @@ sealed interface TeacherNextState {
     data class DayOff(val next: NextLessonRef?) : TeacherNextState
 }
 
-/** Чистая логика teacher-виджетов — без Android/БД, покрыта TeacherWidgetLogicTest. */
 object TeacherWidgetLogic {
     fun shortDow(dow: Int): String = TeacherDayLogic.shortDow(dow)
 
-    /** ИДЁТ / следующая сегодня / пусто / пары кончились / выходной (конвенция: минуты из Calendar). */
     fun nextState(
         lessons: List<TeacherWidgetLesson>,
         nowMinutes: Int,
@@ -61,7 +57,6 @@ object TeacherWidgetLogic {
         return if (lessons.isEmpty()) TeacherNextState.EmptyToday(next) else TeacherNextState.DayDone(next)
     }
 
-    /** Следующая пара из кэша ближайших дней: первый не-вс день с парами (без сети — сеть в воркере). */
     fun findNextLesson(days: List<TeacherDayRef>): NextLessonRef? =
         days
             .firstOrNull { it.dow != 7 && it.lessons.isNotEmpty() }
@@ -70,10 +65,6 @@ object TeacherWidgetLogic {
                 NextLessonRef(day.dateString, day.dow, first)
             }
 
-    /**
-     * Грабли v2.x («виджет отключается через день»): кэш-ключ ОБЯЗАН включать дату, минуту
-     * и профиль — иначе вчерашний снапшот отдаётся на той же минуте суток.
-     */
     fun cacheKey(
         date: String,
         minute: Int,
@@ -92,7 +83,6 @@ object TeacherWidgetLogic {
         month1: Int,
     ): String = String.format(Locale.ROOT, "Сегодня, %02d.%02d", dayOfMonth, month1)
 
-    /** «Следующая — вт 09:50, каб. 241» (формат TeacherDayLogic.emptyDayText). */
     fun nextLessonText(next: NextLessonRef?): String {
         if (next == null) return ""
         val room = if (next.lesson.room.isNotBlank()) ", каб. ${next.lesson.room}" else ""
@@ -100,7 +90,6 @@ object TeacherWidgetLogic {
         return "Следующая — ${shortDow(next.dow)}$time$room"
     }
 
-    /** Плашка пустого состояния: заголовок + следующая пара второй строкой (если есть). */
     fun emptyText(
         title: String,
         next: NextLessonRef?,
@@ -109,7 +98,6 @@ object TeacherWidgetLogic {
         return if (n.isBlank()) title else "$title\n$n"
     }
 
-    /** Выходной: «Выходной» + следующая пара из кэша, иначе каноническое «До 1 урока в пн». */
     fun dayOffText(next: NextLessonRef?): String {
         val n = nextLessonText(next)
         return if (n.isBlank()) "Выходной.\nДо 1-й пары в пн" else "Выходной.\n$n"

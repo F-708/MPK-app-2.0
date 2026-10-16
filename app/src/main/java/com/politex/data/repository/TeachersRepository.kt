@@ -21,7 +21,6 @@ class TeachersRepository(
     private val context: Context,
 ) {
 
-    // СРЕД9: пустой результат не кешируется — временный сбой чтения assets не прибивает список навсегда
     fun loadTeachers(): List<Teacher> = cached ?: parseTeachers().takeIf { it.isNotEmpty() }?.also { cached = it } ?: emptyList()
 
     private fun parseTeachers(): List<Teacher> = try {
@@ -41,7 +40,7 @@ class TeachersRepository(
         .map { it.trim() }
         .filter { it.isNotBlank() && !it.startsWith("#") }
         .map { line ->
-            // М20: общий CSV-сплиттер (кавычки внутри значений больше не рвут строку)
+
             val p = Csv.splitRow(line)
             Teacher(
                 name = cell(p, 0),

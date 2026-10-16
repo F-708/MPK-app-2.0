@@ -7,10 +7,6 @@ import com.politex.util.BellCountdownNotifier
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * TR7: стиль «до звонка» в teacher-UI — ТОЛЬКО два варианта. Проверяем чистый маппинг
- * UI-выбор ↔ BellCountdownNotifier.Style: из UI достижимы лишь COMPACT и WITH_SECONDS.
- */
 class TeacherBellStyleTest {
     @Test
     fun `выбор в минутах маппится в COMPACT`() {
@@ -35,8 +31,7 @@ class TeacherBellStyleTest {
 
     @Test
     fun `студенческие стили недостижимые в teacher схлопываются в В минутах`() {
-        // WITH_LESSON/WITH_PROGRESS/WITH_APP_NAME в teacher-UI не предлагаются; если prefs
-        // остались со студенческой стороны — показываем «В минутах», но не теряем WITH_SECONDS.
+
         assertEquals(BellStyleChoice.MINUTES, choiceForStyle(BellCountdownNotifier.Style.WITH_LESSON))
         assertEquals(BellStyleChoice.MINUTES, choiceForStyle(BellCountdownNotifier.Style.WITH_PROGRESS))
         assertEquals(BellStyleChoice.MINUTES, choiceForStyle(BellCountdownNotifier.Style.WITH_APP_NAME))

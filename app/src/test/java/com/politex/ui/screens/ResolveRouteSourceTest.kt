@@ -9,13 +9,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * FF3: тап по кабинету на карте — пиннинг авто/ручного маршрута и заполнение
- * полей конструктора. Чистая функция [resolveRouteSource], без Compose.
- */
 class ResolveRouteSourceTest {
-
-    // --- (а) авто-пиннинг: запиненный маршрут тап НЕ перестраивает ---
 
     @Test
     fun `запиненный маршрут - тап только выбирает кабинет и не трогает маршрут`() {
@@ -57,8 +51,6 @@ class ResolveRouteSourceTest {
         assertEquals("214", res.target)
         assertFalse(res.build)
     }
-
-    // --- (б) тап в конструкторе заполняет A-B и строит при обоих ---
 
     @Test
     fun `конструктор - первый тап заполняет A когда пусто, без build`() {
@@ -144,8 +136,6 @@ class ResolveRouteSourceTest {
         assertEquals("249", res.pairA)
         assertFalse(res.build)
     }
-
-    // --- HH1: проводка fromRoom (предыдущий урок → запись навигации карты) ---
 
     private fun lesson(
         n: Int,

@@ -70,7 +70,6 @@ private class RecordingLessonDao : LessonDao {
     }
 }
 
-/** КРИТ1-фейк: сеть «возвращает» уроки, среди которых есть строка за прошлый месяц (эффект restampByDow). */
 private class RestampingClient : MpkNetworkClient() {
     override suspend fun probeDocument(calendar: Calendar, nameBase: String): ProbeResult = ProbeResult.NotFound(404)
 
@@ -100,7 +99,6 @@ private class RestampingClient : MpkNetworkClient() {
         Result.failure(IOException("offline"))
 }
 
-/** КРИТ3-фейк: полный офлайн — probe даёт NetworkError, загрузки не удаются. */
 private class OfflineClient : MpkNetworkClient() {
     var downloadAttempts = 0
 
@@ -191,7 +189,6 @@ class SyncDateFilterTest {
 
         val result = repo.syncScheduleDetailed(group)
 
-        // тяжёлая загрузка документов не запускается — только лёгкие probe-запросы
         assertEquals(0, client.downloadAttempts)
         assertEquals(SyncOutcome.FoundNoGroup(tomorrowStr(today)), result.getOrNull())
 

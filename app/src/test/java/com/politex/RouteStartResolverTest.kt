@@ -33,11 +33,9 @@ class RouteStartResolverTest {
             lesson(3, "10:35", "320"),
         )
 
-    // --- II1: старт = предыдущий ОТНОСИТЕЛЬНО ЦЕЛЕВОГО урока, время не влияет ---
-
     @Test
     fun `II1 тап по 3-му уроку — старт от кабинета 2-го даже утром до всех уроков`() {
-        // прежнее поведение брало «последний НАЧАВШИЙСЯ» — утром это был главный вход
+
         assertEquals(
             RouteStartResolver.RouteStart.From("223"),
             RouteStartResolver.startForLesson(lessons, lessons[2], SubgroupPref.NEUTRAL),
@@ -86,8 +84,6 @@ class RouteStartResolverTest {
         )
     }
 
-    // --- GG2/GG3: split-предыдущий ---
-
     private val splitDay =
         listOf(
             lesson(1, "08:30", "118", "224", split = true),
@@ -97,7 +93,7 @@ class RouteStartResolverTest {
 
     @Test
     fun `GG2 prev non-split — from = комната предыдущего, без вопроса`() {
-        // тапнут ТЕКУЩИЙ split-урок (3) — он даёт только цель; источник = урок 2
+
         assertEquals(
             RouteStartResolver.RouteStart.From("320"),
             RouteStartResolver.startForLesson(splitDay, splitDay[2], SubgroupPref.NEUTRAL),

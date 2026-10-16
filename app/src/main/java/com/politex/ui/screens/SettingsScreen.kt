@@ -111,8 +111,6 @@ fun SettingsScreen(
         mutableStateOf(WidgetUpdateHelper.isNotificationEnabled(context))
     }
 
-    // R2#11: разрешение на уведомления могли отозвать в системных настройках —
-    // перечитываем флаг на ON_RESUME (тот же паттерн, что для canExactAlarms ниже)
     val settingsLifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(settingsLifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -379,7 +377,7 @@ fun SettingsScreen(
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
                                     checkedTrackColor = ColorBrandBlue,
-                                    // Вёрстка: OFF-состояние различимо (светлый трек + серый палец).
+
                                     uncheckedTrackColor = ColorBorderLight,
                                     uncheckedThumbColor = ColorTextMuted,
                                 ),
@@ -439,7 +437,7 @@ fun SettingsScreen(
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
                                     checkedTrackColor = ColorBrandBlue,
-                                    // Вёрстка: OFF-состояние различимо (светлый трек + серый палец).
+
                                     uncheckedTrackColor = ColorBorderLight,
                                     uncheckedThumbColor = ColorTextMuted,
                                 ),
@@ -457,7 +455,6 @@ fun SettingsScreen(
                 }
             }
 
-            // GG3: подгруппа для split-уроков — маршруты и виджеты ведут в кабинеты выбранной подгруппы
             item {
                 var subgroupPref by remember { mutableStateOf(SubgroupSettings.get(context)) }
                 AppCard(
@@ -560,7 +557,7 @@ fun SettingsScreen(
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
                                     checkedTrackColor = ColorBrandBlue,
-                                    // Вёрстка: OFF-состояние различимо (светлый трек + серый палец).
+
                                     uncheckedTrackColor = ColorBorderLight,
                                     uncheckedThumbColor = ColorTextMuted,
                                 ),
@@ -692,9 +689,6 @@ fun SettingsScreen(
                 }
             }
 
-
-            // BB12/BB15 (admin): сброс флагов обучающих подсказок —
-            // демо-задание и пульс кабинетов вернутся при следующем входе
             if (BuildConfig.FLAVOR == "admin") {
                 item {
                     AppCard(
@@ -739,8 +733,7 @@ fun SettingsScreen(
                         }
                     }
                 }
-                // v2.0 (admin): сброс выбранной группы/подгруппы + закрытие приложения —
-                // при следующем входе снова появится выбор группы (проверка онбординга).
+
                 item {
                     AppCard(
                         modifier = Modifier
@@ -777,7 +770,7 @@ fun SettingsScreen(
                                 filled = false,
                                 modifier = Modifier.testTag("reset_group_btn"),
                                 onClick = {
-                                    // remove, а не putString(""): hasSelectedGroup() = contains(key)
+
                                     WidgetUpdateHelper.getPrefs(context).edit()
                                         .remove("selected_group")
                                         .apply()
@@ -1084,7 +1077,6 @@ private fun BellCountdownNotificationCard() {
                     }
                 }
             }
-
 
             if (isOngoingEnabled) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -1430,8 +1422,7 @@ private fun ActionChip(
             .bouncyClickable(onClick = onClick),
     ) {
         Box(
-            // v2.0: компактная ширина по тексту (fillMaxWidth растягивал чип на всю
-            // строку, вертикаль дублировал heightIn) — масштаб кнопки «СБРОСИТЬ» в норме.
+
             modifier = Modifier.padding(horizontal = 16.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -1450,7 +1441,6 @@ private fun ActionChip(
     }
 }
 
-// GG3: сегмент выбора подгруппы (эталон — DayChip из CollegeScreen)
 @Composable
 private fun SubgroupChip(
     title: String,

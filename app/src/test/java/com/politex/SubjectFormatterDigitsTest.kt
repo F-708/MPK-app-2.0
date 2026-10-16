@@ -5,10 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * GG5: «завтра показывало цифры вместо предметов» — getShortName не должен
- * возвращать цифры (fallback парсера на сырую строку) ни для пустого, ни для цифрового raw.
- */
 class SubjectFormatterDigitsTest {
     private fun assertNoDigits(result: String) {
         assertTrue("результат «$result» содержит цифры", result.none { it.isDigit() })

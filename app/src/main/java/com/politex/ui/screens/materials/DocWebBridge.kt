@@ -8,13 +8,8 @@ import java.io.File
 import java.io.InputStream
 import java.io.RandomAccessFile
 
-// Мост и чистая логика WebView-просмотра PDF/DOCX.
-// Порты из gander (MIT, tools/reader/gander): DocRange.kt, PortMessage.kt, ViewerPolicy.kt,
-// WebViewFloor.kt — см. READER-PLAN.md (D6/D7/D9), лицензии: assets/viewer-licences.md.
-
 internal const val ASSET_HOST = "appassets.androidplatform.net"
 
-/** CSP каждой viewer-страницы. Дословно совпадает с meta-тегом html-страниц в assets/viewer (ViewerAssetsTest). */
 internal object ViewerPolicy {
     const val CSP =
         "default-src 'none'; " +
@@ -31,14 +26,10 @@ internal object ViewerPolicy {
             "base-uri 'none'"
 }
 
-// ---------------------------------------------------------------- DocRange (локальные файлы)
-
-/** Выше этого документ отдаётся диапазонами, а не читается целиком (порог памяти, не скорости). */
 internal const val RANGE_THRESHOLD_BYTES = 16L * 1024 * 1024
 
 internal fun useRanges(total: Long): Boolean = total >= RANGE_THRESHOLD_BYTES
 
-/** «bytes=start-end» против известного total. Null = отдать целиком (неразбор/неудовлетворимый диапазон). */
 internal fun parseRange(header: String, total: Long): Pair<Long, Long>? {
     if (total <= 0) return null
     val spec = header.substringAfter("bytes=", "").substringBefore(',').trim()
@@ -52,7 +43,6 @@ internal fun parseRange(header: String, total: Long): Pair<Long, Long>? {
 internal fun documentMime(ext: String): String =
     MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream"
 
-/** Читает не больше [remaining] байт и закрывает источник вместе с [alsoClose]. */
 internal class LimitedInputStream(
     private val source: InputStream,
     private var remaining: Long,
@@ -78,7 +68,6 @@ internal class LimitedInputStream(
     }
 }
 
-/** Диапазон [start..end] локального файла как поток (RandomAccessFile, без skip-петли). */
 internal fun fileSlice(file: File, start: Long, end: Long): InputStream {
     val raf = RandomAccessFile(file, "r")
     raf.seek(start)
@@ -89,17 +78,13 @@ internal fun fileSlice(file: File, start: Long, end: Long): InputStream {
     return LimitedInputStream(input, end - start + 1, raf)
 }
 
-// ---------------------------------------------------------------- WebViewFloor (срезан до PDF/DOCX)
-
 internal const val PDFJS_MIN_CHROMIUM = 125
 internal const val DOCX_PREVIEW_MIN_CHROMIUM = 80
 internal const val PLAUSIBLE_CHROMIUM_MAJOR = 30
 internal val CHROME_TOKEN = Regex("""Chrome/(\d+)""")
 
-/** Провайдеры, которых нельзя заменить (Huawei без Google-сервисов); версия у них не про Chromium. */
 internal val LOCKED_WEBVIEW_PACKAGES = setOf("com.huawei.webview")
 
-/** Chromium major из user agent (Chrome/NNN), иначе из versionName пакета. Null = не удалось прочесть. */
 internal fun chromiumMajor(userAgent: String?, packageVersionName: () -> String?): Int? {
     val fromUa = userAgent
         ?.let { CHROME_TOKEN.find(it) }
@@ -112,70 +97,43 @@ internal fun chromiumMajor(userAgent: String?, packageVersionName: () -> String?
         ?.takeIf { it >= PLAUSIBLE_CHROMIUM_MAJOR }
 }
 
-/** major/locked текущего WebView-провайдера; в Robolectric/без провайдера → (null, false). */
 internal fun webViewEngineInfo(context: Context): Pair<Int?, Boolean> {
     val pkg = runCatching { WebViewCompat.getCurrentWebViewPackage(context) }.getOrNull()
     return chromiumMajor(null) { pkg?.versionName } to (pkg?.packageName in LOCKED_WEBVIEW_PACKAGES)
 }
 
-/**
- * PDF в WebView только когда движок точно достаточно новый и файл целый.
- * Null major трактуется КОНСЕРВАТИВНО (нативный PdfRenderer) — в отличие от gander:
- * у MPK нативный путь полноценный (аннотации), а не «плашка обнови WebView».
- */
 internal fun pdfRouteWeb(fileExists: Boolean, pageCount: Int, major: Int?, locked: Boolean): Boolean =
     fileExists && pageCount > 0 && !locked && major != null && major >= PDFJS_MIN_CHROMIUM
 
-/**
- * DOCX в WebView, если не правлен (textEdited показываем плоским текстом из БД) и движок
- * потянет docx-preview. На locked-провайдере (Huawei) с нечитаемой версией — КОНСЕРВАТИВНО
- * плоский рендер: у docx-пути нет порта и fallback-сигнала, битый рендер был бы тупиком.
- */
 internal fun docxRouteWeb(textEdited: Boolean, fileExists: Boolean, major: Int?, locked: Boolean): Boolean {
     if (textEdited || !fileExists) return false
     return if (major == null) !locked else major >= DOCX_PREVIEW_MIN_CHROMIUM
 }
 
-// ---------------------------------------------------------------- Индексы страниц
-
-// QA CRITICAL #2: БД/закладки/аннотации MPK 0-based, порт gander 1-based. Конверсия ТОЛЬКО здесь.
 internal fun pageToPort(zeroBased: Int): Int = zeroBased + 1
 
 internal fun pageFromPort(oneBased: Int): Int = oneBased - 1
 
-// ---------------------------------------------------------------- Протокол порта
-
-// v2.0-ит2: ink-протокол (M/S/E/K, ink/zap/layout) удалён вместе с рисованием —
-// остался контракт gander: страница/поиск/пароль + переход «g<n>».
-
-/** Что шлёт native. Одна буква verb, затем payload (контракт gander: q/n/p/c/g/i). */
 internal object PortCommand {
     fun query(q: String) = "q$q"
     fun next() = "n"
     fun prev() = "p"
     fun clear() = "c"
 
-    /** К странице, 1-based. В PDF обрабатывает pdf.mjs, в DOCX — mpk-page.js. */
     fun goToPage(n: Int) = "g$n"
 
     fun nightMode(on: Boolean) = if (on) "i1" else "i0"
 }
 
-/** Что прислала страница, уже прочитанное и признанное годным. */
 internal sealed interface PortMessage {
-    /** Страница под серединой экрана, 1-based (формат gander «page N OF»). */
+
     data class Page(val n: Int, val of: Int) : PortMessage
 
     data class SearchCount(val at: Int, val total: Int, val done: Boolean) : PortMessage
 
-    /** PDF запросил пароль: pdf.mjs сам показывает карточку ввода; native не вмешивается. */
     data object Locked : PortMessage
 }
 
-/**
- * Граница безопасности: всё, что говорит документ, читается как маленькая фиксированная
- * форма или молча дропается. Ошибок наружу нет намеренно (порт из gander).
- */
 internal fun parsePortMessage(data: String?): PortMessage? {
     if (data == "locked") return PortMessage.Locked
     val said = data?.split(" ") ?: return null

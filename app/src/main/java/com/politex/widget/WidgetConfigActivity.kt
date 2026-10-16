@@ -100,8 +100,7 @@ class WidgetConfigActivity : ComponentActivity() {
 
                         WidgetStyle.entries.forEach { option ->
                             val isSelected = style == option
-                            // v2.0: свотч показывает РЕАЛЬНЫЕ цвета (у «Как в приложении» —
-                            // из палитры выбранной темы, не из полей-заглушек enum).
+
                             val colors = option.colors(this@WidgetConfigActivity)
                             OptionRow(
                                 selected = isSelected,
@@ -127,7 +126,6 @@ class WidgetConfigActivity : ComponentActivity() {
                             )
                         }
 
-                        // v2.0: скругление углов виджета с живым превью.
                         Spacer(modifier = Modifier.height(18.dp))
                         SectionTitle("Скругление углов")
                         val previewColors = style.colors(this@WidgetConfigActivity)
@@ -346,10 +344,8 @@ object WidgetOptions {
     private const val PREF_SHOW_ROOM = "widget_show_room_"
     private const val PREF_SECONDS = "widget_seconds_"
 
-    // v2.0: скругление углов виджета, dp (0 = квадратные, как раньше).
     private const val PREF_RADIUS = "widget_radius_"
 
-    /** Допустимые радиусы (чипы в конфигураторе). */
     val RADII_DP = listOf(0, 8, 16, 24, 28)
 
     fun radius(

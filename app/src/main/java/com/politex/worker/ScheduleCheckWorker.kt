@@ -46,8 +46,6 @@ class ScheduleCheckWorker(
                 prefs.getBoolean("checked_${groupName}_$ds", false)
         }
 
-        // SRED10: пишем отметку и заодно чистим notified_/checked_ ключи старше 7 дней,
-        // иначе SharedPreferences бесконечно растёт по одной паре ключей на день.
         fun mark(key: String) {
             val editor = prefs.edit().putBoolean(key, true)
             staleMarkKeys(prefs.all.keys, System.currentTimeMillis()).forEach { editor.remove(it) }
@@ -136,8 +134,6 @@ class ScheduleCheckWorker(
 
         private val DATE_IN_KEY = Regex("""\d{2}\.\d{2}\.\d{4}""")
 
-        // SRED10: notified_/checked_ ключи, чья дата (dd.MM.yyyy) старше keepDays дней.
-        // Чистая функция — тестируется без SharedPreferences.
         internal fun staleMarkKeys(
             allKeys: Set<String>,
             nowMillis: Long,

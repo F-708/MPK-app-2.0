@@ -48,7 +48,7 @@ class GroupCodePickerTest {
         assertFalse(validateAgainstCatalog("43О", catalog))
         assertFalse(validateAgainstCatalog("41", catalog))
         assertFalse(validateAgainstCatalog("", catalog))
-        // нормализация пробелов/дефисов как в GroupCatalog.normalize
+
         assertTrue(validateAgainstCatalog("4-1 О", catalog))
         assertFalse(validateAgainstCatalog("41Ы", catalog))
     }
@@ -69,11 +69,11 @@ class GroupCodePickerTest {
 
     @Test
     fun `максимальный номер группы для курса из каталога`() {
-        // catalog: 11О, 11Д, 21Г, 41О, 41Д, 42Э
+
         assertEquals(1, groupPickerMaxNumber(catalog, 1))
         assertEquals(1, groupPickerMaxNumber(catalog, 2))
         assertEquals(2, groupPickerMaxNumber(catalog, 4))
-        // курс без групп в каталоге / курс не выбран — ограничение снимается (1..9)
+
         assertEquals(9, groupPickerMaxNumber(catalog, 3))
         assertEquals(9, groupPickerMaxNumber(catalog, null))
         assertEquals(9, groupPickerMaxNumber(emptyList(), 1))
@@ -81,7 +81,7 @@ class GroupCodePickerTest {
 
     @Test
     fun `курс и номер без групп в каталоге - буквы пустые`() {
-        // UI при пустых буквах скрывает LazyRow, показывает «Группы <код> нет в расписании», ОТКРЫТЬ disabled
+
         assertTrue(groupPickerLetters(catalog, 4, 3).isEmpty())
         assertTrue(groupPickerLetters(catalog, 3, 1).isEmpty())
     }
@@ -96,7 +96,7 @@ class GroupCodePickerTest {
         val text = src.readText()
         assertFalse(text.contains("group_picker_open_anyway"))
         assertFalse(text.contains("Всё равно открыть"))
-        // заглушка вместо букв на месте
+
         assertTrue(text.contains("нет в расписании"))
         assertTrue(text.contains("group_picker_no_groups"))
     }

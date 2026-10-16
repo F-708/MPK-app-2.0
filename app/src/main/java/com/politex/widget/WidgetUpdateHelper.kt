@@ -88,22 +88,8 @@ object WidgetUpdateHelper {
         return System.currentTimeMillis() - last > STALE_AFTER_MS
     }
 
-    /**
-     * RC1 (v2.0): виджет «сбрасывается» каждый день и не показывает расписание. Причина —
-     * уроки КОНКРЕТНОЙ даты попадают в Room только если вчерашний ScheduleCheckWorker успел
-     * их скачать (окно 10:00–21:00 + отметка checked_). Утром их часто ещё нет, и
-     * [WidgetData.filterTodayLessons] откатывается на недельный шаблон, а шаблонных строк
-     * sync не пишет → «Уроков нет» весь день.
-     *
-     * Здесь: раз в сутки на учебный день, если в БД нет строк СЕГОДНЯШНЕЙ даты — синхроним
-     * сегодня напрямую и перерисовываем виджеты. Сеть может быть недоступна → между попытками
-     * выдерживаем [SYNC_RETRY_MS], а не долбим каждую минуту; успешная синхронизация
-     * отмечается done-флагом на дату и больше не повторяется.
-     */
     private const val SYNC_RETRY_MS = 15 * 60_000L
 
-    // goAsync() живёт ~10с; сетевой sync обязан уложиться и оставить время на
-    // рендер и перевзвод будильника, иначе receiver рвётся системой на середине.
     internal const val SYNC_BUDGET_MS = 6_000L
 
     suspend fun ensureTodaySchedule(context: Context) {
@@ -111,7 +97,7 @@ object WidgetUpdateHelper {
         if (group.isBlank()) return
         val cal = java.util.Calendar.getInstance()
         val dow = com.politex.util.Dow.of(cal)
-        if (dow == 7) return // воскресенье — не учебный день
+        if (dow == 7) return
         val today = WidgetData.todayDateString()
         val prefs = getPrefs(context)
         val doneKey = "today_synced_${group}_$today"
@@ -128,16 +114,11 @@ object WidgetUpdateHelper {
             return
         }
 
-        // Кулдаун между попытками синка (сеть/док может быть ещё не опубликован).
         val attemptKey = "today_sync_attempt_${group}_$today"
         val now = System.currentTimeMillis()
         if (now - prefs.getLong(attemptKey, 0L) < SYNC_RETRY_MS) return
         prefs.edit().putLong(attemptKey, now).apply()
 
-        // syncScheduleForDate возвращает success даже когда документ ещё не опубликован
-        // (пустой результат) — поэтому «готово» ставим ТОЛЬКО если в БД реально появились
-        // строки сегодняшней даты. Иначе ретраим в следующий тик (через кулдаун).
-        // Бюджет по времени: сеть внутри окна goAsync() (~10с) не должна рвать receiver.
         runCatching {
             kotlinx.coroutines.withTimeoutOrNull(SYNC_BUDGET_MS) {
                 com.politex.AppGraph.scheduleRepository.syncScheduleForDate(group, cal)
@@ -156,8 +137,6 @@ object WidgetUpdateHelper {
         }
     }
 
-    // Ключи today_synced_/today_sync_attempt_ копятся по паре на день — удаляем все,
-    // кроме сегодняшней даты (аналог staleMarkKeys у ScheduleCheckWorker).
     private fun pruneTodaySyncKeys(prefs: SharedPreferences, today: String) {
         val ed = prefs.edit()
         prefs.all.keys
@@ -171,8 +150,6 @@ object WidgetUpdateHelper {
         NowNextWidgetProvider.updateAll(context)
     }
 
-    // HH2: смена подгруппы меняет только NowNext+Today — перерисовать их сразу,
-    // не дожидаясь тика (Today не входит в минутное обновление). Вне main-потока: buildViews делает runBlocking-запрос БД.
     fun refreshScheduleWidgets(context: Context) {
         widgetScope.launch {
             NowNextWidgetProvider.updateAll(context)
@@ -192,8 +169,6 @@ object WidgetUpdateHelper {
         }
     }
 
-    // D1: общий «exact если можно, иначе inexact while-idle» для всех будильников приложения.
-    // Используется в WidgetAlarm.scheduleNext, BellTimerService.scheduleFallbackAlarm.
     fun setExactOrIdle(
         context: Context,
         triggerAt: Long,
@@ -212,8 +187,6 @@ object WidgetUpdateHelper {
         }
     }
 
-    // D3: единый PendingIntent «открыть приложение» для всех виджетов (тап по корню/чипу).
-    // code — из неймспейсов SRED11, extras собираются только когда нужны (семантика прежняя).
     fun openAppIntent(
         context: Context,
         code: Int,
@@ -239,7 +212,6 @@ object WidgetUpdateHelper {
         )
     }
 
-    // D5: показать idle-колокольчик (AVD) в пустом состоянии виджета.
     fun showIdle(
         views: RemoteViews,
         id: Int = R.id.iv_idle,
@@ -248,12 +220,6 @@ object WidgetUpdateHelper {
         views.setViewVisibility(id, android.view.View.VISIBLE)
     }
 
-    /**
-     * v2.0: фон виджета со скруглением из настроек (WidgetConfigActivity).
-     * Shape-drawable + setColorFilter вместо битмапа: RemoteViews гоняют битмапы
-     * через binder (лимит ~1.5МБ на всю транзакцию) — векторный фон работает на любом
-     * размере виджета и с любым цветом стиля, включая динамический «как в приложении».
-     */
     fun applyWidgetBackground(
         views: RemoteViews,
         context: Context,
@@ -275,7 +241,6 @@ object WidgetUpdateHelper {
         }
 }
 
-// SRED9: очистка per-widget настроек при удалении виджета, иначе ключи текут навсегда.
 object WidgetPrefs {
     private val PREFIXES = listOf("widget_style_", "countdown_mode_", "widget_show_room_", "widget_seconds_", "widget_radius_")
 

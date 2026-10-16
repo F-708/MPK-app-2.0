@@ -8,7 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ParserAnchorTest {
-    // СРЕД6: detectLessonNumber заякорен — цифра кабинета не становится номером урока
 
     @Test
     fun `номер урока распознаётся из номера, урока, пары и значка`() {
@@ -29,8 +28,6 @@ class ParserAnchorTest {
         assertNull(MpkScheduleParser.detectLessonNumber(listOf("Математика 205")))
     }
 
-    // СРЕД7: xmlToPseudoTable — ячейка из нескольких рангов не разваливается на колонки
-
     @Test
     fun `мульти-ран ячейка остаётся одной колонкой`() {
         val xml =
@@ -45,8 +42,6 @@ class ParserAnchorTest {
 
         assertEquals("│Иванов И.И.║41О│\n", TeacherScheduleParser.xmlToPseudoTable(xml))
     }
-
-    // СРЕД12: линейка уроков с ведущими пустыми ячейками по-прежнему пропускается
 
     @Test
     fun `линейка с ведущими пустыми ячейками не становится слотами преподавателя`() {

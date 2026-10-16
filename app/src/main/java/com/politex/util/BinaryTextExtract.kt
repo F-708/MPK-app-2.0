@@ -2,11 +2,6 @@ package com.politex.util
 
 import java.nio.charset.Charset
 
-/**
- * R1-СЖАТИЕ: экстракторы текстовых ранов из бинарных .doc (UTF-16LE и CP1251) —
- * были продублированы в MpkScheduleParser и TeacherScheduleParser. Различия параметризованы:
- * [bellAsTab] (0x07 → таб), минимальная длина рана и предикат приема рана.
- */
 object BinaryTextExtract {
     val CP1251: Charset = Charset.forName("windows-1251")
 

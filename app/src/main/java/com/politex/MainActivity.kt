@@ -49,10 +49,9 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.FLAVOR == "teacher") {
             com.politex.ui.teacher.initUiScale(this)
             MpkWorkManagerHelper.setupTeacherSync(this)
-            // TR-W3: «до звонка» в teacher-сборке живой — watchdog возвращает FGS после убийства OEM
+
             MpkWorkManagerHelper.setupBellServiceWatchdog(this)
-            // TR-W3: шторка/виджет «до звонка» — общие звонки колледжа сразу при старте,
-            // а не на первом минутном тике (идемпотентно; в standard профиль null → no-op)
+
             com.politex.widget.TeacherWidgetUpdater.forceCollegeBellDefaults(this)
         } else {
             MpkWorkManagerHelper.setupPeriodicScheduleCheck(this)
@@ -66,16 +65,12 @@ class MainActivity : ComponentActivity() {
             val navController = rememberNavController()
             this@MainActivity.navController = navController
 
-            // Релиз-ревью №3: в teacher-сборке нет NavHost-графа — handleIntent с EXTRA_ROOM
-            // уронил бы navigate(); teacher-экстры (EXTRA_OPEN_TAB/EXTRA_MARK_OVERRIDES)
-            // читает TeacherNav сам.
             if (BuildConfig.FLAVOR != "teacher") {
                 LaunchedEffect(Unit) {
                     handleIntent(intent, navController)
                 }
             }
 
-            // Единственная точка ветвления flavor (долг чести №6: ноль FLAVOR в остальном коде)
             if (BuildConfig.FLAVOR == "teacher") {
                 com.politex.ui.teacher.TeacherRoot(modifier = Modifier.fillMaxSize())
             } else {

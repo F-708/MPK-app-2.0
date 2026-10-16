@@ -8,14 +8,6 @@ import android.widget.RemoteViews
 import com.politex.R
 import kotlinx.coroutines.launch
 
-/**
- * Виджет преподавателя «Следующая пара» (SPEC §4.1 фича 8, §6.5), 4×1 и 2×2 — один
- * провайдер, layout адаптируется. Регистрация ТОЛЬКО в teacher-сборке
- * (src/teacher/AndroidManifest.xml).
- *
- * Состояния: ИДЁТ / ДАЛЬШЕ (кабинет КРУПНО + предмет мельче) / «Сегодня пар нет» +
- * следующая пара / «Выходной» / «Выберите себя в приложении». Метка «обновлено в HH:MM».
- */
 class TeacherNextWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(
         context: Context,
@@ -27,7 +19,7 @@ class TeacherNextWidgetProvider : AppWidgetProvider() {
             try {
                 ids.forEach { id -> runCatching { manager.updateAppWidget(id, buildViews(context, id, manager)) } }
             } finally {
-                // GG8(а): перевзвод будильника переживает падение сборки виджета
+
                 WidgetAlarm.scheduleNext(context)
                 pending.finish()
             }
@@ -49,14 +41,14 @@ class TeacherNextWidgetProvider : AppWidgetProvider() {
         appWidgetId: Int,
         newOptions: android.os.Bundle?,
     ) {
-        // 4×1 ↔ 2×2: пересобрать при ресайзе (высота решает, компактный ли вариант)
+
         WidgetUpdateHelper.widgetScope.launch {
             runCatching { manager.updateAppWidget(appWidgetId, buildViews(context, appWidgetId, manager)) }
         }
     }
 
     companion object {
-        // 4×1 ≈ 40dp, 2×2 ≈ 110dp (формула n*70-30) — порог компактного варианта
+
         private const val COMPACT_MAX_HEIGHT_DP = 70
 
         suspend fun updateAll(context: Context) {
@@ -74,14 +66,14 @@ class TeacherNextWidgetProvider : AppWidgetProvider() {
             val style = WidgetStyle.load(context, appWidgetId)
 
             views.setInt(R.id.teacher_next_root, "setBackgroundColor", style.backgroundColor)
-            // v2.3 «белое на белом»: каждый TextView получает явный цвет из стиля
+
             views.setTextColor(R.id.tv_next_status, style.subColor)
             views.setTextColor(R.id.tv_next_time, style.mainColor)
             views.setTextColor(R.id.tv_next_groups, style.subColor)
             views.setTextColor(R.id.tv_next_subject, style.mainColor)
             views.setTextColor(R.id.tv_next_updated, style.subColor)
             views.setTextColor(R.id.tv_next_empty, style.mainColor)
-            // кабинет КРУПНО и контрастно: chip на highlight-подложке, цвет mainColor
+
             views.setTextColor(R.id.tv_next_room, style.mainColor)
             views.setInt(R.id.tv_next_room, "setBackgroundColor", style.highlightColor)
             views.setViewVisibility(R.id.iv_idle, android.view.View.GONE)
@@ -111,7 +103,6 @@ class TeacherNextWidgetProvider : AppWidgetProvider() {
                 if (updated.isNotBlank()) views.setTextViewText(R.id.tv_next_updated, updated)
             }
 
-            // Тап → открытие приложения (MainActivity, без deep-link — T4)
             views.setOnClickPendingIntent(
                 R.id.teacher_next_root,
                 TeacherWidgetUpdater.openAppIntent(context, 5_000_000 + appWidgetId),
@@ -149,7 +140,7 @@ class TeacherNextWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.tv_next_empty, text)
             views.setTextColor(R.id.tv_next_empty, style.mainColor)
             views.setViewVisibility(R.id.tv_next_empty, android.view.View.VISIBLE)
-            // колокольчик-AVD сохранён (§6.5); в компакте 4×1 не влезает — только текст
+
             if (!compact) WidgetUpdateHelper.showIdle(views)
         }
     }

@@ -8,7 +8,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.politex.ui.theme.ColorBrandBlue
 
-/** R2-дубль12: общий заголовок секции (был SectionLabel в CollegeScreen и SectionHeader в SettingsScreen). */
 @Composable
 fun SectionCaption(
     text: String,

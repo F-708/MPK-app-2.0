@@ -5,7 +5,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** AA4 — кликабельность шильда «Ведёт у вас» — чистая функция canToggleLeads. */
 class TeacherLeadsToggleTest {
     @Test
     fun `авто-факт уверен и не снят — шильд НЕ кликабельна`() {

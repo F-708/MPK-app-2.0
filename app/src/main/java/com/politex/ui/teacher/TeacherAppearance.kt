@@ -45,11 +45,6 @@ import com.politex.util.AppThemeStore
 import com.politex.util.UiScale
 import androidx.compose.ui.text.style.TextOverflow
 
-/**
- * TR-W4: «Масштаб интерфейса» 75/100/125% — три сегмента одним рядом (заказчик:
- * «шагом 25%... аккуратно, чтобы не пересекалось»). Uniform LocalDensity (ScaledDensityProvider
- * в TeacherRoot) масштабирует dp и sp одинаково → геометрия не разъезжается.
- */
 @Composable
 fun ScaleCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -96,11 +91,6 @@ fun ScaleCard(modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * TR-W4: «Тема приложения» — копия студенческого блока swatches (SettingsScreen.kt:585-640):
- * те же 7 палитр, тот же AppThemeStore (save → applyAppTheme реактивно), тот же визуал
- * (квадрат topBar с полосой brandBlue, подпись, выбранная — обводка 2dp ColorTopBar).
- */
 @Composable
 fun ThemeSwatchesCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current

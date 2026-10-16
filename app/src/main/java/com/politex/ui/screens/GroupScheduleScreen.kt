@@ -117,14 +117,11 @@ internal fun pickForeignGroupLessons(
     return rows.filter { it.dateString.isBlank() }
 }
 
-// Сеть только при пустом кэше или явном действии пользователя
 internal fun needsFetch(
     hasCachedLessons: Boolean,
     userForced: Boolean,
 ): Boolean = userForced || !hasCachedLessons
 
-// Z6: трёхшаговый пикер «курс, номер, буква».
-// Канонический код группы по GroupParser/GroupCatalog: <курс 1-4><номер 1-9><буква>, ровно 3 символа («41О»).
 internal fun buildGroupCode(
     course: Int?,
     number: Int?,
@@ -143,8 +140,6 @@ internal fun validateAgainstCatalog(
     return catalog.any { it == normalized }
 }
 
-// BB6: максимум номеров групп для курса по каталогу («<курс><номер><буква>», номер = средняя цифра).
-// Курс не выбран или в каталоге нет групп этого курса (каталог может отставать) — 9, т.е. без ограничения.
 internal fun groupPickerMaxNumber(
     catalog: List<String>,
     course: Int?,
@@ -156,9 +151,6 @@ internal fun groupPickerMaxNumber(
         .maxOfOrNull { it[1] - '0' } ?: 9
 }
 
-// Буквы, реально существующие в каталоге для курса+номера; нет совпадений — пустой список
-// (UI скрывает буквы и показывает «Группы <код> нет в расписании»).
-// Фолбэк на буквы специальностей — только если каталог вовсе пуст/не читается.
 internal fun groupPickerLetters(
     catalog: List<String>,
     course: Int?,
@@ -223,12 +215,11 @@ fun GroupScheduleScreen(
 
     var syncError by remember(selectedGroupName) { mutableStateOf<String?>(null) }
     var syncEmptyNotice by remember(selectedGroupName) { mutableStateOf<String?>(null) }
-    // BB14: последний исход синка с его датой — empty-state показывает его только для своего слота
+
     var lastOutcome by remember(selectedGroupName) { mutableStateOf<SyncOutcome?>(null) }
 
     val foreignInfo = remember(selectedGroupName) { GroupParser.parse(selectedGroupName) }
 
-    // R2#8: общая асинхронная загрузка + кэш с инвалидацией (см. util/KnownTeachers.kt)
     val isTeacherKnown: (String) -> Boolean = com.politex.ui.util.rememberIsTeacherKnown()
 
     val realNow = rememberToday()
@@ -242,7 +233,6 @@ fun GroupScheduleScreen(
         foreignInfo?.hasSaturdayClasses == true ||
             allForeignLessons?.any { it.dayOfWeek == 6 } == true
 
-    // R2-дубль3: общий хелпер слотов «сегодня/завтра» (util/DaySlots.kt)
     val daySlots =
         remember(selectedGroupName, saturdayIsSchoolDay, realNow, allForeignLessons) {
             com.politex.ui.util.daySlots(realNow, saturdayIsSchoolDay) { cal ->
@@ -276,8 +266,7 @@ fun GroupScheduleScreen(
         syncError = null
         syncEmptyNotice = null
         scope.launch {
-            // BB14: ручное обновление синкает дату ВИДИМОГО слота; авто-синк при входе —
-            // прежний охват «сегодня + завтра», чтобы оба слота заполнялись без тапов
+
             val result = scheduleRepository.syncScheduleDetailed(
                 group,
                 force = force,
@@ -300,8 +289,6 @@ fun GroupScheduleScreen(
         }
     }
 
-    // Кэш-первым: уроки выбранной группы уже лежат в БД (файл разобран на вкладке расписания) —
-    // авто-синк не дёргает сеть/probe; сеть только при пустом результате или явном нажатии кнопки
     var autoCheckDone by remember(selectedGroupName) { mutableStateOf(false) }
     LaunchedEffect(selectedGroupName, allForeignLessons) {
         if (selectedGroupName.isBlank() || autoCheckDone) return@LaunchedEffect
@@ -420,7 +407,7 @@ fun GroupScheduleScreen(
         AppDivider()
 
         if (selectedGroupName.isBlank()) {
-            // ponytail: GroupCatalog.load читает asset 310B на main thread — ничтожно; кэш, если каталог вырастет
+
             val catalogCodes = remember(context) { GroupCatalog.load(context).all() }
             GroupSchedulePicker(
                 selectedCourse = selectedCourse,
@@ -597,8 +584,7 @@ fun GroupScheduleScreen(
                             )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
-                        // BB14: уведомление синка показываем только если оно про текущий слот,
-                        // иначе короткий честный ответ про эту дату (без «загружено» про чужой день)
+
                         val noticeForActiveDate = syncEmptyNotice?.takeIf { lastOutcome?.date == activeDateString }
                         Text(
                             text =
@@ -670,7 +656,7 @@ fun GroupScheduleScreen(
                     }
                 }
             } else {
-                // R2-дубль4: общий билдер слотов (ScheduleScreen + GroupScheduleScreen)
+
                 val slots = remember(lessons) { lessonSlots(lessons) }
 
                 LazyColumn(
@@ -721,8 +707,6 @@ private fun GroupSchedulePicker(
     var selectedNumber by rememberSaveable { mutableStateOf<Int?>(null) }
     var selectedLetter by rememberSaveable { mutableStateOf<Char?>(null) }
 
-    // BB6: номер ограничен максимумом из каталога для выбранного курса;
-    // выбранный ранее номер сверх лимита сбрасывается
     val maxNumber =
         remember(catalogCodes, selectedCourse) { groupPickerMaxNumber(catalogCodes, selectedCourse) }
     val number = selectedNumber?.takeIf { it in 1..maxNumber }
@@ -844,7 +828,7 @@ private fun GroupSchedulePicker(
                 }
             }
         } else if (number != null) {
-            // BB6: для выбранных курса+номера нет групп в каталоге — букв нет, код не собрать, ОТКРЫТЬ disabled
+
             Text(
                 text = "Группы $selectedCourse$number нет в расписании",
                 style =
@@ -910,7 +894,6 @@ private fun GroupSchedulePicker(
             }
         }
 
-        // BB6: открытие кода вне каталога убрано заказчиком — кнопка ОТКРЫТЬ disabled без валидного кода
         Spacer(modifier = Modifier.height(12.dp))
     }
 }
@@ -968,4 +951,3 @@ private fun PickerChip(
         }
     }
 }
-

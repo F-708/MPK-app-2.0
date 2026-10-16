@@ -7,7 +7,6 @@ import org.junit.Test
 
 class GradeDeleteActionTest {
 
-    // Спека doubleTapDeleteState(tapCount, withinTimeout) поверх чистого gradeDeleteAction
     private fun doubleTapDeleteState(tapCount: Int, withinTimeout: Boolean): DeleteArmState {
         var state = DeleteArmState.NONE
         if (tapCount >= 1) state = gradeDeleteAction(state, tapped = true, expired = false)

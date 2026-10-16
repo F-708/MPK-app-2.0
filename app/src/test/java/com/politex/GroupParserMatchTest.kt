@@ -6,7 +6,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GroupParserMatchTest {
-    // СРЕД11: contains-шорткат убран — совпадение только по regex с границами
 
     @Test
     fun `точное и обрамлённое совпадение находится`() {

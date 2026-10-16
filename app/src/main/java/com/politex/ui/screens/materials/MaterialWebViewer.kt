@@ -59,10 +59,6 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import androidx.compose.ui.text.style.TextOverflow
 
-// WebView-просмотр PDF (pdf.js) и DOCX (docx-preview) — рендер из gander (MIT),
-// своя обвязка: READER-PLAN.md D3/D6/D9. Security-инварианты — в комментарии к WebView.
-// v2.0-ит2: рисование убрано (лагало) — закладки и счётчик страниц остались.
-
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun MaterialWebViewer(
@@ -74,11 +70,10 @@ fun MaterialWebViewer(
 ) {
     val scope = rememberCoroutineScope()
     val isPdf = item.ext == "pdf"
-    // Закладки/страницы — и в PDF, и в DOCX (mpk-page.js шлёт «page N OF» для docx).
+
     val canBookmark = isPdf || item.ext == "docx"
 
-    // ---------------------------------------------------------------- страницы / тулбар
-    var pageAt by remember(item.id) { mutableIntStateOf(0) } // 0-based
+    var pageAt by remember(item.id) { mutableIntStateOf(0) }
     var pageTotal by remember(item.id) { mutableIntStateOf(0) }
     var showBookmarkList by remember(item.id) { mutableStateOf(false) }
     var showAddBookmark by remember(item.id) { mutableStateOf(false) }
@@ -91,7 +86,6 @@ fun MaterialWebViewer(
 
     LaunchedEffect(rendererGone) { if (rendererGone) onFallbackNative() }
 
-    // ---------------------------------------------------------------- порт / WebView
     val portRef = remember(item.id) { arrayOfNulls<WebMessagePortCompat>(1) }
     val webRef = remember(item.id) { arrayOfNulls<WebView>(1) }
 
@@ -111,9 +105,6 @@ fun MaterialWebViewer(
                 scope.launch { dao.setLastPage(item.id, pageFromPort(said.n)) }
             }
 
-            // PDF с паролем: pdf.mjs сам показывает карточку ввода пароля внутри страницы
-            // (vwAskPassword) — fallback в нативный НЕ делаем, PdfRenderer шифрованные
-            // файлы не открывает вовсе (был бы ложный plaque «повреждён»).
             PortMessage.Locked -> Unit
             is PortMessage.SearchCount -> Unit
             null -> Unit
@@ -132,11 +123,10 @@ fun MaterialWebViewer(
             },
         )
         portRef[0] = ends[0]
-        // Порт адресуется своему origin, не «*»: его не должна получить чужая страница.
+
         WebViewCompat.postWebMessage(w, WebMessageCompat("vw-search-port", arrayOf(ends[1])), Uri.parse("https://$ASSET_HOST"))
     }
 
-    // ---------------------------------------------------------------- UI
     Column(modifier = modifier.fillMaxSize().background(ColorBgMain)) {
         MaterialViewerTopBar(title = item.title, testTag = if (isPdf) "web_pdf_top_bar" else "web_docx_top_bar", onBack = onBack) {
             if (pageTotal > 0) {
@@ -174,9 +164,6 @@ fun MaterialWebViewer(
             }
         }
 
-        // v2.0-ит2 (#18): панель закладок — ОВЕРЛЕЙ поверх WebView (Box), а не элемент
-        // Column: WebView больше не ресайзится при открытии/закрытии, и тёмный кадр
-        // недорендера (фон страницы pdf.js) при закрытии панели исчез физически.
         Box(modifier = Modifier.fillMaxSize()) {
             key(item.id) {
                 AndroidView(
@@ -230,8 +217,6 @@ fun MaterialWebViewer(
     }
 }
 
-// ---------------------------------------------------------------- WebView-фабрика (вне композиции)
-
 private fun createDocWebView(
     ctx: android.content.Context,
     item: MaterialItemEntity,
@@ -245,8 +230,7 @@ private fun createDocWebView(
     val mime = documentMime(item.ext)
 
     return WebView(ctx).apply {
-        // Security-инварианты (READER-PLAN D9): JS включён ТОЛЬКО для локальных viewer-страниц;
-        // всё остальное закрыто явно, а не по дефолту.
+
         with(settings) {
             javaScriptEnabled = true
             domStorageEnabled = false
@@ -266,7 +250,7 @@ private fun createDocWebView(
 
             @Suppress("DEPRECATION")
             setAllowUniversalAccessFromFileURLs(false)
-            // pdf.js TextLayer меряет 1px-пробник; пол 8 ломает выделение (gander issue #22).
+
             if (isPdf) minimumFontSize = 1
         }
         CookieManager.getInstance().also { cm ->
@@ -282,7 +266,7 @@ private fun createDocWebView(
         webViewClient =
             object : WebViewClientCompat() {
                 override fun onPageFinished(view: WebView, url: String) {
-                    // Порт: pdf.mjs (страницы/поиск) и mpk-page.js/find.js в docx.
+
                     if (canBookmark) openPort(view)
                 }
 
@@ -291,25 +275,20 @@ private fun createDocWebView(
                     if (url.scheme == "https" && url.host == ASSET_HOST) {
                         val path = url.path ?: return webNotFound()
                         if (path == "/doc/file." + item.ext) return docResponse(file, mime, request.requestHeaders["Range"])
-                        // Узкий префикс + запрет «..»: JS не должен читать ничего вне viewer/
-                        // (в admin-сборке рядом в assets лежит students.csv — READER-PLAN D9).
+
                         if (path.startsWith("/assets/viewer/") && ".." !in path) {
                             return assetLoader.shouldInterceptRequest(url)?.withViewerPolicy() ?: webNotFound()
                         }
                         return webNotFound()
                     }
-                    // У MPK есть INTERNET: любая попытка страницы уйти в сеть гасится здесь
-                    // (вторая стена после CSP). Пропускаем только data:/blob: — это байты, которые
-                    // страница уже держит (картинки docx-preview, воркер/декодеры pdf.js); всё
-                    // прочее (http/https/ws/wss/ftp/file/content/intent) → 404, не в сеть.
+
                     return if (url.scheme == "data" || url.scheme == "blob") null else webNotFound()
                 }
 
                 override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean {
                     val url = request.url
                     if (isViewerPage(url)) return false
-                    // Ссылки документа (vwDisarmLinks оставляет http/mailto/tel) — наружу в браузер,
-                    // в WebView не открывается ничего (QA HIGH: мёртвые ссылки — регресс).
+
                     if (url.scheme == "http" || url.scheme == "https" || url.scheme == "mailto" || url.scheme == "tel") {
                         runCatching {
                             ctx.startActivity(Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -319,8 +298,7 @@ private fun createDocWebView(
                 }
 
                 override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
-                    // Без true Android убивает ВЕСЬ процесс приложения. WebView после этого
-                    // мёртв: снимаем, уничтожаем и отступаем в нативный viewer (READER-PLAN D3).
+
                     if (webRef[0] === view) {
                         webRef[0] = null
                         runCatching { (view.parent as? ViewGroup)?.removeView(view) }
@@ -339,7 +317,7 @@ private fun createDocWebView(
 private fun buildDocUrl(item: MaterialItemEntity, file: File): String {
     val total = file.length()
     val ranged = if (useRanges(total)) 1 else 0
-    // item.lastPage 0-based (нативный viewer) → resume 1-based, только если не первая (контракт gander).
+
     val resume = if (item.ext == "pdf" && item.lastPage > 0) pageToPort(item.lastPage) else 0
     return "https://$ASSET_HOST/assets/viewer/" + (if (item.ext == "pdf") "pdf.html" else "docx.html") +
         "?name=${Uri.encode(item.fileName.ifBlank { item.title })}&ext=${Uri.encode(item.ext)}&ranged=$ranged" +
@@ -379,7 +357,6 @@ private fun docResponse(file: File, mime: String, range: String?): WebResourceRe
         webNotFound()
     }
 
-/** CSP-заголовок на КАЖДЫЙ asset-ответ: только так политика доезжает до worker'а pdf.js. */
 private fun WebResourceResponse.withViewerPolicy(): WebResourceResponse =
     apply { responseHeaders = responseHeaders.orEmpty() + ("Content-Security-Policy" to ViewerPolicy.CSP) }
 

@@ -7,7 +7,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** GG6: subjectListFor = куррикулум группы + использованные, distinct, без пустых, sorted. */
 class SubjectListForTest {
     private val group =
         GroupInfo(

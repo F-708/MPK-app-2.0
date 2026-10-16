@@ -14,12 +14,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * SPEC §5.4 / TEACHER-APP-SPEC: Room v9 → v10 (таблица teacher_overrides).
- * Схема v9 — полная, из app/schemas/com.politex.data.local.MpkDatabase/9.json.
- * fallbackToDestructiveMigration включён: забытая миграция не падает, а ТИХО стирает
- * student_tasks — поэтому здесь проверяется и выживание старых данных.
- */
 @RunWith(RobolectricTestRunner::class)
 class MigrationV9ToV10Test {
     private val dbName = com.politex.data.local.MpkDatabase.DATABASE_NAME
@@ -203,7 +197,6 @@ class MigrationV9ToV10Test {
         assertTrue("индекс UNIQUE: $sql", sql.uppercase().contains("UNIQUE"))
         assertTrue("индекс по (dateString, lessonNumber): $sql", sql.contains("`dateString`") && sql.contains("`lessonNumber`"))
 
-        // вторая правка той же пары без upsert — нарушение уникальности, а не дубль
         db.openHelper.writableDatabase.execSQL(
             "INSERT INTO teacher_overrides (dateString, lessonNumber, kind, room, note, createdAt) " +
                 "VALUES ('05.10.2026', 3, 'NO_LESSON', '', '', 1)",

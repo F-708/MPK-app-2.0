@@ -21,7 +21,6 @@ class BellTimerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var tickJob: Job? = null
 
-    // SRED5: индекс последней обработанной минуты (для детекта минутной границы)
     private var lastMinute = -1L
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -30,9 +29,6 @@ class BellTimerService : Service() {
         super.onCreate()
         BellCountdownNotifier.createChannel(this)
 
-        // CRIT1: startForeground кидает ForegroundServiceStartNotAllowedException на 12+,
-        // если сервис поднят из фона. Не уходим в краш-петлю — тихо гасим себя;
-        // watchdog/fallback-alarm повторят старт из exempt-контекста.
         try {
             startForeground(BellCountdownNotifier.NOTIFICATION_ID, BellCountdownNotifier.buildNotification(this))
         } catch (e: Exception) {
@@ -70,8 +66,6 @@ class BellTimerService : Service() {
 
                     delay(if (secondMode) 1000L - nowMs % 1000L else 60_000L - nowMs % 60_000L)
 
-                    // SRED5: граница по смене индекса минуты, а не по окну %60000<1000
-                    // (окно промахивалось при задержке/drift и давало пропуски обновлений).
                     val nowAfter = System.currentTimeMillis()
                     val minuteBoundary = isMinuteBoundary(nowAfter, lastMinute)
                     if (minuteBoundary) lastMinute = nowAfter / 60_000L
@@ -101,7 +95,7 @@ class BellTimerService : Service() {
 
     override fun onDestroy() {
         tickJob?.cancel()
-        // МЕЛОЧ18: гасим весь scope сервиса, а не только tickJob (иначе SupervisorJob течёт)
+
         scope.cancel()
         isRunning = false
         super.onDestroy()
@@ -112,10 +106,8 @@ class BellTimerService : Service() {
         @Volatile
         var isRunning: Boolean = false
 
-        // SRED8/QA#1: requestCode fallback-будильника (broadcast, отдельный неймспейс от activity-PI)
         private const val FALLBACK_REQUEST_CODE = 0xBE11
 
-        // SRED5: чистая проверка минутной границы — «индекс минуты сменился».
         internal fun isMinuteBoundary(nowMs: Long, lastMinute: Long): Boolean = nowMs / 60_000L != lastMinute
 
         fun start(context: Context): Boolean {
@@ -146,9 +138,6 @@ class BellTimerService : Service() {
             }
         }
 
-        // SRED8/D1: единая точка планирования fallback-будильника. Точный будильник на
-        // BellServiceAlarmReceiver — exempt-контекст, из которого FGS-старт разрешён даже
-        // из фона (12+). Используют и WatchdogWorker, и сам BellServiceAlarmReceiver (ретрай).
         fun scheduleFallbackAlarm(context: Context) {
             val pi = PendingIntent.getBroadcast(
                 context,

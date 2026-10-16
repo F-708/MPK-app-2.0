@@ -7,7 +7,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
-/** GG8/GG9: chooseRooms для split-кнопок виджетов + регрессии бага «уроки закончились через день». */
 class Gg89RoomsTest {
     private fun lesson(
         split: Boolean,
@@ -59,12 +58,9 @@ class Gg89RoomsTest {
         assertEquals(listOf("315"), WidgetData.chooseRooms(lesson(split = true, r2 = ""), SubgroupPref.SECOND))
     }
 
-    // ---- GG8(а): регрессии «отключается через день / уроки закончились хотя нет» ----
-
     @Test
     fun `GG8 ключ кэша содержит дату — та же минута на следующие сутки не сталкивается`() {
-        // Старый ключ был minuteOfDay+group: через 24h минута повторялась и процесс
-        // отдавал вчерашние уроки (все в прошлом) → «Уроки закончились» при живых.
+
         val yesterday = WidgetData.lessonsCacheKey(minute = 480, group = "41О", date = "05.10.2026")
         val today = WidgetData.lessonsCacheKey(minute = 480, group = "41О", date = "06.10.2026")
         assertNotEquals(yesterday, today)

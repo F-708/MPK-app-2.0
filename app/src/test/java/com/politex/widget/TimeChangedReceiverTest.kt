@@ -30,7 +30,7 @@ class TimeChangedReceiverTest {
 
     @Test
     fun `onTimeChanged перепланирует без исключений`() {
-        // v2.0: функция suspend (RC1 — ensureTodaySchedule внутри)
+
         kotlinx.coroutines.runBlocking { TimeChangedReceiver.onTimeChanged(ctx) }
     }
 }

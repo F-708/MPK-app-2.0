@@ -16,10 +16,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Ловушка на залипание «Уроки закончились»: RemoteViews применяются накопительно,
- * поэтому после пустого состояния ветка с данными обязана вернуть блоки в VISIBLE.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class NowNextEmptyStateRecoveryTest {

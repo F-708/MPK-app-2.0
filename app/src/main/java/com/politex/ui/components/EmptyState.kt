@@ -30,10 +30,6 @@ import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 
-/**
- * R4 §9/§10: эталонный empty state — круг 56dp, иконка 28dp, заголовок Bold 18sp, подсказка 13sp.
- * Промоут MaterialEmptyState из MaterialBaseScreen.
- */
 @Composable
 fun EmptyState(
     title: String,

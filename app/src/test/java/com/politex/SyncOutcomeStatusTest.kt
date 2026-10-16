@@ -111,13 +111,11 @@ class SyncOutcomeStatusTest {
         val monday = "05.10.2026"
         val tuesday = "06.10.2026"
 
-        // статус называет СВОЮ дату и только её
         val mondayStatus = statusMessageFor(SyncOutcome.Ok(8, monday))
         assertEquals("Расписание на 05.10.2026 загружено (8 уроков)", mondayStatus)
         assertTrue(mondayStatus.contains(monday))
         assertFalse(mondayStatus.contains(tuesday))
 
-        // empty-state вторника не цитирует статус про понедельник — короткое честное «нет»
         val tuesdayEmpty = emptyStateText(tuesday, monday, SyncOutcome.Ok(8, monday))
         assertEquals("Расписания на этот день нет", tuesdayEmpty)
         assertFalse(tuesdayEmpty.contains(monday))

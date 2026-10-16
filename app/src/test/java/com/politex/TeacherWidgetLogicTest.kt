@@ -11,10 +11,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * T3-C: чистая логика teacher-виджетов. RemoteViews/БД не тестируем (нет инфраструктуры) —
- * только выбор следующей пары, состояния и состав кэш-ключа.
- */
 class TeacherWidgetLogicTest {
     private fun lesson(
         n: Int,
@@ -36,8 +32,6 @@ class TeacherWidgetLogicTest {
 
     private fun at(h: Int, m: Int) = h * 60 + m
 
-    // ——— состояния: идёт / следующая / пусто / выходной ———
-
     @Test
     fun state_running_nowInsideLesson() {
         val l = listOf(lesson(1, at(8, 0), at(9, 0)), lesson(2, at(9, 0), at(10, 0)))
@@ -57,9 +51,9 @@ class TeacherWidgetLogicTest {
     @Test
     fun state_nextToday_skipsRunningPicksFollowing() {
         val l = listOf(lesson(1, at(8, 0), at(9, 0)), lesson(2, at(9, 0), at(10, 0)))
-        // 08:30 — первая идёт; «следующая сегодня» не нужна (Running приоритетнее)
+
         assertTrue(TeacherWidgetLogic.nextState(l, at(8, 30), 3, null) is TeacherNextState.Running)
-        // 09:30 — первая прошла, вторая идёт
+
         assertEquals(2, (TeacherWidgetLogic.nextState(l, at(9, 30), 3, null) as TeacherNextState.Running).lesson.lessonNumber)
     }
 
@@ -86,19 +80,17 @@ class TeacherWidgetLogicTest {
 
     @Test
     fun state_sundayWithLessons_notDayOff() {
-        // вс с парами (край) — показываем их, а не «Выходной»
+
         val l = listOf(lesson(1, at(9, 0), at(10, 0)))
         assertTrue(TeacherWidgetLogic.nextState(l, at(9, 30), 7, null) is TeacherNextState.Running)
     }
 
-    // ——— выбор следующей пары из списка дней (кэш, без сети) ———
-
     @Test
     fun findNext_skipsSundayAndEmptyDays() {
         val days = listOf(
-            TeacherDayRef("09.10.2026", 4, emptyList()), // чт — пусто
-            TeacherDayRef("10.10.2026", 5, listOf(lesson(1, at(8, 0), at(9, 0)))), // пт — есть
-            TeacherDayRef("11.10.2026", 6, listOf(lesson(1, at(8, 0), at(9, 0)))), // сб
+            TeacherDayRef("09.10.2026", 4, emptyList()),
+            TeacherDayRef("10.10.2026", 5, listOf(lesson(1, at(8, 0), at(9, 0)))),
+            TeacherDayRef("11.10.2026", 6, listOf(lesson(1, at(8, 0), at(9, 0)))),
         )
         val next = TeacherWidgetLogic.findNextLesson(days)
         assertEquals("10.10.2026", next?.dateString)
@@ -108,7 +100,7 @@ class TeacherWidgetLogicTest {
     @Test
     fun findNext_sundayDaySkippedEvenIfListed() {
         val days = listOf(
-            TeacherDayRef("sun", 7, listOf(lesson(1, at(8, 0), at(9, 0)))), // вс — игнор
+            TeacherDayRef("sun", 7, listOf(lesson(1, at(8, 0), at(9, 0)))),
             TeacherDayRef("mon", 1, listOf(lesson(2, at(8, 0), at(9, 0)))),
         )
         assertEquals("mon", TeacherWidgetLogic.findNextLesson(days)?.dateString)
@@ -127,20 +119,16 @@ class TeacherWidgetLogicTest {
         assertNull(TeacherWidgetLogic.findNextLesson(emptyList()))
     }
 
-    // ——— кэш-ключ: дата + минута + профиль ———
-
     @Test
     fun cacheKey_includesDateMinuteProfile() {
         val base = TeacherWidgetLogic.cacheKey("08.10.2026", 500, "Иванов И.И.")
-        // каждая компонента меняет ключ (грабли v2.x «виджет отключается через день»)
-        assertFalse(base == TeacherWidgetLogic.cacheKey("09.10.2026", 500, "Иванов И.И.")) // дата
-        assertFalse(base == TeacherWidgetLogic.cacheKey("08.10.2026", 501, "Иванов И.И.")) // минута
-        assertFalse(base == TeacherWidgetLogic.cacheKey("08.10.2026", 500, "Петров П.П.")) // профиль
-        // стабилен при тех же входах
+
+        assertFalse(base == TeacherWidgetLogic.cacheKey("09.10.2026", 500, "Иванов И.И."))
+        assertFalse(base == TeacherWidgetLogic.cacheKey("08.10.2026", 501, "Иванов И.И."))
+        assertFalse(base == TeacherWidgetLogic.cacheKey("08.10.2026", 500, "Петров П.П."))
+
         assertEquals(base, TeacherWidgetLogic.cacheKey("08.10.2026", 500, "Иванов И.И."))
     }
-
-    // ——— тексты плашек ———
 
     @Test
     fun updatedLabel_zeroEpoch_blank() {

@@ -60,19 +60,14 @@ import com.politex.util.Dow
 import java.util.Calendar
 import androidx.compose.ui.text.style.TextOverflow
 
-// Экран «Ещё» teacher-приложения = КОПИЯ студенческого «Другое» (CollegeScreen.OtherMenu:223).
-// Порядок/состав/стиль MenuCard — 1-в-1 как у студентов, минус «Моя специальность», «Расписание
-// звонков» (стало вкладкой «График»), «База данных учащихся» (teacher flavor не admin).
-// Сверху — строка профиля (якорь личности, тап → onPickProfile = сброс TeacherProfileStore).
-
 @Composable
 fun TeacherMoreScreen(
     profile: TeacherProfile?,
     onPickProfile: () -> Unit = {},
-    // onOpenBells — строка «Расписание звонков» (бриф TR5 дословно: заказчик перечислил её в «Ещё»).
+
     onOpenBells: () -> Unit = {},
     onOpenMap: () -> Unit = {},
-    // TR5: новые цели меню — подключает агент A подстраницами в TeacherNav (дефолты = no-op).
+
     onOpenGroupSchedule: () -> Unit = {},
     onOpenTeachers: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
@@ -146,8 +141,6 @@ fun TeacherMoreScreen(
     }
 }
 
-// ——— Клоны приватных MenuCard/Header из CollegeScreen.kt (1-в-1, + необязательный testTag) ———
-
 @Composable
 private fun MenuCard(
     icon: @Composable () -> Unit,
@@ -210,8 +203,6 @@ private fun Header(
         )
     }
 }
-
-// ——— Звонки (подстраница TeacherNav.Bells; в меню «Ещё» строки нет — вкладка «График») ———
 
 @Composable
 fun TeacherBellsPage(
@@ -279,8 +270,6 @@ private fun dowTitle(dow: Int): String =
         else -> "воскресенье"
     }
 
-// ——— OEM-справка (подстраница TeacherNav.OemHelp; в меню «Ещё» строки нет — §10 п.5) ———
-
 @Composable
 private fun OemCard(
     title: String,
@@ -299,8 +288,6 @@ private fun OemCard(
         }
     }
 }
-
-// ——— «О программе»: версия + дисклеймер (используется TeacherSettingsScreen) ———
 
 internal const val TEACHER_ABOUT_DISCLAIMER =
     "Неофициальное приложение. Данные из открытых источников guo-mpk.by. Может отставать от приказов о заменах."

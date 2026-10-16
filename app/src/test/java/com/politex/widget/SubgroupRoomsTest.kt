@@ -7,7 +7,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** HH2: split-комнаты следуют настройке «Подгруппа». */
 class SubgroupRoomsTest {
     private fun splitLesson() =
         LessonEntity(
@@ -44,8 +43,6 @@ class SubgroupRoomsTest {
         assertEquals(listOf("101"), WidgetData.chooseRooms(lesson, SubgroupPref.NEUTRAL))
         assertEquals(listOf("101"), WidgetData.chooseRooms(lesson, SubgroupPref.SECOND))
     }
-
-    // --- II2: split-стиль (две мелкие цифры) только для NEUTRAL, иначе ванильный чип ---
 
     @Test
     fun `II2 NEUTRAL split - splitStyle true (две цифры-кнопки)`() {

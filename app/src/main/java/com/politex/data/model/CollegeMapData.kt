@@ -22,7 +22,6 @@ data class MapRoom(
 
     val door: MapPoint? = null,
 
-    // Ручная подстройка размера числа кабинета (множитель авто-fit). Правится в tools/map-editor.html.
     val numScale: Float = 1f,
 )
 

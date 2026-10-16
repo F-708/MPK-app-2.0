@@ -51,16 +51,8 @@ import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTopBar
 
-// Оболочка приложения преподавателя (TR5): 3 вкладки Расписание/График/Ещё —
-// КОПИЯ студенческой нижней навигации (MainScreen.kt:235-286). Свайпа между вкладками НЕТ.
-
 enum class TeacherTab { SCHEDULE, BELLS, MORE }
 
-/**
- * Чистая логика навигации (покрыта TeacherNavLogicTest).
- * Контракт deep-link: MainActivity-intent extra [EXTRA_OPEN_TAB].
- * Принимаем и новые ("schedule"/"bells"), и старые ("today"/"week") строки виджетов.
- */
 object TeacherNavLogic {
     const val EXTRA_OPEN_TAB = "EXTRA_OPEN_TAB"
 
@@ -88,8 +80,6 @@ private sealed interface TeacherSubPage {
     object Settings : TeacherSubPage
 }
 
-// Заглушка группы для BellsScreen: звонки группо-независимы, canonicalName "00О" не
-// совпадёт ни с одной реальной группой → todayLessons пусты → рельс серый (reuse-map §3.2).
 private val bellsStubGroup = GroupInfo(rawName = "", course = 0, groupNumber = 0, specialtyCode = 'О')
 
 @Composable
@@ -100,7 +90,7 @@ fun TeacherNav(
 ) {
     val context = LocalContext.current
     var tab by rememberSaveable { mutableStateOf(TeacherTab.SCHEDULE) }
-    // ponytail: remember, не rememberSaveable — sealed-иерархия не влезает в Bundle; поворот сбрасывает подстраницу, это ок
+
     var subPage by remember { mutableStateOf<TeacherSubPage?>(null) }
 
     LaunchedEffect(Unit) {
@@ -110,7 +100,6 @@ fun TeacherNav(
         }
     }
 
-    // Back: подстраница → закрыли; не-корневая вкладка → Расписание; корень → выход (системный).
     BackHandler(enabled = subPage != null || tab != TeacherTab.SCHEDULE) {
         if (subPage != null) {
             subPage = null
@@ -123,8 +112,7 @@ fun TeacherNav(
         modifier = modifier.fillMaxSize(),
         containerColor = ColorBgMain,
         bottomBar = {
-            // Копия студенческой нижней навигации (MainScreen.kt:235-286): высота 72dp,
-            // тот же NavigationBarItemDefaults.colors, иконки CalendarMonth/AccessTime/Apps, label 10sp.
+
             NavigationBar(
                 containerColor = ColorBgMain,
                 tonalElevation = 0.dp,
@@ -194,7 +182,6 @@ fun TeacherNav(
                         onBack = { subPage = null },
                     )
 
-                // TR5 «Найти группу» = студенческий GroupScheduleRoute 1-в-1 (пустая группа → пикер внутри экрана)
                 is TeacherSubPage.FindGroup ->
                     GroupScheduleRoute(
                         group = sub.group,
@@ -206,7 +193,6 @@ fun TeacherNav(
                         onRoomClick = { room, _ -> subPage = TeacherSubPage.Map(room) },
                     )
 
-                // TR5 «Преподаватели» = студенческий TeachersRoute с showLeads=false (без «ведёт у вас»)
                 TeacherSubPage.Teachers ->
                     TeachersRoute(
                         groupInfo = bellsStubGroup,

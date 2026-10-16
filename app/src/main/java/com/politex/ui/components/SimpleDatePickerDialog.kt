@@ -155,7 +155,7 @@ fun SimpleDatePickerDialog(
                 ) {
                     ActionButton(text = "ОТМЕНА", filled = false, onClick = onDismiss)
                     Spacer(modifier = Modifier.width(8.dp))
-                    // R2#21: «ГОТОВО» активна только когда дата выбрана
+
                     ActionButton(
                         text = "ГОТОВО",
                         filled = true,

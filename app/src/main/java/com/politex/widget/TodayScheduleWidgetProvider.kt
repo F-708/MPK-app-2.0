@@ -21,7 +21,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             try {
                 ids.forEach { id -> runCatching { manager.updateAppWidget(id, buildViews(context, id)) } }
             } finally {
-                // GG8(а): перевзвод будильника переживает падение сборки виджета
+
                 WidgetAlarm.scheduleNext(context)
                 pending.finish()
             }
@@ -51,7 +51,6 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             val style = WidgetStyle.load(context, appWidgetId).colors(context)
             val showRoom = WidgetOptions.showRoom(context, appWidgetId)
 
-            // v2.0: фон со скруглением (iv_bg) вместо setBackgroundColor корня.
             WidgetUpdateHelper.applyWidgetBackground(views, context, appWidgetId, style.backgroundColor)
             views.setTextColor(R.id.tv_today_header, style.subColor)
             views.setTextColor(R.id.tv_today_empty, style.subColor)
@@ -75,7 +74,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
 
             if (lessons.isEmpty()) {
                 views.setViewVisibility(R.id.tv_today_empty, android.view.View.VISIBLE)
-                // CC9: idle-анимация в пустом состоянии (AVD автостартует в ImageView, API24+)
+
                 WidgetUpdateHelper.showIdle(views)
             } else {
                 views.setViewVisibility(R.id.tv_today_empty, android.view.View.GONE)
@@ -85,7 +84,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                         R.id.today_rows,
                         buildRow(
                             context, lesson, now, style, showRoom, appWidgetId, pref,
-                            // HH1+II1: маршрут от кабинета урока, ПРЕДЫДУЩЕГО относительно этого
+
                             com.politex.ui.util.RouteStartResolver.startRoomForLesson(lessons, lesson, pref),
                         ),
                     )
@@ -132,8 +131,6 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                     else -> style.mainColor
                 }
 
-            // v2.0: не-текущие строки ПРОЗРАЧНЫЕ — фон (iv_bg со скруглением) просвечивает
-            // тем же backgroundColor; иначе квадратные row-подложки перекрывали скругление углов.
             row.setInt(
                 R.id.row_root,
                 "setBackgroundColor",
@@ -153,16 +150,12 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             )
             row.setTextColor(R.id.row_subject, textColor)
 
-            // GG9/II2: две полуширинные кнопки-цифры только при NEUTRAL-split (rooms.size>1);
-            // при выбранной подгруппе — ванильный чип «каб. N» как у non-split.
             val rooms = WidgetData.chooseRooms(lesson, pref)
             if (showRoom && rooms.isNotEmpty()) {
                 val d = context.resources.displayMetrics.density
 
                 val ph = (10 * d + 0.5f).toInt()
-                // EE3: pv=10dp раздувал чип (~35dp) выше высоты строки
-                // (row_root = 0dp + weight → строка фиксирована, ~11-20dp при 12
-                // уроках) — цифры клиппились. 2dp keeps chip ≈ высоте текста строки.
+
                 val pv = (2 * d + 0.5f).toInt()
                 val splitStyle = WidgetData.isSplitStyle(rooms)
                 rooms.forEachIndexed { i, room ->
@@ -176,7 +169,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                         viewId,
                         WidgetUpdateHelper.openAppIntent(
                             context,
-                            // SRED11-неймспейс GG9: 2M + id*100 + lesson*2 + slot
+
                             2_000_000 + appWidgetId * 100 + lesson.lessonNumber * 2 + i,
                             "MAP",
                             room = room,
@@ -201,7 +194,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             hiddenCount: Int,
         ): RemoteViews {
             val row = RemoteViews(context.packageName, R.layout.widget_row_list)
-            // v2.0: прозрачный фон — iv_bg просвечивает (скругление углов не перекрыто).
+
             row.setInt(R.id.row_root, "setBackgroundColor", android.graphics.Color.TRANSPARENT)
             row.setTextViewText(R.id.row_number, "")
             row.setTextViewText(R.id.row_time, "")

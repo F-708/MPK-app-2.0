@@ -5,7 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** R2 #3: '|' в названии предмета экранируется — стек маршрутов не ломается. */
 class MaterialRouteEscapeTest {
 
     private fun roundTrip(name: String) {

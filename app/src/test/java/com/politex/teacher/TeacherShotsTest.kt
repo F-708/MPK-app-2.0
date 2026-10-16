@@ -37,16 +37,6 @@ import java.io.File
 import java.util.Calendar
 import java.util.TimeZone
 
-/**
- * КАДРЫ teacher-flavor для совета приложения (T5): реальные экраны преподавателя на
- * Robolectric + Roborazzi, демо-данные вымышленные. PNG → _reports/teacher-app-council/shots/.
- *
- * Запись: sh ./gradlew :app:recordRoborazziStandardDebug --tests "*TeacherShotsTest*"
- *
- * Профиль — «Лебедева Ольга Дмитриевна»: фамилии НЕТ в assets/teachers.csv, поэтому
- * TeacherInsights.matchRowToTeacher даёт YES (кандидатов 0) без однофамильцев и без
- * реальных ФИО в кадрах/отчётах.
- */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w412dp-h915dp-xhdpi")
@@ -66,10 +56,6 @@ class TeacherShotsTest {
             File(root, "_reports/teacher-app-council/shots").apply { mkdirs() }
         }
 
-    /**
-     * Фейковая TimeZone живёт на весь тест-JVM: без восстановления java.time-код чужих тестов
-     * (DocxTextExtractorTest, Step7) падает с ZoneRulesException «Unknown time-zone ID».
-     */
     private var realTz: TimeZone = TimeZone.getDefault()
 
     @Before
@@ -85,9 +71,6 @@ class TeacherShotsTest {
         TimeZone.setDefault(realTz)
     }
 
-    // ------------------------------------------------------------------ данные
-
-    /** Сегодня (вт): 3-я пара ИДЁТ, 4-я СЛЕДУЮЩАЯ. */
     private val todayPlan =
         listOf(
             Row(1, "Математика", "41О", "214"),
@@ -98,7 +81,6 @@ class TeacherShotsTest {
             Row(6, "Математика", "51О", "402"),
         )
 
-    /** Остальные дни недели: 4 пары, чтобы полоса Пн–Сб была с бейджами и нагрузка считалась. */
     private val weekPlan =
         listOf(
             Row(1, "Математика", "41О", "214"),
@@ -140,19 +122,16 @@ class TeacherShotsTest {
         rows.map { it.dateString }.distinct().forEach { lessonDao.deleteForDate(it) }
         lessonDao.insertLessons(rows)
 
-        // «обновлено в HH:MM» в шапке
         TeacherDayLoader.markSyncedNow(context)
     }
 
-    // ------------------------------------------------------------------ кадры
-
     @Test
     fun shotOnboardingPick() {
-        // TR1: онбординг = один экран выбора преподавателя (визард убран)
+
         setOnboarding()
         waitForText("Выберите себя")
         waitForTag("teacher_onboarding_search")
-        // список грузится асинхронно из assets/teachers.csv — ждём первую карточку
+
         val first = AppGraph.teachersRepository.loadTeachers().firstOrNull()?.name ?: error("teachers.csv пуст")
         waitForText(first)
         advance(500)
@@ -166,7 +145,7 @@ class TeacherShotsTest {
         waitForTag("teacher_onboarding_search")
         val first = AppGraph.teachersRepository.loadTeachers().firstOrNull()?.name ?: error("teachers.csv пуст")
         waitForText(first)
-        // грубая опечатка в фамилии — живой список всё равно подсказывает (TR1)
+
         composeRule.onNodeWithTag("teacher_onboarding_search").performTextInput(first.substringBefore(' ').lowercase() + "а")
         advance(500)
         waitForText(first)
@@ -178,9 +157,7 @@ class TeacherShotsTest {
     fun shotHomeDay() {
         setNav()
         waitForText("обновлено в")
-        // TR3: карточка пары = копия студенческой LessonCard — НЕТ текстов «ИДЁТ»/«СЛЕДУЮЩАЯ»
-        // (у студентов текущая пара подсвечивается рамкой ColorActiveBlue, без статус-текста).
-        // Ждём сам список пар: бейдж номера + предмет.
+
         waitForText("Математика")
         waitForTag("lesson_card_3")
         advance(2_000)
@@ -189,7 +166,7 @@ class TeacherShotsTest {
 
     @Test
     fun shotBells() {
-        // TR5: вкладка 2 = «График» = BellsScreen (таймлайн звонков), замена старой «Неделе».
+
         setNav()
         waitForTag("teacher_tab_bells")
         composeRule.onNodeWithTag("teacher_tab_bells").performClick()
@@ -201,24 +178,20 @@ class TeacherShotsTest {
 
     @Test
     fun shotMore() {
-        // autoAdvance=true ОБЯЗАТЕЛЕН: performScrollTo при стоящих часах livelock'ится
-        // (scroll-семантика ждёт кадров, которых нет) — проверено на практике.
+
         setNav(autoAdvance = true)
         waitForTag("teacher_tab_more")
         composeRule.onNodeWithTag("teacher_tab_more").performClick()
         advance(1_500)
-        // TR5: «Ещё» = клон студенческого «Другое»: Профиль → Карта → Найти группу → Преподаватели → Настройки.
+
         waitForText("Карта колледжа")
         waitForTag("more_profile")
         capture("teacher_more")
 
-        // низ меню отдельным кадром: строка «Настройки»
         composeRule.onNodeWithTag("more_settings").performScrollTo()
         composeRule.waitForIdle()
         capture("teacher_more_bottom")
     }
-
-    // ------------------------------------------------------------------ обвязка
 
     private fun setOnboarding() {
         composeRule.mainClock.autoAdvance = false
@@ -245,7 +218,6 @@ class TeacherShotsTest {
         node: SemanticsNodeInteraction = composeRule.onRoot(),
     ) = node.captureRoboImage(File(outDir, "$name.png").absolutePath)
 
-    /** Room/IO асинхронны, часы теста стоят — крутим кадры вручную (паттерн PromoShotsTest). */
     private fun waitForText(
         text: String,
         timeoutMs: Long = 20_000,
@@ -270,7 +242,6 @@ class TeacherShotsTest {
         throw AssertionError("Узел «$tag» не появился за ${timeoutMs}мс")
     }
 
-    /** Дать кадру отрисоваться: при стоящих часах — один кадр, при живых — полный idle. */
     private fun pump() {
         Thread.sleep(50)
         if (composeRule.mainClock.autoAdvance) composeRule.waitForIdle() else composeRule.mainClock.advanceTimeByFrame()
@@ -289,11 +260,6 @@ class TeacherShotsTest {
         throw AssertionError("Условие «$what» не выполнено за ${timeoutMs}мс")
     }
 
-    /**
-     * «Заморозка» на ближайший вторник 10:30 (идёт 3 урок, 10:20–11:05) — иначе статусы
-     * ИДЁТ/СЛЕДУЮЩАЯ в кадре не получить. Копия приёма из PromoShotsTest: экраны читают
-     * Calendar.getInstance(), поэтому сдвигаем дефолтный TimeZone, а не ShadowSystemClock.
-     */
     private fun freezeAtTuesday1030() {
         val real = System.currentTimeMillis()
         val target =

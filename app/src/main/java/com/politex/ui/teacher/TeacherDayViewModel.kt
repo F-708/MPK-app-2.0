@@ -21,11 +21,11 @@ import java.util.Calendar
 
 data class TeacherHomeState(
     val dayOffset: Int = 0,
-    // TR3: дата из архив-календаря (dd.MM.yyyy); пустая = активен слот Сегодня/Завтра (как у студентов selectedDateString)
+
     val selectedDate: String = "",
     val dateKey: String = "",
     val dow: Int = 0,
-    // true когда видимый день = сегодня (нужно для подсветки ИДЁТ/СЛЕДУЮЩАЯ, как у студентов)
+
     val isToday: Boolean = true,
     val loading: Boolean = true,
     val refreshing: Boolean = false,
@@ -61,15 +61,12 @@ class TeacherDayViewModel(
         load()
     }
 
-    /** Выбор даты из календаря (dd.MM.yyyy) — аналог студенческого onDateChange. */
     fun selectDate(dateKey: String) {
         if (dateKey == _state.value.selectedDate) return
         _state.update { it.copy(selectedDate = dateKey) }
         load()
     }
 
-    // SPEC §4.1 фича 14: force-синк выбранного дня; успех → lastSyncEpoch (пишем сами,
-    // если воркер ещё не успел), затем перечитываем день.
     fun refresh() {
         if (profile == null) return
         if (_state.value.refreshing) return
@@ -114,10 +111,6 @@ class TeacherDayViewModel(
         }
     }
 
-    /**
-     * Активный день: выбранная в календаре дата (dd.MM.yyyy) или слот Сегодня/Завтра.
-     * Копия студенческой логики ScheduleScreen (parsedSelectedDate ?: leftCal/rightCal).
-     */
     private fun resolveDate(state: TeacherHomeState): Pair<Calendar, String> {
         val picked = state.selectedDate
         if (picked.isNotEmpty()) {

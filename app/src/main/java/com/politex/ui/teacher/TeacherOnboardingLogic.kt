@@ -4,22 +4,12 @@ import com.politex.data.repository.Teacher
 import com.politex.data.repository.TeacherInsights
 import com.politex.util.FuzzySearch
 
-/**
- * TR1: поиск себя при запуске teacher-приложения. Подсказываем даже при грубых опечатках —
- * показываем ВСЕХ правдоподобных кандидатов, сортируя по релевантности.
- *
- * Свой ранжир только в teacher-ветке: общий [FuzzySearch] (порог 2, префикс 4) остался
- * нетронутым, чтобы не менять поведение студенческого поиска материалов.
- */
 object TeacherOnboardingLogic {
 
-    /** Фикс только для слов ≥5 букв: на коротких дистанция 3 матчит пол-списка. */
     private const val MIN_FUZZY_LEN = 5
 
-    /** Грубее студенческих MAX_DISTANCE=2 — заказчик просил терпеть опечатки. */
     private const val MAX_DIST = 3
 
-    /** ФИО важнее должности/предметов: «иван» в фамилии ≠ «иван» в названии предмета. */
     private const val NAME_WEIGHT = 3
 
     private const val EXACT = 3
@@ -50,10 +40,8 @@ object TeacherOnboardingLogic {
             Score(e.teacher, total, matched, nameScore)
         }
 
-        // Строгий проход: сматчились ВСЕ слова запроса (в любом порядке, в любом поле).
         val strict = scored.filter { it.matched == words.size && it.total > 0 }
-        // Грубая ошибка в имени/отчестве не должна прятать человека: оставляем тех,
-        // у кого совпала фамилия (первое слово бьёт по ФИО сильнее всего).
+
         val pool = if (strict.isNotEmpty()) strict else scored.filter { it.nameScore > 0 }
         return pool
             .sortedWith(compareByDescending<Score> { it.total }.thenBy { FuzzySearch.normalize(it.teacher.name) })

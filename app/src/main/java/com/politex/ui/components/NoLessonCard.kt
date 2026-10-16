@@ -26,7 +26,6 @@ import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 
-/** R2-дубль5: плашка «Урока нет» (была NoLessonCard в ScheduleScreen и GroupNoLessonCard в GroupScheduleScreen). */
 @Composable
 fun NoLessonCard(lessonNumber: Int) {
     Surface(

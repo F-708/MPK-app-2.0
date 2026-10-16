@@ -15,7 +15,6 @@ class Step2UiLogicTest {
         assertEquals(12, CollegeBellSchedule.BELLS.size)
         assertTrue(CollegeBellSchedule.DISCLAIMER.contains("расписание звонков колледжа МГПК на 2026 г."))
 
-        // М25: getBellForNumber/getTimeForNumber удалены как мёртвые — проверяем живой getTimeForLessonNumber
         val firstLesson = CollegeBellSchedule.getTimeForLessonNumber(1, 1)
         assertEquals("08:15", firstLesson.first)
         assertEquals("09:00", firstLesson.second)

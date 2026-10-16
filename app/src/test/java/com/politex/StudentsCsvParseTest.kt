@@ -32,8 +32,8 @@ class StudentsCsvParseTest {
 
     @Test
     fun `колонки читаются по заголовку а не по индексам старого формата`() {
-        val s = students.first { it.fullName.startsWith("Абражевич") }
-        assertEquals("Абражевич Елизавета Владиславовна", s.fullName)
+        val s = students.first { it.fullName.startsWith("Примерова") }
+        assertEquals("Примерова Анна Сергеевна", s.fullName)
         assertEquals("41Д", s.group)
         assertEquals("4", s.course)
         assertEquals("5-04-0414-01", s.specialtyCode)

@@ -8,10 +8,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** R3: чистая логика фиксов (без Robolectric) — CRIT2, SRED5, SRED10, SRED11. */
 class R3WidgetFixesTest {
-    // SRED11-контракт requestCode-неймспейсов (зеркалит формулы в провайдерах/NotificationHelper)
-    // GG8в/GG9: у чипов появились вторые slot-индексы (split-комнаты)
+
     private fun nowNextChip(id: Int, slot: Int, roomIdx: Int = 0) = 1_000_000 + id * 100 + slot * 10 + roomIdx
     private fun todayChip(id: Int, lesson: Int, slot: Int = 0) = 2_000_000 + id * 100 + lesson * 2 + slot
     private fun reminder(id: Long) = (3_000_000 + id % 1_000_000).toInt()
@@ -25,10 +23,10 @@ class R3WidgetFixesTest {
 
     @Test
     fun `SRED5 минутная граница срабатывает один раз на смену минуты`() {
-        assertTrue(BellTimerService.isMinuteBoundary(nowMs = 60_000L, lastMinute = 0L)) // минута 1 != 0
-        assertFalse(BellTimerService.isMinuteBoundary(nowMs = 60_500L, lastMinute = 1L)) // всё ещё минута 1
-        assertFalse(BellTimerService.isMinuteBoundary(nowMs = 119_999L, lastMinute = 1L)) // всё ещё минута 1
-        assertTrue(BellTimerService.isMinuteBoundary(nowMs = 120_000L, lastMinute = 1L)) // минута 2
+        assertTrue(BellTimerService.isMinuteBoundary(nowMs = 60_000L, lastMinute = 0L))
+        assertFalse(BellTimerService.isMinuteBoundary(nowMs = 60_500L, lastMinute = 1L))
+        assertFalse(BellTimerService.isMinuteBoundary(nowMs = 119_999L, lastMinute = 1L))
+        assertTrue(BellTimerService.isMinuteBoundary(nowMs = 120_000L, lastMinute = 1L))
     }
 
     @Test

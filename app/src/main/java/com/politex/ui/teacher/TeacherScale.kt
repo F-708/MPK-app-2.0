@@ -9,8 +9,6 @@ import androidx.compose.ui.unit.Density
 import com.politex.util.UiScale
 import com.politex.util.UiScaleStore
 
-// W4: единое состояние масштаба (паттерн paletteState из Color.kt) — настройки пишут,
-// всё teacher-поддерево читает; смена масштаба мгновенно перекладывает UI.
 val uiScaleState = mutableStateOf(UiScale.NORMAL)
 
 fun applyUiScale(

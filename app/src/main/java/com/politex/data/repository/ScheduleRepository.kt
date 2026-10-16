@@ -47,8 +47,6 @@ internal fun cachedOutcomeForDate(
     else -> null
 }
 
-// СРЕД10: метка «день разобран, но документ неполный» для негативного кэша:
-// true — запомнить (не докачивать каждый автосинк), false — снять (день полный), null — не трогать (день не разобран).
 internal fun incompleteDayMark(
     parsedGroups: Int,
     catalogSize: Int,
@@ -58,15 +56,11 @@ internal fun incompleteDayMark(
     else -> true
 }
 
-// КРИТ1: к записи в БД — только уроки запрошенных дат (пустая dateString идёт через insert, она ничего не затирает).
-// restampByDow может разметать недельный документ на прошлые дни/месяц, и replaceForDate стёр бы уже синхронизированный архив.
 internal fun lessonsForWrite(
     lessons: List<LessonEntity>,
     allowedDates: Set<String>,
 ): List<LessonEntity> = lessons.filter { it.dateString.isBlank() || it.dateString in allowedDates }
 
-// BB14: гейт «всё в кэше — сеть не нужна»; возвращаем исход ЦЕЛЕВОЙ даты (первый),
-// а не сумму двух дней: статус называет свою дату, и чужие уроки в счёт не идут.
 internal fun combineCachedOutcomes(outcomes: List<SyncOutcome?>): SyncOutcome? {
     if (outcomes.isEmpty() || outcomes.any { it == null }) return null
     return outcomes.first()
@@ -81,7 +75,6 @@ internal fun syncedCountForGroup(
 sealed class SyncOutcome {
     abstract val count: Int
 
-    // BB14: каждый исход знает свою дату — статусы и тосты не врут, про какой они день
     abstract val date: String
 
     data class NotFound(override val date: String) : SyncOutcome() {
@@ -119,17 +112,13 @@ internal fun toastFor(outcome: SyncOutcome, group: String): String = when (outco
 
 internal fun checkingStatusFor(date: String): String = "Проверяю расписание на $date…"
 
-// BB14: empty-state слота не цитирует глобальный статус синка — тот может быть про другую дату
-// («Расписание загружено (8 уроков)» про понедельник над пустым вторником — то самое противоречие).
-// Статусы теперь называют свою дату, а слот без уроков всегда получает короткий честный ответ про себя.
 internal fun emptyStateText(
     forDate: String,
     lastOutcomeDate: String = "",
     outcome: SyncOutcome? = null,
 ): String =
     if (outcome is SyncOutcome.Ok && outcome.count > 0 && lastOutcomeDate == forDate) {
-        // уроки именно этой даты только что записаны в БД и список вот-вот заполнится —
-        // не показывать на долю секунды «расписания нет» рядом с тостом «загружено»
+
         "Расписание на $forDate загружено"
     } else {
         "Расписания на этот день нет"
@@ -203,8 +192,6 @@ internal fun looksLikeDocument(bytes: ByteArray): Boolean {
     return docx || doc
 }
 
-// AA5: построение строк кэша преподавателей — отдельно от сети, чтобы E2E-тест
-// прогонял реальный код записи (фикстура дока → parse → rows → dao).
 internal fun teacherRows(
     parsedAll: Map<String, List<TeacherSlot>>,
     date: String,
@@ -212,8 +199,7 @@ internal fun teacherRows(
 ): List<TeacherLessonEntity> =
     parsedAll
         .flatMap { (rawName, slots) ->
-            // «Иванов/Петров» — две строки, каждая со своим surnameKey (иначе SQL-фильтр
-            // по surnameKey не вернул бы ячейку ни одному из преподавателей).
+
             TeacherInsights.splitTeacherNames(rawName).flatMap { name ->
                 val surname = TeacherInsights.surnameOf(name)
                 if (surname.isBlank()) {
@@ -234,8 +220,7 @@ internal fun teacherRows(
                 }
             }
         }
-        // СРЕД13: groups и dayOfWeek в ключ — один преподаватель может вести один и тот же
-        // предмет в одном кабинете у разных групп/дней, эти строки не дубли.
+
         .distinctBy { "${it.surnameKey}_${it.dayOfWeek}_${it.lessonNumber}_${it.room}_${it.subject}_${it.groups}" }
 
 class ScheduleRepository(
@@ -251,9 +236,6 @@ class ScheduleRepository(
     @Volatile
     private var cachedCatalog: List<String>? = null
 
-    // СРЕД10: негативный кэш «день разобран, но документ неполный» — суббота с неполным
-    // документом не перекачивается каждый автосинк. Сброс: force, полный день, успех полной загрузки.
-    // ponytail: in-memory per-repository; если репозиторий начнут пересоздавать на каждый синк — вынести в singleton.
     private val incompleteDayCache = ConcurrentHashMap<String, Boolean>()
 
     internal fun isKnownIncompleteDay(date: String): Boolean = incompleteDayCache[date] == true
@@ -329,7 +311,7 @@ class ScheduleRepository(
     suspend fun syncScheduleDetailed(
         groupName: String,
         force: Boolean = false,
-        // BB14: дата видимого слота из UI; null — прежнее поведение «today + следующий учебный»
+
         targetDate: String? = null,
     ): Result<SyncOutcome> = withContext(Dispatchers.IO) {
         val today = Calendar.getInstance()
@@ -342,7 +324,6 @@ class ScheduleRepository(
         val candidates = targetCal?.let { listOf(it) } ?: nextDayCandidates(today, saturdaySchool)
         val todayStr = formatDate(today)
 
-        // Кэш-первым: данные целевых дат уже разобраны в БД — ответ без сети и без «Проверяю…»
         if (!force) {
             val candidateOutcome = candidates.firstNotNullOfOrNull { cachedDateOutcome(groupName, it) }
             if (candidateOutcome != null) {
@@ -384,7 +365,7 @@ class ScheduleRepository(
         val fetched = mutableListOf<LessonEntity>()
         var fetchFailed = false
         var documentFound = false
-        // BB14: документ ИМЕННО целевой даты — «опубликовано» в статусе не может быть про другой день
+
         var targetDocumentFound = false
 
         val allGroups = (catalog() + groupName).distinct()
@@ -393,7 +374,6 @@ class ScheduleRepository(
             .filter { it.second }
             .distinctBy { formatDate(it.first) }
 
-        // СРЕД10: все нужные дни уже помечены «разобраны, но неполны» — честный статус без перекачки документа
         if (!force && needTomorrow && days.isNotEmpty() && days.all { incompleteDayCache[formatDate(it.first)] == true }) {
             val incomplete = SyncOutcome.FoundNoGroup(tomorrowStr)
             networkClient.publishStatus(statusMessage = statusMessageFor(incomplete), isSyncing = false)
@@ -416,7 +396,7 @@ class ScheduleRepository(
 
                         val dayGroups = dayLessons.map { it.groupName }.distinct().size
                         if (isFullDayDocument(dayGroups, allGroups.size)) fetched += dayLessons
-                        // СРЕД10: неполный день запоминаем, полный — снимаем метку
+
                         rememberDayCompleteness(date, dayGroups, allGroups.size)
                     }.onFailure { fetchFailed = true }
             }
@@ -461,25 +441,21 @@ class ScheduleRepository(
                 .distinctBy { "${it.groupName}_${it.dayOfWeek}_${it.lessonNumber}_${it.dateString}" }
 
         if (finalLessons.isNotEmpty()) {
-            // КРИТ1: пишем только даты, которые реально запрашивали в этом синке
+
             writeByGroup(finalLessons, days.map { formatDate(it.first) }.toSet())
 
             days.forEach { (calendar, _) -> runCatching { syncTeacherScheduleForDate(calendar) } }
             pruneOldLessons()
         }
 
-        // BB14: счёт и «опубликовано» — только про целевую дату, иначе статус приписывает
-        // вторнику уроки, скачанные для понедельника (исходный баг «загружено (8)» над пустым днём)
         val groupCount = syncedCountForGroup(finalLessons, groupName, tomorrowStr)
-        // СРЕД4: целевая дата не перезапрашивалась (нужный день уже был в кэше) —
-        // исход берём из кэша даты, а не пересчётом по пустому для неё finalLessons.
+
         val outcome = if (!needTomorrow) {
             cachedDateOutcome(groupName, tomorrow) ?: resolveSyncOutcome(groupCount, targetDocumentFound, tomorrowStr)
         } else {
             resolveSyncOutcome(groupCount, targetDocumentFound, tomorrowStr)
         }
-        // КРИТ3: офлайн (probe дал NetworkError, ничего не скачано и не найдено) — это
-        // «не удалось получить», а не «ещё не опубликовано».
+
         val offlineDead = probeNetworkError && !documentFound && fetched.isEmpty()
         return@withContext if (outcome is SyncOutcome.NotFound && (fetchFailed || offlineDead)) {
 
@@ -521,7 +497,7 @@ class ScheduleRepository(
         if (forGroup.isFailure) return@withContext Result.failure(forGroup.exceptionOrNull()!!)
         val all = forGroup.getOrDefault(emptyList())
         if (all.isNotEmpty()) {
-            // КРИТ1: пишем только уроки запрошенной даты
+
             writeByGroup(all, setOf(date))
             pruneOldLessons()
         }
@@ -607,8 +583,7 @@ class ScheduleRepository(
         }
 
         val rows = teacherRows(parsedAll, date, requestedDow)
-        // М23: replaceForDate даже при пустых rows — документ разобран, значит устаревшие
-        // строки этой даты нужно стереть, а не оставлять прошлый кэш.
+
         dao.replaceForDate(date, rows)
         Result.success(rows.size)
     }
@@ -679,7 +654,7 @@ class ScheduleRepository(
         for (date in lessonDao.getAllDistinctDatesSync()) {
             if (isStaleDate(date, cutoff)) {
                 lessonDao.deleteLessonsByDate(date)
-                // СРЕД5: кэш преподавателей устаревает по тем же датам
+
                 teacherLessonDao?.deleteForDate(date)
             }
         }

@@ -19,10 +19,6 @@ object Dow {
         else -> 7
     }
 
-    /**
-     * R1-СЖАТИЕ: день недели (1..6) из русского слова в тексте; null, если слова дня нет.
-     * Заменяет дубли dowFromHeader (MpkScheduleParser) и dowFromHeaderText (TeacherScheduleParser).
-     */
     fun ofWord(text: String): Int? {
         val word = WORD_REGEX.find(text)?.value?.uppercase(Locale.ROOT) ?: return null
         return when {

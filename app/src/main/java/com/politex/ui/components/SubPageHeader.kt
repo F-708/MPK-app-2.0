@@ -19,9 +19,6 @@ import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.TextStyleSubPageTitle
 import androidx.compose.ui.text.style.TextOverflow
 
-/**
- * R4 §10: единая шапка подстраницы — «назад» + заголовок 24sp + акцентный подзаголовок + разделитель.
- */
 @Composable
 fun SubPageHeader(
     title: String,

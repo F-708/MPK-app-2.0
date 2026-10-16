@@ -26,9 +26,6 @@ object TeacherScheduleParser {
 
     private const val MAX_LESSON = 12
 
-    // Линейка номеров уроков: ячейки идут строго 1,2,3,… (пустые допускаются).
-    // СРЕД12: ведущие пустые ячейки пропускаются — линейка может начинаться не с первой колонки.
-    // ponytail: отличает линейку от строки кабинетов тем, что cell[start+i]==i+1; если появятся кабинеты «1»/«2» подряд — уточнить.
     private fun isLessonRuler(cells: List<String>): Boolean {
         val start = cells.indexOfFirst { it.isNotBlank() }
         if (start < 0 || cells[start] != "1") return false
@@ -189,8 +186,6 @@ object TeacherScheduleParser {
 
     private fun parseDocx(bytes: ByteArray): Map<String, List<TeacherSlot>>? = parseDocxText(bytes)?.let { parsePlainText(it) }
 
-    // СРЕД7: строка делится по ячейкам <w:tc>, все ранги <w:t> внутри ячейки конкатенируются —
-    // раньше каждый ранг считался отдельной ячейкой и мульти-ран ячейки ломали колонки.
     internal fun xmlToPseudoTable(xml: String): String {
         val textRun = Regex("<w:t(?: [^>]*)?>([^<]*)</w:t>")
         val cellStart = Regex("<w:tc(?: [^>]*)?>")

@@ -2,13 +2,11 @@ package com.politex.util
 
 import android.content.Context
 
-/** BB12/BB15: флаги обучающих подсказок без затемнения. */
 object HintFlags {
     private const val PREFS = "mpk_hints"
     const val KEY_SWIPE_TASKS = "swipe_tasks"
     const val KEY_SCHEDULE_TAPS = "schedule_taps"
 
-    // v2.0: туториал «Тестовый урок» в оценках — учит удалять оценку двойным нажатием.
     const val KEY_GRADES_TUTORIAL = "grades_tutorial"
 
     fun isDone(

@@ -11,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.politex.ui.theme.ColorBrandBlue
 
-/** R4 §10: единственный центрированный индикатор загрузки — 28dp, обводка 2dp, ColorBrandBlue. */
 @Composable
 fun CenteredLoader(modifier: Modifier = Modifier) {
     Box(

@@ -161,9 +161,6 @@ class TeacherInsights(
 
         const val STALE_DAYS = 30L
 
-        // Строка teacher_lessons принадлежит выбранному преподавателю: YES/NO/AMBIGUOUS.
-        // «Иванов/Петров» матчится на каждого; голая фамилия при однофамильцах — AMBIGUOUS
-        // (нельзя ни дропать, ни угадывать); инициалы при одном носителе — YES.
         fun matchRowToTeacher(
             rowTeacherName: String,
             selected: Teacher,

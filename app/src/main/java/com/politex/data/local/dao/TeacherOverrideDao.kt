@@ -14,8 +14,6 @@ interface TeacherOverrideDao {
     @Query("SELECT * FROM teacher_overrides")
     suspend fun all(): List<TeacherOverrideEntity>
 
-    // НЕ @Upsert: при autoGenerate-PK Room ищет строку для обновления по id (=0) и молча
-    // не сохраняет правку при конфликте уникального индекса. REPLACE даёт «одна строка на пару».
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: TeacherOverrideEntity)
 

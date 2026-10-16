@@ -33,7 +33,6 @@ import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import androidx.compose.ui.text.style.TextOverflow
 
-/** R2-дубли: общий чип-переключатель (MaterialSubjectDialog / TaskEditDialog). */
 @Composable
 fun ToggleChip(
     text: String,
@@ -56,7 +55,6 @@ fun ToggleChip(
     }
 }
 
-/** R2-дубли: общий заголовок диалога с кнопкой закрытия (MaterialDialogs / TasksScreen). */
 @Composable
 fun DialogTitleBar(
     text: String,

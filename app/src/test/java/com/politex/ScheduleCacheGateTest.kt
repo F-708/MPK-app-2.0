@@ -130,7 +130,7 @@ class ScheduleCacheGateTest {
 
     @Test
     fun `комбинация кэшей — исход целевой (первой) даты при полном кэше, null тянет в сеть`() {
-        // BB14: без суммы двух дней — статус называет дату первого исхода и счёт только про неё
+
         assertEquals(
             SyncOutcome.Ok(5, "05.10.2026"),
             combineCachedOutcomes(listOf(SyncOutcome.Ok(5, "05.10.2026"), SyncOutcome.Ok(3, "04.10.2026"))),

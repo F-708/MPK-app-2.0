@@ -7,9 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 
-/**
- * R4 §10: пустой результат поиска — один текст и один сброс для всех экранов.
- */
 @Composable
 fun SearchEmptyState(
     query: String,

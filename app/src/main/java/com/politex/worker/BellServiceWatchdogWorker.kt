@@ -17,18 +17,14 @@ class BellServiceWatchdogWorker(
         val ctx = applicationContext
         if (BellCountdownNotifier.isEnabled(ctx) && !BellTimerService.isRunning) {
             val started = BellTimerService.start(ctx)
-            // SRED8/D1: fallback-будильник теперь общий и живёт в BellTimerService.
+
             if (shouldScheduleFallback(startFailed = !started, sdkInt = Build.VERSION.SDK_INT)) {
                 BellTimerService.scheduleFallbackAlarm(ctx)
             }
         }
 
-        // RC2 (v2.0): минутный будильник мог быть дропнут (force-stop/restricted bucket,
-        // деградация exact-аларма на Android 12+) — watchdog раз в 15 мин его перевзводит.
         runCatching { WidgetAlarm.scheduleNext(ctx) }
 
-        // RC1 (v2.0): уроки сегодняшней даты могли не успеть синхронизироваться —
-        // fallback-проверка (основной вызов живёт в минутном TICK).
         runCatching { WidgetUpdateHelper.ensureTodaySchedule(ctx) }
 
         WidgetUpdateHelper.updateAllWidgets(ctx)

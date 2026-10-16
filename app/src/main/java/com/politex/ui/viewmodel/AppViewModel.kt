@@ -87,8 +87,6 @@ class AppViewModel(
     private val currentGroup: Flow<String> =
         _uiState.map { it.currentGroupName }.distinctUntilChanged()
 
-    // R2#13 (CC7): null до первой эмиссии — экран показывает лоадер,
-    // а не вспышку «нет уроков/заданий» на первом кадре
     @OptIn(ExperimentalCoroutinesApi::class)
     val groupLessons: StateFlow<List<LessonEntity>?> =
         currentGroup
@@ -132,7 +130,6 @@ class AppViewModel(
         }
     }
 
-    // BB14: targetDate — дата видимого слота (dd.MM.yyyy) при ручном обновлении из экрана расписания
     fun syncSchedule(
         isAutoSync: Boolean = false,
         targetDate: String? = null,

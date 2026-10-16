@@ -89,18 +89,16 @@ fun MaterialViewerTopBar(
     onBack: (() -> Unit)? = null,
     actions: @Composable () -> Unit = {},
 ) {
-    // BB1: WindowInsets.statusBars — @Composable-геттер, поднимаем до drawBehind.
+
     val statusBars = WindowInsets.statusBars
     Surface(
-        // v2.0: квадратные углы — скругление давало видимые пиксели фона по углам синего бара.
+
         shape = RectangleShape,
         color = ColorTopBar,
         modifier = Modifier
             .fillMaxWidth()
             .testTag(testTag)
-            // BB1: хост (Scaffold) отступил контент вниз на высоту статусбара — белая полоса
-            // над баром. Заливаем её тем же ColorTopBar, рисуя фон вверх за пределами панели:
-            // синий бар начинается от самого верха окна, статусбар — на синем фоне.
+
             .drawBehind {
                 val top = statusBars.getTop(this).toFloat()
                 if (top > 0f) drawRect(color = ColorTopBar, topLeft = Offset(0f, -top), size = Size(size.width, top))

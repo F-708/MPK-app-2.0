@@ -6,9 +6,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.Calendar
 
-/** R2-дубль3: общий хелпер слотов «сегодня/завтра» (ScheduleScreen + GroupScheduleScreen). */
 class DaySlotsTest {
-    // сентябрь 2026: 21 пн, 23 ср, 25 пт, 26 сб, 27 вс, 28 пн, 29 вт
+
     private fun cal(day: Int): Calendar =
         Calendar.getInstance().apply {
             clear()
@@ -69,7 +68,7 @@ class DaySlotsTest {
 
     @Test
     fun `обычный учебный день — fallback с расписанием не задействуется`() {
-        // вторник 22 — завтра среда (учебный день), hasSchedule игнорируется
+
         val (l, r) = slots(22) { c -> dom(c) == 27 }
         assertEquals(22, dom(l))
         assertEquals(23, dom(r))

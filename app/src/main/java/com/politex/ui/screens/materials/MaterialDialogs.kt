@@ -386,8 +386,7 @@ fun BrandActionButton(
     filled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    // R4 §10: реализация перенесена в ui.components.BrandActionButton.
-    // ponytail: форвардер нужен, пока ImageViewer.kt (чужая PDF-волна) не получит import — удалить после.
+
     com.politex.ui.components.BrandActionButton(
         icon = icon,
         label = label,

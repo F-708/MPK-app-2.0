@@ -44,7 +44,6 @@ class TaskRepository(
         taskDao.setTaskCompleted(id, isCompleted)
     }
 
-    // R2#7: каскад — напоминания не переживают задание (иначе сироты в task_reminders)
     suspend fun deleteTask(task: StudentTaskEntity) = withContext(Dispatchers.IO) {
         taskDao.deleteTask(task)
         reminderDao.deleteForTask(task.id)

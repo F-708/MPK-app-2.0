@@ -145,13 +145,11 @@ fun NavController.navigateToTab(route: String) {
     }
 }
 
-/** Индекс вкладки по маршруту (с отброшенным query), -1 если не таб. */
 fun tabIndex(route: String?): Int {
     val base = route?.substringBefore("?")
     return AppTab.entries.indexOfFirst { it.route == base }
 }
 
-/** DD4: индекс РОДИТЕЛЬСКОЙ вкладки: точные табы → их индекс; под-экраны Другого → 3; карта (исключение заказчика), неизвестно, null → -1. */
 fun ownerTabIndex(route: String?): Int {
     val base = route?.substringBefore("?") ?: return -1
     return when (base) {
@@ -162,7 +160,6 @@ fun ownerTabIndex(route: String?): Int {
     }
 }
 
-/** Направление слайда: +1 влево-переход (вперёд), -1 вправо (назад), 0 не-таб/тот же. */
 fun tabSlideDir(from: Int, to: Int): Int = when {
     from < 0 || to < 0 || from == to -> 0
     to > from -> 1
@@ -223,21 +220,18 @@ fun MainScreen(
             modifier = Modifier.fillMaxSize(),
 
             topBar = {
-                // З1а: на карте баннер колледжа скрыт — у карты своя синяя верхняя полоса.
+
                 val onMap = backStackEntry?.destination?.route?.substringBefore("?") == ROUTE_MAP.substringBefore("?")
                 if (!ViewerMode.active && !onMap) MainTopBar()
             },
             bottomBar = {
-                // FF1: нижняя навигация скрывается ТОЛЬКО в полноэкранном чтении;
-                // в конструкторе маршрутов она видна (иначе «пропадает» критично)
+
                 if (!ViewerMode.active) Column(modifier = Modifier.fillMaxWidth()) {
                     AppDivider()
                     NavigationBar(
                         containerColor = ColorBgMain,
                         tonalElevation = 0.dp,
-                        // BB17: высота −10% (80dp → 72dp) — место под контент.
-                        // heightIn, а не height: NavigationBar сам добавляет inset
-                        // навигационной панели, жёсткая высота его съедала.
+
                         modifier = Modifier.testTag("main_bottom_nav").heightIn(min = 72.dp),
                     ) {
                         val tabs =
@@ -295,9 +289,7 @@ fun MainScreen(
                 }
             },
         ) { innerPadding ->
-            // v2.0: свайп-жест смены вкладок удалён (срабатывал через раз и конфликтовал
-            // со скроллом/картами). Переход по кнопкам нижней панели остался — его анимация
-            // живёт в enterTransition/exitTransition NavHost ниже, она НЕ тронута.
+
             Box {
                 NavHost(
                     navController = navController,
@@ -314,12 +306,7 @@ fun MainScreen(
                         val d = tabSlideDir(ownerTabIndex(initialState.destination.route), ownerTabIndex(targetState.destination.route))
                         if (d == 0) fadeOut(tween(150)) else slideOutHorizontally(tween(280)) { if (d > 0) -it else it }
                     },
-                    // v2.0-ит2 (#13): возврат (pop) — быстрый cross-fade вместо слайда.
-                    // Механика стека НЕ меняется (куда ведёт «Назад» — как было), но при
-                    // возврате на несколько уровней подряд промежуточные вкладки больше не
-                    // «пролетают» слайдом по кадру. Слайд остался только для перехода ВПЕРЁД
-                    // по кнопкам нижней панели (enterTransition/exitTransition) — заказчик
-                    // эту анимацию просил сохранить как есть.
+
                     popEnterTransition = { fadeIn(tween(120)) },
                     popExitTransition = { fadeOut(tween(120)) },
                 ) {

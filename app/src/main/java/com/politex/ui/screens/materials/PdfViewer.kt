@@ -272,17 +272,11 @@ fun MaterialPdfViewer(
 
     var eraserActive by remember { mutableStateOf(false) }
 
-    // HH3: ОДНОФАЗНЫЙ зум как в ImageViewer. Layout постоянный (страница = ширина вьюпорта,
-    // fit = 1.0), scale/pan живут в едином state и применяются graphicsLayer в draw-фазе —
-    // ноль relayout на кадр, никакого commit-рывка. Pinch фокальный (applyLive): точка под
-    // центроидом щипка остаётся под центроидом. Одиночный палец всегда скроллит LazyColumn.
     val zoomState = remember(item.id) { mutableFloatStateOf(DocZoom.DEFAULT) }
     val panState = remember(item.id) { mutableStateOf(Offset.Zero) }
     var zoomJob by remember(item.id) { mutableStateOf<Job?>(null) }
     var viewportSize by remember(item.id) { mutableStateOf(IntSize.Zero) }
 
-    // HH3: плавная анимация зума (двойной тап 1.0↔2.0 вокруг точки тапа, сброс к 1.0).
-    // pan(t) = p0*k + (focal-center)*(1-k), k = z/z0 — та же фокальная формула, что applyLive.
     fun animateZoomTo(
         target: Float,
         focal: Offset?,
@@ -312,8 +306,6 @@ fun MaterialPdfViewer(
     val dirtyPages = remember(item.id) { mutableStateListOf<Int>() }
     var saveVersion by remember { mutableIntStateOf(0) }
 
-    // BB3: undo-история текущей сессии редактирования. Живёт, пока открыт viewer:
-    // выход из документа уничтожает композицию и очищает историю (штрихи в БД остаются).
     val undoSession = remember(item.id) { AnnotationUndoSession() }
 
     LaunchedEffect(annotations) {
@@ -397,7 +389,7 @@ fun MaterialPdfViewer(
                 onColor = { drawColor = it },
                 onWidth = { drawWidth = it },
                 onUndo = {
-                    // BB3: отменяем последнее ДЕЙСТВИЕ сессии — добавление ИЛИ стирание ИЛИ корзину.
+
                     val action = undoSession.pop()
                     if (action != null) {
                         val updated = applyUndo(action, pageStrokes.toMap())
@@ -410,7 +402,7 @@ fun MaterialPdfViewer(
                     }
                 },
                 onClear = {
-                    // BB3: корзина удаляет аннотации ВСЕГО документа (все страницы).
+
                     val snapshot = pageStrokes.toMap().filterValues { it.isNotEmpty() }
                     if (snapshot.isNotEmpty()) {
                         undoSession.record(AnnotationAction.ClearAll(snapshot))
@@ -437,15 +429,13 @@ fun MaterialPdfViewer(
 
         BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f).clipToBounds()) {
             val density = LocalDensity.current
-            // Битмапы рендерятся ОДИН раз в фикс-ширину (LruCache) — при pinch не перерисовываются.
+
             val renderWidthPx = with(density) { maxWidth.roundToPx() }.coerceIn(320, 2800)
             val boxW = with(density) { maxWidth.toPx() }
             val boxH = with(density) { maxHeight.toPx() }
             val maxHDp = maxHeight
             val center = Offset(boxW / 2f, boxH / 2f)
 
-            // HH3: pinch в draw-режиме идёт через AnnotationLayer (центроида нет) — зум вокруг
-            // центра вьюпорта; panChange приходит в координатах слоя ⇒ в экранные *zoom.
             val drawTransform: (Offset, Float) -> Unit = { panChange, zoomChange ->
                 val z = zoomState.floatValue
                 val next =
@@ -462,8 +452,6 @@ fun MaterialPdfViewer(
                 panState.value = clampPan(next.pan, next.zoom, boxW, boxH)
             }
 
-            // GG13b: фоновый прогрев битмапов ±PREFETCH_RANGE страниц вокруг видимой
-            // (предзагрузка соседей); collectLatest сбрасывает устаревшую партию при быстром скролле.
             LaunchedEffect(renderer, renderWidthPx, pageCount) {
                 snapshotFlow { listState.firstVisibleItemIndex }
                     .collectLatest { first ->
@@ -487,9 +475,7 @@ fun MaterialPdfViewer(
                 Modifier
                     .fillMaxSize()
                     .onSizeChanged { viewportSize = it }
-                    // HH3: двухпальцевый зум+pan ОДНОВРЕМЕННО, однофазно и фокально (applyLive).
-                    // consume только при 2+ пальцах ⇒ одиночный палец скроллит LazyColumn
-                    // (вертикально, при любом зуме, в т.ч. когда pan упёрся в край).
+
                     .pointerInput(zoomState, panState) {
                         val c = Offset(size.width / 2f, size.height / 2f)
                         awaitEachGesture {
@@ -522,7 +508,7 @@ fun MaterialPdfViewer(
                             } while (event.changes.any { it.pressed })
                         }
                     }
-                    // HH3: двойной тап — плавная анимация 1.0↔2.0 вокруг точки тапа.
+
                     .pointerInput(zoomState, panState) {
                         detectTapGestures(
                             onDoubleTap = { tap ->
@@ -534,11 +520,9 @@ fun MaterialPdfViewer(
                             },
                         )
                     }
-                    // HH3: scale/pan — draw-фаза, без relayout (как в ImageViewer).
-                    // pointerInput выше по цепочке ⇒ центроид/тап в координатах вьюпорта.
+
                     .graphicsLayer {
-                        // II3: при zoom<1 якорь сверху — список высотой 2*viewport заполняет
-                        // экран при 0.5x без пустот; при zoom=1 оба якоря дают identity ⇒ без скачка.
+
                         transformOrigin = if (zoomState.floatValue < 1f) TransformOrigin(0.5f, 0f) else TransformOrigin.Center
                         scaleX = zoomState.floatValue
                         scaleY = zoomState.floatValue
@@ -546,12 +530,7 @@ fun MaterialPdfViewer(
                         translationY = panState.value.y
                     },
             ) {
-                // II3: высота списка = viewport/MIN (константа, 2x) — запас скомпозированных
-                // страниц покрывает весь видимый экран при любом zoom >= MIN, ноль relayout
-                // на кадр pinch. LazyColumn не клипит draw ниже viewport ⇒ запас и рисуется.
-                // Нижний padding = невидимому остатку viewport при zoom=1: конец документа
-                // достижим скроллом, как и раньше. requiredHeight — входящие constraint'ы
-                // Box'а фиксированы (weight), height(2x) был бы зажат.
+
                 val zoomOutFactor = zoomOutHeightFactor(DocZoom.MIN)
                 LazyColumn(
                     state = listState,
@@ -646,14 +625,6 @@ internal object DocZoom {
     fun apply(current: Float, multiplier: Float): Float = (current * multiplier).coerceIn(MIN, MAX)
 }
 
-// HH3: единая модель зума PDF и DOCX — scale/pan применяются graphicsLayer поверх
-// ПОСТОЯННОГО layout (страница = ширина вьюпорта, fit по ширине = 1.0, высота из аспекта
-// битмапа ⇒ при zoom < 1 страница видна ЦЕЛИКОМ, ничего не обрезается).
-
-// Фокальная формула зума (чистая функция, тесты в DocZoomTest): точка под центроидом
-// остаётся под центроидом. screen = zoom*(p-center) + center + pan ⇒ pan' = k*pan + c*(1-k) + d*k,
-// где c = centroid-center (transformOrigin — центр слоя), k = ЭФФЕКТИВНЫЙ zoomChange
-// (после clamp), d = panChange (движение центроида, экранные px).
 internal data class LiveTransform(
     val zoom: Float,
     val pan: Offset,
@@ -674,8 +645,6 @@ internal fun applyLive(
     return LiveTransform(newZoom, pan)
 }
 
-// CC4: граница pan — масштабированный контент не уезжает за viewport больше, чем на
-// половину избытка с каждой стороны; при scale <= 1 pan зафиксирован в 0 (страница центрируется).
 internal fun clampPan(
     pan: Offset,
     scale: Float,
@@ -684,22 +653,16 @@ internal fun clampPan(
 ): Offset {
     val maxX = ((scale - 1f) * widthPx / 2f).coerceAtLeast(0f)
     val maxY = ((scale - 1f) * heightPx / 2f).coerceAtLeast(0f)
-    // Явные нули при maxX/maxY == 0: coerceIn вернул бы -0f, а Offset.equals
-    // сравнивает упакованные биты (-0f != Offset.Zero).
+
     val x = if (maxX == 0f) 0f else pan.x.coerceIn(-maxX, maxX)
     val y = if (maxY == 0f) 0f else pan.y.coerceIn(-maxY, maxY)
     return Offset(x, y)
 }
 
-// GG13b: фоновый прогрев битмапов соседей — при быстром скролле LazyColumn композиции
-// соседних страниц ещё нет, но битмапы уже в LruCache ⇒ страница сразу рисуется из кэша.
 internal const val PREFETCH_RANGE = 3
 
-// II3: множитель высоты списка при zoom<1: 1/MIN = 2 ⇒ запас скомпозированных страниц
-// покрывает весь видимый экран на минимальном зуме без relayout на кадр pinch. Чистая функция.
 internal fun zoomOutHeightFactor(minZoom: Float): Float = if (minZoom > 0f && minZoom < 1f) 1f / minZoom else 1f
 
-// Страницы для прогрева: ±range вокруг видимой, clamp в [0, total). Чистая функция (тесты).
 internal fun neighborPages(
     firstVisible: Int,
     total: Int,
@@ -711,16 +674,12 @@ internal fun neighborPages(
     return (from..to).toList()
 }
 
-// EE6: bookmark-кнопка масштабируется с zoom, но не сильнее ±20% (иначе на 400% она огромная).
 internal fun bookmarkSizeFactor(zoom: Float): Float = zoom.coerceIn(0.8f, 1.2f)
 
 internal const val ZOOM_RESET_ANIM_MS = 220
 
-// HH3: цель двойного тапа (анимация 1.0↔2.0 вокруг точки тапа).
 internal const val DOUBLE_TAP_ZOOM = 2f
 
-// FF4: жест двухфазного зума — остаётся для DocTextViewer (его переделывает другой работник).
-// PDF больше не использует: там однофазный зум прямо в MaterialPdfViewer.
 internal fun Modifier.docLiveZoom(
     docZoomState: MutableFloatState,
     liveZoomState: MutableFloatState,
@@ -791,18 +750,17 @@ private fun PdfReaderBar(
     onBookmarks: () -> Unit,
     onDrawToggle: () -> Unit,
 ) {
-    // BB1: WindowInsets.statusBars — @Composable-геттер, поднимаем до drawBehind.
+
     val statusBars = WindowInsets.statusBars
     Surface(
-        // v2.0: квадратный топбар (скругление давало пиксели фона по углам)
+
         shape = RectangleShape,
         color = ColorTopBar,
         modifier =
         Modifier
             .fillMaxWidth()
             .testTag("pdf_top_bar")
-            // BB1: хост (Scaffold) отступил контент вниз на высоту статусбара — белая полоса
-            // над баром. Заливаем её тем же ColorTopBar, рисуя фон вверх за пределами панели.
+
             .drawBehind {
                 val top = statusBars.getTop(this).toFloat()
                 if (top > 0f) drawRect(color = ColorTopBar, topLeft = Offset(0f, -top), size = Size(size.width, top))
@@ -850,7 +808,6 @@ private fun PdfReaderBar(
                 }
                 Spacer(modifier = Modifier.weight(1f))
 
-                // HH3: индикатор зума из единого state (tap = плавный сброс к 100%).
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = Color.Transparent,
@@ -917,8 +874,7 @@ private fun PdfPageRow(
     cache: LruCache<Long, Bitmap>,
     renderLock: Mutex,
     renderWidthPx: Int,
-    // HH3: единый state зума; читается только в draw-фазе (graphicsLayer) — item не
-    // рекомпонируется на кадр pinch.
+
     zoomState: FloatState,
     bookmarked: Boolean,
     onBookmarkClick: (bookmarked: Boolean) -> Unit,
@@ -955,8 +911,6 @@ private fun PdfPageRow(
         }
     }
 
-    // HH3: layout постоянный — страница во всю ширину вьюпорта (fit = 1.0), высота из
-    // аспекта битмапа ⇒ при zoom < 1 (graphicsLayer) страница видна ЦЕЛИКОМ, без обрезки.
     Box(
         modifier =
         Modifier
@@ -1002,8 +956,7 @@ private fun PdfPageRow(
                 val bh = boxSize.height.toFloat()
                 if (bw > 1f && bh > 1f) {
                     val aspect = bh / bw
-                    // HH3: bw = ширина вьюпорта (постоянна), layerScale = 1 ⇒ нормализованный
-                    // порог не зависит от зума («на бумаге»).
+
                     val erased = mutableListOf<Pair<Int, Stroke>>()
                     val remaining = mutableListOf<Stroke>()
                     latestStrokes.forEachIndexed { i, st ->
@@ -1014,13 +967,11 @@ private fun PdfPageRow(
                 }
             },
             transformGestures = onTransform,
-            // DD2/HH3: штрих «нарисован на бумаге» — толщина в координатах страницы постоянна
-            // (layerScale = 1), graphicsLayer контейнера сам умножает экранную толщину на zoom.
+
             layerScale = 1f,
             modifier = Modifier.matchParentSize(),
         )
 
-        // R2 #22: кликабельная область закладки 44dp, визуальный размер прежний (26dp)
         Box(
             modifier =
             Modifier
@@ -1034,8 +985,7 @@ private fun PdfPageRow(
                 shape = RoundedCornerShape(2.dp),
                 color = if (bookmarked) ColorBrandBlue else ColorBgMain.copy(alpha = 0.85f),
                 border = BorderStroke(1.dp, ColorBorderLight),
-                // EE6/HH3: экранный размер = 26dp * bookmarkSizeFactor(zoom) (±20%):
-                // компенсация factor/z в draw-фазе поверх graphicsLayer(z) контейнера.
+
                 modifier =
                 Modifier
                     .graphicsLayer {
@@ -1063,7 +1013,7 @@ private fun PdfPageRow(
             Modifier
                 .align(Alignment.TopEnd)
                 .padding(4.dp)
-                // HH3: номер страницы не растёт с зумом (компенсация 1/z в draw-фазе).
+
                 .graphicsLayer {
                     val s = 1f / zoomState.floatValue.coerceAtLeast(0.01f)
                     scaleX = s

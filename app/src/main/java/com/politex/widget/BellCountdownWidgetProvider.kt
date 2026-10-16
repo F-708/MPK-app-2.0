@@ -36,14 +36,12 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onDisabled(context: Context) {
-        // CRIT2: отменяем будильник, только если виджетов не осталось ВООБЩЕ
-        // (hasWork проверяет все 4 провайдера) — иначе удаление одного виджета
-        // глушило минутный тик для остальных.
+
         WidgetAlarm.cancelIfNoWork(context)
     }
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
-        // SRED9: чистим per-widget настройки удалённого инстанса
+
         appWidgetIds.forEach { WidgetPrefs.clear(context, it) }
         WidgetUpdateHelper.invalidateSecondsCache()
     }
@@ -220,8 +218,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                     }
                 }
             } catch (_: Exception) {
-                // RC4 (v2.0): временный сбой Room НЕ кэшируем — иначе null прибивает
-                // «Уроков нет» до полуночи даже после восстановления БД.
+
                 return null
             }
 
@@ -233,13 +230,10 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
         private fun buildViews(context: Context, appWidgetId: Int): RemoteViews {            val views = RemoteViews(context.packageName, R.layout.widget_bell_countdown)
 
             val style = WidgetStyle.load(context, appWidgetId).colors(context)
-            // v2.0: фон со скруглением (iv_bg) вместо setBackgroundColor корня.
+
             WidgetUpdateHelper.applyWidgetBackground(views, context, appWidgetId, style.backgroundColor)
             views.setViewVisibility(R.id.iv_idle, android.view.View.GONE)
-            // RC3b (v2.0): RemoteViews применяются НАКОПИТЕЛЬНО поверх предыдущего
-            // состояния — ветки GONE («Уроков нет») прятали число навсегда, пока виджет
-            // не пересоздан. Восстанавливаем видимость каждый цикл, ветки GONE её
-            // перебивают заново.
+
             views.setViewVisibility(R.id.tv_countdown_value, android.view.View.VISIBLE)
             views.setTextColor(R.id.tv_countdown_label, style.subColor)
             views.setTextColor(R.id.tv_countdown_value, style.mainColor)
@@ -298,9 +292,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                             WidgetUpdateHelper.showIdle(views)
                         }
                         else -> {
-                            // RC3 (v2.0): ветка была абсолютно пустой — например, воскресенье
-                            // до 07:00 (tomorrow-лейбл gated по SHOW_FROM_MINUTE, night не
-                            // работает в вс). Виджет обязан иметь текст всегда.
+
                             views.setTextViewText(
                                 R.id.tv_countdown_label,
                                 if (dow == 7) "Выходной" else "Сегодня уроков нет",
@@ -423,10 +415,6 @@ enum class WidgetStyle(
         "Яркий синий",
     ),
 
-    // v2.0: цвета берутся из выбранного стиля приложения при каждой отрисовке виджета
-    // (APP.colors(context)). Поля-заглушки здесь дублируют LIGHT — если какой-то
-    // провайдер (в т.ч. teacher-виджеты) читает style.backgroundColor напрямую,
-    // APP деградирует в читаемый белый, а не в чёрный (0).
     APP(
         0xFFFFFFFF.toInt(),
         0xFF111827.toInt(),
@@ -453,16 +441,11 @@ enum class WidgetStyle(
         }
     }
 
-    /** Реальные цвета виджета: у фиксированных стилей — поля enum, у APP — палитра приложения. */
     fun colors(context: Context): WidgetColors =
         if (this != APP) {
             WidgetColors(backgroundColor, mainColor, subColor, highlightColor, pastColor)
         } else {
-            // v2.0-ит2 (#14): раньше фон брался из bgMain, а он БЕЛЫЙ во всех 7 темах
-            // (темы различаются только акцентами) → виджет оставался белым с чёрным текстом,
-            // хотя превью скругления показывало цвет темы. Теперь фон = насыщенный акцент
-            // темы (brandFill: фирменный синий / изумрудный / бордовый / …), текст белый,
-            // чипы кабинетов — более тёмный topBar той же темы. Контраст проверен для всех 7.
+
             val p = com.politex.util.AppThemeStore.load(context).palette
             WidgetColors(
                 backgroundColor = p.brandFill.toArgb(),
@@ -474,7 +457,6 @@ enum class WidgetStyle(
         }
 }
 
-/** Разрешённые цвета виджета; имена полей совпадают с WidgetStyle — вызовы style.X не меняются. */
 data class WidgetColors(
     val backgroundColor: Int,
     val mainColor: Int,
@@ -507,8 +489,7 @@ object WidgetAlarm {
             NowNextWidgetProvider::class.java,
             TodayScheduleWidgetProvider::class.java,
             BellsWidgetProvider::class.java,
-            // T3-C: teacher-виджеты держат минутный тик живым в teacher-сборке.
-            // В студенческой они не зарегистрированы → getAppWidgetIds пуст, дёшево.
+
             TeacherNextWidgetProvider::class.java,
             TeacherTodayWidgetProvider::class.java,
         ).any { manager.getAppWidgetIds(ComponentName(context, it)).isNotEmpty() }
@@ -520,7 +501,6 @@ object WidgetAlarm {
         val minutes = WidgetData.minuteOfDay(cal)
         val now = System.currentTimeMillis()
 
-        // SRED13: в учебное окно — ровно следующая минутная граница (тик не дрейфует).
         val triggerAt = if (minutes in SCHOOL_START until SCHOOL_END) {
             now + (60_000L - now % 60_000L)
         } else {
@@ -533,11 +513,9 @@ object WidgetAlarm {
             }.timeInMillis
         }
 
-        // D1: общее exact-или-idle планирование (WatchdogWorker/AlarmReceiver/scheduleNext)
         WidgetUpdateHelper.setExactOrIdle(context, triggerAt, pendingIntent(context))
     }
 
-    // CRIT2: отменять будильник можно, только когда не осталось НИ ОДНОГО виджета.
     internal fun shouldCancelAlarm(hasWork: Boolean): Boolean = !hasWork
 
     fun cancelIfNoWork(context: Context) {
@@ -559,10 +537,6 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
                 WidgetUpdateHelper.widgetScope.launch {
                     try {
 
-                        // RC1 (v2.0): перед рендером проверяем, что уроки сегодняшней даты
-                        // есть в БД; если нет — синхроним (с суточным done-флагом и
-                        // 15-мин кулдауном между попытками). Без этого виджет после
-                        // полуночи показывает «Уроков нет» до вечернего воркера.
                         runCatching { WidgetUpdateHelper.ensureTodaySchedule(context) }
 
                         if (WidgetUpdateHelper.isFullUpdateStale(context)) {
@@ -577,13 +551,10 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
                                 WidgetUpdateHelper.updateMinuteWidgets(context)
                             }
                         }
-                        // T3-C: teacher-виджеты обновляем тем же минутным тиком, БЕЗ flavor-гейта —
-                        // в студенческой сборке профиль null → updateAllNow мгновенно выходит (дёшево:
-                        // одно чтение prefs). Держать тик живым для teacher-виджетов — см. hasWork().
+
                         runCatching { TeacherWidgetUpdater.updateAllNow(context) }
                     } finally {
-                        // GG8(а) для главного минутного пути: перевзвод будильника обязан
-                        // переживать любое падение выше — иначе цепочка тиков обрывается.
+
                         runCatching { WidgetAlarm.scheduleNext(context) }
                         pending.finish()
                     }
@@ -592,8 +563,7 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
             -> {
-                // SRED4: после загрузки и после обновления приложения системные будильники
-                // сброшены — перепланируем тик, поднимаем сервис и обновляем все виджеты.
+
                 WidgetAlarm.scheduleNext(context)
 
                 if (com.politex.util.BellCountdownNotifier.isEnabled(context)) {
@@ -604,7 +574,7 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
                 WidgetUpdateHelper.widgetScope.launch {
                     try {
                         WidgetUpdateHelper.updateAllWidgets(context)
-                        // T3-C: teacher-виджеты после перезагрузки/обновления приложения
+
                         TeacherWidgetUpdater.updateAllNow(context)
                     } finally {
                         pending.finish()

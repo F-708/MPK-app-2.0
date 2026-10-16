@@ -26,9 +26,9 @@ class RouteTickPositionsTest {
 
     @Test
     fun `короткий путь - без меток (иначе они мигали бы всей пачкой)`() {
-        // 100 < 2*margin + step = 112 -> пусто
+
         assertTrue(routeTickPositions(100f, 56f, 0f, 28f).isEmpty())
-        // ровно на границе: метки на обоих краях отступов
+
         assertEquals(listOf(28f, 84f), routeTickPositions(112f, 56f, 0f, 28f))
     }
 
@@ -44,7 +44,7 @@ class RouteTickPositionsTest {
         assertEquals(listOf(28f, 84f, 140f), pos)
         assertTrue(pos.first() >= 28f)
         assertTrue(pos.last() <= 200f - 28f)
-        // при любой фазе границы отступа не нарушаются
+
         for (phase in 0..20) {
             val p = routeTickPositions(500f, 56f, phase * 2.7f, 28f)
             assertTrue(p.all { it >= 28f - eps && it <= 500f - 28f + eps })
@@ -53,7 +53,7 @@ class RouteTickPositionsTest {
 
     @Test
     fun `метки не ближе size÷2 к концам пути`() {
-        val size = 26f // ROUTE_TICK_SIZE_DP(10dp) * pxPerDp(~2.6) — экранных px
+        val size = 26f
         val margin = size / 2f
         val total = 400f
         for (phase in 0..30) {
@@ -66,17 +66,17 @@ class RouteTickPositionsTest {
 
     @Test
     fun `смещение заворачивается в 0 до step (включая отрицательное)`() {
-        // offset == step -> 0
+
         assertEquals(routeTickPositions(200f, 56f, 0f), routeTickPositions(200f, 56f, 56f))
-        // offset > step
+
         assertEquals(listOf(42f, 98f, 154f), routeTickPositions(200f, 56f, 70f, 28f))
-        // отрицательное: -10 -> фаза 46
+
         assertEquals(listOf(74f, 130f), routeTickPositions(200f, 56f, -10f, 28f))
     }
 
     @Test
     fun `периодичность по offset - бесшовная петля и постоянная скорость`() {
-        // сдвиг фазы на целый шаг ничего не меняет => течение непрерывно
+
         val base = routeTickPositions(500f, 56f, 12f, 28f)
         assertEquals(base, routeTickPositions(500f, 56f, 12f + 56f, 28f))
         assertEquals(base, routeTickPositions(500f, 56f, 12f + 56f * 3f, 28f))
@@ -89,17 +89,15 @@ class RouteTickPositionsTest {
         for (i in 1 until pos.size) {
             assertEquals(56f, pos[i] - pos[i - 1], eps)
         }
-        // число меток ≈ total/step (отступы съедают не больше пары меток)
+
         assertTrue(abs(pos.size - total / 56f) <= 2f)
-        assertEquals(35f, pos.first(), eps) // margin + phase
+        assertEquals(35f, pos.first(), eps)
         assertTrue(pos.last() <= total - 28f)
     }
 
     @Test
     fun `при zoom x2 позиции по доле длины те же (однородность по масштабу)`() {
-        // totalScreenLen = totalImg*zoom: при zoom×2 все ЭКРАННЫЕ длины удваиваются.
-        // Однородность routeTickPositions => доли позиций (p/total) не меняются —
-        // метки не переставляются скачком при зуме.
+
         val total = 331f
         val p1 = routeTickPositions(total, 56f, 12f, 28f)
         val p2 = routeTickPositions(total * 2f, 112f, 24f, 56f)
@@ -111,14 +109,13 @@ class RouteTickPositionsTest {
 
     @Test
     fun `на стыках полилиний общего контура метки не дублируются и не теряются`() {
-        // Общий контур (AA1): две полилинии 90 + 60 px с базами 0 и 90.
+
         val bases = listOf(0f, 90f)
         val cums = listOf(listOf(0f, 30f, 90f), listOf(0f, 60f))
         val total = 150f
-        val positions = routeTickPositions(total, 30f, 0f, 15f) // [15,45,75,105,135]
+        val positions = routeTickPositions(total, 30f, 0f, 15f)
         assertEquals(listOf(15f, 45f, 75f, 105f, 135f), positions)
 
-        // Зеркало обхода из drawRoutePath: полуинтервал [base+cum[i-1], base+cum[i]).
         val drawn = ArrayList<Float>()
         var idx = 0
         for ((pi, cum) in cums.withIndex()) {
@@ -135,11 +132,9 @@ class RouteTickPositionsTest {
                 }
             }
         }
-        // каждая метка нарисована ровно один раз, порядок вдоль контура сохранён
+
         assertEquals(positions, drawn)
     }
-
-    // ---- AA7: zoom-to-fit этапа ----
 
     @Test
     fun `fitStageViewport - scale по bbox и центрирование`() {
@@ -167,10 +162,10 @@ class RouteTickPositionsTest {
         val viewH = 600f
         val imgH = viewW / CollegeRouteFinder.PLAN_ASPECT
         val rest = (viewH / imgH * 0.72f).coerceIn(1f, 2.2f)
-        // одна точка (вырожденный bbox) — зум упирается в потолок 8
+
         val (sMax, _, _) = fitStageViewport(listOf(MapPoint(0.5f, 0.5f)), viewW, viewH)!!
         assertEquals(8f, sMax, 1e-3f)
-        // bbox на весь план — scale ниже rest, клампим снизу в restZoom
+
         val all = listOf(MapPoint(0f, 0f), MapPoint(1f, 1f))
         val (sMin, _, _) = fitStageViewport(all, viewW, viewH)!!
         assertEquals(rest, sMin, 1e-3f)
@@ -184,18 +179,14 @@ class RouteTickPositionsTest {
         assertNull(fitStageViewport(listOf(MapPoint(0.5f, 0.5f)), 1080f, 0f))
     }
 
-    // ---- BB9: дедупликация соседних одинаковых этапов ----
-
     @Test
     fun `dedupeStages схлопывает подряд идущие одинаковые этажи`() {
         assertEquals(listOf("1", "2", "3-4"), dedupeStages(listOf("1", "1", "2", "3-4", "3-4", "3-4")))
         assertEquals(emptyList<String>(), dedupeStages(emptyList()))
         assertEquals(listOf("3-4"), dedupeStages(listOf("3-4", "3-4")))
-        // несоседние дубликаты сохраняются (маршрут реально вернулся на этаж)
+
         assertEquals(listOf("1", "2", "1"), dedupeStages(listOf("1", "2", "1")))
     }
-
-    // ---- EE4: подписи шагов ----
 
     @Test
     fun `stepLabels нумерует шаги с 1`() {

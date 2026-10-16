@@ -23,7 +23,7 @@ object NotificationHelper {
 
     const val REMINDER_CHANNEL_ID = "mpk_reminders"
     const val REMINDER_CHANNEL_NAME = "Напоминания о заданиях"
-    // SRED11: неймспейс reminder-PendingIntent (3_000_000+), не пересекается с виджет-чипами
+
     private const val REMINDER_NOTIFICATION_BASE = 3_000_000
 
     fun createNotificationChannel(context: Context) {
@@ -146,9 +146,6 @@ object NotificationHelper {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
-        // v2.0: без префикса «Напоминание:» (иконка канала и так говорит, что это напоминание).
-        // Заголовок — урок КАПСОМ (о чём), текст — сама задача (что сделать):
-        // «МАТЕМАТИКА · Решить задачи 15-20» читается одним взглядом.
         val subject = task.shortSubjectName.ifBlank { task.subjectName }
         val title = if (subject.isNotBlank()) subject.uppercase() else "ЗАДАНИЕ"
         val body = task.title.ifBlank { "Посмотри задание" }

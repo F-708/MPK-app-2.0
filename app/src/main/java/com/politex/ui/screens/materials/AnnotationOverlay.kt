@@ -126,25 +126,15 @@ private fun distPointToSegment(p: Offset, a: Offset, b: Offset): Float {
     return (ap - ab * t).getDistance()
 }
 
-// CC5: штрих рисуется внутри контейнера, масштабированного graphicsLayer'ом (изображения,
-// PDF и DOCX — единая модель зума). Чтобы толщина была константой в экранных dp,
-// хранимую widthDp компенсируем делением на layerScale.
 internal fun compensatedStrokeWidthPx(widthDp: Float, pxPerDp: Float, layerScale: Float): Float =
     widthDp * pxPerDp / layerScale.coerceAtLeast(0.01f)
 
-// BB3: порог ластика в нормализованных координатах страницы. Экранная зона касания
-// (widthDp/2 + extra) постоянна; перевод в пиксели слоя (÷layerScale) и в нормаль (÷boxWidthPx).
 internal fun eraserThresholdNorm(widthDp: Float, extraDp: Float, pxPerDp: Float, boxWidthPx: Float, layerScale: Float): Float =
     (widthDp / 2f + extraDp) * pxPerDp / (layerScale.coerceAtLeast(0.01f) * boxWidthPx.coerceAtLeast(1f))
 
-// BB3: штрих принадлежит странице, на которой начат; уход пальца за край — точка clamp'ится
-// на границу симметрично со всех сторон (не рисуем на соседней странице).
 internal fun clampToBox(pos: Offset, w: Float, h: Float): Offset =
     Offset(pos.x.coerceIn(0f, w), pos.y.coerceIn(0f, h))
 
-// BB3: undo — стек ДЕЙСТВИЙ текущей сессии редактирования (добавление ИЛИ стирание ИЛИ корзина).
-// Сессия живёт пока открыт viewer; выход из документа уничтожает её вместе с историей
-// (сохранённые в БД штрихи остаются).
 sealed interface AnnotationAction {
     data class Add(val page: Int, val stroke: Stroke) : AnnotationAction
     data class Erase(val page: Int, val index: Int, val stroke: Stroke) : AnnotationAction
@@ -190,14 +180,11 @@ fun AnnotationLayer(
 
     transformKey: Any? = null,
 
-    // CC5: масштаб graphicsLayer контейнера документа, внутри которого рисуем. 1f = без компенсации.
     layerScale: Float = 1f,
 ) {
 
     var eraserPos by remember { mutableStateOf<Offset?>(null) }
 
-    // Колбэчи держим свежими: pointerInput не перезапускается при зуме,
-    // а замыкания viewer'а пересоздаются (иначе ластик читает устаревший zoom).
     val currentOnChange by rememberUpdatedState(onCurrentChange)
     val currentFinished by rememberUpdatedState(onStrokeFinished)
     val currentErase by rememberUpdatedState(onEraseAt)
@@ -207,9 +194,7 @@ fun AnnotationLayer(
         if (drawMode) {
             Modifier.pointerInput(drawMode, eraserActive, strokeColor, strokeWidthDp, transformKey) {
                 awaitEachGesture {
-                    // BB3: размер страницы читаем НА КАЖДЫЙ жест, а не один раз при старте
-                    // pointerInput: при зуме страница меняет размер, устаревшие w/h ломали
-                    // нормализацию координат (ластик «не стирал», штрих вставал не туда).
+
                     val w = size.width.toFloat().coerceAtLeast(1f)
                     val h = size.height.toFloat().coerceAtLeast(1f)
                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -326,7 +311,7 @@ fun AnnotationToolbar(
     var clearConfirm by remember { mutableStateOf(false) }
     LaunchedEffect(clearConfirm) {
         if (clearConfirm) {
-            // BB3: корзина — двойной тап в течение 500ms (первый → «Точно?», второй → удалить всё).
+
             delay(CLEAR_CONFIRM_TIMEOUT_MS)
             clearConfirm = false
         }
@@ -340,8 +325,7 @@ fun AnnotationToolbar(
         Column(modifier = Modifier.padding(vertical = 2.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                // R2 #22: чипы 44dp не влезают в 360dp — скролл вместо клиппинга
-                // ponytail: horizontalScroll, если тулбар когда-нибудь растёт — заменить на FlowRow
+
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
             ) {
                 ANNOTATION_COLORS.forEachIndexed { i, c ->

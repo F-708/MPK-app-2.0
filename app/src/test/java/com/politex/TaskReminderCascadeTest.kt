@@ -16,7 +16,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** R2#7: deleteTask удаляет напоминания каскадом; undo восстанавливает задание и снимок напоминаний. */
 @RunWith(RobolectricTestRunner::class)
 class TaskReminderCascadeTest {
     private lateinit var db: MpkDatabase
@@ -72,14 +71,13 @@ class TaskReminderCascadeTest {
     fun `undo возвращает задание и снимок напоминаний`() = runBlocking {
         val (id, _) = seedTaskWithReminders()
         val saved = requireNotNull(repo.getTaskById(id))
-        // снимок ДО удаления — так делает deleteWithUndo в TasksScreen
+
         val snapshot = db.taskReminderDao().getForTask(id)
         assertEquals(2, snapshot.size)
 
         repo.deleteTask(saved)
         assertTrue(db.taskReminderDao().getForTask(id).isEmpty())
 
-        // undo
         repo.addTask(saved.copy())
         db.taskReminderDao().insertAll(snapshot)
 

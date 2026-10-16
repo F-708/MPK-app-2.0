@@ -134,7 +134,6 @@ fun MaterialImageViewer(
     val dirtyPages = remember(item.id) { mutableStateListOf<Int>() }
     var saveVersion by remember { mutableIntStateOf(0) }
 
-    // BB3: undo-сессия живёт пока открыт viewer; выход очищает историю (штрихи в БД остаются).
     val undoSession = remember(item.id) { AnnotationUndoSession() }
 
     LaunchedEffect(annotations) {
@@ -242,7 +241,7 @@ fun MaterialImageViewer(
                 onColor = { drawColor = it },
                 onWidth = { drawWidth = it },
                 onUndo = {
-                    // BB3: отменяем последнее ДЕЙСТВИЕ сессии — добавление ИЛИ стирание ИЛИ корзину.
+
                     val action = undoSession.pop()
                     if (action != null) {
                         val updated = applyUndo(action, pageStrokes.toMap())
@@ -255,7 +254,7 @@ fun MaterialImageViewer(
                     }
                 },
                 onClear = {
-                    // BB3: корзина удаляет аннотации ВСЕГО документа (все страницы).
+
                     val snapshot = pageStrokes.toMap().filterValues { it.isNotEmpty() }
                     if (snapshot.isNotEmpty()) {
                         undoSession.record(AnnotationAction.ClearAll(snapshot))
@@ -303,9 +302,7 @@ fun MaterialImageViewer(
 
                             awaitEachGesture {
                                 awaitFirstDown(requireUnconsumed = false)
-                                // R2 #2: в drawMode двухпальцевый трансформ обрабатывает AnnotationLayer —
-                                // внешний зум-хэндлер жест не трогает (иначе zoom/pan применяется дважды
-                                // и портит штрихи). drawMode читается из snapshot-state на каждый жест.
+
                                 if (drawMode) return@awaitEachGesture
                                 var handled = zoom > 1.05f
                                 do {
@@ -364,8 +361,7 @@ fun MaterialImageViewer(
                         },
                         eraserActive = eraserActive,
                         transformKey = rotation,
-                        // BB3: слой находится внутри graphicsLayer(scaleX/Y = zoom*fit) —
-                        // компенсируем масштаб, чтобы толщина штриха была константой на экране.
+
                         layerScale = zoom * fit,
                         onEraseAt = { p ->
 

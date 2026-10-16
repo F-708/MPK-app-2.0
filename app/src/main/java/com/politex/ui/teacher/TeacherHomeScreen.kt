@@ -78,9 +78,6 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-// Экран «Расписание» преподавателя (TR3): near-copy студенческого ScheduleScreen.
-// Структура 1-в-1: шапка «Расписание»+подзаголовок+sync, ряд Сегодня/Завтра+календарь,
-// список карточек-пар (LessonCard-копия). Данные — TeacherDayLoader через TeacherDayViewModel.
 @Composable
 fun TeacherHomeScreen(
     profile: TeacherProfile?,
@@ -101,7 +98,6 @@ fun TeacherHomeScreen(
     val todayCal = Calendar.getInstance()
     var showDatePicker by remember { mutableStateOf(false) }
 
-    // Копия subtitleText студенческого ScheduleScreen (:242-256).
     val subtitleText = remember(state.dateKey, state.isToday, state.dayOffset, state.selectedDate) {
         val parts = state.dateKey.split(".")
         val ddMM = if (parts.size >= 2) "${parts[0]}.${parts[1]}" else state.dateKey
@@ -129,7 +125,7 @@ fun TeacherHomeScreen(
     }
 
     Column(modifier = modifier.fillMaxSize().background(ColorBgMain)) {
-        // ——— Шапка: копия ScheduleScreen.kt:501-563 ———
+
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -148,7 +144,7 @@ fun TeacherHomeScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                // TR: «обновлено в HH:MM» — контракт честности, стилем студенческих служебных подписей.
+
                 Text(
                     text =
                         if (state.lastSyncEpoch > 0L) {
@@ -161,7 +157,7 @@ fun TeacherHomeScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            // Копия sync-кнопки ScheduleScreen.kt:537-563.
+
             Box(
                 modifier =
                     Modifier
@@ -192,7 +188,6 @@ fun TeacherHomeScreen(
             }
         }
 
-        // ——— Ряд Сегодня/Завтра + кнопка календаря: копия ScheduleScreen.kt:566-621 ———
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -231,11 +226,10 @@ fun TeacherHomeScreen(
 
         AppDivider(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
 
-        // ——— Список пар дня ———
         val slots = remember(state.lessons) { teacherSlots(state.lessons) }
         val statusByNumber =
             remember(state.lessons, state.isToday) {
-                // nowMinutes для подсветки текущей пары (как у студентов — только рамка, без своих статусов-текстов).
+
                 val c = Calendar.getInstance()
                 val nowMinutes = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE)
                 TeacherDayLogic
@@ -246,7 +240,7 @@ fun TeacherHomeScreen(
 
         val listState = rememberLazyListState()
         LaunchedEffect(slots, statusByNumber, state.dateKey) {
-            // Индекс внутри slots (с «дырками» NoLessonCard), а не внутри списка пар.
+
             val idx = slots.indexOfFirst { (_, lesson) ->
                 lesson != null && statusByNumber[lesson.lessonNumber].let { it == LessonStatus.NOW || it == LessonStatus.NEXT }
             }
@@ -301,9 +295,6 @@ fun TeacherHomeScreen(
     }
 }
 
-// ——— Карточка пары: near-copy студенческой LessonCard (ScheduleScreen.kt:866-1066) ———
-// Отличия (по reuse-map §2): вместо TeacherChip → GroupChip; кнопка кабинета ЧУТЬ БОЛЬШЕ (§2.3);
-// НЕТ HomeworkBadge/isSplit/SubgroupPane/StatusLabel — у преподавателя их нет.
 @Composable
 private fun TeacherLessonCard(
     lesson: TeacherDayLesson,
@@ -319,7 +310,7 @@ private fun TeacherLessonCard(
         modifier = Modifier.fillMaxWidth().testTag("lesson_card_${lesson.lessonNumber}"),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Верхний Row: бейдж номера + время (ScheduleScreen.kt:902-935).
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -344,7 +335,6 @@ private fun TeacherLessonCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Предмет (ScheduleScreen.kt:988-1001).
             val noSubject = lesson.subject.isBlank()
             Text(
                 text = if (noSubject) "Предмет уточняется" else lesson.subject,
@@ -360,7 +350,6 @@ private fun TeacherLessonCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Нижний Row: группа (слева) + кабинет (справа) — ScheduleScreen.kt:1005-1062.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -369,7 +358,7 @@ private fun TeacherLessonCard(
                 if (lesson.groups.isNotEmpty()) {
                     GroupChip(
                         name = lesson.groups.joinToString(", "),
-                        // §2.2: кликабельно только при одной группе (иначе неоднозначно).
+
                         onClick = if (lesson.groups.size == 1) {
                             { onGroupClick(lesson.groups[0]) }
                         } else {
@@ -388,8 +377,6 @@ private fun TeacherLessonCard(
     }
 }
 
-// GroupChip — визуальный клон студенческого TeacherChip (ScheduleScreen.kt:1069-1139):
-// тот же Surface/border/padding/размеры, но иконка Groups вместо Person и текст = группы.
 @Composable
 private fun GroupChip(
     name: String,
@@ -442,8 +429,6 @@ private fun GroupChip(
     }
 }
 
-// Кнопка кабинета — оригинальный чип «каб. N» (ScheduleScreen.kt:1023-1061) ЧУТЬ БОЛЬШЕ (reuse-map §2.3):
-// hit 44→48dp, иконка 12→14dp, текст 11→13sp, padding h6v2→h10v4. Клик тот же — onRoomClick → карта.
 @Composable
 private fun RoomButton(
     room: String,
@@ -474,7 +459,6 @@ private fun RoomButton(
     }
 }
 
-// Пустое состояние — копия студенческого (ScheduleScreen.kt:635-762), без упоминания группы.
 @Composable
 private fun TeacherEmptyState(
     text: String,
@@ -537,7 +521,6 @@ private fun TeacherEmptyState(
     }
 }
 
-// Экран «Выберите себя» (профиль не задан) — минимальный, в студенческой стилистике.
 @Composable
 private fun PickProfilePrompt(
     onPickProfile: () -> Unit,
@@ -568,9 +551,6 @@ private fun PickProfilePrompt(
     }
 }
 
-// ——— Чистые хелперы ———
-
-/** dd.MM для слота Сегодня(0)/Завтра(1) — БЕЗ дня недели (TR3). */
 internal fun slotSubtitle(
     offset: Int,
     base: Calendar = Calendar.getInstance(),
@@ -591,19 +571,16 @@ private fun isTomorrow(
     return com.politex.util.DateFormats.dotDate(tomorrow) == dateKey
 }
 
-/** dd.MM.yyyy → yyyy-MM-dd (для SimpleDatePickerDialog). */
 private fun isoOf(dotDate: String): String? {
     val p = dotDate.split(".")
     return if (p.size == 3) "${p[2]}-${p[1]}-${p[0]}" else null
 }
 
-/** yyyy-MM-dd → dd.MM.yyyy. */
 private fun dotDateOf(iso: String): String? {
     val p = iso.split("-")
     return if (p.size == 3) "${p[2]}.${p[1]}.${p[0]}" else null
 }
 
-/** Слоты 1..max с «дырками» — копия lessonSlots (ScheduleScreen.kt:1284) для TeacherDayLesson. */
 internal fun teacherSlots(lessons: List<TeacherDayLesson>): List<Pair<Int, TeacherDayLesson?>> {
     if (lessons.isEmpty()) return emptyList()
     val byNumber = lessons.associateBy { it.lessonNumber }

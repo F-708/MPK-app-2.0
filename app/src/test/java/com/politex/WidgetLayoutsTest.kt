@@ -106,7 +106,7 @@ class WidgetLayoutsTest {
     fun `CC9 anim_idle — animated-vector с конечным repeatCount (не infinite)`() {
         val text = File("src/main/res/drawable/anim_idle.xml").readText()
         assertTrue("anim_idle не animated-vector", text.contains("<animated-vector"))
-        // МЕЛОЧ20: бесконечный AVD крутился бы вечно и разряжал батарею — только конечный repeat
+
         assertTrue("anim_idle зациклен бесконечно (battery drain)", !text.contains("android:repeatCount=\"infinite\""))
         assertTrue(
             "anim_idle должен иметь конечный repeatCount",

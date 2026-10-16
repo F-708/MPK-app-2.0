@@ -156,8 +156,6 @@ fun TasksScreen(
             }
         }
 
-    // BB12: подсказка свайпа — демо-задание в начале списка, пока жест не освоен.
-    // Демо живет только в UI: id = DEMO_TASK_ID, в БД не пишется ни при каких условиях.
     var swipeHintDone by remember { mutableStateOf(HintFlags.isDone(context, HintFlags.KEY_SWIPE_TASKS)) }
     val demoTask =
         remember(groupInfo.canonicalName, groupInfo.course) {
@@ -180,22 +178,20 @@ fun TasksScreen(
             TaskType.getAvailableForCourse(groupInfo.course)
         }
 
-    // GG6: предметы, уже встречавшиеся в заданиях пользователя, — добавляются к куррикулуму группы
     val usedSubjects =
         remember(allTasks) {
             allTasks.map { it.subjectName }.filter { it.isNotBlank() }.distinct()
         }
 
     fun deleteWithUndo(task: StudentTaskEntity) {
-        // BB12: любой свайп до удаления (демо или реальное) — подсказка освоена
+
         if (!swipeHintDone) {
             HintFlags.markDone(context, HintFlags.KEY_SWIPE_TASKS)
             swipeHintDone = true
         }
-        if (isDemoTask(task.id)) return // демо не в БД — просто исчезает из списка
+        if (isDemoTask(task.id)) return
         coroutineScope.launch {
-            // R2#7: deleteTask удаляет напоминания каскадом — перед удалением снимаем
-            // снимок, undo восстанавливает его вместе с заданием
+
             val remindersSnapshot = reminderDao.getForTask(task.id)
             taskRepository.deleteTask(task)
             if (snackbarHostState == null) return@launch
@@ -709,7 +705,7 @@ private fun TaskFilterChip(
         color = if (isSelected) ColorTopBar else ColorBgMain,
         modifier =
         Modifier
-            // Вёрстка: та же высота, что у кнопки «+ ДОБАВИТЬ» (44dp).
+
             .height(Tokens.ButtonHeight)
             .onGloballyPositioned { offsets[index] = it.positionInParent().x.toInt() to it.size.width }
             .bouncyClickable(onClick = onClick)
@@ -760,8 +756,7 @@ internal fun shouldDelete(
 private fun SwipeToDeleteBox(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
-    // CC8: демо-офсет (доля ширины) применяется только к карточке, красный фон статичен;
-    // лямбда читается в фазе отрисовки — без рекомпозиций на кадр
+
     demoFraction: () -> Float = { 0f },
     content: @Composable () -> Unit,
 ) {
@@ -819,8 +814,7 @@ private fun SwipeToDeleteBox(
             modifier =
             Modifier
                 .matchParentSize()
-                // BB12: тот же RoundedCornerShape(2.dp) что у карточки — красный фон
-                // больше не торчит квадратными углами из-под скруглённой карточки
+
                 .clip(RoundedCornerShape(2.dp))
                 .background(ColorDangerFill),
             contentAlignment = Alignment.CenterEnd,
@@ -846,16 +840,10 @@ private fun SwipeToDeleteBox(
     }
 }
 
-// BB12: демо-задание — чисто UI, id = -1, в БД не попадает никогда
 internal const val DEMO_TASK_ID = -1L
 
 internal fun isDemoTask(id: Long): Boolean = id == DEMO_TASK_ID
 
-/**
- * BB12/CC8: демо-задание периодически «прыгает» влево на 40% ширины и обратно —
- * двигается ТОЛЬКО карточка, красный фон с иконкой Delete остаётся статичным
- * и открывается под ней, подсказывая жест удаления. Реальные карточки не прыгают.
- */
 @Composable
 private fun DemoSwipeHintItem(
     task: StudentTaskEntity,
@@ -877,7 +865,7 @@ private fun DemoSwipeHintItem(
         onDelete = onDelete,
         demoFraction = { demoOffset.value },
     ) {
-        // клики/чекбокс у демо неактивны — иначе saveTask/toggle писали бы id=-1 в БД
+
         TaskItemCard(
             task = task,
             onToggleCompleted = {},
@@ -909,7 +897,6 @@ fun TaskEditDialog(
         }
     var selectedType by remember { mutableStateOf(task?.taskTypeEnum ?: TaskType.HOMEWORK) }
 
-    // GG6: полный список — куррикулум группы + уже использованные предметы, distinct + sorted
     val subjectOptions =
         remember(groupInfo.specialtyCode, groupInfo.course, usedSubjects) {
             subjectListFor(groupInfo, usedSubjects)
@@ -937,7 +924,7 @@ fun TaskEditDialog(
         shape = RoundedCornerShape(2.dp),
         containerColor = ColorBgMain,
         title = {
-            // R2-дубли: общий заголовок диалога из ui.components
+
             DialogTitleBar(
                 text = if (isEdit) "Редактировать задание" else "Новое задание",
                 onClose = onDismissRequest,
@@ -992,7 +979,6 @@ fun TaskEditDialog(
                     }
                 }
 
-                // R2-дубли: общий ToggleChip из ui.components (тот же, что в MaterialSubjectDialog)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -1015,8 +1001,7 @@ fun TaskEditDialog(
                             .testTag("custom_subject_field"),
                     )
                 } else {
-                    // GG6: вместо дефолтного DropdownMenu (фиолетово-розовый) — свой триггер-поле,
-                    // по тапу открывается SubjectPickerDialog со списком-карточками
+
                     Surface(
                         shape = RoundedCornerShape(2.dp),
                         border = BorderStroke(1.dp, ColorBorderLight),
@@ -1069,8 +1054,6 @@ fun TaskEditDialog(
                         .TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                 )
 
-                // GG7: вместо чипов [+1 день, +2 дня, + напоминание] — одно полноширинное окошко,
-                // тап открывает существующую форму создания напоминания
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     border = BorderStroke(2.dp, ColorBorderLight),
@@ -1186,7 +1169,6 @@ fun TaskEditDialog(
         },
     )
 
-    // GG6: список предметов — AlertDialog со скроллящимся списком-карточками (не DropdownMenu)
     if (subjectExpanded) {
         SubjectPickerDialog(
             options = subjectOptions,
@@ -1402,7 +1384,7 @@ private fun ReminderComposer(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    // GG7: час/минуты по центру окошка, а не слева
+
                     horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
                 ) {
                     OutlinedTextField(
@@ -1508,8 +1490,6 @@ private fun ReminderComposer(
     }
 }
 
-/** GG6: полный список предметов для выбора — куррикулум группы + уже использованные,
- *  без пустых и дублей, отсортирован. Чистая функция — покрыта SubjectListForTest. */
 internal fun subjectListFor(
     groupInfo: GroupInfo,
     used: List<String>,
@@ -1519,9 +1499,6 @@ internal fun subjectListFor(
         .distinct()
         .sorted()
 
-/** GG6: диалог выбора предмета — скроллящийся список карточек в стиле приложения
- *  (Surface 2dp border ColorBorderLight, bg ColorBgMain, padding 12dp, 14sp ColorTextTitle,
- *  выбранный = ColorTopBar/белый), высота не более 60% экрана. */
 @Composable
 private fun SubjectPickerDialog(
     options: List<String>,

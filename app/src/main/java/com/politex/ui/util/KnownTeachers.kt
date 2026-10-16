@@ -16,13 +16,6 @@ import com.politex.data.repository.TeacherInsights
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * R2#8: общая загрузка базы преподавателей (CSV из assets) — вне main thread,
- * с кэшем, который сбрасывается на каждом ON_RESUME (данные могли обновиться
- * после синка/обновления приложения). Заменяет синхронный loadTeachers() из
- * композиции (GroupScheduleScreen, CollegeScreen) и вечный кэш фамилий
- * без инвалидации (ScheduleScreen).
- */
 object TeachersCache {
     @Volatile
     private var cached: List<Teacher>? = null
@@ -35,7 +28,7 @@ object TeachersCache {
         cached ?: withContext(Dispatchers.IO) {
             AppGraph.teachersRepository
                 .loadTeachers()
-                // пустой результат не кешируем (СРЕД9) — временный сбой чтения не прибивает список
+
                 .also { if (it.isNotEmpty()) cached = it }
         }
 }
@@ -49,7 +42,7 @@ fun rememberTeachers(): List<Teacher> {
         val observer =
             LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_RESUME) {
-                    // первый ON_RESUME — реплей при регистрации observer: данные только что загружены
+
                     if (firstResume) {
                         firstResume = false
                     } else {
@@ -65,7 +58,6 @@ fun rememberTeachers(): List<Teacher> {
     return teachers
 }
 
-/** R2#8: «фамилия есть в базе колледжа» — кликабельность чипов преподавателей в расписаниях. */
 @Composable
 fun rememberIsTeacherKnown(): (String) -> Boolean {
     val teachers = rememberTeachers()

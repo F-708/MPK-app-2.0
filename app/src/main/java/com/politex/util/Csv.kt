@@ -1,9 +1,5 @@
 package com.politex.util
 
-/**
- * R1-СЖАТИЕ: разбор строки CSV с `;`-разделителем и кавычками — был приватной копией
- * в StudentsRepository,TeachersRepository резал наивным split(';').
- */
 object Csv {
     fun splitRow(line: String): List<String> {
         val cells = mutableListOf<String>()

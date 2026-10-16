@@ -46,13 +46,6 @@ import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberTeachers
 
-/**
- * TR1: один экран — «Выберите себя». Тап по карточке сразу пишет профиль и закрывает экран
- * (без подтверждения): заказчик просил выбрать определённого преподавателя, а не шагать по визарду.
- *
- * @param onSkipAll оставлен для совместимости с вызовом в TeacherRoot — ветки «Пропустить» и
- *   mailto убраны (TR6), параметр не используется.
- */
 @Composable
 @Suppress("UNUSED_PARAMETER")
 fun TeacherOnboardingScreen(
@@ -114,7 +107,6 @@ fun TeacherOnboardingScreen(
     }
 }
 
-/** Копия стиля карточки из CollegeScreen.TeacherCard (без фото — выбор по ФИО/должности/предметам). */
 @Composable
 private fun TeacherPickCard(
     teacher: Teacher,

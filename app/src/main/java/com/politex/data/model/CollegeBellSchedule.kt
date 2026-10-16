@@ -107,8 +107,6 @@ object CollegeBellSchedule {
         return bells.firstOrNull { currentMinutes in it.startMinutes..it.endMinutes }
     }
 
-    // М25: getTimeForNumber/getBellForNumber (время «пар») удалены — в проде не использовались,
-    // уроки везде считаются через getTimeForLessonNumber.
     fun getTimeForLessonNumber(
         number: Int,
         dayOfWeek: Int = 1,

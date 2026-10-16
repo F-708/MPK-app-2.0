@@ -53,7 +53,7 @@ internal fun directUrlHasRequestedDate(url: String, dateDot: String): Boolean {
 open class MpkNetworkClient {
 
     companion object {
-        // Единственный честный промежуточный статус на время любой сетевой активности
+
         const val STATUS_CHECKING = "Проверяю расписание…"
         const val SCHEDULE_PORTAL_URL = "https://guo-mpk.by/raspisanie/"
         const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -104,7 +104,6 @@ open class MpkNetworkClient {
             if (result.none { it.first == url }) result.add(Pair(url, ddMmYyyy))
         }
 
-        // М16: прежние два «приоритетных» add() дублировали первую итерацию цикла (тот же порядок)
         for ((yyyy, mm) in folders) {
             for (name in listOf(ddMmYyyy, "${dd}_${mm}_$yyyy")) {
                 for (suffix in listOf("", "-1", "-2")) {
@@ -230,7 +229,7 @@ open class MpkNetworkClient {
         }
 
         fun rememberParseStats() {
-            // СРЕД14: один синхронный снапшот вместо 6 отдельных volatile-чтений
+
             val stats = MpkScheduleParser.statsSnapshot()
             lastParseFormat = stats.format
             lastParseStrategy = stats.strategy
@@ -339,8 +338,7 @@ open class MpkNetworkClient {
 
     open suspend fun downloadFileBytes(url: String): ByteArray? = withContext(Dispatchers.IO) {
         try {
-            // КРИТ2: ответ закрывается и на не-2xx — иначе при переборе кандидатов
-            // каждое 404 оставляет соединение OkHttp незакрытым (утечка пула).
+
             executeRequest(url).use { response ->
                 if (response.isSuccessful) {
                     return@withContext response.body?.bytes()
@@ -459,7 +457,7 @@ open class MpkNetworkClient {
     }
 
     open fun publishStatus(statusMessage: String? = null, isSyncing: Boolean? = null) {
-        // СРЕД14: атомарный update вместо read-copy-write — параллельные публикаторы не затирают друг друга
+
         _diagnosticInfo.update { current ->
             current.copy(
                 statusMessage = statusMessage ?: current.statusMessage,

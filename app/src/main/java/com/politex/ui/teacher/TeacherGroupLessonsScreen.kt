@@ -45,10 +45,6 @@ import com.politex.util.DateFormats
 import java.util.Calendar
 import androidx.compose.ui.text.style.TextOverflow
 
-// ——— «Мои пары у этой группы» (SPEC §4.1 фича 11): чип группы в карточке пары → сегодня+завтра.
-// Данные — из уже загруженного кэша teacher_lessons через TeacherDayLoader.loadDay, ноль новых загрузок.
-
-/** Чистая логика (покрыта TeacherGroupLogicTest). */
 object TeacherGroupLogic {
     data class GroupDay(
         val label: String,
@@ -56,7 +52,6 @@ object TeacherGroupLogic {
         val lessons: List<TeacherDayLesson>,
     )
 
-    /** Пара «моя у группы», если название группы (без учёта регистра/пробелов) совпадает с одной из lesson.groups. */
     fun matchesGroup(
         groups: List<String>,
         target: String,

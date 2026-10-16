@@ -116,8 +116,6 @@ private const val MATERIAL_STORAGE_NOTE = "Материалы хранятся �
 
 private const val RESTORED_SUBJECT = "Восстановленные"
 
-/** CC7: фаза списка — чистая функция. Пока Room не выдал первое значение — LOADING
- *  (нейтральный placeholder), empty-state только когда загружено и реально пусто. */
 enum class MaterialListUi { LOADING, EMPTY, CONTENT }
 
 fun materialListUi(
@@ -130,8 +128,6 @@ fun materialListUi(
         else -> MaterialListUi.CONTENT
     }
 
-// R2 #3: пользовательское название предмета может содержать '|' — разделитель стека.
-// '%' экранируется первым, чтобы round-trip был однозначным для любого ввода.
 private fun escapeSegment(s: String): String = s.replace("%", "%25").replace("|", "%7C")
 
 private fun unescapeSegment(s: String): String = s.replace("%7C", "|").replace("%25", "%")
@@ -186,11 +182,9 @@ fun MaterialBaseScreen(
     val dao = remember { MpkDatabase.getInstance(context).materialDao() }
     val scope = rememberCoroutineScope()
 
-    // CC7: initial=null вместо emptyList — первый кадр не выглядит «пустым списком»,
-    // последние полученные данные помнятся, чтобы не мигать при пересборе
     val itemsOrNull by dao.getAllItems().collectAsState(initial = null as List<MaterialItemEntity>?)
     var lastItems by remember { mutableStateOf(emptyList<MaterialItemEntity>()) }
-    // R2 #14: никакого backward-write в композиции — lastItems обновляется только в эффекте
+
     LaunchedEffect(itemsOrNull) { itemsOrNull?.let { lastItems = it } }
     val items = itemsOrNull ?: lastItems
     val loaded = itemsOrNull != null
@@ -271,7 +265,7 @@ fun MaterialBaseScreen(
 
     fun deleteItem(item: MaterialItemEntity) {
         scope.launch {
-            // R2 #15: сбой удаления файлов/БД не должен ронять экран молча — showErr-паттерн
+
             runCatching {
                 MaterialImporter.deleteStoredFiles(item)
                 dao.deleteItemWithBookmarks(item.id)
@@ -338,10 +332,7 @@ fun MaterialBaseScreen(
                         )
 
                     MaterialKind.FILE -> {
-                        // READER-PLAN D1/D3: PDF и DOCX идут в WebView-рендер (gander), если
-                        // движок достаточно новый и файл цел; иначе нативный PdfViewer / плоский
-                        // DocTextViewer. onFallbackNative переключает на нативный путь при смерти
-                        // рендер-процесса или pdf с паролем («locked»).
+
                         val context = LocalContext.current
                         val engine = remember { webViewEngineInfo(context) }
                         val fileExists = remember(viewerItem.uriPath) { File(viewerItem.uriPath).exists() }
@@ -384,8 +375,6 @@ fun MaterialBaseScreen(
                 val subjectRoute = currentRoute as? MaterialRoute.SubjectScreen
                 val archiveRoute = currentRoute as? MaterialRoute.ArchiveScreen
 
-                // GG15: корневая шапка (поиск + ДОБАВИТЬ) — только в корне; на экране
-                // предмета/архива «+» переехал в строку заголовка (MaterialSubjectContent)
                 if (subjectRoute == null && archiveRoute == null) {
                     MaterialHeader(
                         query = query,
@@ -646,7 +635,6 @@ private fun MaterialRootList(
     val subjects = remember(active) { active.groupBy { it.subjectName }.keys.sorted() }
     val archiveCount = remember(items) { items.count { it.archived } }
 
-    // CC7: placeholder/empty-state только по loaded-флагу — нет мигания «материалов нет»
     when (materialListUi(loaded, active.size + archiveCount)) {
         MaterialListUi.LOADING -> {
             MaterialLoadingPlaceholder(modifier)
@@ -778,7 +766,7 @@ private fun MaterialSubjectContent(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
             }
-            // GG15: название предмета сразу после «назад», weight 1f, 2 строки с эллипсисом
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = subjectName ?: "Архив",
@@ -798,10 +786,7 @@ private fun MaterialSubjectContent(
                     style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                 )
             }
-            // GG15: «ДОБАВИТЬ» — только иконка Plus в квадрате Tokens.IconHit, справа.
-            // v2.0-ит2 (#17): end-padding 12dp — Row имеет horizontal=4dp, а карточки списка
-            // и «+» главного экрана выровнены по 16dp; без этого кнопка уезжала вправо и
-            // стояла не вровень с остальными окошками.
+
             Surface(
                 shape = RoundedCornerShape(2.dp),
                 border = BorderStroke(1.dp, ColorBrandBlue),
@@ -826,7 +811,6 @@ private fun MaterialSubjectContent(
 
         AppDivider(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp))
 
-        // CC7: три фазы — placeholder до загрузки, empty-state только когда реально пусто
         when (materialListUi(loaded, items.size)) {
             MaterialListUi.LOADING ->
                 MaterialLoadingPlaceholder(Modifier.weight(1f))
@@ -870,8 +854,6 @@ private fun MaterialSubjectContent(
     }
 }
 
-/** CC7: нейтральный placeholder той же геометрии, что и список (карточки-болванки
- *  без иконки и текста — не empty-state), пока Room не выдал первое значение. */
 @Composable
 private fun MaterialLoadingPlaceholder(modifier: Modifier = Modifier) {
     LazyColumn(
@@ -1147,8 +1129,6 @@ private fun RowIconButton(
     }
 }
 
-// Вёрстка: склонение «1 отложенный / 2 отложенных / 5 отложенных» —
-// тот же паттерн, что lessonsWord (util/NotificationHelper.kt).
 private fun pluralWord(
     n: Int,
     one: String,
@@ -1162,4 +1142,3 @@ private fun pluralWord(
     }
 
 private fun deferredWord(n: Int): String = pluralWord(n, "отложенный", "отложенных", "отложенных")
-

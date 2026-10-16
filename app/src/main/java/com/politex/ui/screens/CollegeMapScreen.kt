@@ -173,10 +173,8 @@ fun CollegeMapScreen(
         mutableStateOf(CollegeMap.floorForRoom(initialRoom.orEmpty())?.id ?: "1")
     }
 
-    // AA7: инкремент при смене этапа маршрута (тап чипа) → zoom-to-fit этапа
     var stageFocus by rememberSaveable { mutableIntStateOf(0) }
 
-    // EE4: выбранный ШАГ маршрута (индекс этапа после склейки соседних этажей)
     var stageIndex by rememberSaveable { mutableIntStateOf(0) }
 
     var roomScheduleFor by remember { mutableStateOf<String?>(null) }
@@ -232,7 +230,6 @@ fun CollegeMapScreen(
         }.getOrNull()?.collect { value = it }
     }
 
-    // R2-дубль1: общий минутный тикер из TodayProvider вместо своего цикла
     val nowMinutes = com.politex.ui.util.rememberNowMinutes()
 
     val roomScheduleCurrentLesson =
@@ -269,9 +266,6 @@ fun CollegeMapScreen(
 
     val floors = remember(mapData) { CollegeMap.Floor.entries.associate { it.id to mapData.floor(it.id) } }
 
-    // FF3: авто-маршрут (из расписания/виджета) ЗАПИНЕН на исходную цель — считается
-    // ОДИН раз от initialRoom и НЕ перестраивается при смене `target` (тап/поиск).
-    // Сбрасывается только «Отменить маршрут» (autoCancelled) или выходом с экрана.
     val pinnedTarget = remember(initialRoom) { initialRoom?.trim().orEmpty() }
     val pinnedAutoRoute =
         remember(autoActive, pinnedTarget, fromRoom, mapData, floors) {
@@ -294,14 +288,13 @@ fun CollegeMapScreen(
     var builderActive by rememberSaveable { mutableStateOf(false) }
     var pairA by rememberSaveable { mutableStateOf("") }
     var pairB by rememberSaveable { mutableStateOf("") }
-    // З3: инкремент при автоподстановке найденного кабинета в «Куда» → разовая пульсация поля.
+
     var pairBPulseTick by remember { mutableIntStateOf(0) }
     var manualA by rememberSaveable { mutableStateOf<String?>(null) }
     var manualB by rememberSaveable { mutableStateOf<String?>(null) }
 
     DisposableEffect(builderActive) {
-        // R2#10: глобальный флаг трогает только экземпляр, включивший режим построения;
-        // вторая карта в стеке (builder выключен) больше не сбрасывает его при выходе
+
         if (builderActive) RouteBuilderMode.active = true
         onDispose { if (builderActive) RouteBuilderMode.active = false }
     }
@@ -317,8 +310,6 @@ fun CollegeMapScreen(
 
     val activeRoute = manualRoute ?: pinnedAutoRoute
 
-    // FF3: единая build-логика — используется и кнопкой «ПОСТРОИТЬ», и тапом в
-    // режиме конструктора. Читает ТЕКУЩИЕ pairA/pairB из state на момент вызова.
     val doBuild: () -> Unit = {
         val a = pairA.trim()
         val b = pairB.trim()
@@ -357,20 +348,15 @@ fun CollegeMapScreen(
         remember(routePoints) { routePoints?.mapIndexed { i, _ -> laneOffsetDp(i) } ?: emptyList() }
     val routeFinishHere =
         remember(activeRoute, floorId) { activeRoute?.floorPaths?.lastOrNull()?.floorId == floorId }
-    // Вёрстка: маркер старта — на ПЕРВОМ этапе маршрута (авто и ручной одинаково),
-    // финиш — на последнем; см. drawRoutePath(drawStart/drawFinish).
+
     val routeStartHere =
         remember(activeRoute, floorId) { activeRoute?.floorPaths?.firstOrNull()?.floorId == floorId }
 
-    // BB8: шильдик «через N этаж» убран; BB9: соседние одинаковые этажи схлопнуты.
-    // EE4: шаги = стадии после склейки; полоса видна всегда при активном маршруте (и с 1 шагом).
     val routeStages =
         remember(activeRoute) {
             dedupeStages(activeRoute?.floorPaths?.map { it.floorId } ?: emptyList())
         }
 
-    // EE4: подсвечен тапнутый шаг; если этаж сменили извне (чипы этажей, поиск,
-    // авто-переключение на target) — первый шаг на текужном этаже.
     val selectedStage =
         if (routeStages.getOrNull(stageIndex) == floorId) stageIndex else routeStages.indexOfFirst { it == floorId }
 
@@ -381,9 +367,6 @@ fun CollegeMapScreen(
             .background(ColorBgMain),
     ) {
 
-        // v2.0-ит2: синий баннер — ТОЛЬКО «назад + Карта колледжа» (как MaterialViewerTopBar).
-        // Поиск кабинета с кнопкой «НАЙТИ» переехал строкой ниже, на светлый фон контента —
-        // в синей полосе поле ввода и тёмно-синяя кнопка выглядели неразборчиво.
         val statusBars = WindowInsets.statusBars
         Surface(
             shape = RectangleShape,
@@ -432,7 +415,6 @@ fun CollegeMapScreen(
             }
         }
 
-        // Строка поиска кабинета — на светлом фоне, под баннером.
         Row(
             modifier =
             Modifier
@@ -459,8 +441,7 @@ fun CollegeMapScreen(
                     .bouncyClickable {
                         val found = query.trim()
                         if (found.isNotBlank()) {
-                            // FF3: поиск лишь выбирает кабинет — запиненный маршрут
-                            // (авто/ручной) живёт до «Отменить маршрут»/выхода, как и при тапе.
+
                             target = found
                             searchFailed = findRoomEverywhere(mapData, found) == null
                         }
@@ -476,7 +457,7 @@ fun CollegeMapScreen(
                 )
             }
         }
-        // BB10: «Отменить» показывается и при открытой форме (даже с пустыми полями)
+
         RouteActionButton(active = routeActive || builderActive) {
             if (routeActive || builderActive) {
                 manualA = null
@@ -487,7 +468,7 @@ fun CollegeMapScreen(
                 pairB = ""
             } else {
                 builderActive = true
-                // З3: найденный кабинет сам подставляется в «Куда», если оно пустое.
+
                 if (pairB.isBlank() && target.isNotBlank()) {
                     pairB = target
                     pairBPulseTick++
@@ -505,8 +486,6 @@ fun CollegeMapScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // BB10: форма конструктора — СРАЗУ под чипами этажей. Приложение edge-to-edge
-        // без ime-insets: клавиатура перекрывает только низ экрана, форма вверху видна.
         if (builderActive) {
             RoutePairPanel(
                 valueA = pairA,
@@ -526,8 +505,7 @@ fun CollegeMapScreen(
 
             onRoomTap = { room ->
                 searchFailed = false
-                // FF3: запиненный маршрут (авто/ручной) тап НЕ перестраивает — только
-                // выбирает кабинет. В конструкторе тап заполняет A/B и строит при обоих.
+
                 val res =
                     resolveRouteSource(
                         pinnedRouteActive = pinnedAutoRoute != null || manualA != null,
@@ -546,8 +524,7 @@ fun CollegeMapScreen(
             routeStages = routeStages,
             selectedStage = selectedStage,
             onSelectStage = { i ->
-                // EE4: тап шага — выбрать шаг и переключить этаж;
-                // AA7: zoom-to-fit bbox'а этапа только при смене этажа
+
                 stageIndex = i
                 val fid = routeStages[i]
                 if (fid != floorId) {
@@ -1019,7 +996,6 @@ private fun MapCanvas(
         label = "tickPhase",
     )
 
-    // GG10: пульс точки-«лестницы» (эталон — точка «сейчас» в звонках: 900ms Reverse)
     val stairsPulse by rememberInfiniteTransition(label = "лестница").animateFloat(
         initialValue = 4.5f,
         targetValue = 7f,
@@ -1089,8 +1065,6 @@ private fun MapCanvas(
 
         fun restZoom(): Float = (viewHState.value / imgHState.value * 0.72f).coerceIn(1f, 2.2f)
 
-        // AA7: счётчик смены этапа — zoom-to-fit выполняем только при смене этапа,
-        // ручной зум пользователя после него не трогаем.
         val handledStage = remember { mutableIntStateOf(0) }
 
         LaunchedEffect(floorId, targetRoom?.id, stageFocus) {
@@ -1220,11 +1194,6 @@ private fun MapCanvas(
             }
         }
 
-        // v2.0: кнопка «во весь экран» (BottomEnd) удалена по брифу — работала криво.
-
-        // EE4: чипы ШАГОВ маршрута («Шаг 1..N») у самого верха карты — без подписей
-        // этажей (этаж и так виден в чипах этажей сверху). Видны всегда при активном
-        // маршруте, CircleShape на широком контенте даёт пилюлю.
         if (routeStages.isNotEmpty()) {
             Row(
                 modifier =
@@ -1413,14 +1382,11 @@ internal fun mainEntranceRoom(mapData: CollegeMapData): MapRoom? = mapData
         )
     }
 
-// Бегущие шевроны «^» (BB7). Все величины ЭКРАННЫЕ: при рисовании внутри
-// масштабируемого graphicsLayer домножаются на unit = 1/zoom, поэтому размер,
-// шаг и скорость галочек постоянны на экране при любом зуме (0.8..8).
-private const val ROUTE_TICK_STEP_PX = 56f // шаг между галочками, экранных px
-private const val ROUTE_TICK_SPEED_PX_PER_SEC = 12f // скорость вдоль пути, экранных px/сек
-private const val ROUTE_TICK_SIZE_DP = 10f // половина габарита галочки, dp
-private const val ROUTE_TICK_STROKE_DP = 2f // внутренний (белый) штрих, dp
-private const val ROUTE_LINE_WIDTH_DP = 2.5f // линия маршрута (тоньше прежних 4dp)
+private const val ROUTE_TICK_STEP_PX = 56f
+private const val ROUTE_TICK_SPEED_PX_PER_SEC = 12f
+private const val ROUTE_TICK_SIZE_DP = 10f
+private const val ROUTE_TICK_STROKE_DP = 2f
+private const val ROUTE_LINE_WIDTH_DP = 2.5f
 
 private fun DrawScope.drawRoutePath(
     polylines: List<List<MapPoint>>,
@@ -1441,25 +1407,19 @@ private fun DrawScope.drawRoutePath(
     var finish: MapPoint? = null
     var start: MapPoint? = null
 
-    // Экранные константы, компенсированные на unit: после graphicsLayer(scale=zoom)
-    // дают одинаковый физический размер/шаг/скорость при любом зуме.
-    val stepPx = ROUTE_TICK_STEP_PX // шаг между галочками, экранных px
-    val offsetPx = tickPhase * stepPx // бегущее смещение, экранных px, [0, stepPx)
-    // AA1: метки не ближе половины габарита к концам пути и не раньше start+step/2 —
-    // плавно «въезжают/выезжают» за границей отступа вместо мигания на старте/финише.
+    val stepPx = ROUTE_TICK_STEP_PX
+    val offsetPx = tickPhase * stepPx
+
     val marginPx = maxOf(stepPx, ROUTE_TICK_SIZE_DP * pxPerDp) / 2f
     val lineW = ROUTE_LINE_WIDTH_DP * pxPerDp * unit
     val tickSize = ROUTE_TICK_SIZE_DP * pxPerDp * unit
     val tickStroke = ROUTE_TICK_STROKE_DP * pxPerDp * unit
 
-    // AA1: ОДИН общий контур — накопленная длина всех полилиний этапа с общей базой,
-    // фаза одна на контур: плотность меток не ломается на стыках полилиний.
-    val contour = ArrayList<Triple<Float, List<Offset>, FloatArray>>(polylines.size) // base, screen, cum
+    val contour = ArrayList<Triple<Float, List<Offset>, FloatArray>>(polylines.size)
     var totalImg = 0f
     for ((pi, raw) in polylines.withIndex()) {
         if (raw.size < 2) {
-            // GG10: этап-«лестница» (переход между этажами, линия нулевой длины) —
-            // пульсирующая точка на позиции лестницы, чтобы шаг не был пустым
+
             val p = raw.lastOrNull() ?: continue
             val c = Offset(p.x * imgW, p.y * imgH)
             drawCircle(
@@ -1499,8 +1459,6 @@ private fun DrawScope.drawRoutePath(
         totalImg += len
     }
 
-    // Метки каждые stepPx ЭКРАННЫХ px вдоль общей длины контура (totalImg*zoom);
-    // шаг пересчитывается в долю длины каждый кадр — при зуме метки текут непрерывно.
     val positions = routeTickPositions(totalImg * zoom, stepPx, offsetPx, marginPx)
     if (positions.isNotEmpty()) {
         var idx = 0
@@ -1518,8 +1476,8 @@ private fun DrawScope.drawRoutePath(
                 val dy = b.y - a.y
                 val angle = atan2(dy, dx)
                 while (idx < positions.size) {
-                    val pImg = positions[idx] * unit // экранные px -> image-px
-                    if (pImg >= segEnd) break // метка следующему сегменту (не дублируем)
+                    val pImg = positions[idx] * unit
+                    if (pImg >= segEnd) break
                     if (pImg >= segStart) {
                         val t = (pImg - segStart) / segLen
                         drawDirectionChevron(
@@ -1536,8 +1494,6 @@ private fun DrawScope.drawRoutePath(
         }
     }
 
-    // Маркер старта — точка на первом конце АКТИВНОЙ полилинии; размер экранный
-    // (pxPerDp*unit компенсирует graphicsLayer(scale=zoom)), как у финиша.
     if (drawStart) {
         start?.let { s ->
             val c = Offset(s.x * imgW, s.y * imgH)
@@ -1559,15 +1515,6 @@ private fun DrawScope.drawRoutePath(
     }
 }
 
-/**
- * Расстояния (px) для бегущих галочек вдоль пути длиной [totalLenPx]: старт с
- * фазы [offsetPx] (заворачивается в [0, stepPx)) от границы отступа и далее каждые
- * [stepPx]. Метки не рисуются ближе [marginPx] к концам (первая не раньше
- * start+step/2, последняя не позже end-step/2 при marginPx = step/2) — на концах
- * они плавно «въезжают/выезжают», а не мигают. Путь короче 2*marginPx+stepPx меток
- * не получает. Чистая функция, однородная по масштабированию всех аргументов:
- * при zoom×2 (все длины в экранных px удвоены) позиции по ДОЛЕ длины те же.
- */
 internal fun routeTickPositions(
     totalLenPx: Float,
     stepPx: Float,
@@ -1589,14 +1536,6 @@ internal fun routeTickPositions(
     return out
 }
 
-/**
- * AA7 zoom-to-fit этапа маршрута: [points] — план-координаты (0..1) точек этапа,
- * [viewW]/[viewH] — экран в px. scale = min(viewW/bw, viewH/bh)*0.85*0.8 (BB11:
- * дополнительное отдаление ~20%; clamp в [restZoom, 8] как у ручного зума),
- * offset — чтобы центр bbox встал в центр экрана.
- * План занимает imgW=viewW, imgH=viewW/PLAN_ASPECT (все планы 1376×768).
- * Чистая функция — тестируется без Compose.
- */
 internal fun fitStageViewport(
     points: List<MapPoint>,
     viewW: Float,
@@ -1619,7 +1558,7 @@ internal fun fitStageViewport(
     val bw = (maxX - minX).coerceAtLeast(1f)
     val bh = (maxY - minY).coerceAtLeast(1f)
     val rest = (viewH / imgH * 0.72f).coerceIn(1f, 2.2f)
-    // BB11: итоговый scale ещё ×0.8 — отдалить этап, clamp сохранён
+
     val scale = (minOf(viewW / bw, viewH / bh) * 0.85f * 0.8f).coerceIn(rest, 8f)
     return Triple(
         scale,
@@ -1628,16 +1567,9 @@ internal fun fitStageViewport(
     )
 }
 
-// BB7: плечи шеврона под ±35° от направления движения
 private const val CHEVRON_COS35 = 0.8192f
 private const val CHEVRON_SIN35 = 0.5736f
 
-/**
- * BB7: бегущий симметричный шеврон «^» вдоль пути: вершина впереди, два РАВНЫХ
- * плеча под ±35° к оси сегмента ([angle] в радианах — направление движения),
- * симметрично относительно оси. Белая заливка + синяя обводка — читается и на
- * линии маршрута, и на любом фоне карты. Все размеры в image-px (уже компенсированы).
- */
 private fun DrawScope.drawDirectionChevron(
     center: Offset,
     angle: Float,
@@ -1653,7 +1585,6 @@ private fun DrawScope.drawDirectionChevron(
         y: Float,
     ) = Offset(center.x + x * c - y * s, center.y + x * s + y * c)
 
-    // локальные координаты: +x — по ходу движения
     val arm = 0.75f * size
     val apex = rot(0.30f * size, 0f)
     val backX = 0.30f * size - arm * CHEVRON_COS35
@@ -1667,10 +1598,8 @@ private fun DrawScope.drawDirectionChevron(
     drawLine(Color.White, apex, e2, strokeWidth = stroke, cap = StrokeCap.Round)
 }
 
-/** BB9: схлопывает ПОДРЯД идущие одинаковые floorId этапов («3-4, 3-4» → «3-4»). Чистая функция. */
 internal fun dedupeStages(list: List<String>): List<String> = list.filterIndexed { i, id -> i == 0 || id != list[i - 1] }
 
-/** EE4: подписи шагов маршрута — «Шаг 1..N» по порядку этапов после склейки. Чистая функция. */
 internal fun stepLabels(stages: List<String>): List<String> = stages.mapIndexed { i, _ -> "Шаг ${i + 1}" }
 
 private fun mapRes(floorId: String): Int = when (floorId) {

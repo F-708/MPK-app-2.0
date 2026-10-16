@@ -11,8 +11,6 @@ import java.util.Calendar
 
 enum class SyncDecision { MORNING_FORCE, PERIODIC, SKIP }
 
-// Чистая функция окон синка (hourMinute = часы*60+минуты, dayOfWeek = Calendar.DAY_OF_WEEK).
-// Суббота трактуется как будень (может быть учебной), воскресенье — всегда SKIP.
 fun shouldTeacherSync(
     hourMinute: Int,
     dayOfWeek: Int,
@@ -42,14 +40,13 @@ class TeacherScheduleWorker(
             if (decision == SyncDecision.SKIP) return@withContext Result.success()
 
             val repository = com.politex.AppGraph.scheduleRepository
-            // ponytail: saturdayIsSchoolDay=true всегда — у преподавателей суббота может быть учебной.
+
             val targets = listOf(now) + nextDayCandidates(now, saturdayIsSchoolDay = true)
 
             var anyOk = false
             var anyFail = false
             targets.forEachIndexed { index, cal ->
-                // Force-перечитывание: утренний прогон (обе цели) + окно 14:00–18:00 для сегодня
-                // (внутридневные правки); прочие тики — кэш-первым.
+
                 val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
                 val force = decision == SyncDecision.MORNING_FORCE || (index == 0 && hour in 14..17)
                 repository
@@ -59,16 +56,16 @@ class TeacherScheduleWorker(
             }
 
             if (anyOk) {
-                // Контракт с экраном «Мой день»: метка «обновлено в HH:MM».
+
                 applicationContext
                     .getSharedPreferences("mpk_teacher_profile", Context.MODE_PRIVATE)
                     .edit()
                     .putLong("lastSyncEpoch", System.currentTimeMillis())
                     .apply()
-                // T3-C: после успешного синка — перерисовать teacher-виджеты (в студенческой сборке профиль null → мгновенный выход)
+
                 com.politex.widget.TeacherWidgetUpdater.updateAll(applicationContext)
             }
-            // Сетевые ошибки тихо: retry/следующий тик, без уведомлений об ошибке (SPEC §4.2 «д»).
+
             if (anyFail) Result.retry() else Result.success()
         }
 

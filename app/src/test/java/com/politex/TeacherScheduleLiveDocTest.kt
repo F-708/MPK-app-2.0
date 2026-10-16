@@ -9,11 +9,6 @@ import org.junit.Test
 import java.util.Calendar
 import java.util.GregorianCalendar
 
-/**
- * Регрессия по ЖИВОМУ документу преподавателей за ПОНЕДЕЛЬНИК 05.10.2026
- * (скачан с https://guo-mpk.by/wp-content/uploads/2026/10/05.10.2026-raspisanie-prepodavatelej.doc).
- * Документ — «2 НЕДЕЛЯ» (чётная), шапка повторяется 4 раза, 12 колонок уроков.
- */
 class TeacherScheduleLiveDocTest {
     private fun liveBytes(): ByteArray =
         javaClass.getResourceAsStream("/fixtures/05.10.2026-raspisanie-prepodavatelej.doc")!!.readBytes()

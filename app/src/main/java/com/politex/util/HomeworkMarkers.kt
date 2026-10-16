@@ -68,12 +68,7 @@ object HomeworkMarkers {
     ): Boolean {
         if (lessonSubject.isBlank() || taskSubject.isBlank()) return false
         val b = SubjectFormatter.normalize(taskSubject)
-        // v2.0 (баг «ДЗ не показывается на split-уроках»): у урока с РАЗНЫМИ предметами
-        // подгрупп subjectRaw = «ПредметA / ПредметB» (MpkScheduleParser:1006), а
-        // normalize() склейки не даёт точного равенства, contains-fallback же требует
-        // длину ≥6 у обеих строк — короткие предметы («ТОЭ», «Химия») терялись.
-        // Сплитим склейку по « / » (сам парсер ставит этот разделитель; в каталоге
-        // предметов «/» не встречается) и матчим КАЖДУЮ часть отдельно.
+
         return lessonSubject
             .split('/')
             .map { SubjectFormatter.normalize(it) }
