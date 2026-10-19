@@ -1133,6 +1133,12 @@ testStandardDebugUnitTest → коммит. Room-схему трогает то�
 - ВОЛНА D ✅ коммит 60b14b1: JJ20 режим преподавателя (TeacherModeStore, онбординг-ветка,
   табы 3 шт, группа вместо преподавателя, без «ведёт у вас»/специальности/подгруппы,
   «СМЕНИТЬ РОЛЬ» → онбординг). Тесты 1070+ зелёные, Roborazzi + teacher-кадр, vision OK.
+- ВОЛНА E ✅ коммит 97d154e: JJ11 тёмная тема визуально (7 dark-кадров harness, values-night,
+  hardcoded→токены, navSelected, баннер-фолбэк в dark, карта-холст). Vision речек 4/4 OK.
+- ВОЛНА F ✅ ФИНАЛ: version 2.2 (versionCode 22000), CHANGELOG, APK: releases/moy-polytech-v2.2-debug.apk
+  + moy-polytech-v2.2-admin-debug.apk (admin с базой 43Э). Гейты: тесты 1080+ зелёные,
+  students.csv standard=0/admin=1, applicationId=com.politex подтверждён в APK.
+  Не закрыто: cor_xavktf разметка (после визуальной сверки с заказчиком).
 - B2 доводок для волны C1 (настройки): в SettingsScreen остались приватные дубли
   openExactAlarmSettings/exactAlarmHintNeeded — заменить на общий util/ExactAlarmGate.kt.
 - Known-flaky (новый, волна D): `W16PdfReaderModeTest` падает с «connection pool has been closed»

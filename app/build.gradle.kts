@@ -20,22 +20,22 @@ android {
         create("standard") {
             dimension = "version"
             isDefault = true
-            versionCode = 21000
-            versionName = "2.1"
+            versionCode = 22000
+            versionName = "2.2"
         }
         create("admin") {
             dimension = "version"
             applicationIdSuffix = ".admin"
             versionNameSuffix = "-admin"
-            versionCode = 21000
-            versionName = "2.1"
+            versionCode = 22000
+            versionName = "2.2"
         }
         create("teacher") {
             dimension = "version"
             applicationIdSuffix = ".teacher"
             versionNameSuffix = "-teacher"
-            versionCode = 21000
-            versionName = "2.1"
+            versionCode = 22000
+            versionName = "2.2"
         }
     }
     minSdk = 24
