@@ -1,16 +1,15 @@
 package com.politex.ui.screens
 
 import android.Manifest
-import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -32,12 +31,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
@@ -51,6 +51,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,7 +69,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.politex.BuildConfig
 import com.politex.data.model.GroupInfo
 import com.politex.ui.components.AppCard
-import com.politex.ui.components.GroupSelectionDialog
 import com.politex.ui.components.SectionCaption
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
@@ -87,8 +87,10 @@ import com.politex.ui.theme.ColorWarning
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.AppThemeStore
-import com.politex.util.GradeSettings
-import com.politex.util.MpkCurriculum
+import com.politex.util.BackupManager
+import com.politex.util.BellCountdownNotifier
+import com.politex.util.ExactAlarmGate
+import com.politex.util.ScheduleDisplayPrefs
 import com.politex.util.SubgroupPref
 import com.politex.util.SubgroupSettings
 import com.politex.util.defaultBackupFileName
@@ -106,7 +108,6 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    var showGroupDialog by remember { mutableStateOf(false) }
     var isNotificationEnabled by remember {
         mutableStateOf(WidgetUpdateHelper.isNotificationEnabled(context))
     }
@@ -147,15 +148,19 @@ fun SettingsScreen(
     var backupIsError by remember { mutableStateOf(false) }
     val backupScope = rememberCoroutineScope()
 
+    var showBackupDialog by remember { mutableStateOf(false) }
+    var pendingBackupSections by remember { mutableStateOf(BackupManager.BackupSection.ALL) }
+
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json"),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        val sections = pendingBackupSections
         backupScope.launch {
             backupMessage = try {
 
                 withContext(Dispatchers.IO) {
-                    val json = com.politex.util.BackupManager.buildBackup(context)
+                    val json = BackupManager.buildBackup(context, sections)
                     context.contentResolver.openOutputStream(uri)?.use { out ->
                         out.write(json.toByteArray(Charsets.UTF_8))
                     }
@@ -182,7 +187,7 @@ fun SettingsScreen(
                     if (json.isNullOrBlank()) {
                         null
                     } else {
-                        com.politex.util.BackupManager.restoreBackup(context, json)
+                        BackupManager.restoreBackup(context, json)
                     }
                 }
                 if (restored == null) {
@@ -197,6 +202,8 @@ fun SettingsScreen(
                             val parts = mutableListOf("Восстановлено заданий: ${result.tasksRestored}")
                             if (result.gradesRestored > 0) parts += "оценок: ${result.gradesRestored}"
                             if (result.remindersRestored > 0) parts += "напоминаний: ${result.remindersRestored}"
+                            if (result.lessonsRestored > 0) parts += "уроков: ${result.lessonsRestored}"
+                            if (result.subjectRenamesRestored > 0) parts += "названий предметов: ${result.subjectRenamesRestored}"
                             result.groupRestored?.let { parts += "группа $it" }
                             if (result.warnings.isNotEmpty()) parts += result.warnings.joinToString("; ")
                             parts.joinToString(". ")
@@ -214,10 +221,6 @@ fun SettingsScreen(
         }
     }
 
-    val specialty = remember(groupInfo.specialtyCode) {
-        MpkCurriculum.getSpecialty(groupInfo.specialtyCode)
-    }
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -228,85 +231,6 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
-                AppCard(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.School,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = groupInfo.canonicalName,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp,
-                                        color = ColorTextTitle,
-                                    ),
-                                )
-                                val spec = specialty?.shortName
-                                if (!spec.isNullOrBlank()) {
-                                    Text(
-                                        text = spec,
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontSize = 11.sp,
-                                            color = ColorTextMuted,
-                                        ),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            color = ColorBrandFill,
-                            modifier = Modifier
-
-                                .heightIn(min = com.politex.ui.theme.Tokens.ButtonHeight)
-                                .bouncyClickable { showGroupDialog = true },
-                        ) {
-
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 12.dp),
-                            ) {
-                                Text(
-                                    text = "СМЕНИТЬ",
-                                    softWrap = false,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = Color.White,
-                                    ),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
             item { SectionCaption("РАСПИСАНИЕ И УВЕДОМЛЕНИЯ", Modifier.padding(top = 4.dp)) }
             item {
                 AppCard(
@@ -336,23 +260,14 @@ fun SettingsScreen(
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Уведомления о расписании",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 14.sp,
-                                            color = ColorTextTitle,
-                                        ),
-                                    )
-                                    Text(
-                                        text = if (isNotificationEnabled) "Включены (10:00 – 21:00)" else "Отключены",
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontSize = 11.sp,
-                                            color = ColorTextMuted,
-                                        ),
-                                    )
-                                }
+                                Text(
+                                    text = "Уведомление о новом расписании",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = ColorTextTitle,
+                                    ),
+                                )
                             }
 
                             Switch(
@@ -384,10 +299,55 @@ fun SettingsScreen(
                                 modifier = Modifier.testTag("notifications_switch"),
                             )
                         }
+                    }
+                }
+            }
 
+            item {
+                BellCountdownNotificationCard()
+            }
+
+            item {
+                var compactSchedule by remember {
+                    mutableStateOf(ScheduleDisplayPrefs.isCompact(context))
+                }
+                AppCard(
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Компактное расписание",
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = ColorTextTitle,
+                                ),
+                                modifier = Modifier.weight(1f),
+                            )
+                            Switch(
+                                checked = compactSchedule,
+                                onCheckedChange = { on ->
+                                    compactSchedule = on
+                                    ScheduleDisplayPrefs.setCompact(context, on)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = ColorBrandBlue,
+
+                                    uncheckedTrackColor = ColorBorderLight,
+                                    uncheckedThumbColor = ColorTextMuted,
+                                ),
+                                modifier = Modifier.testTag("settings_compact_schedule_switch"),
+                            )
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Приходит один раз, когда на сайте появляется расписание на следующий день.",
+                            text = "Только номер, предмет, преподаватель и кабинет",
                             style = androidx.compose.ui.text.TextStyle(
                                 color = ColorTextMuted,
                                 fontSize = 11.sp,
@@ -402,7 +362,7 @@ fun SettingsScreen(
             item {
                 var routesEnabled by remember {
                     mutableStateOf(
-                        com.politex.widget.WidgetUpdateHelper.getPrefs(context)
+                        WidgetUpdateHelper.getPrefs(context)
                             .getBoolean("map_routes_enabled", true),
                     )
                 }
@@ -429,7 +389,7 @@ fun SettingsScreen(
                                 checked = routesEnabled,
                                 onCheckedChange = { on ->
                                     routesEnabled = on
-                                    com.politex.widget.WidgetUpdateHelper.getPrefs(context)
+                                    WidgetUpdateHelper.getPrefs(context)
                                         .edit()
                                         .putBoolean("map_routes_enabled", on)
                                         .apply()
@@ -518,63 +478,6 @@ fun SettingsScreen(
                 }
             }
 
-            item { SectionCaption("ЗВОНКИ", Modifier.padding(top = 4.dp)) }
-            item {
-                BellCountdownNotificationCard()
-            }
-
-            item { SectionCaption("УЧЁБА", Modifier.padding(top = 4.dp)) }
-
-            item {
-                var weightsEnabled by remember {
-                    mutableStateOf(GradeSettings.getGlobalWeightsEnabled(context))
-                }
-                AppCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("grades_weights_toggle"),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "Учитывать веса категорий",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = ColorTextTitle,
-                                ),
-                            )
-                            Switch(
-                                checked = weightsEnabled,
-                                onCheckedChange = { on ->
-                                    weightsEnabled = on
-                                    GradeSettings.setGlobalWeightsEnabled(context, on)
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = ColorBrandBlue,
-
-                                    uncheckedTrackColor = ColorBorderLight,
-                                    uncheckedThumbColor = ColorTextMuted,
-                                ),
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Когда выключено, средний балл считается без весов во всех предметах.",
-                            style = androidx.compose.ui.text.TextStyle(
-                                color = ColorTextMuted,
-                                fontSize = 11.sp,
-                            ),
-                        )
-                    }
-                }
-            }
-
             item {
                 SectionCaption("ВНЕШНИЙ ВИД", Modifier.padding(top = 4.dp))
             }
@@ -636,6 +539,48 @@ fun SettingsScreen(
                 }
             }
 
+            item {
+                var darkTheme by remember {
+                    mutableStateOf(AppThemeStore.isDark(context))
+                }
+                AppCard(
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Тёмная тема",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = ColorTextTitle,
+                            ),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(
+                            checked = darkTheme,
+                            onCheckedChange = { on ->
+                                darkTheme = on
+                                AppThemeStore.setDark(context, on)
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = ColorBrandBlue,
+
+                                uncheckedTrackColor = ColorBorderLight,
+                                uncheckedThumbColor = ColorTextMuted,
+                            ),
+                            modifier = Modifier.testTag("settings_dark_theme_switch"),
+                        )
+                    }
+                }
+            }
+
             item { SectionCaption("ДАННЫЕ", Modifier.padding(top = 4.dp)) }
             item {
                 AppCard(
@@ -643,18 +588,12 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            text = "Резервная копия",
+                            text = "Резервная копия данных",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = ColorTextTitle,
                             ),
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            text = "Настройки и всё остальное сохраняются в файл.",
-                            style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(
@@ -662,15 +601,19 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             ActionChip(
-                                text = "СОХРАНИТЬ В ФАЙЛ",
+                                text = "СОХРАНИТЬ",
                                 filled = true,
-                                modifier = Modifier.weight(1f),
-                                onClick = { exportLauncher.launch(defaultBackupFileName()) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("backup_save_btn"),
+                                onClick = { showBackupDialog = true },
                             )
                             ActionChip(
                                 text = "ВОССТАНОВИТЬ",
                                 filled = false,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("backup_restore_btn"),
                                 onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
                             )
                         }
@@ -726,6 +669,7 @@ fun SettingsScreen(
                                 filled = true,
                                 modifier = Modifier.testTag("reset_hints_btn"),
                                 onClick = {
+
                                     com.politex.util.HintFlags.resetAll(context)
                                     Toast.makeText(context, "Подсказки сброшены", Toast.LENGTH_SHORT).show()
                                 },
@@ -846,16 +790,139 @@ fun SettingsScreen(
         }
     }
 
-    if (showGroupDialog) {
-        GroupSelectionDialog(
-            currentGroupName = groupInfo.canonicalName,
-            onDismissRequest = { showGroupDialog = false },
-            onGroupSelected = { newGroup ->
-                showGroupDialog = false
-                onGroupChanged(newGroup)
+    if (showBackupDialog) {
+        BackupSectionsDialog(
+            onDismiss = { showBackupDialog = false },
+            onConfirm = { sections ->
+                showBackupDialog = false
+                pendingBackupSections = sections
+                exportLauncher.launch(defaultBackupFileName())
             },
         )
     }
+}
+
+@Composable
+private fun BackupSectionsDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (Set<BackupManager.BackupSection>) -> Unit,
+) {
+    var selected by remember { mutableStateOf(BackupManager.BackupSection.ALL) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(2.dp),
+        containerColor = ColorBgMain,
+        modifier = Modifier.testTag("backup_sections_dialog"),
+        title = {
+            Text(
+                text = "Что сохранить",
+                style = androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = ColorTextTitle,
+                ),
+            )
+        },
+        text = {
+            Column {
+                BackupManager.BackupSection.entries.forEach { section ->
+                    val checked = section in selected
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = Tokens.HitTarget)
+                            .bouncyClickable {
+                                selected =
+                                    if (checked) selected - section else selected + section
+                            }
+                            .testTag("backup_opt_${section.name.lowercase()}"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = {
+                                selected =
+                                    if (checked) selected - section else selected + section
+                            },
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = backupSectionTitle(section),
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 14.sp,
+                                color = ColorTextBody,
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBrandFill,
+                modifier = Modifier
+                    .heightIn(min = Tokens.ButtonHeight)
+                    .then(if (selected.isEmpty()) Modifier else Modifier.bouncyClickable { onConfirm(selected) })
+                    .testTag("backup_confirm_btn"),
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                ) {
+                    Text(
+                        text = "СОХРАНИТЬ",
+                        softWrap = false,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = if (selected.isEmpty()) ColorTextMuted else Color.White,
+                        ),
+                    )
+                }
+            }
+        },
+        dismissButton = {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBgMain,
+                border = BorderStroke(1.dp, ColorBorderLight),
+                modifier = Modifier
+                    .heightIn(min = Tokens.ButtonHeight)
+                    .bouncyClickable(onClick = onDismiss)
+                    .testTag("backup_cancel_btn"),
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                ) {
+                    Text(
+                        text = "ОТМЕНА",
+                        softWrap = false,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = ColorTextTitle,
+                        ),
+                    )
+                }
+            }
+        },
+    )
+}
+
+private fun backupSectionTitle(section: BackupManager.BackupSection): String = when (section) {
+    BackupManager.BackupSection.SCHEDULE_HISTORY -> "История расписания"
+    BackupManager.BackupSection.TASKS -> "Задания"
+    BackupManager.BackupSection.GRADES -> "Оценки"
+    BackupManager.BackupSection.SUBJECT_NAMES -> "Названия предметов"
+    BackupManager.BackupSection.SETTINGS -> "Настройки"
 }
 
 @Composable
@@ -912,32 +979,49 @@ private fun LinkItem(
 private fun BellCountdownNotificationCard() {
     val context = LocalContext.current
     var isOngoingEnabled by remember {
-        mutableStateOf(com.politex.util.BellCountdownNotifier.isEnabled(context))
+        mutableStateOf(BellCountdownNotifier.isEnabled(context))
     }
     var selectedStyle by remember {
-        mutableStateOf(com.politex.util.BellCountdownNotifier.getStyle(context))
+        mutableStateOf(BellCountdownNotifier.getStyle(context))
     }
     var selectedTheme by remember {
-        mutableStateOf(com.politex.util.BellCountdownNotifier.getTheme(context))
+        mutableStateOf(BellCountdownNotifier.getTheme(context))
     }
+    var selectedScope by remember {
+        mutableStateOf(BellCountdownNotifier.getScope(context))
+    }
+    var settingsExpanded by rememberSaveable { mutableStateOf(false) }
+    var exactAlarmAsked by rememberSaveable { mutableStateOf(false) }
 
-    var canExactAlarms by remember { mutableStateOf(canScheduleExactAlarms(context)) }
+    var canExactAlarms by remember { mutableStateOf(ExactAlarmGate.canScheduleExactAlarms(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) canExactAlarms = canScheduleExactAlarms(context)
+            if (event == Lifecycle.Event.ON_RESUME) canExactAlarms = ExactAlarmGate.canScheduleExactAlarms(context)
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    fun requestExactAlarmIfNeeded() {
+        if (ExactAlarmGate.shouldRequest(Build.VERSION.SDK_INT, canExactAlarms, exactAlarmAsked)) {
+            exactAlarmAsked = true
+            ExactAlarmGate.openSettings(context)
+        }
+    }
+
+    fun enableLine() {
+        isOngoingEnabled = true
+        BellCountdownNotifier.setEnabled(context, true)
+        com.politex.widget.WidgetAlarm.scheduleNext(context)
+        requestExactAlarmIfNeeded()
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) {
-            isOngoingEnabled = true
-            com.politex.util.BellCountdownNotifier.setEnabled(context, true)
-            com.politex.widget.WidgetAlarm.scheduleNext(context)
+            enableLine()
         } else {
             isOngoingEnabled = false
         }
@@ -971,7 +1055,7 @@ private fun BellCountdownNotificationCard() {
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Строка «До звонка»",
+                            text = "Строка «до звонка»",
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
@@ -988,6 +1072,26 @@ private fun BellCountdownNotificationCard() {
                     }
                 }
 
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = if (settingsExpanded) ColorSurfaceHighlight else Color.Transparent,
+                    border = BorderStroke(1.dp, if (settingsExpanded) ColorTopBar else ColorBorderLight),
+                    modifier = Modifier
+                        .size(Tokens.HitTarget)
+                        .bouncyClickable { settingsExpanded = !settingsExpanded }
+                        .testTag("bell_settings_toggle"),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Настройки строки",
+                            tint = if (settingsExpanded) ColorBrandBlue else ColorTextMuted,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+
                 Switch(
                     checked = isOngoingEnabled,
                     onCheckedChange = { enable ->
@@ -998,13 +1102,11 @@ private fun BellCountdownNotificationCard() {
                             ) {
                                 permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             } else {
-                                isOngoingEnabled = true
-                                com.politex.util.BellCountdownNotifier.setEnabled(context, true)
-                                com.politex.widget.WidgetAlarm.scheduleNext(context)
+                                enableLine()
                             }
                         } else {
                             isOngoingEnabled = false
-                            com.politex.util.BellCountdownNotifier.setEnabled(context, false)
+                            BellCountdownNotifier.setEnabled(context, false)
                         }
                     },
                     colors = SwitchDefaults.colors(
@@ -1019,14 +1121,14 @@ private fun BellCountdownNotificationCard() {
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Постоянная строка со временем до звонка — обновляется каждую минуту (в стиле «с секундами» — каждую секунду).",
+                text = "Отсчёт до конца урока в строке уведомлений",
                 style = androidx.compose.ui.text.TextStyle(
                     color = ColorTextMuted,
                     fontSize = 11.sp,
                 ),
             )
 
-            if (exactAlarmHintNeeded(Build.VERSION.SDK_INT, canExactAlarms)) {
+            if (ExactAlarmGate.hintNeeded(Build.VERSION.SDK_INT, canExactAlarms)) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Surface(
                     shape = RoundedCornerShape(2.dp),
@@ -1055,7 +1157,7 @@ private fun BellCountdownNotificationCard() {
                             color = ColorBrandFill,
                             modifier = Modifier
                                 .heightIn(min = 44.dp)
-                                .bouncyClickable { openExactAlarmSettings(context) },
+                                .bouncyClickable { ExactAlarmGate.openSettings(context) },
                         ) {
                             Box(
                                 contentAlignment = Alignment.Center,
@@ -1078,181 +1180,189 @@ private fun BellCountdownNotificationCard() {
                 }
             }
 
-            if (isOngoingEnabled) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "СТИЛЬ СТРОКИ",
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = ColorBrandBlue,
-                    ),
-                )
-                Spacer(modifier = Modifier.height(6.dp))
+            AnimatedVisibility(
+                visible = settingsExpanded,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "СТИЛЬ СТРОКИ",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = ColorBrandBlue,
+                        ),
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                com.politex.util.BellCountdownNotifier.Style.entries
-                    .filter { it != com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME }
-                    .forEach { style ->
-                    val isSelected = selectedStyle == style
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
-                        color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 3.dp)
+                    BellCountdownNotifier.Style.entries
+                        .filter { it != BellCountdownNotifier.Style.WITH_APP_NAME }
+                        .forEach { style ->
+                        val isSelected = selectedStyle == style
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
+                            color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp)
 
-                            .heightIn(min = 44.dp)
-                            .bouncyClickable {
-                                selectedStyle = style
-                                com.politex.util.BellCountdownNotifier.setStyle(context, style)
-                            },
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                .heightIn(min = Tokens.HitTarget)
+                                .bouncyClickable {
+                                    selectedStyle = style
+                                    BellCountdownNotifier.setStyle(context, style)
+                                    requestExactAlarmIfNeeded()
+                                }
+                                .testTag("bell_style_${style.id}"),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 RadioButton(
                                     selected = isSelected,
                                     onClick = {
                                         selectedStyle = style
-                                        com.politex.util.BellCountdownNotifier.setStyle(context, style)
+                                        BellCountdownNotifier.setStyle(context, style)
+                                        requestExactAlarmIfNeeded()
                                     },
                                     modifier = Modifier.size(20.dp),
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = stylePreviewTitle(style),
+                                    text = bellStyleLabel(style),
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
                                         color = ColorTextTitle,
                                     ),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            Text(
-                                text = stylePreviewBody(style),
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 11.sp,
-                                    color = ColorTextMuted,
-                                ),
-                                modifier = Modifier.padding(start = 28.dp),
-                            )
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "ЦВЕТОВАЯ ТЕМА",
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = ColorBrandBlue,
-                    ),
-                )
-                Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "ЦВЕТОВАЯ ТЕМА",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = ColorBrandBlue,
+                        ),
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                com.politex.util.BellCountdownNotifier.Theme.entries.forEach { theme ->
-                    val isSelected = selectedTheme == theme
-                    val swatchColor =
-                        when {
-                            theme == com.politex.util.BellCountdownNotifier.Theme.APP -> ColorBrandFill
-                            theme.accent != 0 -> Color(theme.accent)
-                            else -> ColorSurfaceVariantLight
-                        }
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
-                        color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 3.dp)
-
-                            .heightIn(min = 44.dp)
-                            .bouncyClickable {
-                                selectedTheme = theme
-                                com.politex.util.BellCountdownNotifier.setTheme(context, theme)
-                            },
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
+                        BellCountdownNotifier.Theme.entries.forEach { theme ->
+                            val isSelected = selectedTheme == theme
+                            val swatchColor =
+                                when {
+                                    theme == BellCountdownNotifier.Theme.APP -> ColorBrandFill
+                                    theme.accent != 0 -> Color(theme.accent)
+                                    else -> ColorSurfaceVariantLight
+                                }
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
+                                color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
                                 modifier = Modifier
-                                    .size(18.dp)
-                                    .background(swatchColor, CircleShape),
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = theme.title,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 12.sp,
-                                    color = ColorTextBody,
-                                ),
-                            )
+                                    .weight(1f)
+
+                                    .heightIn(min = Tokens.HitTarget)
+                                    .bouncyClickable {
+                                        selectedTheme = theme
+                                        BellCountdownNotifier.setTheme(context, theme)
+                                    }
+                                    .testTag("bell_theme_${theme.id}"),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .background(swatchColor, CircleShape),
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = theme.title,
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 12.sp,
+                                            color = ColorTextBody,
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "СЧИТАТЬ ДО КОНЦА КАКИХ УРОКОВ",
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = ColorBrandBlue,
-                    ),
-                )
-                Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "СЧИТАТЬ ДО КОНЦА КАКИХ УРОКОВ",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = ColorBrandBlue,
+                        ),
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                var selectedScope by remember {
-                    mutableStateOf(com.politex.util.BellCountdownNotifier.getScope(context))
-                }
-                com.politex.util.BellCountdownNotifier.Scope.entries.forEach { scope ->
-                    val isSelected = selectedScope == scope
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
-                        color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 3.dp)
+                    BellCountdownNotifier.Scope.entries.forEach { scope ->
+                        val isSelected = selectedScope == scope
+                        Surface(
+                            shape = RoundedCornerShape(2.dp),
+                            border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
+                            color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 3.dp)
 
-                            .heightIn(min = 44.dp)
-                            .bouncyClickable {
-                                selectedScope = scope
-                                com.politex.util.BellCountdownNotifier.setScope(context, scope)
-                            },
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = {
-                                        selectedScope = scope
-                                        com.politex.util.BellCountdownNotifier.setScope(context, scope)
-                                    },
-                                    modifier = Modifier.size(20.dp),
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                .heightIn(min = Tokens.HitTarget)
+                                .bouncyClickable {
+                                    selectedScope = scope
+                                    BellCountdownNotifier.setScope(context, scope)
+                                }
+                                .testTag("bell_scope_${scope.id}"),
+                        ) {
+                            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = {
+                                            selectedScope = scope
+                                            BellCountdownNotifier.setScope(context, scope)
+                                        },
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = scope.title,
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = ColorTextTitle,
+                                        ),
+                                    )
+                                }
                                 Text(
-                                    text = scope.title,
+                                    text = scope.description,
                                     style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = ColorTextTitle,
+                                        fontSize = 11.sp,
+                                        color = ColorTextMuted,
                                     ),
+                                    modifier = Modifier.padding(start = 28.dp),
                                 )
                             }
-                            Text(
-                                text = scope.description,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 11.sp,
-                                    color = ColorTextMuted,
-                                ),
-                                modifier = Modifier.padding(start = 28.dp),
-                            )
                         }
                     }
                 }
@@ -1261,10 +1371,14 @@ private fun BellCountdownNotificationCard() {
     }
 }
 
-internal fun canScheduleExactAlarms(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-    (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
-
-internal fun exactAlarmHintNeeded(sdkInt: Int, canScheduleExact: Boolean): Boolean = sdkInt >= Build.VERSION_CODES.S && !canScheduleExact
+private fun bellStyleLabel(style: BellCountdownNotifier.Style): String = when (style) {
+    BellCountdownNotifier.Style.COMPACT,
+    BellCountdownNotifier.Style.WITH_APP_NAME,
+    -> "В минутах"
+    BellCountdownNotifier.Style.WITH_LESSON -> "В минутах + идущий урок"
+    BellCountdownNotifier.Style.WITH_PROGRESS -> "С полосой прогресса"
+    BellCountdownNotifier.Style.WITH_SECONDS -> "В секундах"
+}
 
 private fun openLink(context: Context, url: String): Boolean =
     try {
@@ -1274,93 +1388,6 @@ private fun openLink(context: Context, url: String): Boolean =
         Toast.makeText(context, "Нет браузера", Toast.LENGTH_SHORT).show()
         false
     }
-
-private fun openExactAlarmSettings(context: Context) {    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
-    try {
-        context.startActivity(
-            Intent(
-                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                Uri.parse("package:${context.packageName}"),
-            ),
-        )
-    } catch (_: Exception) {
-
-        try {
-            context.startActivity(Intent(Settings.ACTION_SETTINGS))
-        } catch (_: Exception) {
-        }
-    }
-}
-
-private fun stylePreviewTitle(style: com.politex.util.BellCountdownNotifier.Style): String = when (style) {
-
-    com.politex.util.BellCountdownNotifier.Style.COMPACT,
-    com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME,
-    -> "До звонка: 12 мин"
-    com.politex.util.BellCountdownNotifier.Style.WITH_LESSON -> "До звонка: 12 мин"
-    com.politex.util.BellCountdownNotifier.Style.WITH_PROGRESS -> "До звонка: 12 мин"
-    com.politex.util.BellCountdownNotifier.Style.WITH_SECONDS -> "До звонка: 11:32"
-}
-
-private fun stylePreviewBody(style: com.politex.util.BellCountdownNotifier.Style): String = when (style) {
-    com.politex.util.BellCountdownNotifier.Style.COMPACT,
-    com.politex.util.BellCountdownNotifier.Style.WITH_APP_NAME,
-    -> "Только суть — сколько осталось"
-    com.politex.util.BellCountdownNotifier.Style.WITH_LESSON ->
-        "Плюс номер идущего урока или «Перемена»"
-    com.politex.util.BellCountdownNotifier.Style.WITH_PROGRESS ->
-        "С полосой прогресса урока"
-    com.politex.util.BellCountdownNotifier.Style.WITH_SECONDS ->
-        "Посекундный отсчёт — обновляется каждую секунду"
-}
-
-@Composable
-private fun SettingsSwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-            .bouncyClickable { onCheckedChange(!checked) }
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = ColorTextTitle,
-                ),
-            )
-            Text(
-                text = subtitle,
-                style = androidx.compose.ui.text.TextStyle(
-                    fontSize = 11.sp,
-                    color = ColorTextMuted,
-                ),
-            )
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = ColorBrandBlue,
-                uncheckedTrackColor = ColorBorderLight,
-                uncheckedThumbColor = ColorTextMuted,
-            ),
-        )
-    }
-}
 
 @Composable
 private fun SettingsValueRow(
@@ -1418,7 +1445,7 @@ private fun ActionChip(
         border = BorderStroke(1.dp, if (filled) ColorBrandFill else ColorBorderLight),
         modifier = modifier
 
-            .heightIn(min = com.politex.ui.theme.Tokens.ButtonHeight)
+            .heightIn(min = Tokens.ButtonHeight)
             .bouncyClickable(onClick = onClick),
     ) {
         Box(

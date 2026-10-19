@@ -44,10 +44,17 @@ object UpdateDownloader {
     ): Boolean {
         if (!file.exists() || file.length() < MIN_APK_BYTES) return false
         return runCatching {
-            context.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
-                ?.packageName == context.packageName
+            val archived =
+                context.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
+                    ?.packageName
+            apkPackageAccepted(context.packageName, archived)
         }.getOrDefault(false)
     }
+
+    internal fun apkPackageAccepted(
+        ownPackage: String,
+        apkPackage: String?,
+    ): Boolean = !apkPackage.isNullOrBlank() && apkPackage == ownPackage
 
     internal const val MIN_APK_BYTES = 1_000_000L
 }

@@ -82,6 +82,45 @@ val LightPalette =
         badgeDiploma = Color(0xFF0B3564),
     )
 
+val DarkPalette =
+    MpkPalette(
+        topBar = Color(0xFF243753),
+        brandBlue = Color(0xFF6FA3D8),
+        activeBlue = Color(0xFF3D94DA),
+        brandFill = Color(0xFF3C5D83),
+        activeFill = Color(0xFF0072CE),
+        menuBg = Color(0xFF12161B),
+        menuSubBg = Color(0xFF0C1014),
+        menuBorder = Color(0xFF2E3338),
+        menuText = Color(0xFFFFFFFF),
+        menuSubtext = Color(0xFFC7CDD6),
+        menuIcon = Color(0xFF98A2B3),
+        bgMain = Color(0xFF0F1419),
+        surfaceVariant = Color(0xFF161C24),
+        surfaceHighlight = Color(0xFF1F2833),
+        textTitle = Color(0xFFF3F5F7),
+        textBody = Color(0xFFE3E7EC),
+        textMuted = Color(0xFF98A2B3),
+        textWeekdays = Color(0xFF8B95A5),
+        textDisabled = Color(0xFF55606F),
+        borderLight = Color(0xFF2A333F),
+        dividerLight = Color(0xFF232C37),
+        success = Color(0xFF4ADE80),
+        successBg = Color(0xFF0D2417),
+        successBorder = Color(0xFF15803D),
+        successText = Color(0xFF86EFAC),
+        warning = Color(0xFFFBBF24),
+        error = Color(0xFFF87171),
+        errorText = Color(0xFFFCA5A5),
+        dangerFill = Color(0xFFDC2626),
+        badgeHW = Color(0xFF5DADE2),
+        badgeLab = Color(0xFFA78BFA),
+        badgePract = Color(0xFF2DD4BF),
+        badgeExam = Color(0xFFFB7185),
+        badgeCourse = Color(0xFFFB923C),
+        badgeDiploma = Color(0xFF6FA3D8),
+    )
+
 internal var paletteState by mutableStateOf(LightPalette)
 
 val ColorTopBar: Color get() = paletteState.topBar

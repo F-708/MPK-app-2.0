@@ -13,7 +13,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.mpkschedule.vbyqzt"
+    applicationId = "com.politex"
     // Flavors: standard — для всех; admin — версия с базой данных учащихся
     flavorDimensions += "version"
     productFlavors {

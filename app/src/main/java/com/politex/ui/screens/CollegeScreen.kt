@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -63,6 +64,7 @@ import com.politex.data.repository.TeacherInsights
 import com.politex.ui.components.AppCard
 import com.politex.ui.components.AppDivider
 import com.politex.ui.components.BackButton
+import com.politex.ui.components.GroupSelectionDialog
 import com.politex.ui.components.SearchBar
 import com.politex.ui.components.SectionCaption
 import com.politex.ui.components.SearchEmptyState
@@ -123,10 +125,11 @@ fun CollegeScreen(
 @Composable
 internal fun SpecialtyRoute(
     groupInfo: GroupInfo,
+    onGroupChanged: (String) -> Unit = {},
     onBack: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
-        MySpecialtyPage(groupInfo, onBack)
+        MySpecialtyPage(groupInfo, onBack, onGroupChanged)
     }
 }
 
@@ -468,6 +471,7 @@ private fun SettingsPage(
 private fun MySpecialtyPage(
     groupInfo: GroupInfo,
     onBack: () -> Unit,
+    onGroupChanged: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     LaunchedEffect(Unit) {
@@ -475,6 +479,7 @@ private fun MySpecialtyPage(
     }
     val renameRevision = SubjectRenameStore.revision.intValue
     var renameTarget by remember { mutableStateOf<String?>(null) }
+    var showGroupDialog by remember { mutableStateOf(false) }
     val specialty =
         remember(groupInfo.specialtyCode) {
             MpkCurriculum.getSpecialty(groupInfo.specialtyCode)
@@ -489,6 +494,26 @@ private fun MySpecialtyPage(
             title = "Моя специальность",
             subtitle = "Группа ${groupInfo.canonicalName}",
             onBack = onBack,
+            actions = {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorSurfaceHighlight,
+                    border = BorderStroke(1.dp, ColorBorderLight),
+                    modifier = Modifier
+                        .size(Tokens.HitTarget)
+                        .bouncyClickable { showGroupDialog = true }
+                        .testTag("specialty_change_group_btn"),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = "Сменить группу",
+                            tint = ColorBrandBlue,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            },
         )
 
         LazyColumn(
@@ -738,6 +763,17 @@ private fun MySpecialtyPage(
         RenameSubjectDialog(
             original = original,
             onDismiss = { renameTarget = null },
+        )
+    }
+
+    if (showGroupDialog) {
+        GroupSelectionDialog(
+            currentGroupName = groupInfo.canonicalName,
+            onDismissRequest = { showGroupDialog = false },
+            onGroupSelected = { newGroup ->
+                showGroupDialog = false
+                onGroupChanged(newGroup)
+            },
         )
     }
 }

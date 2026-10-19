@@ -3,6 +3,7 @@ package com.politex.util
 import android.content.Context
 import com.politex.data.local.MpkDatabase
 import com.politex.data.local.entity.GradeEntryEntity
+import com.politex.data.local.entity.LessonEntity
 import com.politex.data.local.entity.StudentTaskEntity
 import com.politex.data.local.entity.TaskReminderEntity
 import com.politex.ui.theme.AppTheme
@@ -22,6 +23,21 @@ object BackupManager {
     private const val KEY_TASKS = "tasks"
     private const val KEY_GRADES = "grades"
     private const val KEY_REMINDERS = "reminders"
+    private const val KEY_LESSONS = "lessons"
+    private const val KEY_SUBJECT_RENAMES = "subjectRenames"
+
+    enum class BackupSection {
+        SCHEDULE_HISTORY,
+        TASKS,
+        GRADES,
+        SUBJECT_NAMES,
+        SETTINGS,
+        ;
+
+        companion object {
+            val ALL: Set<BackupSection> = entries.toSet()
+        }
+    }
 
     data class ImportResult(
         val tasksRestored: Int,
@@ -30,37 +46,35 @@ object BackupManager {
         val warnings: List<String>,
         val gradesRestored: Int = 0,
         val remindersRestored: Int = 0,
+        val lessonsRestored: Int = 0,
+        val subjectRenamesRestored: Int = 0,
     )
 
     suspend fun buildBackup(
         context: Context,
-        includeTasks: Boolean = true,
+        sections: Set<BackupSection> = BackupSection.ALL,
     ): String {
         val root = JSONObject()
         root.put(KEY_VERSION, FORMAT_VERSION)
         root.put(KEY_EXPORTED_AT, System.currentTimeMillis())
         root.put(KEY_APP, "Мой Политех")
 
-        val settings = JSONObject()
-        settings.put("group", WidgetUpdateHelper.getSelectedGroup(context))
-        settings.put("notificationsEnabled", WidgetUpdateHelper.isNotificationEnabled(context))
-        settings.put("appTheme", AppThemeStore.load(context).id)
-        settings.put(
-            "notificationsStyle",
-            com.politex.util.BellCountdownNotifier
-                .getStyle(context)
-                .id,
-        )
-        settings.put(
-            "notificationsTheme",
-            com.politex.util.BellCountdownNotifier
-                .getTheme(context)
-                .id,
-        )
-        root.put(KEY_SETTINGS, settings)
+        val db = MpkDatabase.getInstance(context)
 
-        if (includeTasks) {
-            val db = MpkDatabase.getInstance(context)
+        if (BackupSection.SETTINGS in sections) {
+            val settings = JSONObject()
+            settings.put("group", WidgetUpdateHelper.getSelectedGroup(context))
+            settings.put("notificationsEnabled", WidgetUpdateHelper.isNotificationEnabled(context))
+            settings.put("appTheme", AppThemeStore.load(context).id)
+            settings.put("appDark", AppThemeStore.isDark(context))
+            settings.put("bellLineEnabled", BellCountdownNotifier.isEnabled(context))
+            settings.put("notificationsStyle", BellCountdownNotifier.getStyle(context).id)
+            settings.put("notificationsTheme", BellCountdownNotifier.getTheme(context).id)
+            settings.put("notificationsScope", BellCountdownNotifier.getScope(context).id)
+            root.put(KEY_SETTINGS, settings)
+        }
+
+        if (BackupSection.TASKS in sections) {
             val reminderDao = db.taskReminderDao()
             val tasks = db.taskDao().getAllTasks()
             val array = JSONArray()
@@ -81,20 +95,38 @@ object BackupManager {
             root.put(KEY_TASKS, array)
         }
 
-        val grades = MpkDatabase.getInstance(context).gradeDao().allEntries().first()
-        val gradesArray = JSONArray()
-        grades.forEach { grade ->
-            gradesArray.put(
-                JSONObject()
-                    .put("subjectName", grade.subjectName)
-                    .put("category", grade.category)
-                    .put("value", grade.value)
-                    .put("label", grade.label)
-                    .put("dateIso", grade.dateIso)
-                    .put("createdAt", grade.createdAt),
-            )
+        if (BackupSection.GRADES in sections) {
+            val grades = db.gradeDao().allEntries().first()
+            val gradesArray = JSONArray()
+            grades.forEach { grade ->
+                gradesArray.put(
+                    JSONObject()
+                        .put("subjectName", grade.subjectName)
+                        .put("category", grade.category)
+                        .put("value", grade.value)
+                        .put("label", grade.label)
+                        .put("dateIso", grade.dateIso)
+                        .put("createdAt", grade.createdAt),
+                )
+            }
+            root.put(KEY_GRADES, gradesArray)
         }
-        root.put(KEY_GRADES, gradesArray)
+
+        if (BackupSection.SCHEDULE_HISTORY in sections) {
+            val lessonsArray = JSONArray()
+            db.lessonDao().getAllLessonsSync().forEach { lesson ->
+                lessonsArray.put(lessonToJson(lesson))
+            }
+            root.put(KEY_LESSONS, lessonsArray)
+        }
+
+        if (BackupSection.SUBJECT_NAMES in sections) {
+            val renames = JSONObject()
+            SubjectRenameStore.allRenames(context).forEach { (original, custom) ->
+                renames.put(original, custom)
+            }
+            root.put(KEY_SUBJECT_RENAMES, renames)
+        }
 
         return root.toString(2)
     }
@@ -111,6 +143,21 @@ object BackupManager {
         put("createdAt", task.createdAt)
     }
 
+    private fun lessonToJson(lesson: LessonEntity): JSONObject = JSONObject().apply {
+        put("groupName", lesson.groupName)
+        put("dayOfWeek", lesson.dayOfWeek)
+        put("lessonNumber", lesson.lessonNumber)
+        put("timeStart", lesson.timeStart)
+        put("timeEnd", lesson.timeEnd)
+        put("subjectRaw", lesson.subjectRaw)
+        put("roomFirst", lesson.roomFirst)
+        put("teacherFirst", lesson.teacherFirst)
+        put("roomSecond", lesson.roomSecond)
+        put("teacherSecond", lesson.teacherSecond)
+        put("isSplit", lesson.isSplit)
+        put("dateString", lesson.dateString)
+    }
+
     suspend fun restoreBackup(
         context: Context,
         json: String,
@@ -123,6 +170,8 @@ object BackupManager {
             warnings += "Файл сохранён более новой версией приложения. " +
                 "Что удалось — восстановлено, остальное пропущено."
         }
+
+        val db = MpkDatabase.getInstance(context)
 
         val settings = root.optJSONObject(KEY_SETTINGS)
         var groupRestored: String? = null
@@ -137,8 +186,14 @@ object BackupManager {
             AppThemeStore.save(context, theme)
             themeRestored = theme != AppTheme.COLLEGE || themeId == AppTheme.COLLEGE.id
         }
+        if (settings?.has("appDark") == true) {
+            AppThemeStore.setDark(context, settings.optBoolean("appDark"))
+        }
         if (settings?.has("notificationsEnabled") == true) {
             WidgetUpdateHelper.setNotificationEnabled(context, settings.optBoolean("notificationsEnabled"))
+        }
+        if (settings?.has("bellLineEnabled") == true) {
+            BellCountdownNotifier.setEnabled(context, settings.optBoolean("bellLineEnabled"))
         }
 
         settings?.optString("notificationsStyle")?.takeIf { it.isNotBlank() }?.let {
@@ -147,8 +202,10 @@ object BackupManager {
         settings?.optString("notificationsTheme")?.takeIf { it.isNotBlank() }?.let {
             BellCountdownNotifier.setTheme(context, BellCountdownNotifier.Theme.from(it))
         }
+        settings?.optString("notificationsScope")?.takeIf { it.isNotBlank() }?.let {
+            BellCountdownNotifier.setScope(context, BellCountdownNotifier.Scope.from(it))
+        }
 
-        val db = MpkDatabase.getInstance(context)
         val dao = db.taskDao()
         val reminderDao = db.taskReminderDao()
         val array = root.optJSONArray(KEY_TASKS)
@@ -237,6 +294,61 @@ object BackupManager {
             }
         }
 
+        val lessonsArray = root.optJSONArray(KEY_LESSONS)
+        var lessonsRestored = 0
+        if (lessonsArray != null) {
+            val byGroup = LinkedHashMap<String, MutableList<LessonEntity>>()
+            for (i in 0 until lessonsArray.length()) {
+                val item = lessonsArray.optJSONObject(i) ?: continue
+                val groupName = item.optString("groupName")
+                if (groupName.isBlank()) continue
+                val entity =
+                    LessonEntity(
+                        groupName = groupName,
+                        dayOfWeek = item.optInt("dayOfWeek"),
+                        lessonNumber = item.optInt("lessonNumber"),
+                        timeStart = item.optString("timeStart"),
+                        timeEnd = item.optString("timeEnd"),
+                        subjectRaw = item.optString("subjectRaw"),
+                        roomFirst = item.optString("roomFirst"),
+                        teacherFirst = item.optString("teacherFirst"),
+                        roomSecond = item.optString("roomSecond"),
+                        teacherSecond = item.optString("teacherSecond"),
+                        isSplit = item.optBoolean("isSplit", false),
+                        dateString = item.optString("dateString"),
+                    )
+                byGroup.getOrPut(groupName) { mutableListOf() }.add(entity)
+            }
+            for ((group, lessons) in byGroup) {
+                val existing =
+                    db
+                        .lessonDao()
+                        .getAllLessonsForGroup(group)
+                        .first()
+                        .map { it.dedupeKey() }
+                        .toHashSet()
+                val fresh = lessons.filter { existing.add(it.dedupeKey()) }
+                if (fresh.isNotEmpty()) {
+                    db.lessonDao().insertLessons(fresh)
+                    lessonsRestored += fresh.size
+                }
+            }
+        }
+
+        val renamesObj = root.optJSONObject(KEY_SUBJECT_RENAMES)
+        var subjectRenamesRestored = 0
+        if (renamesObj != null) {
+            val keys = renamesObj.keys()
+            while (keys.hasNext()) {
+                val original = keys.next()
+                val custom = renamesObj.optString(original, "").trim()
+                if (original.isNotBlank() && custom.isNotBlank()) {
+                    SubjectRenameStore.setCustomName(context, original, custom)
+                    subjectRenamesRestored++
+                }
+            }
+        }
+
         Result.success(
             ImportResult(
                 tasksRestored = restored,
@@ -245,6 +357,8 @@ object BackupManager {
                 warnings = warnings,
                 gradesRestored = gradesRestored,
                 remindersRestored = remindersRestored,
+                lessonsRestored = lessonsRestored,
+                subjectRenamesRestored = subjectRenamesRestored,
             ),
         )
     } catch (e: Exception) {
@@ -255,6 +369,11 @@ object BackupManager {
 private fun StudentTaskEntity.dedupeKey(): String = listOf(groupName, subjectName, title, deadlineDate).joinToString("|").lowercase()
 
 private fun GradeEntryEntity.dedupeKey(): String = listOf(subjectName, category, value, label, dateIso).joinToString("|").lowercase()
+
+private fun LessonEntity.dedupeKey(): String =
+    listOf(groupName, dateString, dayOfWeek, lessonNumber, subjectRaw, timeStart, timeEnd, roomFirst, roomSecond)
+        .joinToString("|")
+        .lowercase()
 
 fun defaultBackupFileName(): String {
     val cal = java.util.Calendar.getInstance()

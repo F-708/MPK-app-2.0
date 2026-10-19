@@ -114,6 +114,7 @@ import com.politex.ui.util.rememberNowMinutes
 import com.politex.ui.util.rememberToday
 import com.politex.util.DateFormats
 import com.politex.util.HintFlags
+import com.politex.util.ScheduleDisplayPrefs
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
 import java.util.Locale
@@ -859,6 +860,12 @@ fun LessonCard(
     focusAlpha: Float = 0f,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val compactRevision = ScheduleDisplayPrefs.revision.intValue
+    val compact =
+        remember(context, compactRevision) {
+            ScheduleDisplayPrefs.isCompact(context)
+        }
     Surface(
         shape = RoundedCornerShape(2.dp),
         color = ColorBgMain,
@@ -877,167 +884,326 @@ fun LessonCard(
                     if (focusAlpha > 0f) {
                         drawRect(ColorBrandBlue.copy(alpha = focusAlpha * 0.18f))
                     }
-                }.padding(12.dp),
+                }.padding(
+                    if (compact) {
+                        PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    } else {
+                        PaddingValues(12.dp)
+                    },
+                ),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBrandFill,
-                        modifier = Modifier.size(24.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "${lesson.lessonNumber}",
-                                style =
-                                androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = Color.White,
-                                ),
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "${lesson.timeStart} – ${lesson.timeEnd}",
-                        style =
-                        androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp,
-                            color = ColorTextBody,
-                        ),
-                    )
-                }
-
-                if (hasHomework) {
-
-                    HomeworkBadge(
-                        lessonNumber = lesson.lessonNumber,
-                        types = homeworkTypes,
-                        onClick = onHomeworkClick,
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            if (lesson.isSplit) {
-                Row(
-                    modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    SubgroupPane(
-                        subgroupNumber = 1,
-                        subject = lesson.shortSubjectName,
-                        teacher = lesson.teacherFirst,
-                        room = lesson.roomFirst,
-                        onTeacherClick = onTeacherClick,
-                        isTeacherKnown = isTeacherKnown,
-                        onRoomClick = onRoomClick,
-                        pulse = pulse,
-                        modifier = Modifier.weight(1f),
-                    )
-
-                    VerticalDivider(
-                        color = ColorBorderLight,
-                        thickness = 1.dp,
-                        modifier = Modifier.fillMaxHeight(),
-                    )
-
-                    SubgroupPane(
-                        subgroupNumber = 2,
-                        subject = lesson.shortSubjectName,
-                        teacher = lesson.teacherSecond,
-                        room = lesson.roomSecond,
-                        onTeacherClick = onTeacherClick,
-                        isTeacherKnown = isTeacherKnown,
-                        onRoomClick = onRoomClick,
-                        pulse = pulse,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            } else {
-
-                val subject = lesson.shortSubjectName
-                val noSubject = subject.isBlank()
-                Text(
-                    text = if (noSubject) "Предмет уточняется" else subject,
-                    style =
-                    androidx.compose.ui.text.TextStyle(
-                        fontWeight = if (noSubject) FontWeight.Normal else FontWeight.Bold,
-                        fontSize = if (noSubject) 11.sp else 15.sp,
-                        color = if (noSubject) ColorTextMuted else ColorTextTitle,
-                    ),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+            if (compact) {
+                CompactLessonCardContent(
+                    lesson = lesson,
+                    hasHomework = hasHomework,
+                    homeworkTypes = homeworkTypes,
+                    onHomeworkClick = onHomeworkClick,
+                    onTeacherClick = onTeacherClick,
+                    isTeacherKnown = isTeacherKnown,
+                    onRoomClick = onRoomClick,
+                    pulse = pulse,
                 )
+            } else {
+                RegularLessonCardContent(
+                    lesson = lesson,
+                    hasHomework = hasHomework,
+                    homeworkTypes = homeworkTypes,
+                    onHomeworkClick = onHomeworkClick,
+                    onTeacherClick = onTeacherClick,
+                    isTeacherKnown = isTeacherKnown,
+                    onRoomClick = onRoomClick,
+                    pulse = pulse,
+                )
+            }
+        }
+    }
+}
 
-                Spacer(modifier = Modifier.height(6.dp))
+@Composable
+private fun RegularLessonCardContent(
+    lesson: LessonEntity,
+    hasHomework: Boolean,
+    homeworkTypes: List<TaskType>,
+    onHomeworkClick: () -> Unit,
+    onTeacherClick: (String) -> Unit,
+    isTeacherKnown: (String) -> Boolean,
+    onRoomClick: (String) -> Unit,
+    pulse: Boolean,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            LessonNumberBadge(lesson.lessonNumber)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "${lesson.timeStart} – ${lesson.timeEnd}",
+                style =
+                androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = ColorTextBody,
+                ),
+            )
+        }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+        if (hasHomework) {
+
+            HomeworkBadge(
+                lessonNumber = lesson.lessonNumber,
+                types = homeworkTypes,
+                onClick = onHomeworkClick,
+            )
+        }
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    if (lesson.isSplit) {
+        Row(
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SubgroupPane(
+                subgroupNumber = 1,
+                subject = lesson.shortSubjectName,
+                teacher = lesson.teacherFirst,
+                room = lesson.roomFirst,
+                onTeacherClick = onTeacherClick,
+                isTeacherKnown = isTeacherKnown,
+                onRoomClick = onRoomClick,
+                pulse = pulse,
+                modifier = Modifier.weight(1f),
+            )
+
+            VerticalDivider(
+                color = ColorBorderLight,
+                thickness = 1.dp,
+                modifier = Modifier.fillMaxHeight(),
+            )
+
+            SubgroupPane(
+                subgroupNumber = 2,
+                subject = lesson.shortSubjectName,
+                teacher = lesson.teacherSecond,
+                room = lesson.roomSecond,
+                onTeacherClick = onTeacherClick,
+                isTeacherKnown = isTeacherKnown,
+                onRoomClick = onRoomClick,
+                pulse = pulse,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    } else {
+
+        val subject = lesson.shortSubjectName
+        val noSubject = subject.isBlank()
+        Text(
+            text = if (noSubject) "Предмет уточняется" else subject,
+            style =
+            androidx.compose.ui.text.TextStyle(
+                fontWeight = if (noSubject) FontWeight.Normal else FontWeight.Bold,
+                fontSize = if (noSubject) 11.sp else 15.sp,
+                color = if (noSubject) ColorTextMuted else ColorTextTitle,
+            ),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        LessonTeacherRoomRow(
+            lesson = lesson,
+            onTeacherClick = onTeacherClick,
+            isTeacherKnown = isTeacherKnown,
+            onRoomClick = onRoomClick,
+            pulse = pulse,
+        )
+    }
+}
+
+@Composable
+private fun CompactLessonCardContent(
+    lesson: LessonEntity,
+    hasHomework: Boolean,
+    homeworkTypes: List<TaskType>,
+    onHomeworkClick: () -> Unit,
+    onTeacherClick: (String) -> Unit,
+    isTeacherKnown: (String) -> Boolean,
+    onRoomClick: (String) -> Unit,
+    pulse: Boolean,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LessonNumberBadge(lesson.lessonNumber)
+        Spacer(modifier = Modifier.width(8.dp))
+        val subject = lesson.shortSubjectName
+        val noSubject = subject.isBlank()
+        Text(
+            text = if (noSubject) "Предмет уточняется" else subject,
+            style =
+            androidx.compose.ui.text.TextStyle(
+                fontWeight = if (noSubject) FontWeight.Normal else FontWeight.Bold,
+                fontSize = if (noSubject) 11.sp else 14.sp,
+                color = if (noSubject) ColorTextMuted else ColorTextTitle,
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+
+        if (hasHomework) {
+
+            HomeworkBadge(
+                lessonNumber = lesson.lessonNumber,
+                types = homeworkTypes,
+                onClick = onHomeworkClick,
+            )
+        }
+    }
+
+    if (lesson.isSplit) {
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SubgroupPane(
+                subgroupNumber = 1,
+                subject = lesson.shortSubjectName,
+                teacher = lesson.teacherFirst,
+                room = lesson.roomFirst,
+                onTeacherClick = onTeacherClick,
+                isTeacherKnown = isTeacherKnown,
+                onRoomClick = onRoomClick,
+                pulse = pulse,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+
+            VerticalDivider(
+                color = ColorBorderLight,
+                thickness = 1.dp,
+                modifier = Modifier.fillMaxHeight(),
+            )
+
+            SubgroupPane(
+                subgroupNumber = 2,
+                subject = lesson.shortSubjectName,
+                teacher = lesson.teacherSecond,
+                room = lesson.roomSecond,
+                onTeacherClick = onTeacherClick,
+                isTeacherKnown = isTeacherKnown,
+                onRoomClick = onRoomClick,
+                pulse = pulse,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    } else if (lesson.teacherFirst.isNotBlank() || lesson.roomFirst.isNotBlank()) {
+        Spacer(modifier = Modifier.height(4.dp))
+        LessonTeacherRoomRow(
+            lesson = lesson,
+            onTeacherClick = onTeacherClick,
+            isTeacherKnown = isTeacherKnown,
+            onRoomClick = onRoomClick,
+            pulse = pulse,
+        )
+    }
+}
+
+@Composable
+private fun LessonNumberBadge(number: Int) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorBrandFill,
+        modifier = Modifier.size(24.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = "$number",
+                style =
+                androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = Color.White,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun LessonTeacherRoomRow(
+    lesson: LessonEntity,
+    onTeacherClick: (String) -> Unit,
+    isTeacherKnown: (String) -> Boolean,
+    onRoomClick: (String) -> Unit,
+    pulse: Boolean,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (lesson.teacherFirst.isNotBlank()) {
+            TeacherChip(
+                name = lesson.teacherFirst,
+                onClick =
+                if (isTeacherKnown(lesson.teacherFirst)) {
+                    { onTeacherClick(lesson.teacherFirst) }
+                } else {
+                    null
+                },
+                pulse = pulse,
+            )
+        }
+
+        if (lesson.roomFirst.isNotBlank()) {
+
+            Box(
+                modifier =
+                Modifier
+                    .heightIn(min = 44.dp)
+                    .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) },
+                contentAlignment = Alignment.Center,
+            ) {
+                AppCard(
+                    modifier = Modifier
+                        .pulseHalo(pulse)
+                        .wrapContentWidth(),
+                    color = ColorSurfaceHighlight,
                 ) {
-                    if (lesson.teacherFirst.isNotBlank()) {
-                        TeacherChip(
-                            name = lesson.teacherFirst,
-                            onClick =
-                            if (isTeacherKnown(lesson.teacherFirst)) {
-                                { onTeacherClick(lesson.teacherFirst) }
-                            } else {
-                                null
-                            },
-                            pulse = pulse,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = ColorBrandBlue,
+                            modifier = Modifier.size(12.dp),
                         )
-                    }
-
-                    if (lesson.roomFirst.isNotBlank()) {
-
-                        Box(
-                            modifier =
-                            Modifier
-                                .heightIn(min = 44.dp)
-                                .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            AppCard(
-                                modifier = Modifier
-                                    .pulseHalo(pulse)
-                                    .wrapContentWidth(),
-                                color = ColorSurfaceHighlight,
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.LocationOn,
-                                        contentDescription = null,
-                                        tint = ColorBrandBlue,
-                                        modifier = Modifier.size(12.dp),
-                                    )
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    Text(
-                                        text = "каб. ${lesson.roomFirst}",
-                                        style =
-                                        androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                            color = ColorBrandBlue,
-                                        ),
-                                    )
-                                }
-                            }
-                        }
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = "каб. ${lesson.roomFirst}",
+                            style =
+                            androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = ColorBrandBlue,
+                            ),
+                        )
                     }
                 }
             }
@@ -1128,6 +1294,7 @@ private fun SubgroupPane(
     isTeacherKnown: (String) -> Boolean,
     onRoomClick: (String) -> Unit,
     pulse: Boolean = false,
+    compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1198,21 +1365,23 @@ private fun SubgroupPane(
             }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        if (!compact) {
+            Spacer(modifier = Modifier.height(4.dp))
 
-        run {
-            val noSubject = subject.isBlank()
-            Text(
-                text = if (noSubject) "Предмет уточняется" else subject,
-                style =
-                androidx.compose.ui.text.TextStyle(
-                    fontWeight = if (noSubject) FontWeight.Normal else FontWeight.SemiBold,
-                    fontSize = if (noSubject) 11.sp else 13.sp,
-                    color = if (noSubject) ColorTextMuted else ColorTextTitle,
-                ),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            run {
+                val noSubject = subject.isBlank()
+                Text(
+                    text = if (noSubject) "Предмет уточняется" else subject,
+                    style =
+                    androidx.compose.ui.text.TextStyle(
+                        fontWeight = if (noSubject) FontWeight.Normal else FontWeight.SemiBold,
+                        fontSize = if (noSubject) 11.sp else 13.sp,
+                        color = if (noSubject) ColorTextMuted else ColorTextTitle,
+                    ),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
 
         if (teacher.isNotBlank()) {

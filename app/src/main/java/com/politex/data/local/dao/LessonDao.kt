@@ -59,6 +59,9 @@ interface LessonDao {
     @Query("SELECT * FROM lessons WHERE groupName = :groupName ORDER BY dayOfWeek ASC, lessonNumber ASC")
     fun getAllLessonsForGroup(groupName: String): Flow<List<LessonEntity>>
 
+    @Query("SELECT * FROM lessons")
+    suspend fun getAllLessonsSync(): List<LessonEntity>
+
     @Query("SELECT * FROM lessons WHERE groupName = :groupName AND dayOfWeek = :dayOfWeek ORDER BY lessonNumber ASC")
     suspend fun getLessonsForDaySync(
         groupName: String,

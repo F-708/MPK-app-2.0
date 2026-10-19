@@ -1,7 +1,7 @@
 package com.politex
 
 import android.os.Build
-import com.politex.ui.screens.exactAlarmHintNeeded
+import com.politex.util.ExactAlarmGate
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,15 +9,15 @@ import org.junit.Test
 class ExactAlarmHintTest {
     @Test
     fun `подсказка показана на SDK 31+ без разрешения`() {
-        assertTrue(exactAlarmHintNeeded(Build.VERSION_CODES.S, false))
-        assertTrue(exactAlarmHintNeeded(35, false))
+        assertTrue(ExactAlarmGate.hintNeeded(Build.VERSION_CODES.S, false))
+        assertTrue(ExactAlarmGate.hintNeeded(35, false))
     }
 
     @Test
     fun `подсказка скрыта если разрешение есть или SDK ниже 31`() {
-        assertFalse(exactAlarmHintNeeded(Build.VERSION_CODES.S, true))
-        assertFalse(exactAlarmHintNeeded(35, true))
-        assertFalse(exactAlarmHintNeeded(30, false))
-        assertFalse(exactAlarmHintNeeded(26, true))
+        assertFalse(ExactAlarmGate.hintNeeded(Build.VERSION_CODES.S, true))
+        assertFalse(ExactAlarmGate.hintNeeded(35, true))
+        assertFalse(ExactAlarmGate.hintNeeded(30, false))
+        assertFalse(ExactAlarmGate.hintNeeded(26, true))
     }
 }

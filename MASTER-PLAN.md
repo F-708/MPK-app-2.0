@@ -1123,8 +1123,17 @@ testStandardDebugUnitTest → коммит. Room-схему трогает то�
   JJ13 (SubjectRenameStore, звёздочка), JJ16 (строгая ортогональность, miter-offset),
   JJ9 (VIEW/SEND + SHA-256 дедуп), JJ10 (DOCX-страницы), Room v11. 956+ тестов зелёные.
   Долг: коридор cor_xavktf (1 эт) самопересекающийся — перерисовать разметку (после визуальной сверки).
+- ВОЛНА B ✅ коммит b936c90: JJ7 (веса per-subject), JJ8 (физра без категорий), JJ12 (удалить все
+  оценки), JJ6 (темы SYSTEM/APP + WCAG-тесты), JJ3-гейт будильников (ExactAlarmGate, виджеты),
+  JJ18 (каскадный пикер онбординга + мердж 43Э: 1703→1733, group_codes 62→63), JJ19 (подгруппа).
+  Roborazzi обновлён, vision-аудит OK (пустая зона в оценках = задуманный layout Y4/X10, не баг).
 - B2 доводок для волны C1 (настройки): в SettingsScreen остались приватные дубли
   openExactAlarmSettings/exactAlarmHintNeeded — заменить на общий util/ExactAlarmGate.kt.
+- C3 доводки для волны E: (1) `res/values-night/themes.xml` — windowBackground тёмный
+  (иначе белый флеш при старте); (2) hardcoded-цвета вне ui/theme: MainHeaderBanner.kt:38,44
+  (белая шапка!), CollegeMapScreen.kt:130-132,833 + белая графика маршрута ~1501,1514,1597,
+  admin-золото CollegeScreen.kt:90-92,431 + StudentsScreens.kt, AnnotationOverlay.kt:262.
+  Виджеты в тёмную НЕ переводить (у них своя тема SYSTEM/APP).
 
 ## РАЗВЕДКА/РЕШЕНИЯ JJ (менеджер, 2026-10-19)
 - Бэкап маршрутов: git tag `backup-pre-jj-routes` создан (HEAD 0e9f20e).

@@ -385,6 +385,7 @@ fun MainScreen(
                 composable(ROUTE_SPECIALTY) {
                     SpecialtyRoute(
                         groupInfo = currentGroupInfo,
+                        onGroupChanged = { newGroup -> viewModel.setGroup(newGroup) },
                         onBack = { navController.popBackStack() },
                     )
                 }

@@ -84,6 +84,11 @@ object SubjectRenameStore {
         setCustomName(context, original, "")
     }
 
+    fun allRenames(context: Context): Map<String, String> {
+        ensureLoaded(context)
+        return LinkedHashMap(cache)
+    }
+
     internal fun clearAll(context: Context) {
         context
             .applicationContext

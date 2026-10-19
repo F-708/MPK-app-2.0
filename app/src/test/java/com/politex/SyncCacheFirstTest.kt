@@ -93,6 +93,8 @@ private class FakeLessonDao(
 
     override fun getAllLessonsForGroup(groupName: String): Flow<List<LessonEntity>> = flowOf(rows.filter { it.groupName == groupName })
 
+    override suspend fun getAllLessonsSync(): List<LessonEntity> = rows
+
     override suspend fun getLessonsForDaySync(
         groupName: String,
         dayOfWeek: Int,

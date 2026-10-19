@@ -65,6 +65,7 @@ import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.MyApplicationTheme
 import com.politex.util.GradeCategory
 import com.politex.util.HintFlags
+import com.politex.util.ScheduleDisplayPrefs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -254,6 +255,18 @@ class PromoShotsTest {
             groupInfo = group, scheduleRepository = AppGraph.scheduleRepository,
             onSyncRequest = {}, selectedSlot = 1,
         )
+    }
+
+    @Test
+    fun shotScheduleCompact() {
+        ScheduleDisplayPrefs.setCompact(context, true)
+        try {
+            shoot("shot_schedule_compact", tab = 0, interact = { waitForText("ЦИФРОВЫХ") }) {
+                ScheduleScreen(groupInfo = group, scheduleRepository = AppGraph.scheduleRepository, onSyncRequest = {})
+            }
+        } finally {
+            ScheduleDisplayPrefs.setCompact(context, false)
+        }
     }
 
     @Test
