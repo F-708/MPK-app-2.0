@@ -125,6 +125,13 @@ object SubjectFormatter {
             "МаИсслед" to "Маркетинговые исследования",
 
             "Програм" to "Программируемые цифровые устройства",
+            "СистТехнОргСер" to "Системы технической организации сервиса",
+            "СистТехОрг" to "Системы технической организации сервиса",
+            "СтатАнализОТП" to "Статический анализ и оптимизация технологических процессов",
+            "ПрограмЦУ" to "Программируемые цифровые устройства",
+            "ЭлСнабГЭТ" to "Электроснабжение городского электрического транспорта",
+            "БеПрофЛекс" to "Белорусский язык (профессиональная лексика)",
+            "ОПрРасА" to "Основы проектирования и расчета автоматизированных электроприводов промышленных и транспортных установок",
         )
 
     private val PREDEFINED_SHORT_NAMES: Map<String, String> =
@@ -262,6 +269,7 @@ object SubjectFormatter {
             "Математика в профессиональной деятельности" to "Матем. проф. деят.",
             "Русский язык (профессиональная лексика)" to "Рус. яз. (проф)",
             "Физика твёрдого тела" to "Физика тв. тела",
+            "Системы технической организации сервиса" to "Сист. техн. орг. серв.",
         )
 
     private val PREDEFINED_ACRONYMS: Map<String, String> =
@@ -395,6 +403,7 @@ object SubjectFormatter {
             "Математика в профессиональной деятельности" to "МВПД",
             "Русский язык (профессиональная лексика)" to "РЯП",
             "Физика твёрдого тела" to "ФТТ",
+            "Системы технической организации сервиса" to "СТОС",
         )
 
     private val STOP_WORDS: Set<String> =
@@ -493,6 +502,8 @@ object SubjectFormatter {
 
         if (normalized.isBlank() || normalized.all { it.isDigit() }) return ""
 
+        SubjectRenameStore.customNameCached(normalized)?.let { return SubjectRenameStore.RENAMED_PREFIX + it }
+
         PREDEFINED_SHORT_NAMES[normalized]?.let { return it }
 
         val normalizedLower = normalized.lowercase(Locale.ROOT)
@@ -540,6 +551,18 @@ object SubjectFormatter {
                 words.take(4).map { it.first().uppercaseChar() }.joinToString("")
             }
         }
+    }
+
+    fun levenshteinSimilarity(
+        a: String,
+        b: String,
+    ): Double {
+        if (a.isEmpty() || b.isEmpty()) return 0.0
+        val s1 = a.lowercase(Locale.ROOT)
+        val s2 = b.lowercase(Locale.ROOT)
+        if (s1 == s2) return 1.0
+        val maxLen = max(s1.length, s2.length)
+        return 1.0 - (levenshteinDistance(s1, s2).toDouble() / maxLen)
     }
 
     private fun cleanRawTitle(raw: String): String {

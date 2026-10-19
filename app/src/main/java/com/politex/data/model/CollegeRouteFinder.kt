@@ -457,6 +457,7 @@ object CollegeRouteFinder {
         points: List<MapPoint>,
         rooms: List<MapRoom>,
         aspect: Float = PLAN_ASPECT,
+        preserveEnds: Boolean = false,
     ): List<MapPoint> {
         if (points.size < 2) return points
         val rects = roomRects(rooms)
@@ -492,7 +493,28 @@ object CollegeRouteFinder {
                 continue
             }
             if (Math.min(dx, dy) / Math.max(dx, dy) < SNAP_RATIO) {
-
+                if (preserveEnds && i == points.lastIndex) {
+                    val prev = if (out.size >= 2) out[out.size - 2] else null
+                    when {
+                        prev != null && Math.abs(prev.x - a.x) < ORTHO_EPS -> {
+                            out[out.size - 1] = MapPoint(a.x, b.y)
+                            out.add(b)
+                            lastLegHorizontal = true
+                        }
+                        prev != null && Math.abs(prev.y - a.y) < ORTHO_EPS -> {
+                            out[out.size - 1] = MapPoint(b.x, a.y)
+                            out.add(b)
+                            lastLegHorizontal = false
+                        }
+                        else -> {
+                            val corner = if (dx > dy) MapPoint(b.x, a.y) else MapPoint(a.x, b.y)
+                            out.add(corner)
+                            out.add(b)
+                            lastLegHorizontal = dx <= dy
+                        }
+                    }
+                    continue
+                }
                 b = if (dx > dy) MapPoint(b.x, a.y) else MapPoint(a.x, b.y)
                 out.add(b)
                 lastLegHorizontal = dx > dy
@@ -585,12 +607,28 @@ object CollegeRouteFinder {
         points: List<MapPoint>,
         floor: FloorMap,
         aspect: Float = PLAN_ASPECT,
-    ): List<MapPoint> = avoidRooms(
-        orthogonalize(simplifyRoute(points, eps = 1e-4f), floor.rooms, aspect),
-        floor.rooms,
-        floor.corridors,
-        aspect,
-    )
+    ): List<MapPoint> {
+        val ortho = orthogonalize(simplifyRoute(points, eps = 1e-4f), floor.rooms, aspect, preserveEnds = true)
+        val avoided = avoidRooms(ortho, floor.rooms, floor.corridors, aspect)
+        val clamped = avoided.map { MapPoint(it.x.coerceIn(0f, 1f), it.y.coerceIn(0f, 1f)) }
+        return simplifyOrthogonal(clamped, aspect)
+    }
+
+    private fun simplifyOrthogonal(points: List<MapPoint>, aspect: Float): List<MapPoint> {
+        val d = ArrayList<MapPoint>(points.size)
+        for (p in points) if (d.isEmpty() || distP(d.last(), p) >= 1e-6f) d.add(p)
+        val out = ArrayList<MapPoint>(d.size)
+        for (p in d) {
+            out.add(p)
+            while (out.size >= 3) {
+                val a = out[out.size - 3]
+                val c = out[out.size - 1]
+                val mergeable = Math.abs(c.x - a.x) * aspect < ORTHO_EPS || Math.abs(c.y - a.y) < ORTHO_EPS
+                if (mergeable) out.removeAt(out.size - 2) else break
+            }
+        }
+        return out
+    }
 
     private const val ORTHO_EPS = 1e-4f
 
@@ -618,8 +656,7 @@ object CollegeRouteFinder {
                 val abx = b.x - a.x
                 val aby = b.y - a.y
                 val cross = abx * (c.y - b.y) - aby * (c.x - b.x)
-                val dot = abx * (c.x - b.x) + aby * (c.y - b.y)
-                val collinear = Math.abs(cross) < eps && dot >= 0f
+                val collinear = Math.abs(cross) < eps
                 val abLen = distP(a, b)
                 val perp = if (abLen < 1e-6f) distP(a, c) else Math.abs(abx * (c.y - a.y) - aby * (c.x - a.x)) / abLen
                 val spike = distP(a, c) < abLen && perp < eps

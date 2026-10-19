@@ -13,8 +13,11 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
+import java.security.MessageDigest
+import java.util.zip.ZipInputStream
 import kotlin.coroutines.coroutineContext
 import kotlin.math.max
 
@@ -83,6 +86,7 @@ object MaterialImporter {
         context: Context,
         uri: Uri,
         fileName: String,
+        digest: MessageDigest? = null,
     ): File = withContext(Dispatchers.IO) {
         val target = File(storageDir(context), fileName)
         val input =
@@ -96,10 +100,83 @@ object MaterialImporter {
                     val read = source.read(buffer)
                     if (read < 0) break
                     out.write(buffer, 0, read)
+                    digest?.update(buffer, 0, read)
                 }
             }
         }
         target
+    }
+
+    internal fun ByteArray.toHexString(): String = joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+
+    internal fun newSha256(): MessageDigest = MessageDigest.getInstance("SHA-256")
+
+    suspend fun contentUriSha256(
+        context: Context,
+        uri: Uri,
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val input = context.contentResolver.openInputStream(uri) ?: return@withContext null
+            val digest = newSha256()
+            input.use { source ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    coroutineContext.ensureActive()
+                    val read = source.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            digest.digest().toHexString()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun contentHashFor(
+        context: Context,
+        pending: PendingMaterial,
+    ): String? =
+        when (pending) {
+            is PendingMaterial.SingleFile -> contentUriSha256(context, pending.uri)
+            is PendingMaterial.Images -> {
+                if (pending.uris.isEmpty()) {
+                    null
+                } else {
+                    val digest = newSha256()
+                    var complete = true
+                    for (uri in pending.uris) {
+                        val hex = contentUriSha256(context, uri)
+                        if (hex == null) {
+                            complete = false
+                            break
+                        }
+                        digest.update(hex.toByteArray(Charsets.US_ASCII))
+                    }
+                    if (complete) digest.digest().toHexString() else null
+                }
+            }
+            is PendingMaterial.Text -> null
+        }
+
+    suspend fun findExistingByContent(
+        context: Context,
+        dao: MaterialDao,
+        pending: PendingMaterial,
+    ): MaterialItemEntity? {
+        val hash = contentHashFor(context, pending) ?: return null
+        return dao.getItemsByContentHash(hash).firstOrNull { item ->
+            when (item.kindEnum) {
+                MaterialKind.FILE, MaterialKind.IMAGES ->
+                    item.uriPath
+                        .split('\n')
+                        .filter { it.isNotBlank() }
+                        .all { File(it).exists() }
+                MaterialKind.TEXT -> true
+            }
+        }
     }
 
     suspend fun pdfPageCount(file: File): Int = withContext(Dispatchers.IO) {
@@ -234,15 +311,19 @@ object MaterialImporter {
                     )
                 val copied = ArrayList<String>(pending.uris.size)
                 try {
+                    val setDigest = newSha256()
                     pending.uris.forEachIndexed { index, uri ->
-                        val file = copyToStorage(context, uri, "$id-$index.$ext")
+                        val fileDigest = newSha256()
+                        val file = copyToStorage(context, uri, "$id-$index.$ext", fileDigest)
                         copied.add(file.absolutePath)
+                        setDigest.update(fileDigest.digest().toHexString().toByteArray(Charsets.US_ASCII))
                     }
                     val text = extractImageSetSearchText(firstName)
                     dao.updateItem(
                         requireNotNull(dao.getItemById(id)).copy(
                             uriPath = copied.joinToString("\n"),
                             textContent = text,
+                            contentHash = setDigest.digest().toHexString(),
                         ),
                     )
                 } catch (t: Throwable) {
@@ -264,8 +345,14 @@ object MaterialImporter {
     ): Long {
         var stored: File? = null
         try {
-            stored = copyToStorage(context, uri, "$itemId.$ext")
-            val pages = if (ext == "pdf") pdfPageCount(stored) else 0
+            val digest = newSha256()
+            stored = copyToStorage(context, uri, "$itemId.$ext", digest)
+            val pages =
+                when (ext) {
+                    "pdf" -> pdfPageCount(stored)
+                    "docx" -> docxPageCount(stored)
+                    else -> 0
+                }
             val text =
                 when {
                     ext == "docx" -> readDocxText(stored)
@@ -280,6 +367,7 @@ object MaterialImporter {
                     textContent = text.take(MAX_INDEXED_CHARS),
                     ext = if (ext.isBlank()) row.ext else ext,
                     title = row.title.ifBlank { titleOf(originalName) },
+                    contentHash = digest.digest().toHexString(),
                 ),
             )
             return itemId
@@ -287,6 +375,53 @@ object MaterialImporter {
             rollback(dao, itemId, stored?.absolutePath ?: "")
             throw t
         }
+    }
+
+    suspend fun docxPageCount(file: File): Int = withContext(Dispatchers.IO) {
+        runCatching {
+            file.inputStream().use { docxPageCount(it) }
+        }.getOrDefault(0)
+    }
+
+    internal fun docxPageCount(source: InputStream): Int {
+        var breaks = 0
+        ZipInputStream(source.buffered()).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: return 0
+                if (entry.name == "word/document.xml") {
+                    breaks = countPageBreaks(zip)
+                    break
+                }
+                zip.closeEntry()
+            }
+        }
+        return 1 + breaks
+    }
+
+    private fun countPageBreaks(stream: InputStream): Int {
+        val parser =
+            org.xmlpull.v1.XmlPullParserFactory
+                .newInstance()
+                .apply { isNamespaceAware = false }
+                .newPullParser()
+        parser.setInput(stream, "UTF-8")
+        var count = 0
+        var event = parser.eventType
+        while (event != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+            if (event == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                when (parser.name.substringAfterLast(':')) {
+                    "lastRenderedPageBreak" -> count++
+                    "br" -> {
+                        val type = (0 until parser.attributeCount).firstOrNull { i ->
+                            parser.getAttributeName(i).substringAfterLast(':') == "type"
+                        }?.let { parser.getAttributeValue(it) }
+                        if (type.equals("page", ignoreCase = true)) count++
+                    }
+                }
+            }
+            event = parser.next()
+        }
+        return count
     }
 
     private fun extractImageSetSearchText(firstName: String): String = titleOf(firstName)

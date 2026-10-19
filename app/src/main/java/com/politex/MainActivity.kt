@@ -14,11 +14,13 @@ import androidx.navigation.compose.rememberNavController
 import com.politex.ui.screens.MainScreen
 import com.politex.ui.screens.buildMapRoute
 import com.politex.ui.screens.buildScrollRoute
+import com.politex.ui.screens.materials.ExternalMaterialIntake
 import com.politex.ui.screens.navigateToTab
 import com.politex.ui.theme.MyApplicationTheme
 import com.politex.ui.viewmodel.ARG_SCROLL
 import com.politex.ui.viewmodel.AppTab
 import com.politex.ui.viewmodel.AppViewModel
+import com.politex.ui.viewmodel.ROUTE_LESSONS
 import com.politex.util.NotificationHelper
 import com.politex.worker.MpkWorkManagerHelper
 
@@ -111,6 +113,14 @@ class MainActivity : ComponentActivity() {
                 ),
             )
             return
+        }
+        if (BuildConfig.FLAVOR != "teacher" && intent != null) {
+            val external = ExternalMaterialIntake.fromIntent(contentResolver, intent)
+            if (external != null) {
+                ExternalMaterialIntake.pending = external
+                navController.navigateToTab(ROUTE_LESSONS)
+                return
+            }
         }
         val scrollTarget = intent?.getStringExtra("EXTRA_SCROLL_TARGET")
         val tab =

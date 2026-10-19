@@ -50,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,6 +73,7 @@ import com.politex.ui.components.AppDivider
 import com.politex.ui.components.EmptyState
 import com.politex.ui.components.SearchEmptyState
 import com.politex.ui.components.BrandActionButton
+import com.politex.ui.screens.materials.ExternalMaterialIntake
 import com.politex.ui.screens.materials.MaterialCard
 import com.politex.ui.screens.materials.MaterialDeleteDialog
 import com.politex.ui.screens.materials.MaterialDocTextViewer
@@ -106,8 +108,11 @@ import com.politex.util.FuzzySearch
 import com.politex.util.MaterialImporter
 import com.politex.util.MpkCurriculum
 import com.politex.util.PendingMaterial
+import com.politex.util.SubjectRenameStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -218,10 +223,30 @@ fun MaterialBaseScreen(
     var showTextInput by remember { mutableStateOf(false) }
     var showSubject by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<PendingMaterial?>(null) }
+    var pendingFromExternal by remember { mutableStateOf(false) }
     var renamingItem by remember { mutableStateOf<MaterialItemEntity?>(null) }
     var deletingItem by remember { mutableStateOf<MaterialItemEntity?>(null) }
     var importing by remember { mutableStateOf(false) }
     var banner by remember { mutableStateOf<Banner?>(null) }
+
+    LaunchedEffect(Unit) {
+        snapshotFlow { ExternalMaterialIntake.pending }
+            .filterNotNull()
+            .collectLatest { material ->
+                ExternalMaterialIntake.pending = null
+                val existing = MaterialImporter.findExistingByContent(context, dao, material)
+                if (existing != null) {
+                    if (!existing.archived && existing.subjectName.isNotBlank()) {
+                        push(MaterialRoute.SubjectScreen(existing.subjectName))
+                    }
+                    push(MaterialRoute.Viewer(existing.id))
+                } else {
+                    pending = material
+                    pendingFromExternal = true
+                    showSubject = true
+                }
+            }
+    }
 
     fun showOk(text: String) {
         banner = Banner(text, isError = false)
@@ -240,26 +265,34 @@ fun MaterialBaseScreen(
                 return@rememberLauncherForActivityResult
             }
             pending = PendingMaterial.SingleFile(uri)
+            pendingFromExternal = false
             showSubject = true
         }
     val imagesPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isNullOrEmpty()) return@rememberLauncherForActivityResult
             pending = PendingMaterial.Images(uris)
+            pendingFromExternal = false
             showSubject = true
         }
 
     fun importInto(
         subject: String,
         material: PendingMaterial,
+        openAfter: Boolean = false,
     ) {
         importing = true
         scope.launch {
             val outcome = runCatching { MaterialImporter.importMaterial(context, dao, subject, material) }
             importing = false
             outcome
-                .onSuccess { showOk("Материал добавлен в «$subject»") }
-                .onFailure { showErr("Не удалось импортировать: ${it.message ?: it.javaClass.simpleName}") }
+                .onSuccess { id ->
+                    showOk("Материал добавлен в «${SubjectRenameStore.displayName(context, subject)}»")
+                    if (openAfter) {
+                        push(MaterialRoute.SubjectScreen(subject))
+                        push(MaterialRoute.Viewer(id))
+                    }
+                }.onFailure { showErr("Не удалось импортировать: ${it.message ?: it.javaClass.simpleName}") }
         }
     }
 
@@ -285,7 +318,7 @@ fun MaterialBaseScreen(
 
                 val subject = item.subjectName.ifBlank { RESTORED_SUBJECT }
                 dao.updateItem(item.copy(subjectName = subject, archived = false, sortOrder = dao.nextItemSortOrder(subject)))
-                showOk("Возвращено в «$subject»")
+                showOk("Возвращено в «${SubjectRenameStore.displayName(context, subject)}»")
             }
         }
     }
@@ -491,6 +524,7 @@ fun MaterialBaseScreen(
             onConfirm = { text ->
                 showTextInput = false
                 pending = PendingMaterial.Text(text)
+                pendingFromExternal = false
                 showSubject = true
             },
         )
@@ -498,6 +532,7 @@ fun MaterialBaseScreen(
 
     if (showSubject) {
         val material = pending
+        val fromExternal = pendingFromExternal
         MaterialSubjectDialog(
             curriculumSubjects = curriculumSubjects,
             usedSubjects = remember(items) {
@@ -506,11 +541,13 @@ fun MaterialBaseScreen(
             onDismiss = {
                 showSubject = false
                 pending = null
+                pendingFromExternal = false
             },
             onConfirm = { subject ->
                 showSubject = false
                 pending = null
-                if (material != null) importInto(subject, material)
+                pendingFromExternal = false
+                if (material != null) importInto(subject, material, openAfter = fromExternal)
             },
         )
     }
@@ -709,6 +746,9 @@ private fun SubjectRow(
     count: Int,
     onOpen: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val renameRevision = SubjectRenameStore.revision.intValue
+    val displayName = remember(subjectName, renameRevision) { SubjectRenameStore.displayName(context, subjectName) }
     MaterialCard(testTag = "material_subject_$subjectName", onClick = onOpen) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Icon(
@@ -719,7 +759,7 @@ private fun SubjectRow(
             )
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-                text = subjectName,
+                text = displayName,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -746,6 +786,12 @@ private fun MaterialSubjectContent(
     onAdd: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val renameRevision = SubjectRenameStore.revision.intValue
+    val displaySubject =
+        remember(subjectName, renameRevision) {
+            subjectName?.let { SubjectRenameStore.displayName(context, it) }
+        }
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -769,7 +815,7 @@ private fun MaterialSubjectContent(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = subjectName ?: "Архив",
+                    text = displaySubject ?: "Архив",
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ColorTextTitle),

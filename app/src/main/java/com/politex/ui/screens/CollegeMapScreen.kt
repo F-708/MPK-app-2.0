@@ -1419,6 +1419,8 @@ private fun DrawScope.drawRoutePath(
         if (raw.size < 2) {
 
             val p = raw.lastOrNull() ?: continue
+            finish = p
+            if (drawStart && start == null) start = p
             val c = Offset(p.x * imgW, p.y * imgH)
             drawCircle(
                 color = ColorActiveBlue.copy(alpha = 0.30f),

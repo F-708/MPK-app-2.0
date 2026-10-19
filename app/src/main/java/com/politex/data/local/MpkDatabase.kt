@@ -39,7 +39,7 @@ import com.politex.data.local.entity.TeacherOverrideEntity
         GradeConfigEntity::class,
         TeacherOverrideEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 abstract class MpkDatabase : RoomDatabase() {
@@ -265,6 +265,13 @@ abstract class MpkDatabase : RoomDatabase() {
                 }
             }
 
+        private val migration10To11 =
+            object : Migration(10, 11) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `material_items` ADD COLUMN `contentHash` TEXT NOT NULL DEFAULT ''")
+                }
+            }
+
         fun getInstance(context: Context): MpkDatabase = instance ?: synchronized(this) {
 
             instance ?: run {
@@ -274,7 +281,7 @@ abstract class MpkDatabase : RoomDatabase() {
                             context.applicationContext,
                             MpkDatabase::class.java,
                             DATABASE_NAME,
-                        ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8, migration8To9, migration9To10)
+                        ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8, migration8To9, migration9To10, migration10To11)
 
                         .fallbackToDestructiveMigration()
                         .build()

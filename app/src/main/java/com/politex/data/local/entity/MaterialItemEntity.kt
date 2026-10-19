@@ -40,6 +40,9 @@ data class MaterialItemEntity(
 
     @ColumnInfo(defaultValue = "0")
     val textEdited: Boolean = false,
+
+    @ColumnInfo(defaultValue = "")
+    val contentHash: String = "",
     val createdAt: Long = System.currentTimeMillis(),
 ) {
     val kindEnum: MaterialKind

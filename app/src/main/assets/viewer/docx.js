@@ -136,7 +136,14 @@ if (!vwWebViewTooOld("Word documents")) {
         inWrapper: true,
         breakPages: true,
         renderHeadersFooters: true,
-        ignoreLastRenderedPageBreak: true,
+        /* Word marks the page edges it computed with lastRenderedPageBreak runs and writes
+           no other break for ordinary flowing text. Ignoring those marks drew a whole
+           document as one section, and the page counter read 1/1 on a forty-page file.
+           Honouring them splits the document where Word split it: the sections are the
+           pages, so the counter, the bookmarks and the page jumps agree with the paper.
+           A section's height is a minimum, not a cap, so when the browser's fonts run a
+           line longer than Word's did, the page grows a little rather than clipping it. */
+        ignoreLastRenderedPageBreak: false,
         experimental: true,
         h: makeElement
       });

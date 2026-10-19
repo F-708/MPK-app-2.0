@@ -62,6 +62,9 @@ interface MaterialDao {
     @Query("SELECT * FROM material_items WHERE id = :itemId")
     suspend fun getItemById(itemId: Long): MaterialItemEntity?
 
+    @Query("SELECT * FROM material_items WHERE contentHash = :hash AND contentHash != '' ORDER BY id ASC")
+    suspend fun getItemsByContentHash(hash: String): List<MaterialItemEntity>
+
     @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM material_items WHERE subjectName = :subject AND archived = 0")
     suspend fun nextItemSortOrder(subject: String): Int
 

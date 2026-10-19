@@ -118,6 +118,7 @@ import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.HintFlags
 import com.politex.util.MpkCurriculum
+import com.politex.util.SubjectRenameStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -888,6 +889,7 @@ fun TaskEditDialog(
     val isEdit = task != null
     var title by remember { mutableStateOf(task?.title ?: "") }
     var description by remember { mutableStateOf(task?.description ?: "") }
+    val context = LocalContext.current
 
     val currentYear =
         remember {
@@ -1017,7 +1019,7 @@ fun TaskEditDialog(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
                         ) {
                             Text(
-                                text = selectedSubject.ifBlank { "Предмет" },
+                                text = SubjectRenameStore.displayName(context, selectedSubject).ifBlank { "Предмет" },
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 style =
@@ -1506,6 +1508,7 @@ private fun SubjectPickerDialog(
     onDismiss: () -> Unit,
     onPick: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.6f).dp
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1548,7 +1551,7 @@ private fun SubjectPickerDialog(
                             modifier = Modifier.padding(12.dp),
                         ) {
                             Text(
-                                text = subject,
+                                text = SubjectRenameStore.displayName(context, subject),
                                 style =
                                 androidx.compose.ui.text.TextStyle(
                                     fontSize = 14.sp,

@@ -10,6 +10,8 @@ import java.util.Locale
 object HomeworkMarkers {
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
 
+    internal const val FUZZY_MATCH_THRESHOLD = 0.8
+
     data class DayContext(
         val dayIso: String,
         val isToday: Boolean,
@@ -67,16 +69,23 @@ object HomeworkMarkers {
         taskSubject: String,
     ): Boolean {
         if (lessonSubject.isBlank() || taskSubject.isBlank()) return false
-        val b = SubjectFormatter.normalize(taskSubject)
+        val rawTask = FuzzySearch.normalize(taskSubject.trim(), caseSensitive = true)
+        val normTask = FuzzySearch.normalize(SubjectFormatter.normalize(taskSubject), caseSensitive = true)
 
         return lessonSubject
             .split('/')
-            .map { SubjectFormatter.normalize(it) }
+            .map { it.trim() }
             .filter { it.isNotBlank() }
-            .any { a ->
-                a.equals(b, ignoreCase = true) ||
-                    (a.length >= 6 && b.length >= 6 &&
-                        (a.contains(b, ignoreCase = true) || b.contains(a, ignoreCase = true)))
+            .any { rawLesson ->
+                val normLesson = FuzzySearch.normalize(SubjectFormatter.normalize(rawLesson), caseSensitive = true)
+                val foldedRawLesson = FuzzySearch.normalize(rawLesson, caseSensitive = true)
+                normLesson.equals(normTask, ignoreCase = true) ||
+                    (normLesson.length >= 6 && normTask.length >= 6 &&
+                        (normLesson.contains(normTask, ignoreCase = true) || normTask.contains(normLesson, ignoreCase = true))) ||
+                    (normLesson.length >= 6 && normTask.length >= 6 &&
+                        SubjectFormatter.levenshteinSimilarity(normLesson, normTask) >= FUZZY_MATCH_THRESHOLD) ||
+                    (foldedRawLesson.length >= 6 && rawTask.length >= 6 &&
+                        SubjectFormatter.levenshteinSimilarity(foldedRawLesson, rawTask) >= FUZZY_MATCH_THRESHOLD)
             }
     }
 

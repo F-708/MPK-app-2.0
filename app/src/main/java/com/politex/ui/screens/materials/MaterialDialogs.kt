@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +58,7 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
+import com.politex.util.SubjectRenameStore
 
 @Composable
 fun MaterialImportTypeDialog(
@@ -151,13 +153,19 @@ fun MaterialSubjectDialog(
     onConfirm: (subject: String) -> Unit,
 ) {
     val subjectOptions = remember(curriculumSubjects, usedSubjects) {
-        (curriculumSubjects + usedSubjects).distinct().filter { it.isNotBlank() }.sorted()
+        (curriculumSubjects + usedSubjects).distinct().filter { it.isNotBlank() }.sorted().ifEmpty { listOf("Без предмета") }
     }
 
     var subjectExpanded by remember { mutableStateOf(false) }
     var isCustomSubject by remember { mutableStateOf(false) }
     var customSubject by remember { mutableStateOf("") }
     var selectedSubject by remember { mutableStateOf(subjectOptions.firstOrNull() ?: "") }
+
+    val context = LocalContext.current
+    val renameRevision = SubjectRenameStore.revision.intValue
+    val displayOf: (String) -> String = remember(renameRevision) {
+        { original -> SubjectRenameStore.displayName(context, original) }
+    }
 
     val subject = if (isCustomSubject) customSubject.trim() else selectedSubject
     val canConfirm = subject.isNotBlank()
@@ -195,7 +203,7 @@ fun MaterialSubjectDialog(
                 } else {
                     ExposedDropdownMenuBox(expanded = subjectExpanded, onExpandedChange = { subjectExpanded = it }) {
                         OutlinedTextField(
-                            value = selectedSubject,
+                            value = displayOf(selectedSubject),
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Предмет", fontSize = 12.sp) },
@@ -209,7 +217,7 @@ fun MaterialSubjectDialog(
                         ExposedDropdownMenu(expanded = subjectExpanded, onDismissRequest = { subjectExpanded = false }) {
                             subjectOptions.forEach { option ->
                                 DropdownMenuItem(
-                                    text = { Text(option, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    text = { Text(displayOf(option), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                     onClick = {
                                         selectedSubject = option
                                         subjectExpanded = false

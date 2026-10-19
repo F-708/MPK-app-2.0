@@ -290,27 +290,46 @@ private fun PairField(
 
 fun offsetPolyline(points: List<MapPoint>, imgW: Float, imgH: Float, offsetPx: Float): List<MapPoint> {
     if (points.size < 2 || offsetPx == 0f || imgW <= 0f || imgH <= 0f) return points
+    val n = points.size - 1
+    val dirX = FloatArray(n)
+    val dirY = FloatArray(n)
+    val nrmX = FloatArray(n)
+    val nrmY = FloatArray(n)
+    for (i in 0 until n) {
+        val sx = (points[i + 1].x - points[i].x) * imgW
+        val sy = (points[i + 1].y - points[i].y) * imgH
+        val len = hypot(sx, sy)
+        if (len < 1e-6f) continue
+        dirX[i] = sx / len
+        dirY[i] = sy / len
+        nrmX[i] = sy / len
+        nrmY[i] = -sx / len
+    }
     val out = ArrayList<MapPoint>(points.size)
     for (i in points.indices) {
-        var nx = 0f
-        var ny = 0f
-        fun addNormal(a: MapPoint, b: MapPoint) {
-            val dx = (b.x - a.x) * imgW
-            val dy = (b.y - a.y) * imgH
-            val len = hypot(dx, dy)
-            if (len < 1e-6f) return
-            nx += dy / len
-            ny += -dx / len
+        val px = points[i].x * imgW
+        val py = points[i].y * imgH
+        val (ox, oy) = when (i) {
+            0 -> px + nrmX[0] * offsetPx to py + nrmY[0] * offsetPx
+            points.lastIndex -> px + nrmX[n - 1] * offsetPx to py + nrmY[n - 1] * offsetPx
+            else -> {
+                val ax = px + nrmX[i - 1] * offsetPx
+                val ay = py + nrmY[i - 1] * offsetPx
+                val bx = px + nrmX[i] * offsetPx
+                val by = py + nrmY[i] * offsetPx
+                val det = dirX[i - 1] * dirY[i] - dirX[i] * dirY[i - 1]
+                if (Math.abs(det) < 1e-6f) {
+                    val mx = nrmX[i - 1] + nrmX[i]
+                    val my = nrmY[i - 1] + nrmY[i]
+                    val ml = hypot(mx, my)
+                    if (ml < 1e-6f) px to py else px + mx / ml * offsetPx to py + my / ml * offsetPx
+                } else {
+                    val t = ((bx - ax) * dirY[i] - (by - ay) * dirX[i]) / det
+                    ax + dirX[i - 1] * t to ay + dirY[i - 1] * t
+                }
+            }
         }
-        if (i > 0) addNormal(points[i - 1], points[i])
-        if (i < points.lastIndex) addNormal(points[i], points[i + 1])
-        val p = points[i]
-        val nLen = hypot(nx, ny)
-        if (nLen < 1e-6f) {
-            out += p
-            continue
-        }
-        out += MapPoint(p.x + (nx / nLen) * offsetPx / imgW, p.y + (ny / nLen) * offsetPx / imgH)
+        out += MapPoint(ox / imgW, oy / imgH)
     }
     return out
 }

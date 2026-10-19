@@ -87,6 +87,7 @@ import com.politex.util.GradeCategory
 import com.politex.util.GradeSettings
 import com.politex.util.HintFlags
 import com.politex.util.MpkCurriculum
+import com.politex.util.SubjectRenameStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -258,7 +259,7 @@ private fun GradeSubjectList(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = subject,
+                        text = SubjectRenameStore.displayName(context, subject),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         style = TextStyle(fontSize = 14.sp, color = ColorTextTitle),
@@ -414,6 +415,7 @@ private fun GradeSubjectScreen(
 ) {
 
     BackHandler { onBack() }
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val today = rememberToday()
 
@@ -500,7 +502,7 @@ private fun GradeSubjectScreen(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад", tint = ColorTextTitle)
             }
             Text(
-                text = subject,
+                text = SubjectRenameStore.displayName(context, subject),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
@@ -850,6 +852,7 @@ private fun GradeSubjectSettingsScreen(
 ) {
 
     BackHandler { onBack() }
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val entries by dao.entriesForSubject(subject).collectAsState(initial = emptyList())
     val byCategory = remember(entries) { entries.groupBy({ it.category }) { it.value } }
@@ -894,7 +897,7 @@ private fun GradeSubjectSettingsScreen(
                     style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
                 )
                 Text(
-                    text = subject,
+                    text = SubjectRenameStore.displayName(context, subject),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),

@@ -26,11 +26,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -81,6 +84,7 @@ import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberToday
 import com.politex.util.MpkCurriculum
+import com.politex.util.SubjectRenameStore
 import java.util.Calendar
 
 private val ADMIN_ACCENT = Color(0xFF7A5C00)
@@ -465,6 +469,12 @@ private fun MySpecialtyPage(
     groupInfo: GroupInfo,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        SubjectRenameStore.ensureLoaded(context)
+    }
+    val renameRevision = SubjectRenameStore.revision.intValue
+    var renameTarget by remember { mutableStateOf<String?>(null) }
     val specialty =
         remember(groupInfo.specialtyCode) {
             MpkCurriculum.getSpecialty(groupInfo.specialtyCode)
@@ -676,24 +686,170 @@ private fun MySpecialtyPage(
                     )
                 }
                 items(subjects) { subject ->
+                    val displaySubject =
+                        remember(subject, renameRevision) {
+                            SubjectRenameStore.displayName(context, subject)
+                        }
                     AppCard(
                         modifier = Modifier.fillMaxWidth(),
                         color = ColorSurfaceVariantLight,
                     ) {
-                        Text(
-                            text = subject,
-                            style =
-                            androidx.compose.ui.text.TextStyle(
-                                fontSize = 13.sp,
-                                color = ColorTextBody,
-                            ),
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
+                        ) {
+                            Text(
+                                text = displaySubject,
+                                style =
+                                androidx.compose.ui.text.TextStyle(
+                                    fontSize = 13.sp,
+                                    color = ColorTextBody,
+                                ),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                color = Color.Transparent,
+                                modifier =
+                                Modifier
+                                    .size(Tokens.HitTarget)
+                                    .bouncyClickable { renameTarget = subject }
+                                    .testTag("subject_rename_btn_$subject"),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Переименовать предмет",
+                                        tint = ColorTextMuted,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
+    renameTarget?.let { original ->
+        RenameSubjectDialog(
+            original = original,
+            onDismiss = { renameTarget = null },
+        )
+    }
+}
+
+@Composable
+private fun RenameSubjectDialog(
+    original: String,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    var text by rememberSaveable(original) {
+        mutableStateOf(SubjectRenameStore.customName(context, original) ?: original)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(2.dp),
+        containerColor = ColorBgMain,
+        title = {
+            Text(
+                text = "Переименовать предмет",
+                style =
+                androidx.compose.ui.text.TextStyle(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = ColorTextTitle,
+                ),
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    text = original,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    style =
+                    androidx.compose.ui.text.TextStyle(
+                        fontSize = 12.sp,
+                        color = ColorTextMuted,
+                    ),
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Название предмета", fontSize = 12.sp) },
+                    placeholder = { Text("Пустое — исходное название", fontSize = 12.sp) },
+                    supportingText = { Text("Пустое поле вернёт исходное название", fontSize = 11.sp) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(2.dp),
+                    modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .testTag("subject_rename_field"),
+                )
+            }
+        },
+        confirmButton = {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBrandFill,
+                modifier =
+                Modifier
+                    .testTag("subject_rename_apply")
+                    .bouncyClickable {
+                        SubjectRenameStore.setCustomName(context, original, text)
+                        onDismiss()
+                    },
+            ) {
+                Text(
+                    text = "ПРИМЕНИТЬ",
+                    softWrap = false,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style =
+                    androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = Color.White,
+                    ),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
+        },
+        dismissButton = {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                border = BorderStroke(1.dp, ColorBorderLight),
+                color = Color.Transparent,
+                modifier =
+                Modifier
+                    .testTag("subject_rename_reset")
+                    .bouncyClickable {
+                        SubjectRenameStore.reset(context, original)
+                        onDismiss()
+                    },
+            ) {
+                Text(
+                    text = "СБРОС",
+                    softWrap = false,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style =
+                    androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = ColorTextBody,
+                    ),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
+        },
+    )
 }
 
 internal sealed interface TeacherRow {
