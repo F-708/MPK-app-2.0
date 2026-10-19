@@ -47,9 +47,9 @@ import com.politex.ui.screens.GroupScheduleRoute
 import com.politex.ui.screens.TeacherCardRoute
 import com.politex.ui.screens.TeachersRoute
 import com.politex.ui.theme.ColorBgMain
+import com.politex.ui.theme.ColorNavSelected
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextMuted
-import com.politex.ui.theme.ColorTopBar
 
 enum class TeacherTab { SCHEDULE, BELLS, MORE }
 
@@ -154,8 +154,8 @@ fun TeacherNav(
                         },
                         colors =
                             NavigationBarItemDefaults.colors(
-                                selectedIconColor = ColorTopBar,
-                                selectedTextColor = ColorTopBar,
+                                selectedIconColor = ColorNavSelected,
+                                selectedTextColor = ColorNavSelected,
                                 indicatorColor = ColorSurfaceHighlight,
                                 unselectedIconColor = ColorTextMuted,
                                 unselectedTextColor = ColorTextMuted,

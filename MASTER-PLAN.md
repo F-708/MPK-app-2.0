@@ -1127,6 +1127,12 @@ testStandardDebugUnitTest → коммит. Room-схему трогает то�
   оценки), JJ6 (темы SYSTEM/APP + WCAG-тесты), JJ3-гейт будильников (ExactAlarmGate, виджеты),
   JJ18 (каскадный пикер онбординга + мердж 43Э: 1703→1733, group_codes 62→63), JJ19 (подгруппа).
   Roborazzi обновлён, vision-аудит OK (пустая зона в оценках = задуманный layout Y4/X10, не баг).
+- ВОЛНА C ✅ коммит 881ae34: JJ3/4/5 (строка до звонка в подгруппе, шестерёнка, стили без превью),
+  JJ7-глобал (GradeSettings удалён), JJ14 (секционный бэкап), JJ15 (смена группы → специальность),
+  JJ2 (компактное расписание), JJ11-инфра (DarkPalette ×7 тем, WCAG), JJ17 (applicationId com.politex).
+- ВОЛНА D ✅ коммит 60b14b1: JJ20 режим преподавателя (TeacherModeStore, онбординг-ветка,
+  табы 3 шт, группа вместо преподавателя, без «ведёт у вас»/специальности/подгруппы,
+  «СМЕНИТЬ РОЛЬ» → онбординг). Тесты 1070+ зелёные, Roborazzi + teacher-кадр, vision OK.
 - B2 доводок для волны C1 (настройки): в SettingsScreen остались приватные дубли
   openExactAlarmSettings/exactAlarmHintNeeded — заменить на общий util/ExactAlarmGate.kt.
 - Known-flaky (новый, волна D): `W16PdfReaderModeTest` падает с «connection pool has been closed»

@@ -23,9 +23,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
+import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorDividerLight
 import com.politex.ui.theme.TextStyleCollegeBranding
+import com.politex.ui.theme.darkThemeState
 
 private const val MPK_HEADER_BANNER_URL = "https://guo-mpk.by/wp-content/uploads/2024/11/cropped-cropped-cropped-logo-na-sajt.png"
 
@@ -35,34 +37,47 @@ fun MainHeaderBanner(modifier: Modifier = Modifier) {
         modifier =
         modifier
             .fillMaxWidth()
-            .background(Color.White),
+            .background(ColorBgMain),
     ) {
         Box(
             modifier =
             Modifier
                 .fillMaxWidth()
-                .background(Color.White)
+                .background(ColorBgMain)
                 .statusBarsPadding()
                 .height(56.dp),
         ) {
-            SubcomposeAsyncImage(
-                model =
-                ImageRequest
-                    .Builder(LocalContext.current)
-                    .data(MPK_HEADER_BANNER_URL)
-                    .crossfade(false)
-                    .build(),
-                contentDescription = "Баннер Минского политехнического колледжа",
-                modifier =
-                Modifier
-                    .align(Alignment.Center)
-                    .padding(horizontal = 16.dp)
-                    .height(44.dp)
-                    .fillMaxWidth(),
-                contentScale = ContentScale.Fit,
-                loading = { HeaderFallback() },
-                error = { HeaderFallback() },
-            )
+            if (darkThemeState.value) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier =
+                    Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 16.dp)
+                        .fillMaxWidth(),
+                ) {
+                    HeaderFallback()
+                }
+            } else {
+                SubcomposeAsyncImage(
+                    model =
+                    ImageRequest
+                        .Builder(LocalContext.current)
+                        .data(MPK_HEADER_BANNER_URL)
+                        .crossfade(false)
+                        .build(),
+                    contentDescription = "Баннер Минского политехнического колледжа",
+                    modifier =
+                    Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 16.dp)
+                        .height(44.dp)
+                        .fillMaxWidth(),
+                    contentScale = ContentScale.Fit,
+                    loading = { HeaderFallback() },
+                    error = { HeaderFallback() },
+                )
+            }
         }
 
         AppDivider()

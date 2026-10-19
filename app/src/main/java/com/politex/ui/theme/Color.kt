@@ -41,6 +41,20 @@ data class MpkPalette(
     val badgeExam: Color,
     val badgeCourse: Color,
     val badgeDiploma: Color,
+    val mapRoomFill: Color,
+    val mapRoomBorder: Color,
+    val mapDead: Color,
+    val mapDeadBg: Color,
+    val mapDeadText: Color,
+    val mapRouteCore: Color,
+    val accentGold: Color,
+    val onAccentGold: Color,
+    val accentGoldBg: Color,
+    val accentGoldBright: Color,
+    val accentGoldSoft: Color,
+    val accentGoldMuted: Color,
+    val annotationDanger: Color,
+    val navSelected: Color,
 )
 
 val LightPalette =
@@ -80,6 +94,20 @@ val LightPalette =
         badgeExam = Color(0xFFE11D48),
         badgeCourse = Color(0xFFF97316),
         badgeDiploma = Color(0xFF0B3564),
+        mapRoomFill = Color(0x331976D2),
+        mapRoomBorder = Color(0xFF0057A8),
+        mapDead = Color(0xFFC0392B),
+        mapDeadBg = Color(0xFFFDECEC),
+        mapDeadText = Color(0xFFC0392B),
+        mapRouteCore = Color(0xFFFFFFFF),
+        accentGold = Color(0xFF7A5C00),
+        onAccentGold = Color(0xFFFFFFFF),
+        accentGoldBg = Color(0xFF2A2313),
+        accentGoldBright = Color(0xFFE8C55A),
+        accentGoldSoft = Color(0xFFD9CBA8),
+        accentGoldMuted = Color(0xFFB8A87F),
+        annotationDanger = Color(0xFFE53935),
+        navSelected = Color(0xFF001737),
     )
 
 val DarkPalette =
@@ -119,6 +147,20 @@ val DarkPalette =
         badgeExam = Color(0xFFFB7185),
         badgeCourse = Color(0xFFFB923C),
         badgeDiploma = Color(0xFF6FA3D8),
+        mapRoomFill = Color(0x3D6FA3D8),
+        mapRoomBorder = Color(0xFF6FA3D8),
+        mapDead = Color(0xFFE57373),
+        mapDeadBg = Color(0xFF3D1B17),
+        mapDeadText = Color(0xFFF28B82),
+        mapRouteCore = Color(0xFF0F1419),
+        accentGold = Color(0xFFC9A24B),
+        onAccentGold = Color(0xFF2A2313),
+        accentGoldBg = Color(0xFF2A2313),
+        accentGoldBright = Color(0xFFD9B45C),
+        accentGoldSoft = Color(0xFFD9CBA8),
+        accentGoldMuted = Color(0xFFB8A87F),
+        annotationDanger = Color(0xFFFF8A80),
+        navSelected = Color(0xFF3D94DA),
     )
 
 internal var paletteState by mutableStateOf(LightPalette)
@@ -163,3 +205,21 @@ val ColorBadgePract: Color get() = paletteState.badgePract
 val ColorBadgeExam: Color get() = paletteState.badgeExam
 val ColorBadgeCourse: Color get() = paletteState.badgeCourse
 val ColorBadgeDiploma: Color get() = paletteState.badgeDiploma
+
+val ColorMapRoomFill: Color get() = paletteState.mapRoomFill
+val ColorMapRoomBorder: Color get() = paletteState.mapRoomBorder
+val ColorMapDead: Color get() = paletteState.mapDead
+val ColorMapDeadBg: Color get() = paletteState.mapDeadBg
+val ColorMapDeadText: Color get() = paletteState.mapDeadText
+val ColorMapRouteCore: Color get() = paletteState.mapRouteCore
+
+val ColorAccentGold: Color get() = paletteState.accentGold
+val ColorOnAccentGold: Color get() = paletteState.onAccentGold
+val ColorAccentGoldBg: Color get() = paletteState.accentGoldBg
+val ColorAccentGoldBright: Color get() = paletteState.accentGoldBright
+val ColorAccentGoldSoft: Color get() = paletteState.accentGoldSoft
+val ColorAccentGoldMuted: Color get() = paletteState.accentGoldMuted
+
+val ColorAnnotationDanger: Color get() = paletteState.annotationDanger
+
+val ColorNavSelected: Color get() = paletteState.navSelected

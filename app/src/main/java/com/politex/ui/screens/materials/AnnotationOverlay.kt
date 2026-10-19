@@ -47,6 +47,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.politex.ui.theme.ColorAnnotationDanger
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -259,8 +260,8 @@ fun AnnotationLayer(
             eraserPos?.let { p ->
                 val r = compensatedStrokeWidthPx(strokeWidthDp / 2f + ERASER_TOUCH_EXTRA_DP, density, layerScale)
                 val center = Offset(p.x * size.width, p.y * size.height)
-                drawCircle(color = Color(0x22E53935), radius = r, center = center)
-                drawCircle(color = Color(0x99E53935), radius = r, center = center, style = DrawStroke(width = 1.5.dp.toPx()))
+                drawCircle(color = ColorAnnotationDanger.copy(alpha = 0.13f), radius = r, center = center)
+                drawCircle(color = ColorAnnotationDanger.copy(alpha = 0.6f), radius = r, center = center, style = DrawStroke(width = 1.5.dp.toPx()))
             }
         }
     }

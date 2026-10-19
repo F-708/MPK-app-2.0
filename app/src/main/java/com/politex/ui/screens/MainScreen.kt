@@ -75,9 +75,9 @@ import com.politex.ui.components.UndoSnackbar
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorDividerLight
+import com.politex.ui.theme.ColorNavSelected
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextMuted
-import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.viewmodel.ARG_SCROLL
 import com.politex.ui.viewmodel.AppTab
 import com.politex.ui.viewmodel.AppViewModel
@@ -278,8 +278,8 @@ fun MainScreen(
                                 },
                                 colors =
                                 NavigationBarItemDefaults.colors(
-                                    selectedIconColor = ColorTopBar,
-                                    selectedTextColor = ColorTopBar,
+                                    selectedIconColor = ColorNavSelected,
+                                    selectedTextColor = ColorNavSelected,
                                     indicatorColor = ColorSurfaceHighlight,
                                     unselectedIconColor = ColorTextMuted,
                                     unselectedTextColor = ColorTextMuted,

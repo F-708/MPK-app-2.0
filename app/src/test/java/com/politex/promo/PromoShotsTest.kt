@@ -61,14 +61,17 @@ import com.politex.ui.screens.LessonsHubScreen
 import com.politex.ui.screens.ScheduleScreen
 import com.politex.ui.screens.SettingsScreen
 import com.politex.ui.screens.materials.MaterialDocTextViewer
+import com.politex.ui.theme.AppTheme
 import com.politex.ui.theme.ColorBgMain
+import com.politex.ui.theme.ColorNavSelected
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextMuted
-import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.MyApplicationTheme
+import com.politex.ui.theme.applyAppTheme
 import com.politex.ui.viewmodel.AppTab
 import com.politex.ui.viewmodel.tabsForMode
 import com.politex.ui.viewmodel.toLessonEntity
+import com.politex.util.AppThemeStore
 import com.politex.util.DateFormats
 import com.politex.util.GradeCategory
 import com.politex.util.HintFlags
@@ -404,6 +407,85 @@ class PromoShotsTest {
         }
     }
 
+    @Test
+    fun shotScheduleTodayDark() = shootDark("shot_schedule_today_dark", tab = 0, interact = { waitForText("ЦИФРОВЫХ") }) {
+        ScheduleScreen(groupInfo = group, scheduleRepository = AppGraph.scheduleRepository, onSyncRequest = {})
+    }
+
+    @Test
+    fun shotSettingsDark() = shootDark("shot_settings_dark", tab = 3) {
+        SettingsScreen(groupInfo = group, onGroupChanged = {})
+    }
+
+    @Test
+    fun shotGradesSubjectDark() = shootDark(
+        "shot_grades_subject_dark",
+        tab = 1,
+        interact = {
+            composeRule.onNodeWithText("Оценки").performClick()
+            waitForTag("grades_root_list")
+            waitForTag("grades_subject_row_Математика")
+            composeRule.onNodeWithTag("grades_subject_row_Математика").performScrollTo()
+            composeRule.onNodeWithTag("grades_subject_row_Математика").performClick()
+            waitForTag("grades_subject_screen")
+            waitForTag("grades_num_5")
+            waitForText("4.2")
+        },
+    ) {
+        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao(), db.taskReminderDao()))
+    }
+
+    @Test
+    fun shotMapRouteDark() = shootDark(
+        "shot_map_route_dark",
+        tab = 0,
+        interact = {
+            composeRule.onNodeWithText("Шаг 1").performClick()
+            composeRule.mainClock.advanceTimeBy(2_000)
+            composeRule.waitForIdle()
+        },
+    ) {
+        CollegeMapScreen(initialRoom = "214", fromRoom = "", showRoute = true, onBack = {})
+    }
+
+    @Test
+    fun shotMaterialsDark() = shootDark(
+        "shot_materials_dark",
+        tab = 1,
+        interact = {
+            composeRule.onNodeWithText("Материалы").performClick()
+            waitForTag("material_subject_Математика")
+        },
+    ) {
+        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao(), db.taskReminderDao()))
+    }
+
+    @Test
+    fun shotBellsDark() = shootDark("shot_bells_dark", tab = 2, interact = { waitForText("Расписание звонков") }) {
+        BellsScreen(groupInfo = group, scheduleRepository = AppGraph.scheduleRepository)
+    }
+
+    @Test
+    fun shotTasksDark() = shootDark("shot_tasks_dark", tab = 1, interact = { waitForText("Параграф 12") }) {
+        LessonsHubScreen(groupInfo = group, taskRepository = TaskRepository(db.taskDao(), db.taskReminderDao()))
+    }
+
+    private fun shootDark(
+        name: String,
+        tab: Int = -1,
+        topBar: Boolean = true,
+        interact: (() -> Unit)? = null,
+        content: @Composable () -> Unit,
+    ) {
+        AppThemeStore.setDark(context, true)
+        applyAppTheme(AppTheme.COLLEGE, dark = true)
+        try {
+            shoot(name, tab = tab, topBar = topBar, interact = interact, content = content)
+        } finally {
+            AppThemeStore.setDark(context, false)
+        }
+    }
+
     private fun shoot(
         name: String,
         tab: Int = -1,
@@ -504,8 +586,8 @@ class PromoShotsTest {
                             )
                         },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = ColorTopBar,
-                            selectedTextColor = ColorTopBar,
+                            selectedIconColor = ColorNavSelected,
+                            selectedTextColor = ColorNavSelected,
                             indicatorColor = ColorSurfaceHighlight,
                             unselectedIconColor = ColorTextMuted,
                             unselectedTextColor = ColorTextMuted,

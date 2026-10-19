@@ -140,6 +140,7 @@ private fun paletteWithAccents(
     brandFill = brand,
     activeFill = active,
     badgeDiploma = brand,
+    navSelected = topBar,
 )
 
 private fun darkPaletteWithAccents(
@@ -155,6 +156,7 @@ private fun darkPaletteWithAccents(
     brandFill = brandFill,
     activeFill = activeFill,
     badgeDiploma = brand,
+    navSelected = active,
 )
 
 private var appliedTheme: AppTheme = AppTheme.COLLEGE

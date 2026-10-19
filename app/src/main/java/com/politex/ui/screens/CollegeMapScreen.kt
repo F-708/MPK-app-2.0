@@ -13,6 +13,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +58,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -110,12 +112,19 @@ import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorBrandFill
+import com.politex.ui.theme.ColorMapDead
+import com.politex.ui.theme.ColorMapDeadBg
+import com.politex.ui.theme.ColorMapDeadText
+import com.politex.ui.theme.ColorMapRoomBorder
+import com.politex.ui.theme.ColorMapRoomFill
+import com.politex.ui.theme.ColorMapRouteCore
 import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.Tokens
+import com.politex.ui.theme.darkThemeState
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.Dow
 import kotlinx.coroutines.flow.first
@@ -126,10 +135,7 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
-private val HIGHLIGHT_COLOR = ColorActiveBlue
-private val ROOM_FILL = Color(0x331976D2)
-private val ROOM_BORDER = Color(0xFF0057A8)
-private val DEAD_COLOR = Color(0xFFC0392B)
+private val HIGHLIGHT_COLOR: Color get() = ColorActiveBlue
 
 @Composable
 fun CollegeMapScreen(
@@ -534,7 +540,17 @@ fun CollegeMapScreen(
             modifier =
             Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .weight(1f)
+                .then(
+                    if (darkThemeState.value) {
+                        Modifier
+                            .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                            .border(1.dp, ColorBorderLight, RoundedCornerShape(2.dp))
+                            .clip(RoundedCornerShape(2.dp))
+                    } else {
+                        Modifier
+                    },
+                ),
         )
 
         if (!builderActive && targetRoom != null) {
@@ -830,11 +846,11 @@ private fun SearchField(
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        color = if (notFound) Color(0xFFFDECEC) else ColorSurfaceVariantLight,
+        color = if (notFound) ColorMapDeadBg else ColorSurfaceVariantLight,
         border =
         BorderStroke(
             if (notFound) 2.dp else 1.dp,
-            if (notFound) DEAD_COLOR else ColorBorderLight,
+            if (notFound) ColorMapDeadText else ColorBorderLight,
         ),
         modifier = modifier.height(Tokens.ButtonHeight),
     ) {
@@ -845,7 +861,7 @@ private fun SearchField(
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = null,
-                tint = if (notFound) DEAD_COLOR else ColorTextMuted,
+                tint = if (notFound) ColorMapDeadText else ColorTextMuted,
                 modifier = Modifier.size(18.dp),
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -860,7 +876,7 @@ private fun SearchField(
                 } else if (notFound) {
                     Text(
                         text = "Кабинета $value нет на плане",
-                        style = TextStyle(fontSize = 14.sp, color = DEAD_COLOR),
+                        style = TextStyle(fontSize = 14.sp, color = ColorMapDeadText),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1268,7 +1284,7 @@ private fun DrawScope.drawMap(
                 .CornerRadius(corner + 3f * unit),
         )
         drawRoundRect(
-            color = ROOM_FILL,
+            color = ColorMapRoomFill,
             topLeft = Offset(x, y),
             size = Size(w, h),
             cornerRadius =
@@ -1276,7 +1292,7 @@ private fun DrawScope.drawMap(
                 .CornerRadius(corner),
         )
         drawRoundRect(
-            color = if (targetRoom.status == "nonexistent") DEAD_COLOR else ROOM_BORDER,
+            color = if (targetRoom.status == "nonexistent") ColorMapDead else ColorMapRoomBorder,
             topLeft = Offset(x, y),
             size = Size(w, h),
             cornerRadius =
@@ -1326,7 +1342,7 @@ private fun DrawScope.drawMap(
         val cx = r.x * imgW
         val cy = r.y * imgH
         val vertical = r.h > r.w * 1.6f
-        val color = if (r.status == "nonexistent") DEAD_COLOR else ColorBrandBlue
+        val color = if (r.status == "nonexistent") ColorMapDead else ColorBrandBlue
 
         withTransform({
             if (vertical) rotate(90f, Offset(cx, cy))
@@ -1498,7 +1514,7 @@ private fun DrawScope.drawRoutePath(
         start?.let { s ->
             val c = Offset(s.x * imgW, s.y * imgH)
             drawCircle(color = color, radius = 5f * pxPerDp * unit, center = c)
-            drawCircle(color = Color.White, radius = 2f * pxPerDp * unit, center = c)
+            drawCircle(color = ColorMapRouteCore, radius = 2f * pxPerDp * unit, center = c)
         }
     }
 
@@ -1511,7 +1527,7 @@ private fun DrawScope.drawRoutePath(
             center = c,
         )
         drawCircle(color = color, radius = 5f * pxPerDp * unit, center = c)
-        drawCircle(color = Color.White, radius = 2f * pxPerDp * unit, center = c)
+        drawCircle(color = ColorMapRouteCore, radius = 2f * pxPerDp * unit, center = c)
     }
 }
 
@@ -1594,8 +1610,8 @@ private fun DrawScope.drawDirectionChevron(
 
     drawLine(outline, apex, e1, strokeWidth = stroke * 1.9f, cap = StrokeCap.Round)
     drawLine(outline, apex, e2, strokeWidth = stroke * 1.9f, cap = StrokeCap.Round)
-    drawLine(Color.White, apex, e1, strokeWidth = stroke, cap = StrokeCap.Round)
-    drawLine(Color.White, apex, e2, strokeWidth = stroke, cap = StrokeCap.Round)
+    drawLine(ColorMapRouteCore, apex, e1, strokeWidth = stroke, cap = StrokeCap.Round)
+    drawLine(ColorMapRouteCore, apex, e2, strokeWidth = stroke, cap = StrokeCap.Round)
 }
 
 internal fun dedupeStages(list: List<String>): List<String> = list.filterIndexed { i, id -> i == 0 || id != list[i - 1] }

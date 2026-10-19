@@ -69,12 +69,17 @@ import com.politex.ui.components.SearchBar
 import com.politex.ui.components.SectionCaption
 import com.politex.ui.components.SearchEmptyState
 import com.politex.ui.components.SubPageHeader
+import com.politex.ui.theme.ColorAccentGold
+import com.politex.ui.theme.ColorAccentGoldBg
+import com.politex.ui.theme.ColorAccentGoldBright
+import com.politex.ui.theme.ColorAccentGoldMuted
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorDividerLight
+import com.politex.ui.theme.ColorOnAccentGold
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
@@ -89,10 +94,6 @@ import com.politex.util.MpkCurriculum
 import com.politex.util.SubjectRenameStore
 import com.politex.util.TeacherModeStore
 import java.util.Calendar
-
-private val ADMIN_ACCENT = Color(0xFF7A5C00)
-private val ADMIN_BG = Color(0xFF2A2313)
-private val ADMIN_GOLD = Color(0xFFE8C55A)
 
 @Composable
 fun CollegeScreen(
@@ -282,7 +283,7 @@ private fun OtherMenu(
             if (isAdmin) {
                 item {
                     AdminMenuCard(
-                        icon = { Icon(Icons.Default.AdminPanelSettings, null, tint = ADMIN_GOLD, modifier = Modifier.size(20.dp)) },
+                        icon = { Icon(Icons.Default.AdminPanelSettings, null, tint = ColorAccentGoldBright, modifier = Modifier.size(20.dp)) },
                         title = "База данных учащихся",
                         subtitle = "Все учащиеся колледжа: фильтры по группам и курсам",
                         badge = "ADMIN",
@@ -406,8 +407,8 @@ private fun AdminMenuCard(
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        color = ADMIN_BG,
-        border = BorderStroke(1.dp, ADMIN_ACCENT),
+        color = ColorAccentGoldBg,
+        border = BorderStroke(1.dp, ColorAccentGold),
         modifier =
         Modifier
             .fillMaxWidth()
@@ -421,7 +422,7 @@ private fun AdminMenuCard(
                 modifier =
                 Modifier
                     .size(36.dp)
-                    .background(ADMIN_ACCENT.copy(alpha = 0.25f), RoundedCornerShape(2.dp)),
+                    .background(ColorAccentGold.copy(alpha = 0.25f), RoundedCornerShape(2.dp)),
                 contentAlignment = Alignment.Center,
             ) { icon() }
             Spacer(modifier = Modifier.width(12.dp))
@@ -433,13 +434,13 @@ private fun AdminMenuCard(
                         androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
-                            color = ADMIN_GOLD,
+                            color = ColorAccentGoldBright,
                         ),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Surface(
                         shape = RoundedCornerShape(2.dp),
-                        color = ADMIN_ACCENT,
+                        color = ColorAccentGold,
                         modifier = Modifier.padding(start = 2.dp),
                     ) {
                         Text(
@@ -448,7 +449,7 @@ private fun AdminMenuCard(
                             androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 8.sp,
-                                color = ADMIN_GOLD,
+                                color = ColorOnAccentGold,
                             ),
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                         )
@@ -459,7 +460,7 @@ private fun AdminMenuCard(
                     style =
                     androidx.compose.ui.text.TextStyle(
                         fontSize = 12.sp,
-                        color = Color(0xFFB8A87F),
+                        color = ColorAccentGoldMuted,
                     ),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -468,7 +469,7 @@ private fun AdminMenuCard(
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
-                tint = ADMIN_GOLD,
+                tint = ColorAccentGoldBright,
                 modifier = Modifier.size(20.dp),
             )
         }

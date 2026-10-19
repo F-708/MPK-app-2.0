@@ -60,11 +60,18 @@ import com.politex.ui.components.AppDivider
 import com.politex.ui.components.BackButton
 import com.politex.ui.components.SearchEmptyState
 import com.politex.ui.components.SubPageHeader
+import com.politex.ui.theme.ColorAccentGold
+import com.politex.ui.theme.ColorAccentGoldBg
+import com.politex.ui.theme.ColorAccentGoldBright
+import com.politex.ui.theme.ColorAccentGoldMuted
+import com.politex.ui.theme.ColorAccentGoldSoft
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorDividerLight
+import com.politex.ui.theme.ColorErrorText
+import com.politex.ui.theme.ColorOnAccentGold
 import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
@@ -80,10 +87,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.text.style.TextOverflow
-
-private val ADMIN_ACCENT = Color(0xFF7A5C00)
-private val ADMIN_BG = Color(0xFF2A2313)
-private val ADMIN_GOLD = Color(0xFFE8C55A)
 
 @Composable
 fun StudentsDatabaseScreen(
@@ -135,7 +138,7 @@ fun StudentsDatabaseScreen(
                     Icon(
                         imageVector = Icons.Default.AdminPanelSettings,
                         contentDescription = null,
-                        tint = ADMIN_ACCENT,
+                        tint = ColorAccentGold,
                         modifier = Modifier.size(22.dp),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -151,7 +154,7 @@ fun StudentsDatabaseScreen(
                     style = androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp,
-                        color = ADMIN_ACCENT,
+                        color = ColorAccentGold,
                     ),
                 )
             }
@@ -163,13 +166,13 @@ fun StudentsDatabaseScreen(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             placeholder = { Text("ФИО или куратор...") },
-            leadingIcon = { Icon(Icons.Default.Search, null, tint = ADMIN_ACCENT, modifier = Modifier.size(18.dp)) },
+            leadingIcon = { Icon(Icons.Default.Search, null, tint = ColorAccentGold, modifier = Modifier.size(18.dp)) },
             singleLine = true,
             shape = RoundedCornerShape(2.dp),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = ColorSurfaceVariantLight,
                 unfocusedContainerColor = ColorSurfaceVariantLight,
-                focusedIndicatorColor = ADMIN_ACCENT,
+                focusedIndicatorColor = ColorAccentGold,
                 unfocusedIndicatorColor = ColorBorderLight,
             ),
             modifier = Modifier
@@ -237,7 +240,7 @@ private fun FilterDropdown(
     Box(modifier = modifier) {
         Surface(
             shape = RoundedCornerShape(2.dp),
-            border = BorderStroke(1.dp, if (selected.isNotBlank()) ADMIN_ACCENT else ColorBorderLight),
+            border = BorderStroke(1.dp, if (selected.isNotBlank()) ColorAccentGold else ColorBorderLight),
             color = ColorBgMain,
             modifier = Modifier
                 .fillMaxWidth()
@@ -290,12 +293,12 @@ private fun StudentRow(student: Student, onClick: () -> Unit) {
             Box(
                 modifier = Modifier
                     .size(34.dp)
-                    .background(ADMIN_BG, RoundedCornerShape(2.dp)),
+                    .background(ColorAccentGoldBg, RoundedCornerShape(2.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = student.group,
-                    color = Color(0xFFE8C55A),
+                    color = ColorAccentGoldBright,
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
                 )
@@ -323,7 +326,7 @@ private fun StudentRow(student: Student, onClick: () -> Unit) {
             Icon(
                 imageVector = Icons.Default.PersonSearch,
                 contentDescription = null,
-                tint = ADMIN_ACCENT,
+                tint = ColorAccentGold,
                 modifier = Modifier.size(16.dp),
             )
         }
@@ -435,13 +438,13 @@ fun StudentCardScreen(
                 "Группа ${student.group}",
                 if (student.course.isNotBlank()) "${student.course} курс" else "",
             ).filter { it.isNotBlank() }.joinToString(" • "),
-            accent = ADMIN_ACCENT,
+            accent = ColorAccentGold,
             titleMaxLines = 2,
             onBack = onBack,
             actions = {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
-                    border = BorderStroke(1.dp, ADMIN_ACCENT),
+                    border = BorderStroke(1.dp, ColorAccentGold),
                     color = ColorBgMain,
                     modifier = Modifier
                         .size(Tokens.IconHit)
@@ -450,7 +453,7 @@ fun StudentCardScreen(
                     Box(contentAlignment = Alignment.Center) {
                         if (isLoading) {
                             CircularProgressIndicator(
-                                color = ADMIN_ACCENT,
+                                color = ColorAccentGold,
                                 strokeWidth = 2.dp,
                                 modifier = Modifier.size(16.dp),
                             )
@@ -458,7 +461,7 @@ fun StudentCardScreen(
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = "Обновить расписание группы",
-                                tint = ADMIN_ACCENT,
+                                tint = ColorAccentGold,
                                 modifier = Modifier.size(18.dp),
                             )
                         }
@@ -508,7 +511,7 @@ fun StudentCardScreen(
                                     "не будет — проверьте группу и курс.",
                                 style = androidx.compose.ui.text.TextStyle(
                                     fontSize = 12.sp,
-                                    color = Color(0xFFB3261E),
+                                    color = ColorErrorText,
                                 ),
                             )
                         }
@@ -519,8 +522,8 @@ fun StudentCardScreen(
             item {
                 Surface(
                     shape = RoundedCornerShape(2.dp),
-                    color = ADMIN_BG,
-                    border = BorderStroke(1.dp, ADMIN_ACCENT),
+                    color = ColorAccentGoldBg,
+                    border = BorderStroke(1.dp, ColorAccentGold),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("student_where_now"),
@@ -531,7 +534,7 @@ fun StudentCardScreen(
                             style = androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
-                                color = ADMIN_GOLD,
+                                color = ColorAccentGoldBright,
                             ),
                         )
                         Spacer(modifier = Modifier.height(6.dp))
@@ -556,7 +559,7 @@ fun StudentCardScreen(
                                     },
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontSize = 13.sp,
-                                        color = Color(0xFFD9CBA8),
+                                        color = ColorAccentGoldSoft,
                                     ),
                                 )
                                 val teacher = listOf(currentLesson.teacherFirst, currentLesson.teacherSecond)
@@ -567,7 +570,7 @@ fun StudentCardScreen(
                                         text = teacher,
                                         style = androidx.compose.ui.text.TextStyle(
                                             fontSize = 12.sp,
-                                            color = Color(0xFFB8A87F),
+                                            color = ColorAccentGoldMuted,
                                         ),
                                     )
                                 }
@@ -608,7 +611,7 @@ fun StudentCardScreen(
                                         text = "Следующий: урок ${nextLesson.lessonNumber} в ${nextLesson.timeStart} — ${nextLesson.subjectRaw}",
                                         style = androidx.compose.ui.text.TextStyle(
                                             fontSize = 13.sp,
-                                            color = Color(0xFFD9CBA8),
+                                            color = ColorAccentGoldSoft,
                                         ),
                                     )
                                 }
@@ -625,7 +628,7 @@ fun StudentCardScreen(
                         style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
-                            color = ADMIN_ACCENT,
+                            color = ColorAccentGold,
                         ),
                     )
                 }
@@ -679,7 +682,7 @@ fun StudentCardScreen(
                         style = androidx.compose.ui.text.TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
-                            color = ADMIN_ACCENT,
+                            color = ColorAccentGold,
                         ),
                     )
                 }
@@ -707,8 +710,8 @@ fun StudentCardScreen(
                             val selected = dayMode == mode
                             Surface(
                                 shape = RoundedCornerShape(2.dp),
-                                color = if (selected) ADMIN_ACCENT else ColorBgMain,
-                                border = BorderStroke(1.dp, ADMIN_ACCENT),
+                                color = if (selected) ColorAccentGold else ColorBgMain,
+                                border = BorderStroke(1.dp, ColorAccentGold),
                                 modifier = Modifier
                                     .weight(1f)
                                     .bouncyClickable {
@@ -722,7 +725,7 @@ fun StudentCardScreen(
                                     style = androidx.compose.ui.text.TextStyle(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
-                                        color = if (selected) Color.White else ADMIN_ACCENT,
+                                        color = if (selected) ColorOnAccentGold else ColorAccentGold,
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -778,15 +781,15 @@ fun StudentCardScreen(
                                 ) {
                                     Surface(
                                         shape = RoundedCornerShape(2.dp),
-                                        color = if (selected) ADMIN_ACCENT else ColorBgMain,
-                                        border = BorderStroke(1.dp, ADMIN_ACCENT),
+                                        color = if (selected) ColorAccentGold else ColorBgMain,
+                                        border = BorderStroke(1.dp, ColorAccentGold),
                                     ) {
                                         Text(
                                             text = date,
                                             style = androidx.compose.ui.text.TextStyle(
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 12.sp,
-                                                color = if (selected) Color.White else ColorTextBody,
+                                                color = if (selected) ColorOnAccentGold else ColorTextBody,
                                             ),
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                         )
