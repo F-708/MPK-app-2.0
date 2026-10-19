@@ -63,7 +63,7 @@ class TeacherNextWidgetProvider : AppWidgetProvider() {
             manager: AppWidgetManager? = null,
         ): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_teacher_next)
-            val style = WidgetStyle.load(context, appWidgetId)
+            val style = WidgetStyle.load(context, appWidgetId).colors(context)
 
             views.setInt(R.id.teacher_next_root, "setBackgroundColor", style.backgroundColor)
 
@@ -132,7 +132,7 @@ class TeacherNextWidgetProvider : AppWidgetProvider() {
 
         private fun showEmpty(
             views: RemoteViews,
-            style: WidgetStyle,
+            style: WidgetColors,
             text: String,
             compact: Boolean,
         ) {

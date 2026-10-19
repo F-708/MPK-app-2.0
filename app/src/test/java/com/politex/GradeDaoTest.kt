@@ -112,4 +112,29 @@ class GradeDaoTest {
         assertEquals(1, dao.allConfigs().first().size)
         assertEquals("""["REGULAR","EXAM"]""", dao.getConfig("ТОЭ")?.priorityJson)
     }
+
+    @Test
+    fun `deleteBySubject стирает все оценки предмета и не трогает чужие`() = runBlocking {
+        dao.insert(entry(subject = "Физическая культура и здоровье", value = 9))
+        dao.insert(entry(subject = "Физическая культура и здоровье", category = "PRACTICAL", value = 7))
+        dao.insert(entry(subject = "Математика", value = 4))
+
+        dao.deleteBySubject("Физическая культура и здоровье")
+
+        assertEquals(0, dao.entriesForSubject("Физическая культура и здоровье").first().size)
+        assertEquals(1, dao.entriesForSubject("Математика").first().size)
+        assertEquals(1, dao.allEntries().first().size)
+    }
+
+    @Test
+    fun `deleteBySubject по отображаемому имени со звёздой не трогает оригинал`() = runBlocking {
+        dao.insert(entry(subject = "ТОЭ", value = 8))
+
+        dao.deleteBySubject("*ТОЭ")
+
+        assertEquals(1, dao.entriesForSubject("ТОЭ").first().size)
+
+        dao.deleteBySubject("ТОЭ")
+        assertEquals(0, dao.entriesForSubject("ТОЭ").first().size)
+    }
 }

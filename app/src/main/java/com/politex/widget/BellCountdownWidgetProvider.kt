@@ -373,65 +373,39 @@ enum class CountdownMode(val title: String, val description: String) {
 }
 
 enum class WidgetStyle(
-    val backgroundColor: Int,
-    val mainColor: Int,
-    val subColor: Int,
-
-    val highlightColor: Int,
-
-    val pastColor: Int,
     val title: String,
 ) {
-    LIGHT(
-        0xFFFFFFFF.toInt(),
-        0xFF111827.toInt(),
-        0xFF6B7280.toInt(),
-        0xFFE8F0FA.toInt(),
-        0xFF6B7280.toInt(),
-        "Белый",
-    ),
-    DARK(
-        0xFF001737.toInt(),
-        0xFFFFFFFF.toInt(),
-        0xFFB9C6D8.toInt(),
-        0xFF0B3564.toInt(),
-        0xFF5A6B85.toInt(),
-        "Тёмно-синий",
-    ),
-    BLUE(
-        0xFF0B3564.toInt(),
-        0xFFFFFFFF.toInt(),
-        0xFFAFC6E4.toInt(),
-        0xFF16457F.toInt(),
-        0xFF6E86A6.toInt(),
-        "Фирменный синий",
-    ),
-    SKY(
-        0xFF0072CE.toInt(),
-        0xFFFFFFFF.toInt(),
-        0xFFD5E9FA.toInt(),
-        0xFF0B3564.toInt(),
-        0xFF8FB8DD.toInt(),
-        "Яркий синий",
-    ),
-
-    APP(
-        0xFFFFFFFF.toInt(),
-        0xFF111827.toInt(),
-        0xFF6B7280.toInt(),
-        0xFFE8F0FA.toInt(),
-        0xFF6B7280.toInt(),
-        "Как в приложении",
-    ),
+    SYSTEM("Системная"),
+    APP("Как в приложении"),
     ;
 
     companion object {
         private const val PREF_PREFIX = "widget_style_"
 
-        fun load(context: Context, appWidgetId: Int): WidgetStyle {
-            val name = WidgetUpdateHelper.getPrefs(context).getString(PREF_PREFIX + appWidgetId, null)
-            return entries.firstOrNull { it.name == name } ?: LIGHT
-        }
+        val SYSTEM_LIGHT =
+            WidgetColors(
+                backgroundColor = 0xFFFFFFFF.toInt(),
+                mainColor = 0xFF111827.toInt(),
+                subColor = 0xFF6B7280.toInt(),
+                highlightColor = 0xFFE8F0FA.toInt(),
+                pastColor = 0xFF6B7280.toInt(),
+            )
+
+        val SYSTEM_DARK =
+            WidgetColors(
+                backgroundColor = 0xFF001737.toInt(),
+                mainColor = 0xFFFFFFFF.toInt(),
+                subColor = 0xFFB9C6D8.toInt(),
+                highlightColor = 0xFF0B3564.toInt(),
+                pastColor = 0xFF5A6B85.toInt(),
+            )
+
+        fun systemColors(night: Boolean): WidgetColors = if (night) SYSTEM_DARK else SYSTEM_LIGHT
+
+        fun fromName(name: String?): WidgetStyle = entries.firstOrNull { it.name == name } ?: SYSTEM
+
+        fun load(context: Context, appWidgetId: Int): WidgetStyle =
+            fromName(WidgetUpdateHelper.getPrefs(context).getString(PREF_PREFIX + appWidgetId, null))
 
         fun save(context: Context, appWidgetId: Int, style: WidgetStyle) {
             WidgetUpdateHelper.getPrefs(context)
@@ -442,18 +416,24 @@ enum class WidgetStyle(
     }
 
     fun colors(context: Context): WidgetColors =
-        if (this != APP) {
-            WidgetColors(backgroundColor, mainColor, subColor, highlightColor, pastColor)
-        } else {
-
-            val p = com.politex.util.AppThemeStore.load(context).palette
-            WidgetColors(
-                backgroundColor = p.brandFill.toArgb(),
-                mainColor = 0xFFFFFFFF.toInt(),
-                subColor = 0xFFD6E2F0.toInt(),
-                highlightColor = p.topBar.toArgb(),
-                pastColor = 0xFF9FB0C4.toInt(),
-            )
+        when (this) {
+            SYSTEM -> {
+                val night =
+                    context.resources.configuration.uiMode and
+                        android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+                        android.content.res.Configuration.UI_MODE_NIGHT_YES
+                systemColors(night)
+            }
+            APP -> {
+                val p = com.politex.util.AppThemeStore.load(context).palette
+                WidgetColors(
+                    backgroundColor = p.brandFill.toArgb(),
+                    mainColor = 0xFFFFFFFF.toInt(),
+                    subColor = 0xFFD6E2F0.toInt(),
+                    highlightColor = p.topBar.toArgb(),
+                    pastColor = 0xFF9FB0C4.toInt(),
+                )
+            }
         }
 }
 

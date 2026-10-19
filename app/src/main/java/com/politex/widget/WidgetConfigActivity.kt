@@ -2,6 +2,7 @@ package com.politex.widget
 
 import android.appwidget.AppWidgetManager
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,9 +35,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -44,6 +50,7 @@ import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.MyApplicationTheme
 import com.politex.ui.util.bouncyClickable
+import com.politex.util.ExactAlarmGate
 import kotlinx.coroutines.launch
 
 class WidgetConfigActivity : ComponentActivity() {
@@ -75,6 +82,31 @@ class WidgetConfigActivity : ComponentActivity() {
                     var showSeconds by remember { mutableStateOf(WidgetOptions.seconds(this@WidgetConfigActivity, appWidgetId)) }
                     var radius by remember { mutableStateOf(WidgetOptions.radius(this@WidgetConfigActivity, appWidgetId)) }
 
+                    var canExactAlarms by remember { mutableStateOf(ExactAlarmGate.canScheduleExactAlarms(this@WidgetConfigActivity)) }
+                    var alarmAsked by remember { mutableStateOf(false) }
+                    val lifecycleOwner = LocalLifecycleOwner.current
+                    DisposableEffect(lifecycleOwner) {
+                        val observer = LifecycleEventObserver { _, event ->
+                            if (event == Lifecycle.Event.ON_RESUME) {
+                                canExactAlarms = ExactAlarmGate.canScheduleExactAlarms(this@WidgetConfigActivity)
+                            }
+                        }
+                        lifecycleOwner.lifecycle.addObserver(observer)
+                        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                    }
+
+                    fun requestAlarmAccessOnce() {
+                        if (ExactAlarmGate.shouldRequest(
+                                Build.VERSION.SDK_INT,
+                                ExactAlarmGate.canScheduleExactAlarms(this@WidgetConfigActivity),
+                                alarmAsked,
+                            )
+                        ) {
+                            alarmAsked = true
+                            ExactAlarmGate.openSettings(this@WidgetConfigActivity)
+                        }
+                    }
+
                     Column(
                         modifier =
                         Modifier
@@ -94,6 +126,51 @@ class WidgetConfigActivity : ComponentActivity() {
                             color = ColorTextMuted,
                             modifier = Modifier.padding(top = 4.dp),
                         )
+
+                        if (ExactAlarmGate.hintNeeded(Build.VERSION.SDK_INT, canExactAlarms)) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Surface(
+                                shape = RoundedCornerShape(2.dp),
+                                color = ColorBgMain,
+                                border = BorderStroke(1.dp, ColorBrandBlue),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = "Чтобы обновление работало корректно, нужен доступ к будильникам",
+                                        fontSize = 12.sp,
+                                        color = ColorTextBody,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(2.dp),
+                                        color = ColorBrandFill,
+                                        modifier =
+                                        Modifier
+                                            .heightIn(min = 44.dp)
+                                            .bouncyClickable {
+                                                ExactAlarmGate.openSettings(this@WidgetConfigActivity)
+                                            },
+                                    ) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier.padding(horizontal = 12.dp),
+                                        ) {
+                                            Text(
+                                                text = "РАЗРЕШИТЬ",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(18.dp))
                         SectionTitle("Тема оформления")
@@ -186,7 +263,10 @@ class WidgetConfigActivity : ComponentActivity() {
                                     selected = countdownMode == option,
                                     title = option.title,
                                     description = option.description,
-                                    onClick = { countdownMode = option },
+                                    onClick = {
+                                        countdownMode = option
+                                        requestAlarmAccessOnce()
+                                    },
                                 )
                             }
                         }
@@ -265,6 +345,8 @@ class WidgetConfigActivity : ComponentActivity() {
                                         WidgetUpdateHelper.updateOne(this@WidgetConfigActivity, appWidgetId)
                                     }
                                     WidgetAlarm.scheduleNext(this@WidgetConfigActivity)
+
+                                    requestAlarmAccessOnce()
 
                                     setResult(
                                         RESULT_OK,

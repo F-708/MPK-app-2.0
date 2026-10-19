@@ -79,8 +79,9 @@ class WidgetLayoutsTest {
     }
 
     @Test
-    fun `N10 pastColor LIGHT соответствует контрасту на белом`() {
-        assertEquals(0xFF6B7280.toInt(), com.politex.widget.WidgetStyle.LIGHT.pastColor)
+    fun `N10 pastColor светлой системной палитры соответствует контрасту на белом`() {
+        assertEquals(0xFF6B7280.toInt(), com.politex.widget.WidgetStyle.SYSTEM_LIGHT.pastColor)
+        assertEquals(0xFF6B7280.toInt(), com.politex.widget.WidgetStyle.systemColors(night = false).pastColor)
     }
 
     @Test

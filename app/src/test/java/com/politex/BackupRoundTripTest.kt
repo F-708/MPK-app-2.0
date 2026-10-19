@@ -94,16 +94,29 @@ class BackupRoundTripTest {
 
     @Test
     fun `СРЕД8 - стиль и тема уведомления восстанавливаются симметрично экспорту`() = runBlocking {
-        val json = """{"version":2,"settings":{"notificationsStyle":"progress","notificationsTheme":"dark"},"tasks":[]}"""
+        val json = """{"version":2,"settings":{"notificationsStyle":"progress","notificationsTheme":"app"},"tasks":[]}"""
         BackupManager.restoreBackup(context, json).getOrThrow()
         assertEquals(BellCountdownNotifier.Style.WITH_PROGRESS, BellCountdownNotifier.getStyle(context))
-        assertEquals(BellCountdownNotifier.Theme.DARK, BellCountdownNotifier.getTheme(context))
+        assertEquals(BellCountdownNotifier.Theme.APP, BellCountdownNotifier.getTheme(context))
+    }
+
+    @Test
+    fun `СРЕД8 - удалённые темы старых бэкапов мягко падают в системную`() = runBlocking {
+        listOf("dark", "sky", "brand").forEach { oldId ->
+            val json = """{"version":2,"settings":{"notificationsTheme":"$oldId"},"tasks":[]}"""
+            BackupManager.restoreBackup(context, json).getOrThrow()
+            assertEquals(
+                "тема '$oldId' удалена — ожидается фолбэк в системную",
+                BellCountdownNotifier.Theme.SYSTEM,
+                BellCountdownNotifier.getTheme(context),
+            )
+        }
     }
 
     @Test
     fun `СРЕД8 - round trip экспорт-импорт сохраняет стиль и тему`() = runBlocking {
         BellCountdownNotifier.setStyle(context, BellCountdownNotifier.Style.WITH_SECONDS)
-        BellCountdownNotifier.setTheme(context, BellCountdownNotifier.Theme.SKY)
+        BellCountdownNotifier.setTheme(context, BellCountdownNotifier.Theme.APP)
 
         val json = BackupManager.buildBackup(context)
 
@@ -112,6 +125,6 @@ class BackupRoundTripTest {
 
         BackupManager.restoreBackup(context, json).getOrThrow()
         assertEquals(BellCountdownNotifier.Style.WITH_SECONDS, BellCountdownNotifier.getStyle(context))
-        assertEquals(BellCountdownNotifier.Theme.SKY, BellCountdownNotifier.getTheme(context))
+        assertEquals(BellCountdownNotifier.Theme.APP, BellCountdownNotifier.getTheme(context))
     }
 }

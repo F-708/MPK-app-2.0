@@ -52,10 +52,6 @@ object BellCountdownNotifier {
         val colorize: Boolean,
     ) {
         SYSTEM("system", "Системная", 0, false),
-        BRAND("brand", "Фирменный синий", 0xFF0B3564.toInt(), true),
-        SKY("sky", "Яркий синий", 0xFF0072CE.toInt(), true),
-        DARK("dark", "Тёмная", 0xFF232527.toInt(), true),
-
         APP("app", "Как в приложении", 0, true),
         ;
 

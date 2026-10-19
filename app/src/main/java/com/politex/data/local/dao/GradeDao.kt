@@ -35,6 +35,9 @@ interface GradeDao {
     @Query("DELETE FROM grade_entries WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    @Query("DELETE FROM grade_entries WHERE subjectName = :subjectName")
+    suspend fun deleteBySubject(subjectName: String)
+
     @Query("DELETE FROM grade_entries WHERE subjectName = :subjectName AND category = 'EXAM'")
     suspend fun deleteExam(subjectName: String)
 

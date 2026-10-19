@@ -191,11 +191,11 @@ fun MainScreen(
         )
 
     if (uiState.showGroupSelection) {
-        com.politex.ui.components.GroupSelectionDialog(
-            currentGroupName = uiState.currentGroupName,
-            onDismissRequest = { },
-            showClose = false,
-            onGroupSelected = { newGroup -> viewModel.setGroup(newGroup) },
+        com.politex.ui.components.FirstRunGroupDialog(
+            onComplete = { group, subgroup ->
+                com.politex.util.SubgroupSettings.set(context, subgroup)
+                viewModel.setGroup(group)
+            },
         )
     }
 

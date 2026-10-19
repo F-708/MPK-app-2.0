@@ -48,7 +48,7 @@ class TeacherTodayWidgetProvider : AppWidgetProvider() {
             appWidgetId: Int,
         ): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_teacher_today)
-            val style = WidgetStyle.load(context, appWidgetId)
+            val style = WidgetStyle.load(context, appWidgetId).colors(context)
 
             views.setInt(R.id.teacher_today_root, "setBackgroundColor", style.backgroundColor)
             views.setTextColor(R.id.tv_teacher_today_header, style.subColor)
@@ -102,7 +102,7 @@ class TeacherTodayWidgetProvider : AppWidgetProvider() {
             context: Context,
             lesson: TeacherWidgetLesson,
             now: Int,
-            style: WidgetStyle,
+            style: WidgetColors,
         ): RemoteViews {
             val row = RemoteViews(context.packageName, R.layout.widget_row_list)
             val isCurrent = lesson.startMinutes >= 0 && now in lesson.startMinutes..lesson.endMinutes
@@ -147,7 +147,7 @@ class TeacherTodayWidgetProvider : AppWidgetProvider() {
 
         private fun buildMoreRow(
             context: Context,
-            style: WidgetStyle,
+            style: WidgetColors,
             hiddenCount: Int,
         ): RemoteViews {
             val row = RemoteViews(context.packageName, R.layout.widget_row_list)

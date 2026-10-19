@@ -1118,6 +1118,14 @@ testStandardDebugUnitTest → коммит. Room-схему трогает то�
 - ВОЛНА E: тёмная тема визуальный проход (Roborazzi dark + vision) + JJ17 aigoogle + фиксы.
 - ВОЛНА F: финал JJ21 (2.2 debug ×2, гейты, CHANGELOG).
 
+## СТАТУС JJ (обновляется менеджером)
+- ВОЛНА A ✅ коммит 49d5708: JJ1 (root cause «СистТехнОргСер» passthrough + фаззи-матчинг 0.8),
+  JJ13 (SubjectRenameStore, звёздочка), JJ16 (строгая ортогональность, miter-offset),
+  JJ9 (VIEW/SEND + SHA-256 дедуп), JJ10 (DOCX-страницы), Room v11. 956+ тестов зелёные.
+  Долг: коридор cor_xavktf (1 эт) самопересекающийся — перерисовать разметку (после визуальной сверки).
+- B2 доводок для волны C1 (настройки): в SettingsScreen остались приватные дубли
+  openExactAlarmSettings/exactAlarmHintNeeded — заменить на общий util/ExactAlarmGate.kt.
+
 ## РАЗВЕДКА/РЕШЕНИЯ JJ (менеджер, 2026-10-19)
 - Бэкап маршрутов: git tag `backup-pre-jj-routes` создан (HEAD 0e9f20e).
 - JJ17: «aigoogle» = applicationId `com.aistudio.mpkschedule.vbyqzt` (build.gradle.kts:16) —

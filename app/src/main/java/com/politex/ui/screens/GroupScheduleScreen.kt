@@ -698,10 +698,11 @@ private val groupDayNames = listOf("", "ПОНЕДЕЛЬНИК", "ВТОРНИК
 private fun dayTitle(cal: Calendar): String = groupDayNames[groupScheduleDayOfWeek(cal)]
 
 @Composable
-private fun GroupSchedulePicker(
+internal fun GroupSchedulePicker(
     selectedCourse: Int,
     onCourseSelected: (Int) -> Unit,
     catalogCodes: List<String>,
+    confirmLabel: String = "ОТКРЫТЬ",
     onGroupSelected: (String) -> Unit,
 ) {
     var selectedNumber by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -883,7 +884,7 @@ private fun GroupSchedulePicker(
                 modifier = Modifier.padding(vertical = 12.dp),
             ) {
                 Text(
-                    text = "ОТКРЫТЬ",
+                    text = confirmLabel,
                     style =
                     androidx.compose.ui.text.TextStyle(
                         fontWeight = FontWeight.Bold,

@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -79,12 +80,12 @@ import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
+import com.politex.ui.theme.ColorWarning
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberToday
 import com.politex.util.GradeAggregator
 import com.politex.util.GradeCategory
-import com.politex.util.GradeSettings
 import com.politex.util.HintFlags
 import com.politex.util.MpkCurriculum
 import com.politex.util.SubjectRenameStore
@@ -127,8 +128,6 @@ fun GradesScreen(
     val context = LocalContext.current
     val dao = remember { MpkDatabase.getInstance(context).gradeDao() }
 
-    val globalWeights = GradeSettings.getGlobalWeightsEnabled(context)
-
     var openSubject by rememberSaveable { mutableStateOf<String?>(null) }
     var settingsSubject by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -153,14 +152,12 @@ fun GradesScreen(
                 GradeSubjectSettingsScreen(
                     subject = settingsSubject!!,
                     dao = dao,
-                    globalWeights = globalWeights,
                     onBack = { settingsSubject = null },
                 )
             openSubject != null ->
                 GradeSubjectScreen(
                     subject = openSubject!!,
                     dao = dao,
-                    globalWeights = globalWeights,
                     onBack = { openSubject = null },
                     onOpenSettings = { settingsSubject = openSubject },
                 )
@@ -168,7 +165,6 @@ fun GradesScreen(
                 GradeSubjectList(
                     groupInfo = groupInfo,
                     dao = dao,
-                    globalWeights = globalWeights,
                     onOpenSubject = { openSubject = it },
                     onOpenTutorial = { showTutorial = true },
                 )
@@ -180,7 +176,6 @@ fun GradesScreen(
 private fun GradeSubjectList(
     groupInfo: GroupInfo,
     dao: GradeDao,
-    globalWeights: Boolean,
     onOpenSubject: (String) -> Unit,
     onOpenTutorial: () -> Unit,
 ) {
@@ -237,7 +232,7 @@ private fun GradeSubjectList(
         items(subjects) { subject ->
 
             val avg =
-                remember(entries, configs, subject, globalWeights) {
+                remember(entries, configs, subject) {
                     val config = configs.firstOrNull { it.subjectName == subject }
                     subjectAverage(
                         byCategory =
@@ -245,7 +240,8 @@ private fun GradeSubjectList(
                             .filter { it.subjectName == subject }
                             .groupBy({ it.category }) { it.value },
                         config = config,
-                        weightsEnabled = globalWeights && (config?.weightsEnabled ?: true),
+                        weightsEnabled =
+                        GradeAggregator.effectiveWeightsEnabled(subject, config?.weightsEnabled ?: true),
                     )
                 }
             AppCard(
@@ -409,7 +405,6 @@ private fun GradeTutorialScreen(onBack: () -> Unit) {
 private fun GradeSubjectScreen(
     subject: String,
     dao: GradeDao,
-    globalWeights: Boolean,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -427,7 +422,8 @@ private fun GradeSubjectScreen(
     val byCategory = remember(entries) { entries.groupBy({ it.category }) { it.value } }
     val config = remember(configs, subject) { configs.firstOrNull { it.subjectName == subject } }
 
-    val weightsEnabled = globalWeights && (config?.weightsEnabled ?: true)
+    val pe = remember(subject) { GradeAggregator.isPhysicalEducation(subject) }
+    val weightsEnabled = GradeAggregator.effectiveWeightsEnabled(subject, config?.weightsEnabled ?: true)
     val ws = remember(config) { parseWeightsList(config?.weightsJson) ?: GradeAggregator.DEFAULT_WEIGHTS }
     val mode = config?.roundingMode ?: ".0"
     val rawAvg = remember(byCategory, config, weightsEnabled) { subjectAverage(byCategory, config, weightsEnabled) }
@@ -438,12 +434,13 @@ private fun GradeSubjectScreen(
         }
 
     var activeCategory by rememberSaveable(subject) { mutableStateOf(GradeCategory.REGULAR.name) }
+    val inputCategory = if (pe) GradeCategory.REGULAR.name else activeCategory
 
     fun submit(value: Int) {
         val entry =
             GradeEntryEntity(
                 subjectName = subject,
-                category = activeCategory,
+                category = inputCategory,
                 value = value,
                 label = "",
                 dateIso = isoOf(today),
@@ -602,7 +599,10 @@ private fun GradeSubjectScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                val activeEntries = remember(entries, activeCategory) { entries.filter { it.category == activeCategory } }
+                val activeEntries =
+                    remember(entries, inputCategory, pe) {
+                        if (pe) entries else entries.filter { it.category == inputCategory }
+                    }
                 if (!loaded) {
 
                     Box(
@@ -672,21 +672,23 @@ private fun GradeSubjectScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    UI_CATEGORIES.forEach { category ->
-                        CategorySegment(
-                            category = category,
-                            count = entries.count { it.category == category.name },
-                            selected = activeCategory == category.name,
-                            onClick = { activeCategory = category.name },
-                        )
+                if (!pe) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        UI_CATEGORIES.forEach { category ->
+                            CategorySegment(
+                                category = category,
+                                count = entries.count { it.category == category.name },
+                                selected = activeCategory == category.name,
+                                onClick = { activeCategory = category.name },
+                            )
+                        }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
@@ -847,15 +849,16 @@ private fun normalizeMode(mode: String?): String =
 private fun GradeSubjectSettingsScreen(
     subject: String,
     dao: GradeDao,
-    globalWeights: Boolean,
     onBack: () -> Unit,
 ) {
 
     BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val pe = remember(subject) { GradeAggregator.isPhysicalEducation(subject) }
     val entries by dao.entriesForSubject(subject).collectAsState(initial = emptyList())
     val byCategory = remember(entries) { entries.groupBy({ it.category }) { it.value } }
+    var confirmDeleteAll by remember { mutableStateOf(false) }
 
     var weights by remember { mutableStateOf<List<Int>?>(null) }
     var priorityJson by remember { mutableStateOf("[]") }
@@ -932,123 +935,42 @@ private fun GradeSubjectSettingsScreen(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
 
+                if (!pe) {
+                    WeightsSettingsBlock(
+                        weightsEnabled = weightsEnabled,
+                        onWeightsEnabledChange = { weightsEnabled = it },
+                        byCategory = byCategory,
+                        ws = ws,
+                        roundingMode = roundingMode,
+                        onWeightChange = { index, v -> weights = ws.toMutableList().apply { set(index, v) } },
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Surface(
                     shape = RoundedCornerShape(2.dp),
                     color = ColorBgMain,
-                    border = BorderStroke(1.dp, ColorBorderLight),
+                    border = BorderStroke(1.dp, ColorWarning),
                     modifier =
                     Modifier
                         .fillMaxWidth()
                         .heightIn(min = 44.dp)
-                        .testTag("grades_weights_toggle")
-                        .bouncyClickable { weightsEnabled = !weightsEnabled },
+                        .testTag("grades_delete_all")
+                        .bouncyClickable { confirmDeleteAll = true },
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Веса категорий",
-                                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
-                            )
-                            Text(
-                                text = if (weightsEnabled) "Включено" else "Выключено",
-                                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-                            )
-                        }
-                        Switch(
-                            checked = weightsEnabled,
-                            onCheckedChange = { weightsEnabled = it },
-                            modifier = Modifier.testTag("grades_weights_switch"),
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                SectionCaption("ВЕСА")
-
-                val weightsOn = globalWeights && weightsEnabled
-                val avg =
-                    remember(byCategory, ws, roundingMode, weightsOn) {
-                        val raw =
-                            if (weightsOn) {
-                                GradeAggregator.weightedAverage(byCategory, weightsMap(ws))
-                            } else {
-                                GradeAggregator.plainAverage(byCategory)
-                            }
-                        raw?.let { GradeAggregator.roundAvg(it, roundingMode) }
-                    }
-                AppCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("grades_weight_preview"),
-                    color = ColorSurfaceHighlight,
-                ) {
-                    Column(
-                        modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text("Средний балл", style = TextStyle(fontSize = 11.sp, color = ColorTextMuted))
-                        if (avg == null) {
-                            EmptyDots()
-                        } else {
-                            Text(
-                                text = GradeAggregator.format(avg, roundingMode),
-                                style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold, color = gradeColor(avg)),
-                            )
-                        }
-
-                        if (weightsOn) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = weightsPreviewLine(ws),
-                                textAlign = TextAlign.Center,
-                                style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                UI_CATEGORIES.forEachIndexed { i, category ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    Box(contentAlignment = Alignment.Center) {
                         Text(
-                            text = CATEGORY_SHORT[category.name] ?: category.title,
+                            text = "Удалить все оценки",
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style =
                             TextStyle(
-                                fontSize = 12.sp,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (weightsOn) ColorTextTitle else ColorTextMuted,
+                                color = ColorWarning,
                             ),
-                            modifier = Modifier.width(60.dp),
-                        )
-
-                        WeightSlider(
-                            value = ws[i],
-                            enabled = weightsOn,
-                            onValueChange = { v -> weights = ws.toMutableList().apply { set(i, v) } },
-                            modifier = Modifier.weight(1f).testTag("grades_weight_slider_${category.name}"),
-                        )
-                        Text(
-                            text = "${ws[i]}%",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.End,
-                            style =
-                            TextStyle(
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (weightsOn) ColorBrandBlue else ColorTextMuted,
-                            ),
-                            modifier = Modifier.width(44.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         )
                     }
                 }
@@ -1088,6 +1010,187 @@ private fun GradeSubjectSettingsScreen(
                     )
                 }
             }
+        }
+    }
+
+    if (confirmDeleteAll) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteAll = false },
+            shape = RoundedCornerShape(2.dp),
+            containerColor = ColorBgMain,
+            title = {
+                Text(
+                    text = "Удаление оценок",
+                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
+                )
+            },
+            text = {
+                Text(
+                    text =
+                    "Удалить все оценки по предмету „" +
+                        SubjectRenameStore.displayName(context, subject) +
+                        "“? Действие нельзя отменить.",
+                    style = TextStyle(fontSize = 13.sp, color = ColorTextBody),
+                )
+            },
+            confirmButton = {
+                Text(
+                    text = "Удалить",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ColorWarning),
+                    modifier =
+                    Modifier
+                        .testTag("grades_delete_all_confirm")
+                        .bouncyClickable {
+                            confirmDeleteAll = false
+                            scope.launch { dao.deleteBySubject(subject) }
+                        }.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            },
+            dismissButton = {
+                Text(
+                    text = "Отмена",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(fontSize = 13.sp, color = ColorTextMuted),
+                    modifier =
+                    Modifier
+                        .testTag("grades_delete_all_cancel")
+                        .bouncyClickable { confirmDeleteAll = false }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            },
+        )
+    }
+}
+
+@Composable
+private fun WeightsSettingsBlock(
+    weightsEnabled: Boolean,
+    onWeightsEnabledChange: (Boolean) -> Unit,
+    byCategory: Map<String, List<Int>>,
+    ws: List<Int>,
+    roundingMode: String,
+    onWeightChange: (Int, Int) -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorBgMain,
+        border = BorderStroke(1.dp, ColorBorderLight),
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .testTag("grades_weights_toggle")
+            .bouncyClickable { onWeightsEnabledChange(!weightsEnabled) },
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Веса категорий",
+                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ColorTextTitle),
+                )
+                Text(
+                    text = if (weightsEnabled) "Включено" else "Выключено",
+                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                )
+            }
+            Switch(
+                checked = weightsEnabled,
+                onCheckedChange = onWeightsEnabledChange,
+                modifier = Modifier.testTag("grades_weights_switch"),
+            )
+        }
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+    SectionCaption("ВЕСА")
+
+    val avg =
+        remember(byCategory, ws, roundingMode, weightsEnabled) {
+            val raw =
+                if (weightsEnabled) {
+                    GradeAggregator.weightedAverage(byCategory, weightsMap(ws))
+                } else {
+                    GradeAggregator.plainAverage(byCategory)
+                }
+            raw?.let { GradeAggregator.roundAvg(it, roundingMode) }
+        }
+    AppCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("grades_weight_preview"),
+        color = ColorSurfaceHighlight,
+    ) {
+        Column(
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("Средний балл", style = TextStyle(fontSize = 11.sp, color = ColorTextMuted))
+            if (avg == null) {
+                EmptyDots()
+            } else {
+                Text(
+                    text = GradeAggregator.format(avg, roundingMode),
+                    style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold, color = gradeColor(avg)),
+                )
+            }
+
+            if (weightsEnabled) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = weightsPreviewLine(ws),
+                    textAlign = TextAlign.Center,
+                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                )
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    UI_CATEGORIES.forEachIndexed { i, category ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = CATEGORY_SHORT[category.name] ?: category.title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style =
+                TextStyle(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (weightsEnabled) ColorTextTitle else ColorTextMuted,
+                ),
+                modifier = Modifier.width(60.dp),
+            )
+
+            WeightSlider(
+                value = ws[i],
+                enabled = weightsEnabled,
+                onValueChange = { v -> onWeightChange(i, v) },
+                modifier = Modifier.weight(1f).testTag("grades_weight_slider_${category.name}"),
+            )
+            Text(
+                text = "${ws[i]}%",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.End,
+                style =
+                TextStyle(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (weightsEnabled) ColorBrandBlue else ColorTextMuted,
+                ),
+                modifier = Modifier.width(44.dp),
+            )
         }
     }
 }
@@ -1147,14 +1250,11 @@ private fun subjectAverage(
     config: GradeConfigEntity?,
     weightsEnabled: Boolean,
 ): Double? =
-    if (weightsEnabled) {
-        GradeAggregator.weightedAverage(
-            byCategory,
-            weightsMap(parseWeightsList(config?.weightsJson) ?: GradeAggregator.DEFAULT_WEIGHTS),
-        )
-    } else {
-        GradeAggregator.plainAverage(byCategory)
-    }
+    GradeAggregator.subjectAverage(
+        byCategory,
+        weightsMap(parseWeightsList(config?.weightsJson) ?: GradeAggregator.DEFAULT_WEIGHTS),
+        weightsEnabled,
+    )
 
 private fun parseWeightsList(json: String?): List<Int>? =
     try {

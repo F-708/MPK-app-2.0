@@ -17,6 +17,8 @@ enum class GradeCategory(
 
 object GradeAggregator {
 
+    const val PHYSICAL_EDUCATION_SUBJECT: String = "Физическая культура и здоровье"
+
     val DEFAULT_PRIORITY: List<String> =
         listOf(
             GradeCategory.REGULAR.name,
@@ -26,6 +28,28 @@ object GradeAggregator {
         )
 
     val DEFAULT_WEIGHTS: List<Int> = listOf(25, 25, 50, 100)
+
+    fun isPhysicalEducation(subject: String): Boolean {
+        val trimmed = subject.trim()
+        if (trimmed.equals(PHYSICAL_EDUCATION_SUBJECT, ignoreCase = true)) return true
+        return SubjectFormatter.normalize(trimmed).equals(PHYSICAL_EDUCATION_SUBJECT, ignoreCase = true)
+    }
+
+    fun effectiveWeightsEnabled(
+        subject: String,
+        configWeightsEnabled: Boolean,
+    ): Boolean = !isPhysicalEducation(subject) && configWeightsEnabled
+
+    fun subjectAverage(
+        byCategory: Map<String, List<Int>>,
+        weights: Map<String, Int>,
+        weightsEnabled: Boolean,
+    ): Double? =
+        if (weightsEnabled) {
+            weightedAverage(byCategory, weights)
+        } else {
+            plainAverage(byCategory)
+        }
 
     fun average(
         byCategory: Map<String, List<Int>>,
