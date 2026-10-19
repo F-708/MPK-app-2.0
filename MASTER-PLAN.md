@@ -1129,6 +1129,8 @@ testStandardDebugUnitTest → коммит. Room-схему трогает то�
   Roborazzi обновлён, vision-аудит OK (пустая зона в оценках = задуманный layout Y4/X10, не баг).
 - B2 доводок для волны C1 (настройки): в SettingsScreen остались приватные дубли
   openExactAlarmSettings/exactAlarmHintNeeded — заменить на общий util/ExactAlarmGate.kt.
+- Known-flaky (новый, волна D): `W16PdfReaderModeTest` падает с «connection pool has been closed»
+  (гонка Room-пула в Robolectric при прогоне всей пачки); ретрай проходит. НЕ регрессия кода.
 - C3 доводки для волны E: (1) `res/values-night/themes.xml` — windowBackground тёмный
   (иначе белый флеш при старте); (2) hardcoded-цвета вне ui/theme: MainHeaderBanner.kt:38,44
   (белая шапка!), CollegeMapScreen.kt:130-132,833 + белая графика маршрута ~1501,1514,1597,

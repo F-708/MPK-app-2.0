@@ -87,6 +87,7 @@ import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberToday
 import com.politex.util.MpkCurriculum
 import com.politex.util.SubjectRenameStore
+import com.politex.util.TeacherModeStore
 import java.util.Calendar
 
 private val ADMIN_ACCENT = Color(0xFF7A5C00)
@@ -142,13 +143,19 @@ internal fun TeachersRoute(
 
     showLeads: Boolean = true,
 ) {
+    val context = LocalContext.current
+    val teacherModeRevision = TeacherModeStore.revision.intValue
+    val isTeacherMode =
+        remember(context, teacherModeRevision) {
+            TeacherModeStore.isTeacher(context)
+        }
     Column(modifier = Modifier.fillMaxSize().background(ColorBgMain)) {
         TeachersPage(
             groupInfo = groupInfo,
             scheduleRepository = scheduleRepository,
             onBack = onBack,
             onOpenTeacher = onOpenTeacher,
-            showLeads = showLeads,
+            showLeads = effectiveShowLeads(showLeads, isTeacherMode),
         )
     }
 }
@@ -165,6 +172,12 @@ internal fun TeacherCardRoute(
     showLeads: Boolean = true,
 ) {
     var teacher by remember(teacherName) { mutableStateOf<Teacher?>(null) }
+    val context = LocalContext.current
+    val teacherModeRevision = TeacherModeStore.revision.intValue
+    val isTeacherMode =
+        remember(context, teacherModeRevision) {
+            TeacherModeStore.isTeacher(context)
+        }
     LaunchedEffect(teacherName) {
 
         teacher =
@@ -187,7 +200,7 @@ internal fun TeacherCardRoute(
                 scheduleRepository = scheduleRepository,
                 onOpenRoom = onOpenRoom,
                 onBack = onBack,
-                showLeads = showLeads,
+                showLeads = effectiveShowLeads(showLeads, isTeacherMode),
             )
         }
     }
@@ -244,9 +257,22 @@ private fun OtherMenu(
 ) {
     val context = LocalContext.current
     val isAdmin = com.politex.BuildConfig.FLAVOR == "admin"
+    val teacherModeRevision = TeacherModeStore.revision.intValue
+    val isTeacherMode =
+        remember(context, teacherModeRevision) {
+            TeacherModeStore.isTeacher(context)
+        }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Header(title = "Другое", subtitle = "Специальность, преподаватели и настройки")
+        Header(
+            title = "Другое",
+            subtitle =
+            if (isTeacherMode) {
+                "Преподаватели, карта и настройки"
+            } else {
+                "Специальность, преподаватели и настройки"
+            },
+        )
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -268,13 +294,15 @@ private fun OtherMenu(
                 }
             }
 
-            item {
-                MenuCard(
-                    icon = { Icon(Icons.Default.School, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
-                    title = "Моя специальность",
-                    subtitle = "Группа ${groupInfo.canonicalName}: код, квалификация, предметы по курсам",
-                    onClick = onOpenSpecialty,
-                )
+            if (showSpecialtyMenu(isTeacherMode)) {
+                item {
+                    MenuCard(
+                        icon = { Icon(Icons.Default.School, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
+                        title = "Моя специальность",
+                        subtitle = "Группа ${groupInfo.canonicalName}: код, квалификация, предметы по курсам",
+                        onClick = onOpenSpecialty,
+                    )
+                }
             }
             item {
                 MenuCard(
@@ -1653,6 +1681,13 @@ internal fun canToggleLeads(
     autoActive: Boolean,
     manualOff: Boolean,
 ): Boolean = !autoActive || manualOff
+
+internal fun showSpecialtyMenu(teacherMode: Boolean): Boolean = !teacherMode
+
+internal fun effectiveShowLeads(
+    requested: Boolean,
+    teacherMode: Boolean,
+): Boolean = requested && !teacherMode
 
 @Composable
 private fun TeacherScheduleTab(

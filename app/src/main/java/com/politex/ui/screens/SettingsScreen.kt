@@ -93,6 +93,7 @@ import com.politex.util.ExactAlarmGate
 import com.politex.util.ScheduleDisplayPrefs
 import com.politex.util.SubgroupPref
 import com.politex.util.SubgroupSettings
+import com.politex.util.TeacherModeStore
 import com.politex.util.defaultBackupFileName
 import com.politex.widget.WidgetUpdateHelper
 import com.politex.worker.MpkWorkManagerHelper
@@ -108,6 +109,15 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val teacherModeRevision = TeacherModeStore.revision.intValue
+    val isTeacherMode =
+        remember(context, teacherModeRevision) {
+            TeacherModeStore.isTeacher(context)
+        }
+    val teacherName =
+        remember(context, teacherModeRevision) {
+            TeacherModeStore.teacherName(context)
+        }
     var isNotificationEnabled by remember {
         mutableStateOf(WidgetUpdateHelper.isNotificationEnabled(context))
     }
@@ -227,7 +237,7 @@ fun SettingsScreen(
             .background(ColorBgMain),
     ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().testTag("settings_list"),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -415,64 +425,66 @@ fun SettingsScreen(
                 }
             }
 
-            item {
-                var subgroupPref by remember { mutableStateOf(SubgroupSettings.get(context)) }
-                AppCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("subgroup_pref_card"),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = "Подгруппа",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = ColorTextTitle,
-                            ),
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            SubgroupChip(
-                                title = "Нейтрально",
-                                selected = subgroupPref == SubgroupPref.NEUTRAL,
-                                tag = "subgroup_pref_neutral",
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                subgroupPref = SubgroupPref.NEUTRAL
-                                SubgroupSettings.set(context, SubgroupPref.NEUTRAL)
-                            }
-                            SubgroupChip(
-                                title = "1-я",
-                                selected = subgroupPref == SubgroupPref.FIRST,
-                                tag = "subgroup_pref_first",
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                subgroupPref = SubgroupPref.FIRST
-                                SubgroupSettings.set(context, SubgroupPref.FIRST)
-                            }
-                            SubgroupChip(
-                                title = "2-я",
-                                selected = subgroupPref == SubgroupPref.SECOND,
-                                tag = "subgroup_pref_second",
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                subgroupPref = SubgroupPref.SECOND
-                                SubgroupSettings.set(context, SubgroupPref.SECOND)
-                            }
-                        }
-                        if (subgroupPref != SubgroupPref.NEUTRAL) {
-                            Spacer(modifier = Modifier.height(8.dp))
+            if (showSubgroupCard(isTeacherMode)) {
+                item {
+                    var subgroupPref by remember { mutableStateOf(SubgroupSettings.get(context)) }
+                    AppCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("subgroup_pref_card"),
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
                             Text(
-                                text = "Маршруты и виджеты будут вести на кабинеты выбранной подгруппы.",
+                                text = "Подгруппа",
                                 style = androidx.compose.ui.text.TextStyle(
-                                    color = ColorTextMuted,
-                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = ColorTextTitle,
                                 ),
                             )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                SubgroupChip(
+                                    title = "Нейтрально",
+                                    selected = subgroupPref == SubgroupPref.NEUTRAL,
+                                    tag = "subgroup_pref_neutral",
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    subgroupPref = SubgroupPref.NEUTRAL
+                                    SubgroupSettings.set(context, SubgroupPref.NEUTRAL)
+                                }
+                                SubgroupChip(
+                                    title = "1-я",
+                                    selected = subgroupPref == SubgroupPref.FIRST,
+                                    tag = "subgroup_pref_first",
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    subgroupPref = SubgroupPref.FIRST
+                                    SubgroupSettings.set(context, SubgroupPref.FIRST)
+                                }
+                                SubgroupChip(
+                                    title = "2-я",
+                                    selected = subgroupPref == SubgroupPref.SECOND,
+                                    tag = "subgroup_pref_second",
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    subgroupPref = SubgroupPref.SECOND
+                                    SubgroupSettings.set(context, SubgroupPref.SECOND)
+                                }
+                            }
+                            if (subgroupPref != SubgroupPref.NEUTRAL) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Маршруты и виджеты будут вести на кабинеты выбранной подгруппы.",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        color = ColorTextMuted,
+                                        fontSize = 11.sp,
+                                    ),
+                                )
+                            }
                         }
                     }
                 }
@@ -784,6 +796,58 @@ fun SettingsScreen(
                             title = "Версия",
                             value = BuildConfig.VERSION_NAME,
                         )
+                    }
+                }
+            }
+
+            if (showTeacherModeExit(isTeacherMode)) {
+                item {
+                    AppCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("teacher_mode_exit_card"),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Режим преподавателя",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = ColorTextTitle,
+                                    ),
+                                )
+                                Text(
+                                    text =
+                                    "Сейчас показано расписание преподавателя" +
+                                        (teacherName?.let { ": $it" } ?: "") +
+                                        ". После выхода приложение снова предложит выбрать роль и группу.",
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 11.sp,
+                                        color = ColorTextMuted,
+                                    ),
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            ActionChip(
+                                text = "СМЕНИТЬ РОЛЬ",
+                                filled = false,
+                                modifier = Modifier.testTag("teacher_mode_exit_btn"),
+                                onClick = {
+                                    WidgetUpdateHelper.getPrefs(context).edit()
+                                        .remove("selected_group")
+                                        .apply()
+                                    SubgroupSettings.set(context, SubgroupPref.NEUTRAL)
+                                    TeacherModeStore.clear(context)
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -1501,3 +1565,7 @@ private fun SubgroupChip(
         }
     }
 }
+
+internal fun showSubgroupCard(teacherMode: Boolean): Boolean = !teacherMode
+
+internal fun showTeacherModeExit(teacherMode: Boolean): Boolean = teacherMode

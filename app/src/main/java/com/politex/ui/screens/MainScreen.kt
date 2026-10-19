@@ -92,10 +92,14 @@ import com.politex.ui.viewmodel.ROUTE_SPECIALTY
 import com.politex.ui.viewmodel.ROUTE_STUDENTS
 import com.politex.ui.viewmodel.ROUTE_TEACHER
 import com.politex.ui.viewmodel.ROUTE_TEACHERS
+import com.politex.ui.viewmodel.tabsForMode
 import com.politex.ui.screens.materials.ViewerMode
+import com.politex.ui.util.daySlots
+import com.politex.util.DateFormats
 import com.politex.widget.WidgetUpdateHelper
 import kotlinx.coroutines.flow.collectLatest
 import java.net.URLEncoder
+import java.util.Calendar
 import kotlin.math.abs
 
 private fun enc(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
@@ -196,6 +200,7 @@ fun MainScreen(
                 com.politex.util.SubgroupSettings.set(context, subgroup)
                 viewModel.setGroup(group)
             },
+            onTeacherSelected = { name -> viewModel.setTeacherMode(name) },
         )
     }
 
@@ -235,12 +240,14 @@ fun MainScreen(
                         modifier = Modifier.testTag("main_bottom_nav").heightIn(min = 72.dp),
                     ) {
                         val tabs =
-                            listOf(
-                                Triple(AppTab.SCHEDULE, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
-                                Triple(AppTab.TASKS, Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
-                                Triple(AppTab.BELLS, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
-                                Triple(AppTab.COLLEGE, Icons.Filled.Apps, Icons.Outlined.Apps),
-                            )
+                            tabsForMode(uiState.isTeacherMode).map { tab ->
+                                when (tab) {
+                                    AppTab.SCHEDULE -> Triple(tab, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth)
+                                    AppTab.TASKS -> Triple(tab, Icons.Filled.MenuBook, Icons.Outlined.MenuBook)
+                                    AppTab.BELLS -> Triple(tab, Icons.Filled.AccessTime, Icons.Outlined.AccessTime)
+                                    AppTab.COLLEGE -> Triple(tab, Icons.Filled.Apps, Icons.Outlined.Apps)
+                                }
+                            }
 
                         tabs.forEach { (tab, filledIcon, outlinedIcon) ->
                             val isSelected = selectedTab == tab
@@ -326,6 +333,16 @@ fun MainScreen(
                     var scheduleSlot by rememberSaveable { mutableIntStateOf(0) }
                     var scheduleDate by rememberSaveable { mutableStateOf("") }
                     val scrollRequest = rememberScrollRequest(entry)
+                    if (uiState.isTeacherMode) {
+                        val saturdaySchool =
+                            currentGroupInfo.course == 1 || groupLessons.orEmpty().any { it.dayOfWeek == 6 }
+                        val slotDays = daySlots(Calendar.getInstance(), saturdaySchool) { false }
+                        val teacherDate =
+                            scheduleDate.ifBlank {
+                                DateFormats.dotDate(if (scheduleSlot == 0) slotDays.first else slotDays.second)
+                            }
+                        LaunchedEffect(teacherDate) { viewModel.setTeacherDate(teacherDate) }
+                    }
                     ScheduleScreen(
                         groupInfo = currentGroupInfo,
                         groupLessonsFromVm = groupLessons,
@@ -351,13 +368,17 @@ fun MainScreen(
                 }
 
                 composable(ROUTE_LESSONS) {
-                    LessonsHubScreen(
-                        groupInfo = currentGroupInfo,
-                        taskRepository = viewModel.taskRepository,
-                        modifier = Modifier.fillMaxSize(),
+                    if (uiState.isTeacherMode) {
+                        LaunchedEffect(Unit) { navController.navigateToTab(ROUTE_SCHEDULE) }
+                    } else {
+                        LessonsHubScreen(
+                            groupInfo = currentGroupInfo,
+                            taskRepository = viewModel.taskRepository,
+                            modifier = Modifier.fillMaxSize(),
 
-                        snackbarHostState = snackbarHostState,
-                    )
+                            snackbarHostState = snackbarHostState,
+                        )
+                    }
                 }
 
                 composable(scrollRoutePattern(ROUTE_BELLS), arguments = scrollArg) { entry ->

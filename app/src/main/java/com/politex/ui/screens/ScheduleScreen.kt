@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.AssignmentLate
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
@@ -115,6 +116,7 @@ import com.politex.ui.util.rememberToday
 import com.politex.util.DateFormats
 import com.politex.util.HintFlags
 import com.politex.util.ScheduleDisplayPrefs
+import com.politex.util.TeacherModeStore
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
 import java.util.Locale
@@ -156,6 +158,12 @@ fun ScheduleScreen(
     }
 
     val isTeacherKnown: (String) -> Boolean = rememberIsTeacherKnown()
+
+    val teacherModeRevision = TeacherModeStore.revision.intValue
+    val isTeacherMode =
+        remember(context, teacherModeRevision) {
+            TeacherModeStore.isTeacher(context)
+        }
 
     val realNow = rememberToday()
 
@@ -658,11 +666,13 @@ fun ScheduleScreen(
                         Text(
 
                             text =
-                            when {
-                                isSyncing -> checkingStatusFor(activeDateString)
-                                hasSyncError -> "Не удалось обновить расписание"
-                                else -> emptyStateText(activeDateString)
-                            },
+                            emptyStateTitle(
+                                isSyncing = isSyncing,
+                                hasSyncError = hasSyncError,
+                                teacherMode = isTeacherMode,
+                                viewingToday = isViewingToday,
+                                activeDateString = activeDateString,
+                            ),
                             style =
                             androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.Bold,
@@ -766,6 +776,7 @@ fun ScheduleScreen(
                                 onHomeworkClick = onOpenTasks,
                                 onTeacherClick = teacherClick,
                                 isTeacherKnown = isTeacherKnown,
+                                teacherMode = isTeacherMode,
 
                                 pulse = showPulse(scheduleHintDone, lesson.lessonNumber == pulseLessonNumber),
 
@@ -856,6 +867,7 @@ fun LessonCard(
     isTeacherKnown: (String) -> Boolean = { true },
     onRoomClick: (String) -> Unit = {},
     pulse: Boolean = false,
+    teacherMode: Boolean = false,
 
     focusAlpha: Float = 0f,
     modifier: Modifier = Modifier,
@@ -902,6 +914,7 @@ fun LessonCard(
                     isTeacherKnown = isTeacherKnown,
                     onRoomClick = onRoomClick,
                     pulse = pulse,
+                    teacherMode = teacherMode,
                 )
             } else {
                 RegularLessonCardContent(
@@ -913,6 +926,7 @@ fun LessonCard(
                     isTeacherKnown = isTeacherKnown,
                     onRoomClick = onRoomClick,
                     pulse = pulse,
+                    teacherMode = teacherMode,
                 )
             }
         }
@@ -929,6 +943,7 @@ private fun RegularLessonCardContent(
     isTeacherKnown: (String) -> Boolean,
     onRoomClick: (String) -> Unit,
     pulse: Boolean,
+    teacherMode: Boolean = false,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -978,6 +993,8 @@ private fun RegularLessonCardContent(
                 isTeacherKnown = isTeacherKnown,
                 onRoomClick = onRoomClick,
                 pulse = pulse,
+                teacherMode = teacherMode,
+                group = lesson.groupName,
                 modifier = Modifier.weight(1f),
             )
 
@@ -996,6 +1013,8 @@ private fun RegularLessonCardContent(
                 isTeacherKnown = isTeacherKnown,
                 onRoomClick = onRoomClick,
                 pulse = pulse,
+                teacherMode = teacherMode,
+                group = lesson.groupName,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1023,6 +1042,7 @@ private fun RegularLessonCardContent(
             isTeacherKnown = isTeacherKnown,
             onRoomClick = onRoomClick,
             pulse = pulse,
+            teacherMode = teacherMode,
         )
     }
 }
@@ -1037,6 +1057,7 @@ private fun CompactLessonCardContent(
     isTeacherKnown: (String) -> Boolean,
     onRoomClick: (String) -> Unit,
     pulse: Boolean,
+    teacherMode: Boolean = false,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1088,6 +1109,8 @@ private fun CompactLessonCardContent(
                 onRoomClick = onRoomClick,
                 pulse = pulse,
                 compact = true,
+                teacherMode = teacherMode,
+                group = lesson.groupName,
                 modifier = Modifier.weight(1f),
             )
 
@@ -1107,10 +1130,12 @@ private fun CompactLessonCardContent(
                 onRoomClick = onRoomClick,
                 pulse = pulse,
                 compact = true,
+                teacherMode = teacherMode,
+                group = lesson.groupName,
                 modifier = Modifier.weight(1f),
             )
         }
-    } else if (lesson.teacherFirst.isNotBlank() || lesson.roomFirst.isNotBlank()) {
+    } else if (lesson.teacherFirst.isNotBlank() || lesson.roomFirst.isNotBlank() || (teacherMode && lesson.groupName.isNotBlank())) {
         Spacer(modifier = Modifier.height(4.dp))
         LessonTeacherRoomRow(
             lesson = lesson,
@@ -1118,6 +1143,7 @@ private fun CompactLessonCardContent(
             isTeacherKnown = isTeacherKnown,
             onRoomClick = onRoomClick,
             pulse = pulse,
+            teacherMode = teacherMode,
         )
     }
 }
@@ -1150,13 +1176,21 @@ private fun LessonTeacherRoomRow(
     isTeacherKnown: (String) -> Boolean,
     onRoomClick: (String) -> Unit,
     pulse: Boolean,
+    teacherMode: Boolean = false,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (lesson.teacherFirst.isNotBlank()) {
+        if (teacherMode) {
+            if (lesson.groupName.isNotBlank()) {
+                GroupChipText(
+                    name = lesson.groupName,
+                    pulse = pulse,
+                )
+            }
+        } else if (lesson.teacherFirst.isNotBlank()) {
             TeacherChip(
                 name = lesson.teacherFirst,
                 onClick =
@@ -1285,6 +1319,38 @@ private fun TeacherChip(
 }
 
 @Composable
+private fun GroupChipText(
+    name: String,
+    fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
+    pulse: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.pulseHalo(pulse),
+    ) {
+        Icon(
+            imageVector = Icons.Default.Groups,
+            contentDescription = null,
+            tint = ColorTextMuted,
+            modifier = Modifier.size(12.dp),
+        )
+        Spacer(modifier = Modifier.width(3.dp))
+        Text(
+            text = name,
+            style =
+            androidx.compose.ui.text.TextStyle(
+                fontSize = fontSize,
+                color = ColorTextMuted,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
 private fun SubgroupPane(
     subgroupNumber: Int,
     subject: String,
@@ -1295,6 +1361,8 @@ private fun SubgroupPane(
     onRoomClick: (String) -> Unit,
     pulse: Boolean = false,
     compact: Boolean = false,
+    teacherMode: Boolean = false,
+    group: String = "",
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1384,7 +1452,16 @@ private fun SubgroupPane(
             }
         }
 
-        if (teacher.isNotBlank()) {
+        if (teacherMode) {
+            if (group.isNotBlank()) {
+                Spacer(modifier = Modifier.height(3.dp))
+                GroupChipText(
+                    name = group,
+                    fontSize = 11.sp,
+                    pulse = pulse,
+                )
+            }
+        } else if (teacher.isNotBlank()) {
             Spacer(modifier = Modifier.height(3.dp))
             TeacherChip(
                 name = teacher,
@@ -1400,6 +1477,20 @@ private fun SubgroupPane(
         }
     }
 }
+
+internal fun emptyStateTitle(
+    isSyncing: Boolean,
+    hasSyncError: Boolean,
+    teacherMode: Boolean,
+    viewingToday: Boolean,
+    activeDateString: String,
+): String =
+    when {
+        isSyncing -> checkingStatusFor(activeDateString)
+        hasSyncError -> "Не удалось обновить расписание"
+        teacherMode && viewingToday -> "Сегодня уроков нет"
+        else -> emptyStateText(activeDateString)
+    }
 
 fun autoScrollLessonIndex(
     lessonNumbers: List<Int>,

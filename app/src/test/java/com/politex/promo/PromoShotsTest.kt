@@ -23,7 +23,9 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -50,6 +52,7 @@ import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.model.GroupInfo
 import com.politex.data.model.TaskType
 import com.politex.data.repository.TaskRepository
+import com.politex.data.repository.TeacherDayLesson
 import com.politex.ui.components.AppDivider
 import com.politex.ui.components.MainTopBar
 import com.politex.ui.screens.BellsScreen
@@ -63,9 +66,14 @@ import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.MyApplicationTheme
+import com.politex.ui.viewmodel.AppTab
+import com.politex.ui.viewmodel.tabsForMode
+import com.politex.ui.viewmodel.toLessonEntity
+import com.politex.util.DateFormats
 import com.politex.util.GradeCategory
 import com.politex.util.HintFlags
 import com.politex.util.ScheduleDisplayPrefs
+import com.politex.util.TeacherModeStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -270,6 +278,43 @@ class PromoShotsTest {
     }
 
     @Test
+    fun shotScheduleTeacher() {
+        TeacherModeStore.setTeacher(context, "Иванова И.И.")
+        try {
+            val today = DateFormats.dotDate(Calendar.getInstance())
+            val plan = listOf(
+                Triple("Математика", "214", "ИС-99, ТС-12"),
+                Triple("Математика", "305", "ИС-98"),
+                Triple("ПРОГРАММИРОВАНИЕ ЦИФРОВЫХ УСТРОЙСТВ", "118", "ЭТ-31"),
+            )
+            val teacherLessons = plan.mapIndexed { i, (subject, room, groups) ->
+                val (start, end) = CollegeBellSchedule.getTimeForLessonNumber(i + 1, 2)
+                TeacherDayLesson(
+                    lessonNumber = i + 1,
+                    subject = subject,
+                    groups = groups.split(", "),
+                    room = room,
+                    start = start,
+                    end = end,
+                    startMinutes = -1,
+                    endMinutes = -1,
+                ).toLessonEntity(today)
+            }
+            shoot("shot_schedule_teacher", tab = 0, interact = { waitForText("ИС-99, ТС-12") }) {
+                ScheduleScreen(
+                    groupInfo = group,
+                    scheduleRepository = AppGraph.scheduleRepository,
+                    onSyncRequest = {},
+                    groupLessonsFromVm = teacherLessons,
+                    pendingTasksFromVm = emptyList(),
+                )
+            }
+        } finally {
+            TeacherModeStore.clear(context)
+        }
+    }
+
+    @Test
     fun shotBells() = shoot("shot_bells", tab = 2, interact = { waitForText("Расписание звонков") }) {
         BellsScreen(groupInfo = group, scheduleRepository = AppGraph.scheduleRepository)
     }
@@ -415,6 +460,9 @@ class PromoShotsTest {
 
     @Composable
     private fun PromoNavBar(selected: Int) {
+        val context = LocalContext.current
+        val teacherModeRevision = TeacherModeStore.revision.intValue
+        val isTeacherMode = remember(context, teacherModeRevision) { TeacherModeStore.isTeacher(context) }
         Column(modifier = Modifier.fillMaxWidth()) {
             AppDivider()
             NavigationBar(
@@ -422,12 +470,14 @@ class PromoShotsTest {
                 tonalElevation = 0.dp,
                 modifier = Modifier.fillMaxWidth().height(72.dp),
             ) {
-                val tabs = listOf(
-                    Triple("Расписание", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
-                    Triple("Уроки", Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
-                    Triple("Звонки", Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
-                    Triple("Другое", Icons.Filled.Apps, Icons.Outlined.Apps),
-                )
+                val tabs = tabsForMode(isTeacherMode).map { tab ->
+                    when (tab) {
+                        AppTab.SCHEDULE -> Triple("Расписание", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth)
+                        AppTab.TASKS -> Triple("Уроки", Icons.Filled.MenuBook, Icons.Outlined.MenuBook)
+                        AppTab.BELLS -> Triple("Звонки", Icons.Filled.AccessTime, Icons.Outlined.AccessTime)
+                        AppTab.COLLEGE -> Triple("Другое", Icons.Filled.Apps, Icons.Outlined.Apps)
+                    }
+                }
                 tabs.forEachIndexed { i, (title, filledIcon, outlinedIcon) ->
                     val isSelected = selected == i
                     NavigationBarItem(
