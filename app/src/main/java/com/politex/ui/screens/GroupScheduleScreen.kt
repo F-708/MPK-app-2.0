@@ -5,11 +5,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,18 +19,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.EventBusy
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -48,7 +47,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -142,7 +140,7 @@ internal fun validateAgainstCatalog(
     catalog: List<String>,
 ): Boolean {
     val normalized = GroupCatalog.normalize(code) ?: return false
-    return catalog.any { it == normalized }
+    return catalog.any { GroupCatalog.normalize(it) == normalized }
 }
 
 internal fun groupPickerMaxNumber(
@@ -702,6 +700,7 @@ private val groupDayNames = listOf("", "ПОНЕДЕЛЬНИК", "ВТОРНИК
 
 private fun dayTitle(cal: Calendar): String = groupDayNames[groupScheduleDayOfWeek(cal)]
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun GroupSchedulePicker(
     selectedCourse: Int,
@@ -709,6 +708,7 @@ internal fun GroupSchedulePicker(
     catalogCodes: List<String>,
     confirmLabel: String = "ОТКРЫТЬ",
     onGroupSelected: (String) -> Unit,
+    note: String? = null,
 ) {
     var selectedNumber by rememberSaveable { mutableStateOf<Int?>(null) }
     var selectedLetter by rememberSaveable { mutableStateOf<Char?>(null) }
@@ -728,109 +728,126 @@ internal fun GroupSchedulePicker(
     val info = remember(code) { code?.let { GroupParser.parse(it) } }
     val specialtyShort = remember(info) { info?.let { MpkCurriculum.getSpecialty(it.specialtyCode)?.shortName }.orEmpty() }
 
-    Column(
-        modifier =
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-    ) {
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
         ) {
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = code ?: "• • •",
+                    style =
+                    androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 44.sp,
+                    ),
+                    color = if (inCatalog) ColorSuccess else ColorTextTitle,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("group_picker_code"),
+                )
+                if (inCatalog) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Группа есть в каталоге",
+                        tint = ColorSuccess,
+                        modifier =
+                        Modifier
+                            .size(28.dp)
+                            .testTag("group_picker_valid_icon"),
+                    )
+                }
+            }
             Text(
-                text = code ?: "• • •",
+                text =
+                when {
+                    code == null -> "Выберите курс, номер и группу"
+                    inCatalog -> "Группа есть в каталоге"
+                    else -> "Группы $code нет в каталоге"
+                },
                 style =
                 androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 44.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 12.sp,
+                    color = if (inCatalog) ColorSuccess else ColorTextMuted,
                 ),
-                color = if (inCatalog) ColorSuccess else ColorTextTitle,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.testTag("group_picker_code"),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
             )
-            if (inCatalog) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "Группа есть в каталоге",
-                    tint = ColorSuccess,
+            if (note != null) {
+                Text(
+                    text = note,
+                    style =
+                    androidx.compose.ui.text.TextStyle(
+                        fontSize = 11.sp,
+                        color = ColorTextMuted,
+                    ),
+                    textAlign = TextAlign.Center,
                     modifier =
                     Modifier
-                        .size(28.dp)
-                        .testTag("group_picker_valid_icon"),
+                        .fillMaxWidth()
+                        .padding(top = 2.dp)
+                        .testTag("group_picker_note"),
                 )
             }
-        }
-        Text(
-            text =
-            when {
-                code == null -> "Выберите курс, номер и букву"
-                inCatalog -> "Группа есть в каталоге"
-                else -> "Группы $code нет в каталоге"
-            },
-            style =
-            androidx.compose.ui.text.TextStyle(
-                fontWeight = FontWeight.Medium,
-                fontSize = 12.sp,
-                color = if (inCatalog) ColorSuccess else ColorTextMuted,
-            ),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
 
-        Spacer(modifier = Modifier.height(16.dp))
-        PickerSectionLabel("1 · КУРС")
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            (1..4).forEach { course ->
-                PickerChip(
-                    label = "$course",
-                    selected = selectedCourse == course,
-                    modifier = Modifier.weight(1f),
-                    tag = "group_schedule_course_$course",
-                    onClick = { onCourseSelected(course) },
-                )
+            Spacer(modifier = Modifier.height(16.dp))
+            PickerSectionLabel("1 · КУРС")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                (1..4).forEach { course ->
+                    PickerChip(
+                        label = "$course",
+                        selected = selectedCourse == course,
+                        modifier = Modifier.weight(1f),
+                        tag = "group_schedule_course_$course",
+                        onClick = { onCourseSelected(course) },
+                    )
+                }
             }
-        }
 
-        Spacer(modifier = Modifier.height(12.dp))
-        PickerSectionLabel("2 · НОМЕР")
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            (1..maxNumber).forEach { n ->
-                PickerChip(
-                    label = "$n",
-                    selected = number == n,
-                    modifier = Modifier.weight(1f),
-                    tag = "group_picker_number_$n",
-                    onClick = { selectedNumber = if (number == n) null else n },
-                )
+            Spacer(modifier = Modifier.height(12.dp))
+            PickerSectionLabel("2 · НОМЕР")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                (1..maxNumber).forEach { n ->
+                    PickerChip(
+                        label = "$n",
+                        selected = number == n,
+                        modifier = Modifier.weight(1f),
+                        tag = "group_picker_number_$n",
+                        onClick = { selectedNumber = if (number == n) null else n },
+                    )
+                }
             }
-        }
 
-        Spacer(modifier = Modifier.height(12.dp))
-        PickerSectionLabel("3 · БУКВА")
-        if (letters.isNotEmpty()) {
-            val lettersState = rememberLazyListState()
-            Box(modifier = Modifier.fillMaxWidth()) {
-                LazyRow(
-                    state = lettersState,
+            Spacer(modifier = Modifier.height(12.dp))
+            PickerSectionLabel("3 · БУКВА")
+            if (letters.isNotEmpty()) {
+                FlowRow(
                     modifier =
                     Modifier
                         .fillMaxWidth()
                         .testTag("group_picker_letters_row"),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    items(letters) { ch ->
+                    letters.forEach { ch ->
                         PickerChip(
                             label = "$ch",
                             selected = letter == ch,
@@ -839,121 +856,83 @@ internal fun GroupSchedulePicker(
                         )
                     }
                 }
-                if (lettersState.canScrollBackward) {
-                    Box(
-                        modifier =
-                        Modifier
-                            .align(Alignment.CenterStart)
-                            .fillMaxHeight()
-                            .width(34.dp)
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(ColorBgMain, ColorBgMain.copy(alpha = 0f)),
-                                ),
-                            )
-                            .testTag("group_picker_letters_more_start"),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowLeft,
-                            contentDescription = null,
-                            tint = ColorTextMuted,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
-                if (lettersState.canScrollForward) {
-                    Box(
-                        modifier =
-                        Modifier
-                            .align(Alignment.CenterEnd)
-                            .fillMaxHeight()
-                            .width(34.dp)
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(ColorBgMain.copy(alpha = 0f), ColorBgMain),
-                                ),
-                            )
-                            .testTag("group_picker_letters_more_end"),
-                        contentAlignment = Alignment.CenterEnd,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = ColorTextMuted,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
+            } else if (number != null) {
+                Text(
+                    text = "Группы $selectedCourse$number нет в расписании",
+                    style =
+                    androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp,
+                        color = ColorTextMuted,
+                    ),
+                    modifier = Modifier.testTag("group_picker_no_groups"),
+                )
             }
-        } else if (number != null) {
 
-            Text(
-                text = "Группы $selectedCourse$number нет в расписании",
-                style =
-                androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 13.sp,
-                    color = ColorTextMuted,
-                ),
-                modifier = Modifier.testTag("group_picker_no_groups"),
-            )
-        }
+            if (info != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text =
+                    listOfNotNull(
+                        code,
+                        "${info.course} курс",
+                        specialtyShort.ifBlank { null },
+                    ).joinToString(" · "),
+                    style =
+                    androidx.compose.ui.text.TextStyle(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        color = ColorTextBody,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .testTag("group_picker_preview"),
+                )
+            }
 
-        if (info != null) {
             Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text =
-                listOfNotNull(
-                    code,
-                    "${info.course} курс",
-                    specialtyShort.ifBlank { null },
-                ).joinToString(" · "),
-                style =
-                androidx.compose.ui.text.TextStyle(
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    color = ColorTextBody,
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .testTag("group_picker_preview"),
-            )
         }
 
-        Spacer(modifier = Modifier.weight(1f))
-
-        Surface(
-            shape = RoundedCornerShape(2.dp),
-            color = if (inCatalog) ColorBrandFill else ColorSurfaceVariantLight,
-            border = BorderStroke(1.dp, if (inCatalog) ColorBrandBlue else ColorBorderLight),
+        Column(
             modifier =
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = Tokens.ButtonHeight)
-                .bouncyClickable(enabled = inCatalog) { code?.let(onGroupSelected) }
-                .testTag("group_picker_open_button"),
+                .padding(horizontal = 16.dp),
         ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.padding(vertical = 12.dp),
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = if (inCatalog) ColorBrandFill else ColorSurfaceVariantLight,
+                border = BorderStroke(1.dp, if (inCatalog) ColorBrandBlue else ColorBorderLight),
+                modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = Tokens.ButtonHeight)
+                    .bouncyClickable(enabled = inCatalog) { code?.let(onGroupSelected) }
+                    .testTag("group_picker_open_button"),
             ) {
-                Text(
-                    text = confirmLabel,
-                    style =
-                    androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        color = if (inCatalog) Color.White else ColorTextMuted,
-                    ),
-                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(vertical = 12.dp),
+                ) {
+                    Text(
+                        text = confirmLabel,
+                        style =
+                        androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = if (inCatalog) Color.White else ColorTextMuted,
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-        }
 
-        Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+        }
     }
 }
 

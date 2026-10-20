@@ -26,6 +26,12 @@ keystore.properties
 # Файлы остаются на диске для сборки admin, но в git не попадают.
 app/src/admin/assets/students.csv
 tools/students-original.csv
+**/students*.csv
+
+# Служебные каталоги параллельных сессий/агентов (не коммитить)
+.claude/
+.superpowers/
+tools/reader/
 
 # Тестовое окружение редактора
 .testenv/node_modules/

@@ -73,6 +73,7 @@ import com.politex.ui.viewmodel.tabsForMode
 import com.politex.ui.viewmodel.toLessonEntity
 import com.politex.util.AppThemeStore
 import com.politex.util.DateFormats
+import com.politex.util.Dow
 import com.politex.util.GradeCategory
 import com.politex.util.HintFlags
 import com.politex.util.ScheduleDisplayPrefs
@@ -252,6 +253,67 @@ class PromoShotsTest {
                     subjectName = "Математика", archived = true, sortOrder = 0,
                 ),
             )
+        }
+    }
+
+    private fun mergedPromoLessons(): List<LessonEntity> {
+        val now = Calendar.getInstance()
+        val dow = Dow.of(now)
+        val date = DateFormats.dotDate(now)
+        val plan = listOf(
+            Triple("Электронные системы транспортных средств", "240", "Иванова И.И."),
+            Triple("Электронные системы транспортных средств", "240", "Иванова И.И."),
+            Triple("Электронные системы транспортных средств", "240", "Иванова И.И."),
+            Triple("Физика", "305", "Петров П.П."),
+        )
+        return plan.mapIndexed { index, (subject, room, teacher) ->
+            val number = index + 1
+            val (start, end) = CollegeBellSchedule.getTimeForLessonNumber(number, dow)
+            LessonEntity(
+                groupName = group.canonicalName,
+                dayOfWeek = dow,
+                lessonNumber = number,
+                timeStart = start,
+                timeEnd = end,
+                subjectRaw = subject,
+                roomFirst = room,
+                teacherFirst = teacher,
+                dateString = date,
+            )
+        }
+    }
+
+    @Test
+    fun shotScheduleMerged() {
+        ScheduleDisplayPrefs.setCompact(context, false)
+        val lessons = mergedPromoLessons()
+        shoot("shot_schedule_merged", tab = 0, interact = { waitForText("Электрон") }) {
+            ScheduleScreen(
+                groupInfo = group,
+                scheduleRepository = AppGraph.scheduleRepository,
+                onSyncRequest = {},
+                groupLessonsFromVm = lessons,
+                pendingTasksFromVm = emptyList(),
+            )
+        }
+    }
+
+    @Test
+    fun shotScheduleMergedCompact() {
+        ScheduleDisplayPrefs.setCompact(context, true)
+        try {
+            val lessons = mergedPromoLessons()
+            shoot("shot_schedule_merged_compact", tab = 0, interact = { waitForText("Электрон") }) {
+                ScheduleScreen(
+                    groupInfo = group,
+                    scheduleRepository = AppGraph.scheduleRepository,
+                    onSyncRequest = {},
+                    groupLessonsFromVm = lessons,
+                    pendingTasksFromVm = emptyList(),
+                )
+            }
+        } finally {
+            ScheduleDisplayPrefs.setCompact(context, false)
         }
     }
 

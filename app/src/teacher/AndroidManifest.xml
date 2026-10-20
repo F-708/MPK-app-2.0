@@ -7,6 +7,10 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <application>
+        <activity-alias
+            android:name=".FileViewAlias"
+            tools:node="remove" />
+
         <!-- Виджет преподавателя «Следующая пара» (4×1 / 2×2) -->
         <receiver
             android:name="com.politex.widget.TeacherNextWidgetProvider"

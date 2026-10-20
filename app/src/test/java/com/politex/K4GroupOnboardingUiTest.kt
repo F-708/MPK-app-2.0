@@ -1,5 +1,6 @@
 package com.politex
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -68,9 +69,10 @@ class K4GroupOnboardingUiTest {
     }
 
     @Test
-    fun `KK10 - описание подгруппы про маршруты виджеты и нейтральный режим`() {
-        assertTrue(dialogs.contains("По подгруппе строятся маршруты и работают виджеты"))
-        assertTrue(dialogs.contains("показывать обе подгруппы"))
+    fun `LL4 - описание подгруппы про маршруты виджеты и возможность изменить`() {
+        assertTrue(dialogs.contains("По подгруппе строятся маршруты и работают виджеты. Можно потом изменить."))
+        assertFalse(dialogs.contains("показывать обе подгруппы"))
+        assertFalse(dialogs.contains("«Нейтрально»"))
         assertFalse(dialogs.contains("Если занятия идут по подгруппам"))
         assertFalse(dialogs.contains("Маршруты и виджеты будут вести на кабинеты"))
     }
@@ -126,17 +128,61 @@ class K4GroupOnboardingUiTest {
     }
 
     @Test
-    fun `KK6 - у букв пикера есть состояние скролла градиент и шевроны`() {
+    fun `LL3 - буквы переносятся FlowRow без стрелок и градиентов`() {
         val block = picker.substringAfter("internal fun GroupSchedulePicker(")
-        assertTrue(block.contains("rememberLazyListState"))
+        assertTrue(block.contains("FlowRow("))
         assertTrue(block.contains("group_picker_letters_row"))
-        assertTrue(block.contains("canScrollForward"))
-        assertTrue(block.contains("canScrollBackward"))
-        assertTrue(block.contains("Brush.horizontalGradient"))
-        assertTrue(block.contains("group_picker_letters_more_start"))
-        assertTrue(block.contains("group_picker_letters_more_end"))
-        assertTrue(block.contains("KeyboardArrowLeft"))
-        assertTrue(block.contains("KeyboardArrowRight"))
+        assertFalse(block.contains("LazyRow("))
+        assertFalse(block.contains("rememberLazyListState"))
+        assertFalse(block.contains("canScrollForward"))
+        assertFalse(block.contains("canScrollBackward"))
+        assertFalse(block.contains("horizontalGradient"))
+        assertFalse(block.contains("KeyboardArrowLeft"))
+        assertFalse(block.contains("KeyboardArrowRight"))
+        assertFalse(block.contains("group_picker_letters_more_start"))
+        assertFalse(block.contains("group_picker_letters_more_end"))
+    }
+
+    @Test
+    fun `LL1 - подтверждение закреплено вне прокручиваемой части пикера`() {
+        val block = picker.substringAfter("internal fun GroupSchedulePicker(")
+        val scrollIndex = block.indexOf("verticalScroll(rememberScrollState())")
+        val buttonIndex = block.indexOf("group_picker_open_button")
+        assertTrue(scrollIndex >= 0)
+        assertTrue(buttonIndex > scrollIndex)
+        assertTrue(block.contains(".weight(1f)"))
+        assertTrue(block.contains("bouncyClickable(enabled = inCatalog)"))
+    }
+
+    @Test
+    fun `LL1 - подтверждение есть в обоих диалогах и не прячется в AlertDialog`() {
+        assertTrue(dialogs.contains("confirmLabel = \"ДАЛЕЕ\""))
+        assertTrue(dialogs.contains("confirmLabel = \"ВЫБРАТЬ\""))
+        assertEquals(2, Regex("GroupSchedulePicker\\(").findAll(dialogs).count())
+        assertFalse(dialogs.contains("AlertDialog("))
+        assertTrue(dialogs.contains("GroupPickerDialogFrame("))
+    }
+
+    @Test
+    fun `LL2 - окно диалога симметрично по вертикали и скруглено сверху и снизу`() {
+        val frame = dialogs.substringAfter("private fun GroupPickerDialogFrame(")
+        assertTrue(frame.contains("WindowInsets.systemBars"))
+        assertTrue(frame.contains("WindowInsets.ime"))
+        assertTrue(frame.contains("groupDialogVerticalInsets("))
+        assertTrue(frame.contains("top = insets.top"))
+        assertTrue(frame.contains("bottom = insets.bottom"))
+        assertTrue(frame.contains("shape = RoundedCornerShape(2.dp)"))
+        assertTrue(frame.contains("decorFitsSystemWindows = false"))
+        assertEquals(3, Regex("GroupPickerDialogFrame\\(").findAll(dialogs).count())
+    }
+
+    @Test
+    fun `LL4 - в онбординге есть подсказка что группу можно изменить`() {
+        assertTrue(dialogs.contains("note = \"Можно потом изменить\""))
+        assertTrue(picker.contains("\"Выберите курс, номер и группу\""))
+        assertTrue(picker.contains("group_picker_note"))
+        val changeDialog = dialogs.substringAfter("fun GroupSelectionDialog(")
+        assertFalse(changeDialog.contains("Можно потом изменить"))
     }
 
     @Test

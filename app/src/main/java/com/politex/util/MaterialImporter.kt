@@ -41,27 +41,96 @@ object MaterialImporter {
 
     const val MAX_INDEXED_CHARS = 200_000
 
+    const val MAX_IMPORT_BYTES = 50L * 1024 * 1024
+
+    const val TOO_LARGE_MESSAGE = "Файл слишком большой — максимум 50 МБ"
+
+    private const val MAX_FILE_NAME_LENGTH = 120
+
+    private val INVISIBLE_CHARS =
+        setOf(
+            '\u200B',
+            '\u200C',
+            '\u200D',
+            '\u200E',
+            '\u200F',
+            '\u202A',
+            '\u202B',
+            '\u202C',
+            '\u202D',
+            '\u202E',
+            '\u2060',
+            '\u2066',
+            '\u2067',
+            '\u2068',
+            '\u2069',
+            '\uFEFF',
+        )
+
     private val PLAIN_TEXT_EXT = setOf("txt", "md", "markdown", "csv", "log", "json", "xml", "rtf")
 
     private val IMAGE_EXT = setOf("jpg", "jpeg", "png", "webp", "bmp", "gif", "heic", "heif")
 
     fun storageDir(context: Context): File = File(context.filesDir, STORAGE_DIR_NAME).apply { if (!exists()) mkdirs() }
 
+    internal fun sanitizeFileName(raw: String?): String {
+        val collapsed = raw.orEmpty().replace(Regex("[\\s\\u00A0]+"), " ")
+        val cleaned = collapsed.filterNot { it.isISOControl() || it in INVISIBLE_CHARS }.trim()
+        if (cleaned.isEmpty()) return "Файл"
+        if (cleaned.length <= MAX_FILE_NAME_LENGTH) return cleaned
+        val dot = cleaned.lastIndexOf('.')
+        val extension = if (dot > 0) cleaned.substring(dot).takeIf { it.length in 2..10 } else null
+        val bodyLength = MAX_FILE_NAME_LENGTH - (extension?.length ?: 0)
+        val truncated = cleaned.take(bodyLength.coerceAtLeast(1)) + (extension ?: "")
+        return truncated.trim().ifBlank { "Файл" }
+    }
+
     fun queryDisplayName(
         context: Context,
         uri: Uri,
     ): String {
-        runCatching {
-            context.contentResolver.query(uri, null, null, null, null)?.use { c ->
-                val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (idx >= 0 && c.moveToFirst()) {
-                    val name = c.getString(idx)
-                    if (!name.isNullOrBlank()) return name.trim()
+        val fromProvider =
+            runCatching {
+                context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                    val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0 && c.moveToFirst()) c.getString(idx) else null
                 }
+            }.getOrNull()
+        val raw =
+            fromProvider?.takeIf { it.isNotBlank() }
+                ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+        return sanitizeFileName(raw)
+    }
+
+    fun querySizeHint(
+        context: Context,
+        uri: Uri,
+    ): Long? =
+        runCatching {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+                val idx = c.getColumnIndex(OpenableColumns.SIZE)
+                if (idx >= 0 && c.moveToFirst() && !c.isNull(idx)) c.getLong(idx) else null
+            }
+        }.getOrNull()
+
+    suspend fun exceedsSizeLimit(
+        context: Context,
+        pending: PendingMaterial,
+    ): Boolean =
+        withContext(Dispatchers.IO) {
+            when (pending) {
+                is PendingMaterial.Text -> false
+                is PendingMaterial.SingleFile -> {
+                    val hint = querySizeHint(context, pending.uri)
+                    hint != null && hint > MAX_IMPORT_BYTES
+                }
+                is PendingMaterial.Images ->
+                    pending.uris.any { uri ->
+                        val hint = querySizeHint(context, uri)
+                        hint != null && hint > MAX_IMPORT_BYTES
+                    }
             }
         }
-        return uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "материал"
-    }
 
     fun extOf(fileName: String): String = fileName.substringAfterLast('.', "").lowercase().take(6)
 
@@ -87,24 +156,33 @@ object MaterialImporter {
         uri: Uri,
         fileName: String,
         digest: MessageDigest? = null,
+        maxBytes: Long = MAX_IMPORT_BYTES,
     ): File = withContext(Dispatchers.IO) {
         val target = File(storageDir(context), fileName)
-        val input =
-            context.contentResolver.openInputStream(uri)
-                ?: throw IOException("Не удалось открыть файл (нет доступа к выбранному документу)")
-        input.use { source ->
-            target.outputStream().use { out ->
-                val buffer = ByteArray(64 * 1024)
-                while (true) {
-                    coroutineContext.ensureActive()
-                    val read = source.read(buffer)
-                    if (read < 0) break
-                    out.write(buffer, 0, read)
-                    digest?.update(buffer, 0, read)
+        try {
+            val input =
+                context.contentResolver.openInputStream(uri)
+                    ?: throw IOException("Не удалось открыть файл (нет доступа к выбранному документу)")
+            input.use { source ->
+                target.outputStream().use { out ->
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0L
+                    while (true) {
+                        coroutineContext.ensureActive()
+                        val read = source.read(buffer)
+                        if (read < 0) break
+                        total += read
+                        if (total > maxBytes) throw IOException(TOO_LARGE_MESSAGE)
+                        out.write(buffer, 0, read)
+                        digest?.update(buffer, 0, read)
+                    }
                 }
             }
+            target
+        } catch (t: Throwable) {
+            runCatching { target.delete() }
+            throw t
         }
-        target
     }
 
     internal fun ByteArray.toHexString(): String = joinToString("") { "%02x".format(it.toInt() and 0xFF) }
@@ -116,14 +194,19 @@ object MaterialImporter {
         uri: Uri,
     ): String? = withContext(Dispatchers.IO) {
         try {
+            val hint = querySizeHint(context, uri)
+            if (hint != null && hint > MAX_IMPORT_BYTES) return@withContext null
             val input = context.contentResolver.openInputStream(uri) ?: return@withContext null
             val digest = newSha256()
             input.use { source ->
                 val buffer = ByteArray(64 * 1024)
+                var total = 0L
                 while (true) {
                     coroutineContext.ensureActive()
                     val read = source.read(buffer)
                     if (read < 0) break
+                    total += read
+                    if (total > MAX_IMPORT_BYTES) return@withContext null
                     digest.update(buffer, 0, read)
                 }
             }
@@ -241,6 +324,7 @@ object MaterialImporter {
         pending: PendingMaterial,
     ): Long {
         val now = System.currentTimeMillis()
+        if (exceedsSizeLimit(context, pending)) throw IOException(TOO_LARGE_MESSAGE)
 
         return when (pending) {
             is PendingMaterial.Text -> {

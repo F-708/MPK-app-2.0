@@ -48,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -63,6 +64,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import coil.compose.AsyncImage
 import com.politex.data.local.MpkDatabase
 import com.politex.data.local.entity.MaterialItemEntity
@@ -109,9 +113,10 @@ import com.politex.util.MaterialImporter
 import com.politex.util.MpkCurriculum
 import com.politex.util.PendingMaterial
 import com.politex.util.SubjectRenameStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -182,6 +187,7 @@ private class MaterialActions(
 fun MaterialBaseScreen(
     groupInfo: GroupInfo,
     modifier: Modifier = Modifier,
+    onExternalMaterialConsumed: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val dao = remember { MpkDatabase.getInstance(context).materialDao() }
@@ -227,25 +233,49 @@ fun MaterialBaseScreen(
     var renamingItem by remember { mutableStateOf<MaterialItemEntity?>(null) }
     var deletingItem by remember { mutableStateOf<MaterialItemEntity?>(null) }
     var importing by remember { mutableStateOf(false) }
+    var checking by remember { mutableStateOf(false) }
+    var preparedMaterial by remember { mutableStateOf<PendingMaterial?>(null) }
     var banner by remember { mutableStateOf<Banner?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val externalConsumed by rememberUpdatedState(onExternalMaterialConsumed)
 
-    LaunchedEffect(Unit) {
-        snapshotFlow { ExternalMaterialIntake.pending }
-            .filterNotNull()
-            .collectLatest { material ->
-                ExternalMaterialIntake.pending = null
-                val existing = MaterialImporter.findExistingByContent(context, dao, material)
-                if (existing != null) {
-                    if (!existing.archived && existing.subjectName.isNotBlank()) {
-                        push(MaterialRoute.SubjectScreen(existing.subjectName))
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            snapshotFlow { ExternalMaterialIntake.active }
+                .filterNotNull()
+                .collect { material ->
+                    if (preparedMaterial === material) return@collect
+                    externalConsumed()
+                    ExternalMaterialIntake.consumeWarning()?.let { banner = Banner(it, isError = false) }
+                    checking = true
+                    try {
+                        if (MaterialImporter.exceedsSizeLimit(context, material)) {
+                            banner = Banner(MaterialImporter.TOO_LARGE_MESSAGE, isError = true)
+                            ExternalMaterialIntake.finish(material)
+                            preparedMaterial = material
+                        } else {
+                            val existing =
+                                runCatching { MaterialImporter.findExistingByContent(context, dao, material) }
+                                    .onFailure { if (it is CancellationException) throw it }
+                                    .getOrNull()
+                            if (existing != null) {
+                                if (!existing.archived && existing.subjectName.isNotBlank()) {
+                                    push(MaterialRoute.SubjectScreen(existing.subjectName))
+                                }
+                                push(MaterialRoute.Viewer(existing.id))
+                                ExternalMaterialIntake.finish(material)
+                            } else {
+                                pending = material
+                                pendingFromExternal = true
+                                showSubject = true
+                            }
+                            preparedMaterial = material
+                        }
+                    } finally {
+                        checking = false
                     }
-                    push(MaterialRoute.Viewer(existing.id))
-                } else {
-                    pending = material
-                    pendingFromExternal = true
-                    showSubject = true
                 }
-            }
+        }
     }
 
     fun showOk(text: String) {
@@ -287,12 +317,20 @@ fun MaterialBaseScreen(
             importing = false
             outcome
                 .onSuccess { id ->
+                    ExternalMaterialIntake.finish(material)
                     showOk("Материал добавлен в «${SubjectRenameStore.displayName(context, subject)}»")
                     if (openAfter) {
                         push(MaterialRoute.SubjectScreen(subject))
                         push(MaterialRoute.Viewer(id))
                     }
-                }.onFailure { showErr("Не удалось импортировать: ${it.message ?: it.javaClass.simpleName}") }
+                }.onFailure {
+                    showErr("Не удалось импортировать: ${it.message ?: it.javaClass.simpleName}")
+                    if (material === ExternalMaterialIntake.active) {
+                        pending = material
+                        pendingFromExternal = true
+                        showSubject = true
+                    }
+                }
         }
     }
 
@@ -470,8 +508,15 @@ fun MaterialBaseScreen(
             }
         }
 
-        if (importing) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)), contentAlignment = Alignment.Center) {
+        if (checking || importing) {
+            Box(
+                modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.25f))
+                    .testTag("material_intake_progress"),
+                contentAlignment = Alignment.Center,
+            ) {
                 AppCard(
                 ) {
                     Row(
@@ -480,7 +525,10 @@ fun MaterialBaseScreen(
                     ) {
                         CircularProgressIndicator(color = ColorBrandBlue, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text("Копируем в хранилище…", style = TextStyle(fontSize = 13.sp, color = ColorTextBody))
+                        Text(
+                            text = if (checking) "Проверяем материал…" else "Копируем в хранилище…",
+                            style = TextStyle(fontSize = 13.sp, color = ColorTextBody),
+                        )
                     }
                 }
             }
@@ -542,6 +590,7 @@ fun MaterialBaseScreen(
                 showSubject = false
                 pending = null
                 pendingFromExternal = false
+                if (material != null) ExternalMaterialIntake.finish(material)
             },
             onConfirm = { subject ->
                 showSubject = false

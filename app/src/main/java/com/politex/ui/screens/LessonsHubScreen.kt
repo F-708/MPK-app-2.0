@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.model.GroupInfo
 import com.politex.data.repository.TaskRepository
+import com.politex.ui.screens.materials.ExternalMaterialIntake
 import com.politex.ui.screens.materials.ViewerMode
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
@@ -40,6 +42,7 @@ import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.util.bouncyClickable
+import kotlinx.coroutines.flow.collect
 
 enum class LessonsSection(
     val title: String,
@@ -49,6 +52,11 @@ enum class LessonsSection(
     GRADES("Оценки"),
 }
 
+internal fun targetHubSection(
+    current: LessonsSection,
+    hasExternalMaterial: Boolean,
+): LessonsSection = if (hasExternalMaterial) LessonsSection.MATERIALS else current
+
 @Composable
 fun LessonsHubScreen(
     groupInfo: GroupInfo,
@@ -57,11 +65,21 @@ fun LessonsHubScreen(
     snackbarHostState: SnackbarHostState? = null,
 ) {
 
-    var section by rememberSaveable { mutableStateOf(LessonsSection.TASKS) }
+    var userSection by rememberSaveable { mutableStateOf(LessonsSection.TASKS) }
+    val hasExternalMaterial = ExternalMaterialIntake.hasWork
+    val section = targetHubSection(userSection, hasExternalMaterial)
 
-    val hasExternalMaterial = com.politex.ui.screens.materials.ExternalMaterialIntake.pending != null
+    LaunchedEffect(Unit) {
+        snapshotFlow { ExternalMaterialIntake.pending to ExternalMaterialIntake.active }
+            .collect { (pending, active) ->
+                if (pending != null && active == null) ExternalMaterialIntake.claim()
+            }
+    }
+
     LaunchedEffect(hasExternalMaterial) {
-        if (hasExternalMaterial) section = LessonsSection.MATERIALS
+        if (hasExternalMaterial && userSection != LessonsSection.MATERIALS) {
+            userSection = LessonsSection.MATERIALS
+        }
     }
 
     Column(
@@ -91,7 +109,7 @@ fun LessonsHubScreen(
                             Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 44.dp)
-                                .bouncyClickable { section = s }
+                                .bouncyClickable { userSection = s }
                                 .testTag("hub_tab_${s.name.lowercase()}"),
                         ) {
                             Box(
@@ -132,6 +150,7 @@ fun LessonsHubScreen(
                 MaterialBaseScreen(
                     groupInfo = groupInfo,
                     modifier = Modifier.fillMaxSize(),
+                    onExternalMaterialConsumed = { userSection = LessonsSection.MATERIALS },
                 )
             LessonsSection.GRADES ->
                 GradesScreen(

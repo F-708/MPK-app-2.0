@@ -2,6 +2,7 @@ package com.politex
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -22,7 +23,24 @@ import com.politex.ui.viewmodel.AppTab
 import com.politex.ui.viewmodel.AppViewModel
 import com.politex.ui.viewmodel.ROUTE_LESSONS
 import com.politex.util.NotificationHelper
+import com.politex.util.PendingMaterial
+import com.politex.util.TeacherModeStore
 import com.politex.worker.MpkWorkManagerHelper
+
+internal fun shouldNavigateToLessons(currentRoute: String?): Boolean =
+    currentRoute?.substringBefore("?") != ROUTE_LESSONS
+
+internal fun acceptIntake(
+    flavor: String,
+    teacherMode: Boolean,
+): Boolean = flavor != "teacher" && !teacherMode
+
+internal fun intakeFingerprint(material: PendingMaterial): String =
+    when (material) {
+        is PendingMaterial.SingleFile -> "f:" + material.uri
+        is PendingMaterial.Images -> "i:" + material.uris.joinToString("|")
+        is PendingMaterial.Text -> "t:" + material.text
+    }
 
 class MainActivity : ComponentActivity() {
 
@@ -90,8 +108,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        handledIntakeKey = null
 
         navController?.let { handleIntent(intent, it) }
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) handledIntakeKey = null
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -117,8 +141,18 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.FLAVOR != "teacher" && intent != null) {
             val external = ExternalMaterialIntake.fromIntent(contentResolver, intent)
             if (external != null) {
-                ExternalMaterialIntake.pending = external
-                navController.navigateToTab(ROUTE_LESSONS)
+                val key = intakeFingerprint(external)
+                if (key != handledIntakeKey) {
+                    handledIntakeKey = key
+                    if (acceptIntake(BuildConfig.FLAVOR, TeacherModeStore.isTeacher(this))) {
+                        ExternalMaterialIntake.offer(external)
+                        if (shouldNavigateToLessons(navController.currentDestination?.route)) {
+                            navController.navigateToTab(ROUTE_LESSONS)
+                        }
+                    } else {
+                        Toast.makeText(this, "Материалы недоступны в режиме преподавателя", Toast.LENGTH_SHORT).show()
+                    }
+                }
                 return
             }
         }
@@ -136,5 +170,9 @@ class MainActivity : ComponentActivity() {
         if (!scrollTarget.isNullOrBlank()) {
             navController.currentBackStackEntry?.savedStateHandle?.set(ARG_SCROLL, scrollTarget)
         }
+    }
+
+    private companion object {
+        var handledIntakeKey: String? = null
     }
 }
