@@ -519,6 +519,12 @@ class WidgetAlarmReceiver : android.content.BroadcastReceiver() {
 
                         runCatching { WidgetUpdateHelper.ensureTodaySchedule(context) }
 
+                        if (com.politex.util.BellCountdownNotifier.isEnabled(context) &&
+                            !com.politex.util.BellTimerService.isRunning
+                        ) {
+                            runCatching { com.politex.util.BellCountdownNotifier.show(context) }
+                        }
+
                         if (WidgetUpdateHelper.isFullUpdateStale(context)) {
                             WidgetUpdateHelper.updateAllWidgets(context)
                         } else {

@@ -119,6 +119,7 @@ import com.politex.ui.util.bouncyClickable
 import com.politex.util.HintFlags
 import com.politex.util.MpkCurriculum
 import com.politex.util.SubjectRenameStore
+import com.politex.util.subjectDisplayName
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -590,7 +591,7 @@ fun TaskItemCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (task.subjectName.isNotBlank()) {
                         Text(
-                            text = task.shortSubjectName,
+                            text = subjectDisplayName(task.subjectName),
                             style =
                             androidx.compose.ui.text.TextStyle(
                                 fontWeight = FontWeight.SemiBold,

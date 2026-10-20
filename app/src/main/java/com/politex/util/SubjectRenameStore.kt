@@ -66,6 +66,7 @@ object SubjectRenameStore {
     ) {
         ensureLoaded(context)
         val trimmed = custom.trim()
+        val before = customNameCached(original)
         synchronized(loadLock) {
             if (trimmed.isBlank() || trimmed == original) {
                 cache.remove(original)
@@ -75,6 +76,9 @@ object SubjectRenameStore {
             persistLocked(context)
         }
         revision.intValue++
+        if (before != customNameCached(original)) {
+            com.politex.widget.WidgetUpdateHelper.refreshScheduleWidgets(context.applicationContext)
+        }
     }
 
     fun reset(
@@ -101,6 +105,7 @@ object SubjectRenameStore {
             loaded = true
         }
         revision.intValue++
+        com.politex.widget.WidgetUpdateHelper.refreshScheduleWidgets(context.applicationContext)
     }
 
     internal fun parseMap(json: String): Map<String, String> {

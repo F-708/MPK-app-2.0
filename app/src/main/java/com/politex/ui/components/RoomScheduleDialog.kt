@@ -49,6 +49,7 @@ import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
+import com.politex.util.subjectDisplayName
 
 fun filterRoomLessonsForDate(
     lessons: List<LessonEntity>,
@@ -283,7 +284,7 @@ private fun RoomLessonCard(
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
             Text(
-                text = lesson.shortSubjectName,
+                text = subjectDisplayName(lesson.subjectRaw),
                 style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = ColorTextTitle),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,

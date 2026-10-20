@@ -66,6 +66,8 @@ import com.politex.ui.theme.TextStyleCalendarMonth
 import com.politex.ui.theme.TextStyleCalendarWeekdays
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
+import com.politex.util.SubjectFormatter
+import com.politex.util.SubjectRenameStore
 import java.util.Calendar
 import java.util.Locale
 
@@ -171,8 +173,10 @@ fun CalendarArchiveDialog(
             }
         }
 
+    val renameRevision = SubjectRenameStore.revision.intValue
+
     val searchResults =
-        remember(searchQuery, allGroupLessons) {
+        remember(searchQuery, allGroupLessons, renameRevision) {
             if (searchQuery.isBlank()) {
                 emptyList()
             } else {
@@ -183,7 +187,7 @@ fun CalendarArchiveDialog(
                         it.teacherSecond.lowercase(Locale.ROOT).contains(q) ||
                         it.roomFirst.lowercase(Locale.ROOT).contains(q) ||
                         it.roomSecond.lowercase(Locale.ROOT).contains(q) ||
-                        it.shortSubjectName.lowercase(Locale.ROOT).contains(q)
+                        SubjectFormatter.getShortName(it.subjectRaw).lowercase(Locale.ROOT).contains(q)
                 }
             }
         }

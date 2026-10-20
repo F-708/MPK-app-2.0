@@ -3,15 +3,12 @@ package com.politex.ui.screens
 import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,20 +37,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,11 +86,9 @@ import com.politex.ui.viewmodel.tabsForMode
 import com.politex.ui.screens.materials.ViewerMode
 import com.politex.ui.util.daySlots
 import com.politex.util.DateFormats
-import com.politex.widget.WidgetUpdateHelper
 import kotlinx.coroutines.flow.collectLatest
 import java.net.URLEncoder
 import java.util.Calendar
-import kotlin.math.abs
 
 private fun enc(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
@@ -169,6 +157,8 @@ fun tabSlideDir(from: Int, to: Int): Int = when {
     to > from -> 1
     else -> -1
 }
+
+private val TabSlideEasing = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
 
 @Composable
 fun MainScreen(
@@ -307,11 +297,11 @@ fun MainScreen(
                         .padding(innerPadding),
                     enterTransition = {
                         val d = tabSlideDir(ownerTabIndex(initialState.destination.route), ownerTabIndex(targetState.destination.route))
-                        if (d == 0) fadeIn(tween(150)) else slideInHorizontally(tween(280)) { if (d > 0) it else -it }
+                        if (d == 0) fadeIn(tween(150)) else slideInHorizontally(tween(300, easing = TabSlideEasing)) { if (d > 0) it else -it }
                     },
                     exitTransition = {
                         val d = tabSlideDir(ownerTabIndex(initialState.destination.route), ownerTabIndex(targetState.destination.route))
-                        if (d == 0) fadeOut(tween(150)) else slideOutHorizontally(tween(280)) { if (d > 0) -it else it }
+                        if (d == 0) fadeOut(tween(150)) else slideOutHorizontally(tween(300, easing = TabSlideEasing)) { if (d > 0) -it else it }
                     },
 
                     popEnterTransition = { fadeIn(tween(120)) },

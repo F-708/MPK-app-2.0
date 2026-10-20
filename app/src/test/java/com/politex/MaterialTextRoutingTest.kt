@@ -14,21 +14,40 @@ import com.politex.util.GroupParser
 import com.politex.util.MaterialImporter
 import com.politex.util.PendingMaterial
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.RuleChain
+import org.junit.rules.TestRule
 import org.junit.runner.RunWith
+import org.junit.runners.model.Statement
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w360dp-h720dp")
 class MaterialTextRoutingTest {
+    private val composeRule = createComposeRule()
+
     @get:Rule
-    val composeRule = createComposeRule()
+    val rules: RuleChain =
+        RuleChain
+            .outerRule(
+                TestRule { base, _ ->
+                    object : Statement() {
+                        override fun evaluate() {
+                            try {
+                                base.evaluate()
+                            } finally {
+                                if (::db.isInitialized) db.close()
+                                resetSingleton()
+                            }
+                        }
+                    }
+                },
+            ).around(composeRule)
 
     private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
     private val group = GroupParser.parse("41О")!!
@@ -48,11 +67,7 @@ class MaterialTextRoutingTest {
         composeRule.waitForIdle()
     }
 
-    @After
-    fun tearDown() {
-        db.close()
-        resetSingleton()
-    }
+
 
     private fun insertItem(item: MaterialItemEntity): Long = runBlocking {
         db.materialDao().insertItem(item)

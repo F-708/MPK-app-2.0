@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,6 +28,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -44,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -815,17 +820,70 @@ internal fun GroupSchedulePicker(
         Spacer(modifier = Modifier.height(12.dp))
         PickerSectionLabel("3 · БУКВА")
         if (letters.isNotEmpty()) {
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(letters) { ch ->
-                    PickerChip(
-                        label = "$ch",
-                        selected = letter == ch,
-                        tag = "group_picker_letter_$ch",
-                        onClick = { selectedLetter = if (letter == ch) null else ch },
-                    )
+            val lettersState = rememberLazyListState()
+            Box(modifier = Modifier.fillMaxWidth()) {
+                LazyRow(
+                    state = lettersState,
+                    modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .testTag("group_picker_letters_row"),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(letters) { ch ->
+                        PickerChip(
+                            label = "$ch",
+                            selected = letter == ch,
+                            tag = "group_picker_letter_$ch",
+                            onClick = { selectedLetter = if (letter == ch) null else ch },
+                        )
+                    }
+                }
+                if (lettersState.canScrollBackward) {
+                    Box(
+                        modifier =
+                        Modifier
+                            .align(Alignment.CenterStart)
+                            .fillMaxHeight()
+                            .width(34.dp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(ColorBgMain, ColorBgMain.copy(alpha = 0f)),
+                                ),
+                            )
+                            .testTag("group_picker_letters_more_start"),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowLeft,
+                            contentDescription = null,
+                            tint = ColorTextMuted,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+                if (lettersState.canScrollForward) {
+                    Box(
+                        modifier =
+                        Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .width(34.dp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(ColorBgMain.copy(alpha = 0f), ColorBgMain),
+                                ),
+                            )
+                            .testTag("group_picker_letters_more_end"),
+                        contentAlignment = Alignment.CenterEnd,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = ColorTextMuted,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
         } else if (number != null) {

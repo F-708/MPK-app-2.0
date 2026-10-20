@@ -49,10 +49,13 @@ class GroupCodesIntegrityTest {
     }
 
     @Test
-    fun `каталог содержит 63 группы - 43Э добавлена`() {
-        assertEquals(63, packaged.size)
+    fun `каталог содержит 61 группу - 43О и 43Э присутствуют`() {
+        assertEquals(61, packaged.size)
+        assertTrue("43О" in packaged)
         assertTrue("43Э" in packaged)
-        assertEquals("43Э", GroupCatalog.load(RuntimeEnvironment.getApplication()).find("43Э"))
+        val catalog = GroupCatalog.load(RuntimeEnvironment.getApplication())
+        assertEquals("43О", catalog.find("43О"))
+        assertEquals("43Э", catalog.find("43Э"))
     }
 
     @Test
@@ -68,12 +71,13 @@ class GroupCodesIntegrityTest {
     }
 
     @Test
-    fun `каскадный пикер предлагает 43Э - курс 4, номер 3, буква Э`() {
+    fun `каскадный пикер на 4 курсе номере 3 предлагает 43О и 43Э`() {
         assertEquals(3, groupPickerMaxNumber(packaged, 4))
-        assertEquals(listOf('Э'), groupPickerLetters(packaged, 4, 3))
+        assertEquals(listOf('О', 'Э'), groupPickerLetters(packaged, 4, 3))
 
-        val code = buildGroupCode(4, 3, 'Э')
-        assertEquals("43Э", code)
+        assertEquals("43О", buildGroupCode(4, 3, 'О'))
+        assertEquals("43Э", buildGroupCode(4, 3, 'Э'))
+        assertTrue(validateAgainstCatalog("43О", packaged))
         assertTrue(validateAgainstCatalog("43Э", packaged))
     }
 }

@@ -18,15 +18,22 @@ class GroupCatalogTest {
     fun `ассет group_codes_csv попадает в standard и содержит все группы колледжа`() {
         val all = catalog.all()
 
-        assertEquals(63, all.size)
+        assertEquals(61, all.size)
         assertEquals(all.distinct(), all)
         assertTrue(all.all { it.length == 3 })
     }
 
     @Test
-    fun `новые группы 41Д 41М 42Д 42М присутствуют`() {
-        listOf("41Д", "41М", "42Д", "42М").forEach { g ->
+    fun `новые группы 42Н 42Т 43О 43Э присутствуют`() {
+        listOf("42Н", "42Т", "43О", "43Э").forEach { g ->
             assertEquals(g, catalog.find(g))
+        }
+    }
+
+    @Test
+    fun `выбывшие группы 33М 41Д 41М 42Д 42М отсутствуют`() {
+        listOf("33М", "41Д", "41М", "42Д", "42М").forEach { g ->
+            assertNull(catalog.find(g))
         }
     }
 

@@ -34,10 +34,10 @@ class StudentsCsvParseTest {
     fun `колонки читаются по заголовку а не по индексам старого формата`() {
         val s = students.first { it.fullName.startsWith("Примерова") }
         assertEquals("Примерова Анна Сергеевна", s.fullName)
-        assertEquals("41Д", s.group)
+        assertEquals("43Э", s.group)
         assertEquals("4", s.course)
-        assertEquals("5-04-0414-01", s.specialtyCode)
-        assertEquals("Документационное обеспечение управления", s.specialty)
+        assertEquals("5-04-0712-01", s.specialtyCode)
+        assertEquals("Монтаж и эксплуатация электрооборудования", s.specialty)
         assertEquals("Платное", s.funding)
         assertEquals("Нет", s.dormitory)
 
@@ -54,8 +54,8 @@ class StudentsCsvParseTest {
     fun `кавычки внутри значения снимаются а не рвут строку`() {
         val s = students.first { it.fullName.startsWith("Иванов") }
         assertEquals("Иванов \"Тест\" Иван Иванович", s.fullName)
-        assertEquals("42М", s.group)
-        assertEquals("5-04-0412-01", s.specialtyCode)
+        assertEquals("43О", s.group)
+        assertEquals("5-04-0715-05", s.specialtyCode)
     }
 
     @Test

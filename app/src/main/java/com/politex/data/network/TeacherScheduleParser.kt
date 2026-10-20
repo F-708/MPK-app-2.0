@@ -26,6 +26,8 @@ object TeacherScheduleParser {
 
     private const val MAX_LESSON = 12
 
+    private const val OFFSITE_MARKER = "Вые"
+
     private fun isLessonRuler(cells: List<String>): Boolean {
         val start = cells.indexOfFirst { it.isNotBlank() }
         if (start < 0 || cells[start] != "1") return false
@@ -140,6 +142,7 @@ object TeacherScheduleParser {
                 when {
                     GROUP_REGEX.matches(value) -> cell.groups.add(value)
                     ROOM_REGEX.matches(value) -> cell.rooms.add(value)
+                    value == OFFSITE_MARKER -> cell.rooms.add(value)
                     else -> cell.subject = value
                 }
             }

@@ -117,6 +117,7 @@ import com.politex.util.DateFormats
 import com.politex.util.HintFlags
 import com.politex.util.ScheduleDisplayPrefs
 import com.politex.util.TeacherModeStore
+import com.politex.util.subjectDisplayName
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
 import java.util.Locale
@@ -332,6 +333,11 @@ fun ScheduleScreen(
     val isViewingToday = selectedSlot == 0 && selectedDateString.isBlank() && leftIsToday
     val lessonNumbers = remember(lessons) { lessons.map { it.lessonNumber } }
 
+    val slots =
+        remember(lessons, isTeacherMode) {
+            mergedLessonSlots(lessons, isTeacherMode)
+        }
+
     var didColdStartScroll by rememberSaveable { mutableStateOf(false) }
 
     suspend fun awaitFirstLayout() {
@@ -358,9 +364,10 @@ fun ScheduleScreen(
             return@LaunchedEffect
         }
         val idx = autoScrollLessonIndex(lessonNumbers, currentLessonNumber, isViewingToday)
-        if (idx != null) {
+        val slotIdx = idx?.let { scheduleSlotIndexOf(slots, lessonNumbers[it]) }
+        if (slotIdx != null) {
             awaitFirstLayout()
-            scrollToLessonFullyVisible(idx)
+            scrollToLessonFullyVisible(slotIdx)
         }
         didColdStartScroll = true
     }
@@ -410,9 +417,10 @@ fun ScheduleScreen(
             return@LaunchedEffect
         }
         val idx = autoScrollLessonIndex(lessonNumbers, currentLessonNumber, true)
-        if (idx != null) {
+        val slotIdx = idx?.let { scheduleSlotIndexOf(slots, lessonNumbers[it]) }
+        if (slotIdx != null) {
 
-            scrollToLessonFullyVisible(idx)
+            scrollToLessonFullyVisible(slotIdx)
         }
 
         highlightLesson = currentLessonNumber
@@ -754,8 +762,6 @@ fun ScheduleScreen(
                 }
             } else {
 
-                val slots = remember(lessons) { lessonSlots(lessons) }
-
                 LazyColumn(
                     state = listState,
                     modifier =
@@ -765,56 +771,116 @@ fun ScheduleScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    items(slots, key = { it.first }) { (number, lesson) ->
-                        if (lesson != null) {
-                            LessonCard(
-                                lesson = lesson,
-                                isCurrent = lesson.lessonNumber == currentLessonNumber,
-                                hasHomework = lesson.lessonNumber in homeworkMarkerNumbers,
+                    items(slots, key = { it.key }) { slot ->
+                        when (slot) {
+                            is ScheduleLessonSlot.Empty -> NoLessonCard(slot.key)
+                            is ScheduleLessonSlot.Single -> {
+                                val lesson = slot.lesson
+                                LessonCard(
+                                    lesson = lesson,
+                                    isCurrent = lesson.lessonNumber == currentLessonNumber,
+                                    hasHomework = lesson.lessonNumber in homeworkMarkerNumbers,
 
-                                homeworkTypes = homeworkByLesson[lesson.lessonNumber] ?: emptyList(),
-                                onHomeworkClick = onOpenTasks,
-                                onTeacherClick = teacherClick,
-                                isTeacherKnown = isTeacherKnown,
-                                teacherMode = isTeacherMode,
+                                    homeworkTypes = homeworkByLesson[lesson.lessonNumber] ?: emptyList(),
+                                    onHomeworkClick = onOpenTasks,
+                                    onTeacherClick = teacherClick,
+                                    isTeacherKnown = isTeacherKnown,
+                                    teacherMode = isTeacherMode,
 
-                                pulse = showPulse(scheduleHintDone, lesson.lessonNumber == pulseLessonNumber),
+                                    pulse = showPulse(scheduleHintDone, lesson.lessonNumber == pulseLessonNumber),
 
-                                onRoomClick = { room ->
+                                    onRoomClick = { room ->
 
-                                    val routesOn =
-                                        com.politex.widget.WidgetUpdateHelper
-                                            .getPrefs(context)
-                                            .getBoolean("map_routes_enabled", true)
-                                    if (!routesOn) {
-                                        roomClick(room, null)
-                                    } else {
+                                        val routesOn =
+                                            com.politex.widget.WidgetUpdateHelper
+                                                .getPrefs(context)
+                                                .getBoolean("map_routes_enabled", true)
+                                        if (!routesOn) {
+                                            roomClick(room, null)
+                                        } else {
 
-                                        when (
-                                            val start =
-                                                com.politex.ui.util.RouteStartResolver.startForLesson(
-                                                    lessons,
-                                                    lesson,
-                                                    com.politex.util.SubgroupSettings.get(context),
-                                                )
-                                        ) {
-                                            is com.politex.ui.util.RouteStartResolver.RouteStart.Ask ->
-                                                pendingSplit = Triple(room, start.roomFirst, start.roomSecond)
-                                            is com.politex.ui.util.RouteStartResolver.RouteStart.From ->
-                                                roomClick(room, start.room)
+                                            when (
+                                                val start =
+                                                    com.politex.ui.util.RouteStartResolver.startForLesson(
+                                                        lessons,
+                                                        lesson,
+                                                        com.politex.util.SubgroupSettings.get(context),
+                                                    )
+                                            ) {
+                                                is com.politex.ui.util.RouteStartResolver.RouteStart.Ask ->
+                                                    pendingSplit = Triple(room, start.roomFirst, start.roomSecond)
+                                                is com.politex.ui.util.RouteStartResolver.RouteStart.From ->
+                                                    roomClick(room, start.room)
+                                            }
                                         }
-                                    }
-                                },
+                                    },
 
-                                focusAlpha =
-                                if (highlightLesson == lesson.lessonNumber) {
-                                    highlightAlpha.value
-                                } else {
-                                    0f
-                                },
-                            )
-                        } else {
-                            NoLessonCard(number)
+                                    focusAlpha =
+                                    if (highlightLesson == lesson.lessonNumber) {
+                                        highlightAlpha.value
+                                    } else {
+                                        0f
+                                    },
+                                )
+                            }
+                            is ScheduleLessonSlot.Merged -> {
+                                val firstLesson = slot.first
+                                val secondLesson = slot.second
+                                MergedLessonCard(
+                                    first = firstLesson,
+                                    second = secondLesson,
+                                    isCurrent =
+                                    currentLessonNumber == firstLesson.lessonNumber ||
+                                        currentLessonNumber == secondLesson.lessonNumber,
+                                    hasHomeworkFirst = firstLesson.lessonNumber in homeworkMarkerNumbers,
+                                    homeworkTypesFirst = homeworkByLesson[firstLesson.lessonNumber] ?: emptyList(),
+                                    hasHomeworkSecond = secondLesson.lessonNumber in homeworkMarkerNumbers,
+                                    homeworkTypesSecond = homeworkByLesson[secondLesson.lessonNumber] ?: emptyList(),
+                                    onHomeworkClick = onOpenTasks,
+                                    onTeacherClick = teacherClick,
+                                    isTeacherKnown = isTeacherKnown,
+                                    teacherMode = isTeacherMode,
+
+                                    pulse =
+                                    showPulse(
+                                        scheduleHintDone,
+                                        firstLesson.lessonNumber == pulseLessonNumber || secondLesson.lessonNumber == pulseLessonNumber,
+                                    ),
+
+                                    onRoomClick = { room ->
+
+                                        val routesOn =
+                                            com.politex.widget.WidgetUpdateHelper
+                                                .getPrefs(context)
+                                                .getBoolean("map_routes_enabled", true)
+                                        if (!routesOn) {
+                                            roomClick(room, null)
+                                        } else {
+
+                                            when (
+                                                val start =
+                                                    com.politex.ui.util.RouteStartResolver.startForLesson(
+                                                        lessons,
+                                                        firstLesson,
+                                                        com.politex.util.SubgroupSettings.get(context),
+                                                    )
+                                            ) {
+                                                is com.politex.ui.util.RouteStartResolver.RouteStart.Ask ->
+                                                    pendingSplit = Triple(room, start.roomFirst, start.roomSecond)
+                                                is com.politex.ui.util.RouteStartResolver.RouteStart.From ->
+                                                    roomClick(room, start.room)
+                                            }
+                                        }
+                                    },
+
+                                    focusAlpha =
+                                    if (highlightLesson == firstLesson.lessonNumber || highlightLesson == secondLesson.lessonNumber) {
+                                        highlightAlpha.value
+                                    } else {
+                                        0f
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -898,7 +964,7 @@ fun LessonCard(
                     }
                 }.padding(
                     if (compact) {
-                        PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     } else {
                         PaddingValues(12.dp)
                     },
@@ -934,6 +1000,113 @@ fun LessonCard(
 }
 
 @Composable
+private fun MergedLessonCard(
+    first: LessonEntity,
+    second: LessonEntity,
+    isCurrent: Boolean,
+    hasHomeworkFirst: Boolean,
+    homeworkTypesFirst: List<TaskType>,
+    hasHomeworkSecond: Boolean,
+    homeworkTypesSecond: List<TaskType>,
+    onHomeworkClick: () -> Unit,
+    onTeacherClick: (String) -> Unit,
+    isTeacherKnown: (String) -> Boolean,
+    onRoomClick: (String) -> Unit,
+    pulse: Boolean,
+    teacherMode: Boolean = false,
+    focusAlpha: Float = 0f,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val compactRevision = ScheduleDisplayPrefs.revision.intValue
+    val compact =
+        remember(context, compactRevision) {
+            ScheduleDisplayPrefs.isCompact(context)
+        }
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorBgMain,
+        border = BorderStroke(1.dp, if (isCurrent) ColorActiveBlue else ColorBorderLight),
+        shadowElevation = 0.dp,
+        modifier =
+        modifier
+            .fillMaxWidth()
+            .testTag("lesson_card_${first.lessonNumber}"),
+    ) {
+        Column(
+            modifier =
+            Modifier
+                .drawBehind {
+                    if (focusAlpha > 0f) {
+                        drawRect(ColorBrandBlue.copy(alpha = focusAlpha * 0.18f))
+                    }
+                }.padding(
+                    if (compact) {
+                        PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    } else {
+                        PaddingValues(12.dp)
+                    },
+                ),
+        ) {
+            if (compact) {
+                CompactLessonHeaderRow(
+                    lesson = first,
+                    hasHomework = hasHomeworkFirst,
+                    homeworkTypes = homeworkTypesFirst,
+                    onHomeworkClick = onHomeworkClick,
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                CompactLessonHeaderRow(
+                    lesson = second,
+                    hasHomework = hasHomeworkSecond,
+                    homeworkTypes = homeworkTypesSecond,
+                    onHomeworkClick = onHomeworkClick,
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                LessonTeacherRoomRow(
+                    lesson = first,
+                    onTeacherClick = onTeacherClick,
+                    isTeacherKnown = isTeacherKnown,
+                    onRoomClick = onRoomClick,
+                    pulse = pulse,
+                    teacherMode = teacherMode,
+                    compact = true,
+                )
+            } else {
+                RegularLessonHeaderRow(
+                    lesson = first,
+                    hasHomework = hasHomeworkFirst,
+                    homeworkTypes = homeworkTypesFirst,
+                    onHomeworkClick = onHomeworkClick,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                LessonSubjectText(first)
+                Spacer(modifier = Modifier.height(8.dp))
+                AppDivider(modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(8.dp))
+                RegularLessonHeaderRow(
+                    lesson = second,
+                    hasHomework = hasHomeworkSecond,
+                    homeworkTypes = homeworkTypesSecond,
+                    onHomeworkClick = onHomeworkClick,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                LessonSubjectText(second)
+                Spacer(modifier = Modifier.height(8.dp))
+                LessonTeacherRoomRow(
+                    lesson = first,
+                    onTeacherClick = onTeacherClick,
+                    isTeacherKnown = isTeacherKnown,
+                    onRoomClick = onRoomClick,
+                    pulse = pulse,
+                    teacherMode = teacherMode,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun RegularLessonCardContent(
     lesson: LessonEntity,
     hasHomework: Boolean,
@@ -944,6 +1117,159 @@ private fun RegularLessonCardContent(
     onRoomClick: (String) -> Unit,
     pulse: Boolean,
     teacherMode: Boolean = false,
+) {
+    RegularLessonHeaderRow(
+        lesson = lesson,
+        hasHomework = hasHomework,
+        homeworkTypes = homeworkTypes,
+        onHomeworkClick = onHomeworkClick,
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    if (lesson.isSplit) {
+        Row(
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SubgroupPane(
+                subgroupNumber = 1,
+                subjectRaw = lesson.subjectRaw,
+                teacher = lesson.teacherFirst,
+                room = lesson.roomFirst,
+                onTeacherClick = onTeacherClick,
+                isTeacherKnown = isTeacherKnown,
+                onRoomClick = onRoomClick,
+                pulse = pulse,
+                teacherMode = teacherMode,
+                group = lesson.groupName,
+                modifier = Modifier.weight(1f),
+            )
+
+            VerticalDivider(
+                color = ColorBorderLight,
+                thickness = 1.dp,
+                modifier = Modifier.fillMaxHeight(),
+            )
+
+            SubgroupPane(
+                subgroupNumber = 2,
+                subjectRaw = lesson.subjectRaw,
+                teacher = lesson.teacherSecond,
+                room = lesson.roomSecond,
+                onTeacherClick = onTeacherClick,
+                isTeacherKnown = isTeacherKnown,
+                onRoomClick = onRoomClick,
+                pulse = pulse,
+                teacherMode = teacherMode,
+                group = lesson.groupName,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    } else {
+
+        LessonSubjectText(lesson)
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        LessonTeacherRoomRow(
+            lesson = lesson,
+            onTeacherClick = onTeacherClick,
+            isTeacherKnown = isTeacherKnown,
+            onRoomClick = onRoomClick,
+            pulse = pulse,
+            teacherMode = teacherMode,
+        )
+    }
+}
+
+@Composable
+private fun CompactLessonCardContent(
+    lesson: LessonEntity,
+    hasHomework: Boolean,
+    homeworkTypes: List<TaskType>,
+    onHomeworkClick: () -> Unit,
+    onTeacherClick: (String) -> Unit,
+    isTeacherKnown: (String) -> Boolean,
+    onRoomClick: (String) -> Unit,
+    pulse: Boolean,
+    teacherMode: Boolean = false,
+) {
+    CompactLessonHeaderRow(
+        lesson = lesson,
+        hasHomework = hasHomework,
+        homeworkTypes = homeworkTypes,
+        onHomeworkClick = onHomeworkClick,
+    )
+
+    if (lesson.isSplit) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SubgroupPane(
+                subgroupNumber = 1,
+                subjectRaw = lesson.subjectRaw,
+                teacher = lesson.teacherFirst,
+                room = lesson.roomFirst,
+                onTeacherClick = onTeacherClick,
+                isTeacherKnown = isTeacherKnown,
+                onRoomClick = onRoomClick,
+                pulse = pulse,
+                compact = true,
+                teacherMode = teacherMode,
+                group = lesson.groupName,
+                modifier = Modifier.weight(1f),
+            )
+
+            VerticalDivider(
+                color = ColorBorderLight,
+                thickness = 1.dp,
+                modifier = Modifier.fillMaxHeight(),
+            )
+
+            SubgroupPane(
+                subgroupNumber = 2,
+                subjectRaw = lesson.subjectRaw,
+                teacher = lesson.teacherSecond,
+                room = lesson.roomSecond,
+                onTeacherClick = onTeacherClick,
+                isTeacherKnown = isTeacherKnown,
+                onRoomClick = onRoomClick,
+                pulse = pulse,
+                compact = true,
+                teacherMode = teacherMode,
+                group = lesson.groupName,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    } else if (lesson.teacherFirst.isNotBlank() || lesson.roomFirst.isNotBlank() || (teacherMode && lesson.groupName.isNotBlank())) {
+        Spacer(modifier = Modifier.height(3.dp))
+        LessonTeacherRoomRow(
+            lesson = lesson,
+            onTeacherClick = onTeacherClick,
+            isTeacherKnown = isTeacherKnown,
+            onRoomClick = onRoomClick,
+            pulse = pulse,
+            teacherMode = teacherMode,
+            compact = true,
+        )
+    }
+}
+
+@Composable
+private fun RegularLessonHeaderRow(
+    lesson: LessonEntity,
+    hasHomework: Boolean,
+    homeworkTypes: List<TaskType>,
+    onHomeworkClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -973,91 +1299,31 @@ private fun RegularLessonCardContent(
             )
         }
     }
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    if (lesson.isSplit) {
-        Row(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            SubgroupPane(
-                subgroupNumber = 1,
-                subject = lesson.shortSubjectName,
-                teacher = lesson.teacherFirst,
-                room = lesson.roomFirst,
-                onTeacherClick = onTeacherClick,
-                isTeacherKnown = isTeacherKnown,
-                onRoomClick = onRoomClick,
-                pulse = pulse,
-                teacherMode = teacherMode,
-                group = lesson.groupName,
-                modifier = Modifier.weight(1f),
-            )
-
-            VerticalDivider(
-                color = ColorBorderLight,
-                thickness = 1.dp,
-                modifier = Modifier.fillMaxHeight(),
-            )
-
-            SubgroupPane(
-                subgroupNumber = 2,
-                subject = lesson.shortSubjectName,
-                teacher = lesson.teacherSecond,
-                room = lesson.roomSecond,
-                onTeacherClick = onTeacherClick,
-                isTeacherKnown = isTeacherKnown,
-                onRoomClick = onRoomClick,
-                pulse = pulse,
-                teacherMode = teacherMode,
-                group = lesson.groupName,
-                modifier = Modifier.weight(1f),
-            )
-        }
-    } else {
-
-        val subject = lesson.shortSubjectName
-        val noSubject = subject.isBlank()
-        Text(
-            text = if (noSubject) "Предмет уточняется" else subject,
-            style =
-            androidx.compose.ui.text.TextStyle(
-                fontWeight = if (noSubject) FontWeight.Normal else FontWeight.Bold,
-                fontSize = if (noSubject) 11.sp else 15.sp,
-                color = if (noSubject) ColorTextMuted else ColorTextTitle,
-            ),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        LessonTeacherRoomRow(
-            lesson = lesson,
-            onTeacherClick = onTeacherClick,
-            isTeacherKnown = isTeacherKnown,
-            onRoomClick = onRoomClick,
-            pulse = pulse,
-            teacherMode = teacherMode,
-        )
-    }
 }
 
 @Composable
-private fun CompactLessonCardContent(
+private fun LessonSubjectText(lesson: LessonEntity) {
+    val subject = subjectDisplayName(lesson.subjectRaw)
+    val noSubject = subject.isBlank()
+    Text(
+        text = if (noSubject) "Предмет уточняется" else subject,
+        style =
+        androidx.compose.ui.text.TextStyle(
+            fontWeight = if (noSubject) FontWeight.Normal else FontWeight.Bold,
+            fontSize = if (noSubject) 11.sp else 15.sp,
+            color = if (noSubject) ColorTextMuted else ColorTextTitle,
+        ),
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+@Composable
+private fun CompactLessonHeaderRow(
     lesson: LessonEntity,
     hasHomework: Boolean,
     homeworkTypes: List<TaskType>,
     onHomeworkClick: () -> Unit,
-    onTeacherClick: (String) -> Unit,
-    isTeacherKnown: (String) -> Boolean,
-    onRoomClick: (String) -> Unit,
-    pulse: Boolean,
-    teacherMode: Boolean = false,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1065,7 +1331,7 @@ private fun CompactLessonCardContent(
     ) {
         LessonNumberBadge(lesson.lessonNumber)
         Spacer(modifier = Modifier.width(8.dp))
-        val subject = lesson.shortSubjectName
+        val subject = subjectDisplayName(lesson.subjectRaw)
         val noSubject = subject.isBlank()
         Text(
             text = if (noSubject) "Предмет уточняется" else subject,
@@ -1088,63 +1354,6 @@ private fun CompactLessonCardContent(
                 onClick = onHomeworkClick,
             )
         }
-    }
-
-    if (lesson.isSplit) {
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            SubgroupPane(
-                subgroupNumber = 1,
-                subject = lesson.shortSubjectName,
-                teacher = lesson.teacherFirst,
-                room = lesson.roomFirst,
-                onTeacherClick = onTeacherClick,
-                isTeacherKnown = isTeacherKnown,
-                onRoomClick = onRoomClick,
-                pulse = pulse,
-                compact = true,
-                teacherMode = teacherMode,
-                group = lesson.groupName,
-                modifier = Modifier.weight(1f),
-            )
-
-            VerticalDivider(
-                color = ColorBorderLight,
-                thickness = 1.dp,
-                modifier = Modifier.fillMaxHeight(),
-            )
-
-            SubgroupPane(
-                subgroupNumber = 2,
-                subject = lesson.shortSubjectName,
-                teacher = lesson.teacherSecond,
-                room = lesson.roomSecond,
-                onTeacherClick = onTeacherClick,
-                isTeacherKnown = isTeacherKnown,
-                onRoomClick = onRoomClick,
-                pulse = pulse,
-                compact = true,
-                teacherMode = teacherMode,
-                group = lesson.groupName,
-                modifier = Modifier.weight(1f),
-            )
-        }
-    } else if (lesson.teacherFirst.isNotBlank() || lesson.roomFirst.isNotBlank() || (teacherMode && lesson.groupName.isNotBlank())) {
-        Spacer(modifier = Modifier.height(4.dp))
-        LessonTeacherRoomRow(
-            lesson = lesson,
-            onTeacherClick = onTeacherClick,
-            isTeacherKnown = isTeacherKnown,
-            onRoomClick = onRoomClick,
-            pulse = pulse,
-            teacherMode = teacherMode,
-        )
     }
 }
 
@@ -1177,6 +1386,7 @@ private fun LessonTeacherRoomRow(
     onRoomClick: (String) -> Unit,
     pulse: Boolean,
     teacherMode: Boolean = false,
+    compact: Boolean = false,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1200,6 +1410,7 @@ private fun LessonTeacherRoomRow(
                     null
                 },
                 pulse = pulse,
+                compact = compact,
             )
         }
 
@@ -1208,7 +1419,7 @@ private fun LessonTeacherRoomRow(
             Box(
                 modifier =
                 Modifier
-                    .heightIn(min = 44.dp)
+                    .then(if (compact) Modifier else Modifier.heightIn(min = 44.dp))
                     .bouncyClickable(scaleDown = 0.97f) { onRoomClick(lesson.roomFirst) },
                 contentAlignment = Alignment.Center,
             ) {
@@ -1251,6 +1462,7 @@ private fun TeacherChip(
     onClick: (() -> Unit)?,
     fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
     pulse: Boolean = false,
+    compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     if (onClick == null) {
@@ -1271,7 +1483,7 @@ private fun TeacherChip(
     Box(
         modifier =
         modifier
-            .heightIn(min = 44.dp)
+            .then(if (compact) Modifier else Modifier.heightIn(min = 44.dp))
             .bouncyClickable(
                 scaleDown = 0.97f,
                 onClick = onClick,
@@ -1286,7 +1498,13 @@ private fun TeacherChip(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 5.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+                modifier =
+                Modifier.padding(
+                    start = 5.dp,
+                    end = 2.dp,
+                    top = if (compact) 1.dp else 2.dp,
+                    bottom = if (compact) 1.dp else 2.dp,
+                ),
             ) {
                 Icon(
                     imageVector = Icons.Default.Person,
@@ -1321,7 +1539,7 @@ private fun TeacherChip(
 @Composable
 private fun GroupChipText(
     name: String,
-    fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
+    fontSize: androidx.compose.ui.unit.TextUnit = 13.sp,
     pulse: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -1333,7 +1551,7 @@ private fun GroupChipText(
             imageVector = Icons.Default.Groups,
             contentDescription = null,
             tint = ColorTextMuted,
-            modifier = Modifier.size(12.dp),
+            modifier = Modifier.size(13.dp),
         )
         Spacer(modifier = Modifier.width(3.dp))
         Text(
@@ -1342,7 +1560,7 @@ private fun GroupChipText(
             androidx.compose.ui.text.TextStyle(
                 fontSize = fontSize,
                 color = ColorTextMuted,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Bold,
             ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -1353,7 +1571,7 @@ private fun GroupChipText(
 @Composable
 private fun SubgroupPane(
     subgroupNumber: Int,
-    subject: String,
+    subjectRaw: String,
     teacher: String,
     room: String,
     onTeacherClick: (String) -> Unit,
@@ -1366,7 +1584,7 @@ private fun SubgroupPane(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.padding(vertical = 2.dp),
+        modifier = modifier.padding(vertical = if (compact) 0.dp else 2.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(
@@ -1397,7 +1615,7 @@ private fun SubgroupPane(
                 Box(
                     modifier =
                     Modifier
-                        .heightIn(min = 44.dp)
+                        .then(if (compact) Modifier else Modifier.heightIn(min = 44.dp))
                         .bouncyClickable(scaleDown = 0.97f) { onRoomClick(room) },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -1437,6 +1655,7 @@ private fun SubgroupPane(
             Spacer(modifier = Modifier.height(4.dp))
 
             run {
+                val subject = subjectDisplayName(subjectRaw)
                 val noSubject = subject.isBlank()
                 Text(
                     text = if (noSubject) "Предмет уточняется" else subject,
@@ -1454,15 +1673,15 @@ private fun SubgroupPane(
 
         if (teacherMode) {
             if (group.isNotBlank()) {
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(if (compact) 2.dp else 3.dp))
                 GroupChipText(
                     name = group,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     pulse = pulse,
                 )
             }
         } else if (teacher.isNotBlank()) {
-            Spacer(modifier = Modifier.height(3.dp))
+            Spacer(modifier = Modifier.height(if (compact) 2.dp else 3.dp))
             TeacherChip(
                 name = teacher,
                 onClick =
@@ -1473,6 +1692,7 @@ private fun SubgroupPane(
                 },
                 fontSize = 11.sp,
                 pulse = pulse,
+                compact = compact,
             )
         }
     }
@@ -1523,6 +1743,85 @@ fun lessonSlots(lessons: List<LessonEntity>): List<Pair<Int, LessonEntity?>> {
     if (lessons.isEmpty()) return emptyList()
     val byNumber = lessons.associateBy { it.lessonNumber }
     return (1..lessons.maxOf { it.lessonNumber }).map { number -> number to byNumber[number] }
+}
+
+internal sealed interface ScheduleLessonSlot {
+    val key: Int
+
+    data class Single(val lesson: LessonEntity) : ScheduleLessonSlot {
+        override val key: Int
+            get() = lesson.lessonNumber
+    }
+
+    data class Merged(val first: LessonEntity, val second: LessonEntity) : ScheduleLessonSlot {
+        override val key: Int
+            get() = first.lessonNumber
+    }
+
+    data class Empty(override val key: Int) : ScheduleLessonSlot
+}
+
+internal fun canMergeLessons(
+    first: LessonEntity,
+    second: LessonEntity,
+    teacherMode: Boolean,
+): Boolean {
+    if (first.isSplit || second.isSplit) return false
+    if (second.lessonNumber != first.lessonNumber + 1) return false
+    if (first.dateString != second.dateString || first.dayOfWeek != second.dayOfWeek) return false
+    if (first.officialSubjectName != second.officialSubjectName) return false
+    if (first.roomFirst.isBlank() || first.roomFirst != second.roomFirst) return false
+    return if (teacherMode) {
+        first.groupName.isNotBlank() && first.groupName == second.groupName
+    } else {
+        first.teacherFirst.isNotBlank() && first.teacherFirst == second.teacherFirst
+    }
+}
+
+internal fun mergedLessonSlots(
+    lessons: List<LessonEntity>,
+    teacherMode: Boolean,
+): List<ScheduleLessonSlot> {
+    if (lessons.isEmpty()) return emptyList()
+    val byNumber = lessons.associateBy { it.lessonNumber }
+    val maxNumber = lessons.maxOf { it.lessonNumber }
+    val slots = ArrayList<ScheduleLessonSlot>(maxNumber)
+    var number = 1
+    while (number <= maxNumber) {
+        val lesson = byNumber[number]
+        val next = byNumber[number + 1]
+        when {
+            lesson == null -> {
+                slots += ScheduleLessonSlot.Empty(number)
+                number += 1
+            }
+            next != null && canMergeLessons(lesson, next, teacherMode) -> {
+                slots += ScheduleLessonSlot.Merged(lesson, next)
+                number += 2
+            }
+            else -> {
+                slots += ScheduleLessonSlot.Single(lesson)
+                number += 1
+            }
+        }
+    }
+    return slots
+}
+
+internal fun scheduleSlotIndexOf(
+    slots: List<ScheduleLessonSlot>,
+    lessonNumber: Int,
+): Int? {
+    val index =
+        slots.indexOfFirst { slot ->
+            when (slot) {
+                is ScheduleLessonSlot.Empty -> false
+                is ScheduleLessonSlot.Single -> slot.lesson.lessonNumber == lessonNumber
+                is ScheduleLessonSlot.Merged ->
+                    slot.first.lessonNumber == lessonNumber || slot.second.lessonNumber == lessonNumber
+            }
+        }
+    return index.takeIf { it >= 0 }
 }
 
 internal fun showPulse(

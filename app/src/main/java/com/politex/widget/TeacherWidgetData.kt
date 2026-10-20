@@ -18,6 +18,7 @@ import com.politex.ui.teacher.TeacherProfileStore
 import com.politex.util.BellCountdownNotifier
 import com.politex.util.DateFormats
 import com.politex.util.Dow
+import com.politex.util.SubjectFormatter
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
@@ -155,14 +156,14 @@ object TeacherWidgetData {
             dow,
         ).first
 
-    private fun toLesson(
+    internal fun toLesson(
         row: TeacherLessonEntity,
         dow: Int,
     ): TeacherWidgetLesson {
         val bell = CollegeBellSchedule.getBellsForDay(dow).firstOrNull { it.lessonNumber == row.lessonNumber }
         return TeacherWidgetLesson(
             lessonNumber = row.lessonNumber,
-            subject = row.subject,
+            subject = SubjectFormatter.getShortName(row.subject),
             groups = row.groups.split(", ").filter { it.isNotBlank() },
             room = row.room,
             start = bell?.start ?: "",

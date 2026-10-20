@@ -14,7 +14,7 @@ import org.robolectric.RuntimeEnvironment
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-class StudentsMerge43ETest {
+class StudentsDatabaseTest {
 
     private val file =
         sequenceOf(
@@ -32,50 +32,67 @@ class StudentsMerge43ETest {
     }
 
     @Test
-    fun `после мерджа в базе 1733 записи и 63 группы`() {
+    fun `база содержит 1693 текущих учащихся в 61 группе`() {
         assumeTrue("students.csv есть только в admin-сборке", file != null)
 
-        assertEquals(1733, students.size)
-        assertEquals(63, students.map { it.group }.distinct().size)
+        assertEquals(1693, students.size)
+        assertEquals(61, students.map { it.group }.distinct().size)
     }
 
     @Test
-    fun `43Э - ровно 30 новых записей с корректными полями`() {
+    fun `архивные выпускники в базу не попадают`() {
         assumeTrue("students.csv есть только в admin-сборке", file != null)
 
-        val group = students.filter { it.group == "43Э" }
-        assertEquals(30, group.size)
-        assertTrue(group.all { it.course == "4" })
-        assertTrue(group.all { it.specialtyCode == "5-04-0712-01" })
-        assertTrue(group.all { it.specialty == "Монтаж и эксплуатация электрооборудования" })
-        assertTrue(group.all { it.funding == "Бюджет" })
-        assertTrue(group.all { it.dormitory == "Нет" })
-        assertTrue(group.all { it.curator == "Савицкая Ольга Владимировна" })
-        assertTrue(group.all { it.room == "343" })
-        assertTrue(group.any { it.fullName == "Агиевич Артём Владимирович" })
+        assertTrue(students.isNotEmpty())
+        assertEquals(0, lines.count { it.contains("Архив (выпускники") })
     }
 
     @Test
-    fun `прочие группы не пострадали при мердже`() {
+    fun `43О и 43Э присутствуют по 30 учащихся с корректными полями`() {
+        assumeTrue("students.csv есть только в admin-сборке", file != null)
+
+        val g43o = students.filter { it.group == "43О" }
+        val g43e = students.filter { it.group == "43Э" }
+        assertEquals(30, g43o.size)
+        assertEquals(30, g43e.size)
+        assertTrue(g43o.all { it.course == "4" && it.specialtyCode == "5-04-0715-05" })
+        assertTrue(g43e.all { it.course == "4" && it.specialtyCode == "5-04-0712-01" })
+        assertTrue(g43o.all { it.curator == "Березовская Наталья Викторовна" && it.room == "139" })
+        assertTrue(g43e.all { it.curator == "Савицкая Ольга Владимировна" && it.room == "343" })
+        assertTrue(g43o.any { it.fullName == "Автушко Дмитрий Владимирович" })
+        assertTrue(g43e.any { it.fullName == "Агиевич Артём Владимирович" })
+    }
+
+    @Test
+    fun `выбывшие группы 33М 41Д 41М 42Д 42М отсутствуют в базе`() {
+        assumeTrue("students.csv есть только в admin-сборке", file != null)
+
+        val gone = listOf("33М", "41Д", "41М", "42Д", "42М")
+        assertFalse(students.any { it.group in gone })
+    }
+
+    @Test
+    fun `контрольные счётчики групп совпадают с полной выгрузкой`() {
         assumeTrue("students.csv есть только в admin-сборке", file != null)
 
         val counts = students.groupingBy { it.group }.eachCount()
         assertEquals(26, counts["11А"])
-        assertEquals(40, counts["41Д"])
-        assertEquals(25, counts["42Э"])
         assertEquals(32, counts["31О"])
-        assertEquals(32, counts["33Э"])
+        assertEquals(30, counts["41А"])
+        assertEquals(30, counts["42О"])
+        assertEquals(25, counts["42Н"])
+        assertEquals(30, counts["42Т"])
     }
 
     @Test
-    fun `43Э не помечаются как несоответствие курса - у специальности 4 курса`() {
+    fun `ни у одного учащегося нет несоответствия курса`() {
         assumeTrue("students.csv есть только в admin-сборке", file != null)
 
-        assertFalse(students.filter { it.group == "43Э" }.any { it.courseMismatch })
+        assertFalse(students.any { it.courseMismatch })
     }
 
     @Test
-    fun `схема колонок сохранена после мерджа`() {
+    fun `схема колонок - 18 полей`() {
         assumeTrue("students.csv есть только в admin-сборке", file != null)
 
         val header = Csv.splitRow(Csv.stripBom(lines.first()))
@@ -91,7 +108,7 @@ class StudentsMerge43ETest {
     }
 
     @Test
-    fun `нумерация записей сквозная от 1 до 1733`() {
+    fun `нумерация записей сквозная от 1 до 1693`() {
         assumeTrue("students.csv есть только в admin-сборке", file != null)
 
         lines.drop(1).forEachIndexed { index, line ->

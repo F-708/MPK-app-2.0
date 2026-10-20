@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -535,8 +534,8 @@ private fun MySpecialtyPage(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Default.Sync,
-                            contentDescription = "Сменить группу",
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Изменить группу",
                             tint = ColorBrandBlue,
                             modifier = Modifier.size(18.dp),
                         )
@@ -1929,7 +1928,7 @@ private fun TeacherScheduleTab(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = slot.subject.ifBlank { "Урок" },
+                                        text = com.politex.util.SubjectFormatter.getShortName(slot.subject).ifBlank { "Урок" },
                                         style =
                                         androidx.compose.ui.text.TextStyle(
                                             fontWeight = FontWeight.Bold,

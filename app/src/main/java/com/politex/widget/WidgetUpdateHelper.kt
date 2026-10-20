@@ -150,7 +150,12 @@ object WidgetUpdateHelper {
         NowNextWidgetProvider.updateAll(context)
     }
 
+    @Volatile
+    internal var scheduleRefreshRequestCount: Int = 0
+        private set
+
     fun refreshScheduleWidgets(context: Context) {
+        scheduleRefreshRequestCount++
         widgetScope.launch {
             NowNextWidgetProvider.updateAll(context)
             TodayScheduleWidgetProvider.updateAll(context)

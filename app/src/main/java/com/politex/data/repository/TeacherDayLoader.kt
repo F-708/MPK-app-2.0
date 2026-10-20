@@ -8,6 +8,7 @@ import com.politex.data.network.TeacherSlot
 import com.politex.ui.teacher.TeacherProfile
 import com.politex.util.DateFormats
 import com.politex.util.Dow
+import com.politex.util.SubjectFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -152,7 +153,7 @@ private fun toLesson(
     val bell = CollegeBellSchedule.getBellsForDay(dow).firstOrNull { it.lessonNumber == row.lessonNumber }
     return TeacherDayLesson(
         lessonNumber = row.lessonNumber,
-        subject = row.subject,
+        subject = SubjectFormatter.normalize(row.subject),
         groups = splitGroups(row.groups),
         room = row.room,
         start = bell?.start ?: "",
@@ -169,7 +170,7 @@ private fun toLesson(
     val bell = CollegeBellSchedule.getBellsForDay(dow).firstOrNull { it.lessonNumber == slot.lessonNumber }
     return TeacherDayLesson(
         lessonNumber = slot.lessonNumber,
-        subject = slot.subject,
+        subject = SubjectFormatter.normalize(slot.subject),
         groups = slot.groups,
         room = slot.room,
         start = bell?.start ?: "",

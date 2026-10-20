@@ -15,21 +15,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,7 +41,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,7 +49,6 @@ import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
 import com.politex.ui.theme.ColorBrandFill
-import com.politex.ui.theme.ColorDangerFill
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
@@ -67,7 +60,6 @@ import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberTeachers
 import com.politex.util.GroupCatalog
 import com.politex.util.GroupParser
-import com.politex.util.MpkCurriculum
 import com.politex.util.SubgroupPref
 
 internal enum class FirstRunStep { GROUP, SUBGROUP, TEACHER }
@@ -89,8 +81,6 @@ fun FirstRunGroupDialog(
     var chosenGroup by rememberSaveable { mutableStateOf("") }
     var selectedCourse by rememberSaveable { mutableIntStateOf(1) }
     var subgroup by rememberSaveable { mutableStateOf(SubgroupPref.NEUTRAL) }
-    var manualInput by rememberSaveable { mutableStateOf("") }
-    var inputError by rememberSaveable { mutableStateOf(false) }
     val catalogCodes = remember { GroupCatalog.load(context).all() }
 
     AlertDialog(
@@ -178,87 +168,9 @@ fun FirstRunGroupDialog(
                                 },
                             )
                         }
-                        Text(
-                            text = "Или введите группу вручную:",
-                            style =
-                            androidx.compose.ui.text.TextStyle(
-                                fontSize = 12.sp,
-                                color = ColorTextMuted,
-                            ),
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            OutlinedTextField(
-                                value = manualInput,
-                                onValueChange = {
-                                    manualInput = it
-                                    inputError = false
-                                },
-                                placeholder = { Text("Например: 43Э", fontSize = 12.sp) },
-                                singleLine = true,
-                                shape = RoundedCornerShape(2.dp),
-                                isError = inputError,
-                                colors =
-                                OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = ColorBrandBlue,
-                                    unfocusedBorderColor = ColorBorderLight,
-                                ),
-                                modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .testTag("first_run_manual_input"),
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Surface(
-                                shape = RoundedCornerShape(2.dp),
-                                color = ColorBrandFill,
-                                contentColor = Color.White,
-                                modifier =
-                                Modifier
-                                    .height(Tokens.ButtonHeight)
-                                    .bouncyClickable {
-                                        val parsed = GroupParser.parse(manualInput)
-                                        if (parsed != null) {
-                                            chosenGroup = parsed.canonicalName
-                                            step = FirstRunStep.SUBGROUP
-                                        } else {
-                                            inputError = true
-                                        }
-                                    }
-                                    .testTag("first_run_manual_button"),
-                            ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.padding(horizontal = 14.dp),
-                                ) {
-                                    Text(
-                                        text = "ВЫБРАТЬ",
-                                        style =
-                                        androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                        ),
-                                    )
-                                }
-                            }
-                        }
-                        if (inputError) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Неверный формат группы",
-                                color = ColorDangerFill,
-                                style =
-                                androidx.compose.ui.text
-                                    .TextStyle(fontSize = 11.sp),
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(14.dp))
                         Surface(
                             shape = RoundedCornerShape(2.dp),
-                            color = ColorBgMain,
+                            color = ColorSurfaceHighlight,
                             border = BorderStroke(1.dp, ColorBorderLight),
                             modifier =
                             Modifier
@@ -267,23 +179,58 @@ fun FirstRunGroupDialog(
                                 .bouncyClickable { step = FirstRunStep.TEACHER }
                                 .testTag("first_run_teacher_button"),
                         ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(vertical = 10.dp),
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                             ) {
-                                Text(
-                                    text = "Я ПРЕПОДАВАТЕЛЬ",
-                                    style =
-                                    androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize = 11.sp,
-                                        color = ColorTextMuted,
-                                    ),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                                Box(
+                                    modifier =
+                                    Modifier
+                                        .size(34.dp)
+                                        .background(ColorBrandFill, RoundedCornerShape(2.dp)),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Groups,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Я ПРЕПОДАВАТЕЛЬ",
+                                        style =
+                                        androidx.compose.ui.text.TextStyle(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = ColorTextTitle,
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = "Расписание преподавателя вместо группы",
+                                        style =
+                                        androidx.compose.ui.text.TextStyle(
+                                            fontSize = 11.sp,
+                                            color = ColorTextMuted,
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ChevronRight,
+                                    contentDescription = null,
+                                    tint = ColorTextMuted,
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.height(12.dp))
                     }
                 FirstRunStep.TEACHER ->
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -410,7 +357,7 @@ fun FirstRunGroupDialog(
                     Column(modifier = Modifier.fillMaxSize()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Если занятия идут по подгруппам — выберите свою. Если нет — оставьте «Нейтрально».",
+                            text = "По подгруппе строятся маршруты и работают виджеты. «Нейтрально» — показывать обе подгруппы.",
                             style =
                             androidx.compose.ui.text.TextStyle(
                                 fontSize = 13.sp,
@@ -428,11 +375,15 @@ fun FirstRunGroupDialog(
                             ),
                             modifier = Modifier.padding(bottom = 6.dp),
                         )
+                        val pairOptions =
+                            firstRunSubgroupOptions.filter { it.first != SubgroupPref.NEUTRAL }
+                        val neutralOption =
+                            firstRunSubgroupOptions.first { it.first == SubgroupPref.NEUTRAL }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            firstRunSubgroupOptions.forEach { (pref, label) ->
+                            pairOptions.forEach { (pref, label) ->
                                 FirstRunOptionChip(
                                     label = label,
                                     selected = subgroup == pref,
@@ -442,17 +393,14 @@ fun FirstRunGroupDialog(
                                 )
                             }
                         }
-                        if (subgroup != SubgroupPref.NEUTRAL) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "Маршруты и виджеты будут вести на кабинеты выбранной подгруппы.",
-                                style =
-                                androidx.compose.ui.text.TextStyle(
-                                    fontSize = 11.sp,
-                                    color = ColorTextMuted,
-                                ),
-                            )
-                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        FirstRunOptionChip(
+                            label = neutralOption.second,
+                            selected = subgroup == neutralOption.first,
+                            tag = "first_run_subgroup_${neutralOption.first.name.lowercase()}",
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { subgroup = neutralOption.first },
+                        )
                         Spacer(modifier = Modifier.weight(1f))
                         Surface(
                             shape = RoundedCornerShape(2.dp),
@@ -532,29 +480,21 @@ fun GroupSelectionDialog(
     showClose: Boolean = true,
     onGroupSelected: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     var selectedCourse by remember {
-        val currentInfo = GroupParser.parse(currentGroupName)
-
-        mutableIntStateOf(currentInfo?.course ?: 0)
+        mutableIntStateOf(GroupParser.parse(currentGroupName)?.course ?: 1)
     }
-
-    var manualInput by remember { mutableStateOf("") }
-    var inputError by remember { mutableStateOf<String?>(null) }
-
-    val allPresetGroups = remember { GroupParser.generateCommonGroups() }
-    val filteredGroups =
-        remember(selectedCourse) {
-            allPresetGroups.filter { it.course == selectedCourse }
-        }
+    val catalogCodes = remember { GroupCatalog.load(context).all() }
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier =
         Modifier
-            .padding(horizontal = 16.dp)
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(2.dp)),
+            .padding(16.dp)
+            .fillMaxSize()
+            .clip(RoundedCornerShape(2.dp))
+            .testTag("group_selection_dialog"),
         confirmButton = {},
         containerColor = ColorBgMain,
         title = {
@@ -563,7 +503,10 @@ fun GroupSelectionDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Box(
                         modifier =
                         Modifier
@@ -579,18 +522,33 @@ fun GroupSelectionDialog(
                         )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Выбор группы",
-                        style =
-                        androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = ColorTextTitle,
-                        ),
-                    )
+                    Column {
+                        Text(
+                            text = "Выбор группы",
+                            style =
+                            androidx.compose.ui.text.TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = ColorTextTitle,
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (currentGroupName.isNotBlank()) {
+                            Text(
+                                text = "Сейчас: $currentGroupName",
+                                style =
+                                androidx.compose.ui.text.TextStyle(
+                                    fontSize = 11.sp,
+                                    color = ColorTextMuted,
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
                 if (showClose) {
-
                     IconButton(
                         onClick = onDismissRequest,
                         modifier = Modifier.size(Tokens.HitTarget),
@@ -605,210 +563,14 @@ fun GroupSelectionDialog(
             }
         },
         text = {
-
-            Column(
-                modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                Text(
-                    text = "Выберите курс:",
-                    style =
-                    androidx.compose.ui.text.TextStyle(
-                        color = ColorTextMuted,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                    ),
+            Box(modifier = Modifier.fillMaxSize()) {
+                com.politex.ui.screens.GroupSchedulePicker(
+                    selectedCourse = selectedCourse,
+                    onCourseSelected = { selectedCourse = it },
+                    catalogCodes = catalogCodes,
+                    confirmLabel = "ВЫБРАТЬ",
+                    onGroupSelected = onGroupSelected,
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    (1..4).forEach { course ->
-                        val isSelected = selectedCourse == course
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
-                            color = if (isSelected) ColorTopBar else ColorBgMain,
-                            modifier =
-                            Modifier
-                                .weight(1f)
-                                .height(Tokens.ChipForm)
-                                .bouncyClickable { selectedCourse = course },
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(
-                                    text = "$course КУРС",
-                                    style =
-                                    androidx.compose.ui.text.TextStyle(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 11.sp,
-                                        color = if (isSelected) Color.White else ColorTextBody,
-                                    ),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = if (selectedCourse == 0) "Сначала выберите курс:" else "Группы $selectedCourse курса:",
-                    style =
-                    androidx.compose.ui.text.TextStyle(
-                        color = ColorTextMuted,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                    ),
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-
-                if (selectedCourse != 0) {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 200.dp),
-                    ) {
-                        items(filteredGroups) { group ->
-                            val isCurrent = group.canonicalName.equals(currentGroupName, ignoreCase = true)
-                            Surface(
-                                shape = RoundedCornerShape(2.dp),
-                                color = if (isCurrent) ColorSurfaceHighlight else ColorBgMain,
-                                border =
-                                BorderStroke(
-                                    1.dp,
-                                    if (isCurrent) ColorTopBar else ColorBorderLight,
-                                ),
-                                modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .bouncyClickable {
-                                        onGroupSelected(group.canonicalName)
-                                    },
-                            ) {
-                                Column(
-                                    modifier =
-                                    Modifier
-                                        .padding(vertical = 8.dp, horizontal = 4.dp)
-                                        .fillMaxWidth(),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                ) {
-                                    Text(
-                                        text = group.canonicalName,
-                                        style =
-                                        androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            color = if (isCurrent) ColorBrandBlue else ColorTextTitle,
-                                        ),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        softWrap = false,
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    val spec = MpkCurriculum.getSpecialty(group.specialtyCode)
-                                    Text(
-                                        text = spec?.shortName ?: "",
-                                        style =
-                                        androidx.compose.ui.text
-                                            .TextStyle(fontSize = 10.sp, color = ColorTextMuted),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        textAlign = TextAlign.Center,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = "Или введите свою группу:",
-                    style =
-                    androidx.compose.ui.text.TextStyle(
-                        color = ColorTextMuted,
-                        fontSize = 12.sp,
-                    ),
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutlinedTextField(
-                        value = manualInput,
-                        onValueChange = {
-                            manualInput = it
-                            inputError = null
-                        },
-
-                        placeholder = { Text("Например: 11А", fontSize = 12.sp) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(2.dp),
-                        isError = inputError != null,
-                        colors =
-                        OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = ColorBrandBlue,
-                            unfocusedBorderColor = ColorBorderLight,
-                        ),
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorBrandFill,
-                        contentColor = Color.White,
-                        modifier =
-                        Modifier
-                            .height(Tokens.ButtonHeight)
-                            .bouncyClickable {
-                                val parsed = GroupParser.parse(manualInput)
-                                if (parsed != null) {
-                                    onGroupSelected(parsed.canonicalName)
-                                } else {
-                                    inputError = "Неверный формат группы"
-                                }
-                            },
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.padding(horizontal = 14.dp),
-                        ) {
-                            Text(
-                                text = "ВЫБРАТЬ",
-                                style =
-                                androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                ),
-                            )
-                        }
-                    }
-                }
-
-                if (inputError != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = inputError ?: "",
-                        color = ColorDangerFill,
-                        style =
-                        androidx.compose.ui.text
-                            .TextStyle(fontSize = 11.sp),
-                    )
-                }
             }
         },
     )

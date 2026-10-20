@@ -12,13 +12,15 @@ import com.politex.ui.screens.materials.ViewerMode
 import com.politex.ui.theme.MyApplicationTheme
 import com.politex.util.GroupParser
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.RuleChain
+import org.junit.rules.TestRule
 import org.junit.runner.RunWith
+import org.junit.runners.model.Statement
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
@@ -26,8 +28,26 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w360dp-h720dp")
 class W16PdfReaderModeTest {
+    private val composeRule = createComposeRule()
+
     @get:Rule
-    val composeRule = createComposeRule()
+    val rules: RuleChain =
+        RuleChain
+            .outerRule(
+                TestRule { base, _ ->
+                    object : Statement() {
+                        override fun evaluate() {
+                            try {
+                                base.evaluate()
+                            } finally {
+                                if (::db.isInitialized) db.close()
+                                resetSingleton()
+                                ViewerMode.active = false
+                            }
+                        }
+                    }
+                },
+            ).around(composeRule)
 
     private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
     private val group = GroupParser.parse("41О")!!
@@ -46,12 +66,7 @@ class W16PdfReaderModeTest {
         composeRule.waitForIdle()
     }
 
-    @After
-    fun tearDown() {
-        db.close()
-        resetSingleton()
-        ViewerMode.active = false
-    }
+
 
     private fun waitForNode(tag: String) {
         composeRule.waitUntil(timeoutMillis = 5_000) {

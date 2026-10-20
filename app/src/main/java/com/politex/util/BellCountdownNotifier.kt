@@ -83,6 +83,21 @@ object BellCountdownNotifier {
 
     fun isEnabled(context: Context): Boolean = WidgetUpdateHelper.getPrefs(context).getBoolean(PREF_ENABLED, false)
 
+    enum class ServiceAction { NONE, START, STOP }
+
+    internal fun serviceActionFor(enabled: Boolean, running: Boolean): ServiceAction =
+        when {
+            !enabled -> ServiceAction.STOP
+            !running -> ServiceAction.START
+            else -> ServiceAction.NONE
+        }
+
+    internal fun ensureServiceAlive(context: Context) {
+        if (serviceActionFor(isEnabled(context), BellTimerService.isRunning) == ServiceAction.START) {
+            if (!BellTimerService.start(context)) BellTimerService.scheduleFallbackAlarm(context)
+        }
+    }
+
     fun setEnabled(
         context: Context,
         enabled: Boolean,
@@ -93,7 +108,7 @@ object BellCountdownNotifier {
             .putBoolean(PREF_ENABLED, enabled)
             .apply()
         if (enabled) {
-            BellTimerService.start(context)
+            if (!BellTimerService.start(context)) BellTimerService.scheduleFallbackAlarm(context)
         } else {
             BellTimerService.stop(context)
             cancel(context)
@@ -162,6 +177,7 @@ object BellCountdownNotifier {
 
     fun show(context: Context) {
         if (!isEnabled(context)) return
+        ensureServiceAlive(context)
         if (!canPost(context)) return
         val notification = buildNotification(context)
 

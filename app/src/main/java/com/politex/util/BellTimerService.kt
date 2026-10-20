@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.IBinder
 import com.politex.widget.BellCountdownWidgetProvider
 import com.politex.widget.WidgetUpdateHelper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -55,39 +56,44 @@ class BellTimerService : Service() {
         tickJob =
             scope.launch {
                 while (true) {
-
-                    val style = BellCountdownNotifier.getStyle(this@BellTimerService)
-                    val secondMode =
-                        WidgetUpdateHelper.needSecondTick(
-                            WidgetUpdateHelper.hasSecondsWidgets(this@BellTimerService),
-                            style,
-                        )
-                    val nowMs = System.currentTimeMillis()
-
-                    delay(if (secondMode) 1000L - nowMs % 1000L else 60_000L - nowMs % 60_000L)
-
-                    val nowAfter = System.currentTimeMillis()
-                    val minuteBoundary = isMinuteBoundary(nowAfter, lastMinute)
-                    if (minuteBoundary) lastMinute = nowAfter / 60_000L
-
-                    if (minuteBoundary || style == BellCountdownNotifier.Style.WITH_SECONDS) {
-                        try {
-                            startForeground(
-                                BellCountdownNotifier.NOTIFICATION_ID,
-                                BellCountdownNotifier.buildNotification(this@BellTimerService),
+                    try {
+                        val style = BellCountdownNotifier.getStyle(this@BellTimerService)
+                        val secondMode =
+                            WidgetUpdateHelper.needSecondTick(
+                                WidgetUpdateHelper.hasSecondsWidgets(this@BellTimerService),
+                                style,
                             )
-                        } catch (_: Exception) {
-                            BellCountdownNotifier.show(this@BellTimerService)
+                        val nowMs = System.currentTimeMillis()
+
+                        delay(if (secondMode) 1000L - nowMs % 1000L else 60_000L - nowMs % 60_000L)
+
+                        val nowAfter = System.currentTimeMillis()
+                        val minuteBoundary = isMinuteBoundary(nowAfter, lastMinute)
+                        if (minuteBoundary) lastMinute = nowAfter / 60_000L
+
+                        if (minuteBoundary || style == BellCountdownNotifier.Style.WITH_SECONDS) {
+                            try {
+                                startForeground(
+                                    BellCountdownNotifier.NOTIFICATION_ID,
+                                    BellCountdownNotifier.buildNotification(this@BellTimerService),
+                                )
+                            } catch (_: Exception) {
+                                BellCountdownNotifier.show(this@BellTimerService)
+                            }
                         }
-                    }
 
-                    if (secondMode) {
+                        if (secondMode) {
 
-                        BellCountdownWidgetProvider.updateSecondsWidgets(this@BellTimerService)
-                    }
+                            BellCountdownWidgetProvider.updateSecondsWidgets(this@BellTimerService)
+                        }
 
-                    if (minuteBoundary) {
-                        BellCountdownWidgetProvider.updateAll(this@BellTimerService)
+                        if (minuteBoundary) {
+                            BellCountdownWidgetProvider.updateAll(this@BellTimerService)
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.w("BellTimerService", "tick iteration failed — loop kept alive", e)
                     }
                 }
             }
