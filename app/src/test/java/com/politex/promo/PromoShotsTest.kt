@@ -34,6 +34,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -477,6 +478,23 @@ class PromoShotsTest {
     @Test
     fun shotSettingsDark() = shootDark("shot_settings_dark", tab = 3) {
         SettingsScreen(groupInfo = group, onGroupChanged = {})
+    }
+
+    @Test
+    fun shotSettingsBottom() {
+        TeacherModeStore.clear(context)
+        shoot(
+            "shot_settings_bottom",
+            tab = 3,
+            interact = {
+                // standard flavor, student mode: 0..7 — расписание/уведомления/вид/карта, 8 — «ДАННЫЕ»
+                composeRule.onNodeWithTag("settings_list").performScrollToIndex(8)
+                composeRule.onNodeWithText("ДАННЫЕ").assertExists()
+                composeRule.onNodeWithText("О ПРИЛОЖЕНИИ").assertExists()
+            },
+        ) {
+            SettingsScreen(groupInfo = group, onGroupChanged = {})
+        }
     }
 
     @Test

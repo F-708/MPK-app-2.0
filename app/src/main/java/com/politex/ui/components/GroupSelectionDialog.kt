@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -75,25 +75,15 @@ internal val firstRunSubgroupOptions: List<Pair<SubgroupPref, String>> =
         SubgroupPref.NEUTRAL to "Нейтрально",
     )
 
-internal data class GroupDialogVerticalInsets(
-    val top: Dp,
-    val bottom: Dp,
-)
-
-internal fun groupDialogVerticalInsets(
-    systemBarTop: Dp,
-    systemBarBottom: Dp,
-    imeBottom: Dp,
-    gap: Dp = 12.dp,
-): GroupDialogVerticalInsets {
-    val keyboardOpen = imeBottom > systemBarBottom
-    val bottomBase = if (keyboardOpen) imeBottom else systemBarBottom
-    val symmetric = if (systemBarTop > systemBarBottom) systemBarTop else systemBarBottom
-    val topBase = if (keyboardOpen) systemBarTop else symmetric
-    return GroupDialogVerticalInsets(
-        top = topBase + gap,
-        bottom = bottomBase + gap,
-    )
+internal fun groupDialogMaxHeight(
+    availableHeight: Dp,
+    minGap: Dp = 12.dp,
+    fraction: Float = 0.88f,
+): Dp {
+    if (availableHeight <= minGap * 2f) return 0.dp
+    val byFraction = availableHeight * fraction
+    val byGap = availableHeight - minGap * 2f
+    return if (byFraction < byGap) byFraction else byGap
 }
 
 @Composable
@@ -515,47 +505,51 @@ private fun GroupPickerDialogFrame(
             decorFitsSystemWindows = false,
         ),
     ) {
-        val bars = WindowInsets.systemBars.asPaddingValues()
-        val ime = WindowInsets.ime.asPaddingValues()
-        val insets =
-            groupDialogVerticalInsets(
-                systemBarTop = bars.calculateTopPadding(),
-                systemBarBottom = bars.calculateBottomPadding(),
-                imeBottom = ime.calculateBottomPadding(),
-            )
-        Surface(
-            shape = RoundedCornerShape(2.dp),
-            color = ColorBgMain,
-            border = BorderStroke(1.dp, ColorBorderLight),
+        val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+        Box(
             modifier =
             Modifier
-                .padding(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = insets.top,
-                    bottom = insets.bottom,
-                )
                 .fillMaxSize()
-                .testTag(testTag),
+                .testTag("${testTag}_window"),
         ) {
-            Column(
+            BoxWithConstraints(
                 modifier =
                 Modifier
                     .fillMaxSize()
+                    .padding(bottom = imeBottom)
                     .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                Spacer(modifier = Modifier.height(14.dp))
-                header()
-                Spacer(modifier = Modifier.height(10.dp))
-                Box(
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = ColorBgMain,
+                    border = BorderStroke(1.dp, ColorBorderLight),
                     modifier =
                     Modifier
                         .fillMaxWidth()
-                        .weight(1f),
+                        .heightIn(max = groupDialogMaxHeight(maxHeight))
+                        .testTag(testTag),
                 ) {
-                    content()
+                    Column(
+                        modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                    ) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        header()
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Box(
+                            modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                        ) {
+                            content()
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
             }
         }
     }

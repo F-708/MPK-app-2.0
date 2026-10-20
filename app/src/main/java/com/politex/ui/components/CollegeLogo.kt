@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.politex.ui.theme.ColorBrandBlue
+import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.darkThemeState
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -88,7 +88,7 @@ private class LogoLineLayout(
 @Composable
 fun CollegeLogo(
     modifier: Modifier = Modifier,
-    color: Color = if (darkThemeState.value) ColorBrandBlue else CollegeLogoIndigo,
+    color: Color = if (darkThemeState.value) ColorTextTitle else CollegeLogoIndigo,
 ) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current

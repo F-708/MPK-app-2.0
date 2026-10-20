@@ -23,6 +23,7 @@ class TeacherInsightsTest {
             teacher("Савицкая Ольга Владимировна"),
             teacher("Савицкая Татьяна Владимировна"),
             teacher("Будай Инесса Николаевна"),
+            teacher("Серединов Андрей Николаевич"),
             teacher("Кривошей Дмитрий Александрович"),
         )
 
@@ -100,7 +101,7 @@ class TeacherInsightsTest {
         val names = TeacherInsights.splitTeacherNames(raw)
         assertEquals(2, names.size)
         val ti = insights()
-        assertNull("Серединова нет в базе — не должен ложно сопоставиться", ti.matchTeacher(names[0]))
+        assertEquals("Серединов Андрей Николаевич", ti.matchTeacher(names[0])?.name)
         assertEquals("Будай Инесса Николаевна", ti.matchTeacher(names[1])?.name)
     }
 

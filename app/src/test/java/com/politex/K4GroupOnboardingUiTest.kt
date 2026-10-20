@@ -164,15 +164,18 @@ class K4GroupOnboardingUiTest {
     }
 
     @Test
-    fun `LL2 - окно диалога симметрично по вертикали и скруглено сверху и снизу`() {
+    fun `LL2 - окно диалога не выше 90 процентов и центрировано с равными зазорами`() {
         val frame = dialogs.substringAfter("private fun GroupPickerDialogFrame(")
-        assertTrue(frame.contains("WindowInsets.systemBars"))
+        assertTrue(frame.contains("BoxWithConstraints("))
+        assertTrue(frame.contains("groupDialogMaxHeight("))
+        assertTrue(frame.contains("heightIn(max ="))
+        assertTrue(frame.contains("contentAlignment = Alignment.Center"))
+        assertTrue(frame.contains("padding(bottom = imeBottom)"))
         assertTrue(frame.contains("WindowInsets.ime"))
-        assertTrue(frame.contains("groupDialogVerticalInsets("))
-        assertTrue(frame.contains("top = insets.top"))
-        assertTrue(frame.contains("bottom = insets.bottom"))
+        assertFalse(frame.contains("WindowInsets.systemBars"))
         assertTrue(frame.contains("shape = RoundedCornerShape(2.dp)"))
         assertTrue(frame.contains("decorFitsSystemWindows = false"))
+        assertTrue(frame.contains("\"\${testTag}_window\""))
         assertEquals(3, Regex("GroupPickerDialogFrame\\(").findAll(dialogs).count())
     }
 

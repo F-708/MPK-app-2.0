@@ -329,8 +329,6 @@ fun ScheduleScreen(
                 pendingTasks = pendingTasks,
             )
         }
-    val homeworkMarkerNumbers: Set<Int> = homeworkByLesson.keys
-
     val isViewingToday = selectedSlot == 0 && selectedDateString.isBlank() && leftIsToday
     val lessonNumbers = remember(lessons) { lessons.map { it.lessonNumber } }
 
@@ -338,6 +336,30 @@ fun ScheduleScreen(
         remember(lessons, isTeacherMode) {
             mergedLessonSlots(lessons, isTeacherMode)
         }
+
+    val lessonRoomClick: (String, LessonEntity) -> Unit = { room, lesson ->
+        val routesOn =
+            com.politex.widget.WidgetUpdateHelper
+                .getPrefs(context)
+                .getBoolean("map_routes_enabled", true)
+        if (!routesOn) {
+            roomClick(room, null)
+        } else {
+            when (
+                val start =
+                    com.politex.ui.util.RouteStartResolver.startForLesson(
+                        lessons,
+                        lesson,
+                        com.politex.util.SubgroupSettings.get(context),
+                    )
+            ) {
+                is com.politex.ui.util.RouteStartResolver.RouteStart.Ask ->
+                    pendingSplit = Triple(room, start.roomFirst, start.roomSecond)
+                is com.politex.ui.util.RouteStartResolver.RouteStart.From ->
+                    roomClick(room, start.room)
+            }
+        }
+    }
 
     var didColdStartScroll by rememberSaveable { mutableStateOf(false) }
 
@@ -773,111 +795,20 @@ fun ScheduleScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(slots, key = { it.key }) { slot ->
-                        when (slot) {
-                            is ScheduleLessonSlot.Empty -> NoLessonCard(slot.key)
-                            is ScheduleLessonSlot.Single -> {
-                                val lesson = slot.lesson
-                                LessonCard(
-                                    lesson = lesson,
-                                    isCurrent = lesson.lessonNumber == currentLessonNumber,
-                                    hasHomework = lesson.lessonNumber in homeworkMarkerNumbers,
-
-                                    homeworkTypes = homeworkByLesson[lesson.lessonNumber] ?: emptyList(),
-                                    onHomeworkClick = onOpenTasks,
-                                    onTeacherClick = teacherClick,
-                                    isTeacherKnown = isTeacherKnown,
-                                    teacherMode = isTeacherMode,
-
-                                    pulse = showPulse(scheduleHintDone, lesson.lessonNumber == pulseLessonNumber),
-
-                                    onRoomClick = { room ->
-
-                                        val routesOn =
-                                            com.politex.widget.WidgetUpdateHelper
-                                                .getPrefs(context)
-                                                .getBoolean("map_routes_enabled", true)
-                                        if (!routesOn) {
-                                            roomClick(room, null)
-                                        } else {
-
-                                            when (
-                                                val start =
-                                                    com.politex.ui.util.RouteStartResolver.startForLesson(
-                                                        lessons,
-                                                        lesson,
-                                                        com.politex.util.SubgroupSettings.get(context),
-                                                    )
-                                            ) {
-                                                is com.politex.ui.util.RouteStartResolver.RouteStart.Ask ->
-                                                    pendingSplit = Triple(room, start.roomFirst, start.roomSecond)
-                                                is com.politex.ui.util.RouteStartResolver.RouteStart.From ->
-                                                    roomClick(room, start.room)
-                                            }
-                                        }
-                                    },
-
-                                    focusAlpha =
-                                    if (highlightLesson == lesson.lessonNumber) {
-                                        highlightAlpha.value
-                                    } else {
-                                        0f
-                                    },
-                                )
-                            }
-                            is ScheduleLessonSlot.Merged -> {
-                                val mergedLessons = slot.lessons
-                                val firstLesson = mergedLessons.first()
-                                MergedLessonCard(
-                                    lessons = mergedLessons,
-                                    isCurrent =
-                                    mergedLessons.any { it.lessonNumber == currentLessonNumber },
-                                    homeworkByLesson = homeworkByLesson,
-                                    onHomeworkClick = onOpenTasks,
-                                    onTeacherClick = teacherClick,
-                                    isTeacherKnown = isTeacherKnown,
-                                    teacherMode = isTeacherMode,
-
-                                    pulse =
-                                    showPulse(
-                                        scheduleHintDone,
-                                        mergedLessons.any { it.lessonNumber == pulseLessonNumber },
-                                    ),
-
-                                    onRoomClick = { room ->
-
-                                        val routesOn =
-                                            com.politex.widget.WidgetUpdateHelper
-                                                .getPrefs(context)
-                                                .getBoolean("map_routes_enabled", true)
-                                        if (!routesOn) {
-                                            roomClick(room, null)
-                                        } else {
-
-                                            when (
-                                                val start =
-                                                    com.politex.ui.util.RouteStartResolver.startForLesson(
-                                                        lessons,
-                                                        firstLesson,
-                                                        com.politex.util.SubgroupSettings.get(context),
-                                                    )
-                                            ) {
-                                                is com.politex.ui.util.RouteStartResolver.RouteStart.Ask ->
-                                                    pendingSplit = Triple(room, start.roomFirst, start.roomSecond)
-                                                is com.politex.ui.util.RouteStartResolver.RouteStart.From ->
-                                                    roomClick(room, start.room)
-                                            }
-                                        }
-                                    },
-
-                                    focusAlpha =
-                                    if (highlightLesson != null && mergedLessons.any { it.lessonNumber == highlightLesson }) {
-                                        highlightAlpha.value
-                                    } else {
-                                        0f
-                                    },
-                                )
-                            }
-                        }
+                        ScheduleLessonSlotCard(
+                            slot = slot,
+                            currentLessonNumber = currentLessonNumber,
+                            homeworkByLesson = homeworkByLesson,
+                            onHomeworkClick = onOpenTasks,
+                            onTeacherClick = teacherClick,
+                            isTeacherKnown = isTeacherKnown,
+                            teacherMode = isTeacherMode,
+                            pulseLessonNumber = pulseLessonNumber,
+                            showPulseHint = !scheduleHintDone,
+                            onRoomClick = lessonRoomClick,
+                            focusLessonNumber = highlightLesson,
+                            focusAlpha = highlightAlpha.value,
+                        )
                     }
                 }
             }
@@ -996,7 +927,7 @@ fun LessonCard(
 }
 
 @Composable
-private fun MergedLessonCard(
+internal fun MergedLessonCard(
     lessons: List<LessonEntity>,
     isCurrent: Boolean,
     homeworkByLesson: Map<Int, List<TaskType>>,
@@ -1066,6 +997,74 @@ private fun MergedLessonCard(
                     teacherMode = teacherMode,
                 )
             }
+        }
+    }
+}
+
+@Composable
+internal fun ScheduleLessonSlotCard(
+    slot: ScheduleLessonSlot,
+    currentLessonNumber: Int?,
+    homeworkByLesson: Map<Int, List<TaskType>> = emptyMap(),
+    onHomeworkClick: () -> Unit = {},
+    onTeacherClick: (String) -> Unit = {},
+    isTeacherKnown: (String) -> Boolean = { true },
+    teacherMode: Boolean = false,
+    pulseLessonNumber: Int? = null,
+    showPulseHint: Boolean = false,
+    onRoomClick: (room: String, fromLesson: LessonEntity) -> Unit = { _, _ -> },
+    focusLessonNumber: Int? = null,
+    focusAlpha: Float = 0f,
+    modifier: Modifier = Modifier,
+) {
+    when (slot) {
+        is ScheduleLessonSlot.Empty -> NoLessonCard(slot.key)
+        is ScheduleLessonSlot.Single -> {
+            val lesson = slot.lesson
+            LessonCard(
+                lesson = lesson,
+                isCurrent = lesson.lessonNumber == currentLessonNumber,
+                hasHomework = lesson.lessonNumber in homeworkByLesson,
+                homeworkTypes = homeworkByLesson[lesson.lessonNumber].orEmpty(),
+                onHomeworkClick = onHomeworkClick,
+                onTeacherClick = onTeacherClick,
+                isTeacherKnown = isTeacherKnown,
+                teacherMode = teacherMode,
+                pulse =
+                showPulse(
+                    flagDone = !showPulseHint,
+                    isTargetLesson = lesson.lessonNumber == pulseLessonNumber,
+                ),
+                onRoomClick = { room -> onRoomClick(room, lesson) },
+                focusAlpha = if (focusLessonNumber == lesson.lessonNumber) focusAlpha else 0f,
+                modifier = modifier,
+            )
+        }
+        is ScheduleLessonSlot.Merged -> {
+            val lessons = slot.lessons
+            val firstLesson = lessons.first()
+            MergedLessonCard(
+                lessons = lessons,
+                isCurrent = lessons.any { it.lessonNumber == currentLessonNumber },
+                homeworkByLesson = homeworkByLesson,
+                onHomeworkClick = onHomeworkClick,
+                onTeacherClick = onTeacherClick,
+                isTeacherKnown = isTeacherKnown,
+                teacherMode = teacherMode,
+                pulse =
+                showPulse(
+                    flagDone = !showPulseHint,
+                    isTargetLesson = lessons.any { it.lessonNumber == pulseLessonNumber },
+                ),
+                onRoomClick = { room -> onRoomClick(room, firstLesson) },
+                focusAlpha =
+                if (focusLessonNumber != null && lessons.any { it.lessonNumber == focusLessonNumber }) {
+                    focusAlpha
+                } else {
+                    0f
+                },
+                modifier = modifier,
+            )
         }
     }
 }
@@ -1596,6 +1595,12 @@ private fun GroupChipText(
     }
 }
 
+internal object SubgroupPaneSpacing {
+    const val CompactRoomTeacherGapDp = 9
+
+    const val RegularRoomTeacherGapDp = 3
+}
+
 @Composable
 private fun LessonSubgroupRow(
     lesson: LessonEntity,
@@ -1761,7 +1766,16 @@ private fun SubgroupPane(
 
         if (teacherMode) {
             if (group.isNotBlank()) {
-                Spacer(modifier = Modifier.height(if (compact) 4.dp else 3.dp))
+                Spacer(
+                    modifier =
+                    Modifier.height(
+                        if (compact) {
+                            SubgroupPaneSpacing.CompactRoomTeacherGapDp.dp
+                        } else {
+                            SubgroupPaneSpacing.RegularRoomTeacherGapDp.dp
+                        },
+                    ),
+                )
                 GroupChipText(
                     name = group,
                     fontSize = 12.sp,
@@ -1769,7 +1783,16 @@ private fun SubgroupPane(
                 )
             }
         } else if (teacher.isNotBlank()) {
-            Spacer(modifier = Modifier.height(if (compact) 4.dp else 3.dp))
+            Spacer(
+                modifier =
+                Modifier.height(
+                    if (compact) {
+                        SubgroupPaneSpacing.CompactRoomTeacherGapDp.dp
+                    } else {
+                        SubgroupPaneSpacing.RegularRoomTeacherGapDp.dp
+                    },
+                ),
+            )
             TeacherChip(
                 name = teacher,
                 onClick =

@@ -12,12 +12,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,19 +29,29 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.AlarmOff
+import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.GroupRemove
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.SaveAlt
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SettingsBackupRestore
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
@@ -56,10 +69,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -68,9 +89,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.politex.BuildConfig
 import com.politex.data.model.GroupInfo
-import com.politex.ui.components.AppCard
 import com.politex.ui.components.SectionCaption
-import com.politex.ui.theme.ColorActiveBlue
+import com.politex.ui.components.SettingsCard
+import com.politex.ui.components.SettingsDivider
+import com.politex.ui.components.SettingsIcon
+import com.politex.ui.components.SettingsRow
+import com.politex.ui.theme.AppTheme
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -78,13 +102,13 @@ import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorError
 import com.politex.ui.theme.ColorSuccess
 import com.politex.ui.theme.ColorSurfaceHighlight
-import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.ColorWarning
 import com.politex.ui.theme.Tokens
+import com.politex.ui.theme.isDarkThemeActive
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.AppThemeStore
 import com.politex.util.BackupManager
@@ -100,7 +124,6 @@ import com.politex.worker.MpkWorkManagerHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.ui.text.style.TextOverflow
 
 @Composable
 fun SettingsScreen(
@@ -133,28 +156,40 @@ fun SettingsScreen(
         onDispose { settingsLifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    fun applyScheduleNotification(enabled: Boolean) {
+        isNotificationEnabled = enabled
+        WidgetUpdateHelper.setNotificationEnabled(context, enabled)
+        MpkWorkManagerHelper.setupPeriodicScheduleCheck(context)
+    }
+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { isGranted ->
-        if (isGranted) {
-            isNotificationEnabled = true
-            WidgetUpdateHelper.setNotificationEnabled(context, true)
-            MpkWorkManagerHelper.setupPeriodicScheduleCheck(context)
+        applyScheduleNotification(isGranted)
+    }
+
+    fun onScheduleNotificationToggle(enable: Boolean) {
+        val needsPermission =
+            enable &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) != PackageManager.PERMISSION_GRANTED
+        if (needsPermission) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            isNotificationEnabled = false
-            WidgetUpdateHelper.setNotificationEnabled(context, false)
-            MpkWorkManagerHelper.setupPeriodicScheduleCheck(context)
+            applyScheduleNotification(enable)
         }
     }
 
     var currentTheme by remember { mutableStateOf(AppThemeStore.load(context)) }
-    fun onThemePicked(theme: com.politex.ui.theme.AppTheme) {
+    fun onThemePicked(theme: AppTheme) {
         AppThemeStore.save(context, theme)
         currentTheme = theme
     }
 
     var backupMessage by remember { mutableStateOf("") }
-
     var backupIsError by remember { mutableStateOf(false) }
     val backupScope = rememberCoroutineScope()
 
@@ -168,7 +203,6 @@ fun SettingsScreen(
         val sections = pendingBackupSections
         backupScope.launch {
             backupMessage = try {
-
                 withContext(Dispatchers.IO) {
                     val json = BackupManager.buildBackup(context, sections)
                     context.contentResolver.openOutputStream(uri)?.use { out ->
@@ -190,7 +224,6 @@ fun SettingsScreen(
         if (uri == null) return@rememberLauncherForActivityResult
         backupScope.launch {
             backupMessage = try {
-
                 val restored = withContext(Dispatchers.IO) {
                     val json = context.contentResolver.openInputStream(uri)
                         ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
@@ -207,7 +240,6 @@ fun SettingsScreen(
                     restored.fold(
                         onSuccess = { result ->
                             backupIsError = false
-
                             result.groupRestored?.let { onGroupChanged(it) }
                             val parts = mutableListOf("Восстановлено заданий: ${result.tasksRestored}")
                             if (result.gradesRestored > 0) parts += "оценок: ${result.gradesRestored}"
@@ -241,616 +273,134 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { SectionCaption("РАСПИСАНИЕ И УВЕДОМЛЕНИЯ", Modifier.padding(top = 4.dp)) }
+            if (showTeacherModeExit(isTeacherMode)) {
+                item { SectionCaption("ПРОФИЛЬ", Modifier.padding(top = 4.dp)) }
+                item {
+                    TeacherModeCard(
+                        teacherName = teacherName,
+                        onSwitchRole = {
+                            WidgetUpdateHelper.getPrefs(context).edit()
+                                .remove("selected_group")
+                                .apply()
+                            SubgroupSettings.set(context, SubgroupPref.NEUTRAL)
+                            TeacherModeStore.clear(context)
+                        },
+                    )
+                }
+            }
+
+            item { SectionCaption("РАСПИСАНИЕ", Modifier.padding(top = 4.dp)) }
             item {
-                AppCard(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        imageVector = if (isNotificationEnabled) Icons.Default.NotificationsActive else Icons.Default.Notifications,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = "Уведомление о новом расписании",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = ColorTextTitle,
-                                    ),
-                                )
-                            }
+                ScheduleSettingsCard(
+                    groupInfo = groupInfo,
+                    showSubgroup = showSubgroupCard(isTeacherMode),
+                )
+            }
 
-                            Switch(
+            item { SectionCaption("УВЕДОМЛЕНИЯ", Modifier.padding(top = 4.dp)) }
+            item {
+                SettingsCard {
+                    SettingsRow(
+                        icon = Icons.Default.Campaign,
+                        title = "Уведомление о новом расписании",
+                        trailing = {
+                            SettingsSwitch(
                                 checked = isNotificationEnabled,
-                                onCheckedChange = { enable ->
-                                    if (enable) {
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                                        ) {
-                                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                        } else {
-                                            isNotificationEnabled = true
-                                            WidgetUpdateHelper.setNotificationEnabled(context, true)
-                                            MpkWorkManagerHelper.setupPeriodicScheduleCheck(context)
-                                        }
-                                    } else {
-                                        isNotificationEnabled = false
-                                        WidgetUpdateHelper.setNotificationEnabled(context, false)
-                                        MpkWorkManagerHelper.setupPeriodicScheduleCheck(context)
-                                    }
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = ColorBrandBlue,
-
-                                    uncheckedTrackColor = ColorBorderLight,
-                                    uncheckedThumbColor = ColorTextMuted,
-                                ),
+                                onCheckedChange = { enabled -> onScheduleNotificationToggle(enabled) },
+                                label = "Уведомление о новом расписании",
                                 modifier = Modifier.testTag("notifications_switch"),
                             )
-                        }
-                    }
+                        },
+                    )
+                    SettingsDivider()
+                    BellCountdownSection()
                 }
             }
 
+            item { SectionCaption("ВНЕШНИЙ ВИД", Modifier.padding(top = 4.dp)) }
             item {
-                BellCountdownNotificationCard()
-            }
-
-            item {
-                var compactSchedule by remember {
-                    mutableStateOf(ScheduleDisplayPrefs.isCompact(context))
-                }
-                AppCard(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "Компактное расписание",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = ColorTextTitle,
-                                ),
-                                modifier = Modifier.weight(1f),
-                            )
-                            Switch(
-                                checked = compactSchedule,
-                                onCheckedChange = { on ->
-                                    compactSchedule = on
-                                    ScheduleDisplayPrefs.setCompact(context, on)
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = ColorBrandBlue,
-
-                                    uncheckedTrackColor = ColorBorderLight,
-                                    uncheckedThumbColor = ColorTextMuted,
-                                ),
-                                modifier = Modifier.testTag("settings_compact_schedule_switch"),
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Только номер, предмет, преподаватель и кабинет",
-                            style = androidx.compose.ui.text.TextStyle(
-                                color = ColorTextMuted,
-                                fontSize = 11.sp,
-                            ),
-                        )
-                    }
-                }
+                AppearanceCard(
+                    currentTheme = currentTheme,
+                    onThemePicked = { theme -> onThemePicked(theme) },
+                )
             }
 
             item { SectionCaption("КАРТА", Modifier.padding(top = 4.dp)) }
-
-            item {
-                var routesEnabled by remember {
-                    mutableStateOf(
-                        WidgetUpdateHelper.getPrefs(context)
-                            .getBoolean("map_routes_enabled", true),
-                    )
-                }
-                AppCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("map_routes_toggle"),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "Маршруты по карте",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = ColorTextTitle,
-                                ),
-                            )
-                            Switch(
-                                checked = routesEnabled,
-                                onCheckedChange = { on ->
-                                    routesEnabled = on
-                                    WidgetUpdateHelper.getPrefs(context)
-                                        .edit()
-                                        .putBoolean("map_routes_enabled", on)
-                                        .apply()
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = ColorBrandBlue,
-
-                                    uncheckedTrackColor = ColorBorderLight,
-                                    uncheckedThumbColor = ColorTextMuted,
-                                ),
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Когда выключено, кнопки кабинетов открывают карту без построения пути.",
-                            style = androidx.compose.ui.text.TextStyle(
-                                color = ColorTextMuted,
-                                fontSize = 11.sp,
-                            ),
-                        )
-                    }
-                }
-            }
-
-            if (showSubgroupCard(isTeacherMode)) {
-                item {
-                    var subgroupPref by remember { mutableStateOf(SubgroupSettings.get(context)) }
-                    AppCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("subgroup_pref_card"),
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text(
-                                text = "Подгруппа",
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = ColorTextTitle,
-                                ),
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                SubgroupChip(
-                                    title = "Нейтрально",
-                                    selected = subgroupPref == SubgroupPref.NEUTRAL,
-                                    tag = "subgroup_pref_neutral",
-                                    modifier = Modifier.weight(1f),
-                                ) {
-                                    subgroupPref = SubgroupPref.NEUTRAL
-                                    SubgroupSettings.set(context, SubgroupPref.NEUTRAL)
-                                }
-                                SubgroupChip(
-                                    title = "1-я",
-                                    selected = subgroupPref == SubgroupPref.FIRST,
-                                    tag = "subgroup_pref_first",
-                                    modifier = Modifier.weight(1f),
-                                ) {
-                                    subgroupPref = SubgroupPref.FIRST
-                                    SubgroupSettings.set(context, SubgroupPref.FIRST)
-                                }
-                                SubgroupChip(
-                                    title = "2-я",
-                                    selected = subgroupPref == SubgroupPref.SECOND,
-                                    tag = "subgroup_pref_second",
-                                    modifier = Modifier.weight(1f),
-                                ) {
-                                    subgroupPref = SubgroupPref.SECOND
-                                    SubgroupSettings.set(context, SubgroupPref.SECOND)
-                                }
-                            }
-                            if (subgroupPref != SubgroupPref.NEUTRAL) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Маршруты и виджеты будут вести на кабинеты выбранной подгруппы.",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        color = ColorTextMuted,
-                                        fontSize = 11.sp,
-                                    ),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            item {
-                SectionCaption("ВНЕШНИЙ ВИД", Modifier.padding(top = 4.dp))
-            }
-            item {
-
-                LazyRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("theme_swatches"),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(com.politex.ui.theme.AppTheme.entries.toList()) { theme ->
-                        val isSelected = currentTheme == theme
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            color = ColorBgMain,
-                            border = BorderStroke(
-                                if (isSelected) 2.dp else 1.dp,
-                                if (isSelected) ColorTopBar else ColorBorderLight,
-                            ),
-                            modifier = Modifier.bouncyClickable { onThemePicked(theme) },
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .width(92.dp)
-                                    .padding(horizontal = 8.dp, vertical = 10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .background(theme.palette.topBar, RoundedCornerShape(2.dp)),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(width = 20.dp, height = 7.dp)
-                                            .background(theme.palette.brandBlue, RoundedCornerShape(1.dp)),
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = theme.title,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 11.sp,
-                                        color = ColorTextTitle,
-                                        textAlign = TextAlign.Center,
-                                    ),
-                                )
-
-                                Spacer(modifier = Modifier.height(2.dp))
-                            }
-                        }
-                    }
-                }
-            }
-
-            item {
-                var darkTheme by remember {
-                    mutableStateOf(AppThemeStore.isDark(context))
-                }
-                AppCard(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Тёмная тема",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = ColorTextTitle,
-                            ),
-                            modifier = Modifier.weight(1f),
-                        )
-                        Switch(
-                            checked = darkTheme,
-                            onCheckedChange = { on ->
-                                darkTheme = on
-                                AppThemeStore.setDark(context, on)
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = ColorBrandBlue,
-
-                                uncheckedTrackColor = ColorBorderLight,
-                                uncheckedThumbColor = ColorTextMuted,
-                            ),
-                            modifier = Modifier.testTag("settings_dark_theme_switch"),
-                        )
-                    }
-                }
-            }
+            item { MapSettingsCard() }
 
             item { SectionCaption("ДАННЫЕ", Modifier.padding(top = 4.dp)) }
             item {
-                AppCard(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                SettingsCard {
+                    SettingsRow(
+                        icon = Icons.Default.SaveAlt,
+                        title = "Сохранить копию",
+                        onClick = { showBackupDialog = true },
+                        showChevron = true,
+                        modifier = Modifier.testTag("backup_save_btn"),
+                    )
+                    SettingsDivider()
+                    SettingsRow(
+                        icon = Icons.Default.SettingsBackupRestore,
+                        title = "Восстановить из файла",
+                        onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                        showChevron = true,
+                        modifier = Modifier.testTag("backup_restore_btn"),
+                    )
+                    if (backupMessage.isNotBlank()) {
+                        SettingsDivider()
                         Text(
-                            text = "Резервная копия данных",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = ColorTextTitle,
+                            text = backupMessage,
+                            style =
+                            TextStyle(
+                                fontSize = 12.sp,
+                                color = if (backupIsError) ColorError else ColorSuccess,
                             ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            ActionChip(
-                                text = "СОХРАНИТЬ",
-                                filled = true,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("backup_save_btn"),
-                                onClick = { showBackupDialog = true },
-                            )
-                            ActionChip(
-                                text = "ВОССТАНОВИТЬ",
-                                filled = false,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("backup_restore_btn"),
-                                onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
-                            )
-                        }
-                        if (backupMessage.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = backupMessage,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 12.sp,
-
-                                    color = if (backupIsError) ColorError else ColorSuccess,
-                                ),
-                            )
-                        }
                     }
                 }
             }
 
             if (BuildConfig.FLAVOR == "admin") {
                 item {
-                    AppCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("reset_hints_card"),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Сбросить подсказки",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = ColorTextTitle,
-                                    ),
-                                )
-                                Text(
-                                    text = "Демо-задание в «Заданиях» и пульсация кабинетов в расписании покажутся снова.",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 11.sp,
-                                        color = ColorTextMuted,
-                                    ),
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            ActionChip(
-                                text = "СБРОСИТЬ",
-                                filled = true,
-                                modifier = Modifier.testTag("reset_hints_btn"),
-                                onClick = {
-
-                                    com.politex.util.HintFlags.resetAll(context)
-                                    Toast.makeText(context, "Подсказки сброшены", Toast.LENGTH_SHORT).show()
-                                },
-                            )
-                        }
-                    }
+                    ResetActionCard(
+                        icon = Icons.Default.RestartAlt,
+                        title = "Сбросить подсказки",
+                        subtitle = "Подсказки в заданиях и расписании появятся снова",
+                        tag = "reset_hints_card",
+                        buttonTag = "reset_hints_btn",
+                        filled = true,
+                        onReset = {
+                            com.politex.util.HintFlags.resetAll(context)
+                            Toast.makeText(context, "Подсказки сброшены", Toast.LENGTH_SHORT).show()
+                        },
+                    )
                 }
-
                 item {
-                    AppCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("reset_group_card"),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Сбросить группу",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = ColorTextTitle,
-                                    ),
-                                )
-                                Text(
-                                    text = "Приложение закроется, а при следующем входе снова спросит группу и подгруппу.",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 11.sp,
-                                        color = ColorTextMuted,
-                                    ),
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            ActionChip(
-                                text = "СБРОСИТЬ",
-                                filled = false,
-                                modifier = Modifier.testTag("reset_group_btn"),
-                                onClick = {
-
-                                    WidgetUpdateHelper.getPrefs(context).edit()
-                                        .remove("selected_group")
-                                        .apply()
-                                    SubgroupSettings.set(context, SubgroupPref.NEUTRAL)
-                                    (context as? android.app.Activity)?.finishAffinity()
-                                },
-                            )
-                        }
-                    }
+                    ResetActionCard(
+                        icon = Icons.Default.GroupRemove,
+                        title = "Сбросить группу",
+                        subtitle = "Приложение закроется и снова спросит группу и подгруппу",
+                        tag = "reset_group_card",
+                        buttonTag = "reset_group_btn",
+                        filled = false,
+                        onReset = {
+                            WidgetUpdateHelper.getPrefs(context).edit()
+                                .remove("selected_group")
+                                .apply()
+                            SubgroupSettings.set(context, SubgroupPref.NEUTRAL)
+                            (context as? android.app.Activity)?.finishAffinity()
+                        },
+                    )
                 }
             }
 
             item { SectionCaption("О ПРИЛОЖЕНИИ", Modifier.padding(top = 4.dp)) }
-            item {
-                AppCard(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
-                        SettingsValueRow(
-                            title = "Telegram",
-                            value = "@Betterthannothing12",
-                        )
-                    }
-                }
-            }
-
-            item {
-                AppCard(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = "Ресурсы колледжа",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = ColorTextTitle,
-                            ),
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        LinkItem(
-                            title = "Сайт колледжа",
-                            subtitle = "guo-mpk.by — официальная информация",
-                            onClick = { openLink(context, "https://guo-mpk.by/") },
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-                        HorizontalDivider(color = ColorBorderLight)
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        LinkItem(
-                            title = "Портал расписания",
-                            subtitle = "guo-mpk.by/raspisanie/",
-                            onClick = { openLink(context, "https://guo-mpk.by/raspisanie/") },
-                        )
-                    }
-                }
-            }
-
-            item {
-                AppCard(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
-                        SettingsValueRow(
-                            title = "Версия",
-                            value = BuildConfig.VERSION_NAME,
-                        )
-                    }
-                }
-            }
-
-            if (showTeacherModeExit(isTeacherMode)) {
-                item {
-                    AppCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("teacher_mode_exit_card"),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Режим преподавателя",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = ColorTextTitle,
-                                    ),
-                                )
-                                Text(
-                                    text =
-                                    "Сейчас показано расписание преподавателя" +
-                                        (teacherName?.let { ": $it" } ?: "") +
-                                        ". После выхода приложение снова предложит выбрать роль и группу.",
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 11.sp,
-                                        color = ColorTextMuted,
-                                    ),
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            ActionChip(
-                                text = "СМЕНИТЬ РОЛЬ",
-                                filled = false,
-                                modifier = Modifier.testTag("teacher_mode_exit_btn"),
-                                onClick = {
-                                    WidgetUpdateHelper.getPrefs(context).edit()
-                                        .remove("selected_group")
-                                        .apply()
-                                    SubgroupSettings.set(context, SubgroupPref.NEUTRAL)
-                                    TeacherModeStore.clear(context)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
+            item { AboutCard() }
         }
     }
 
@@ -863,6 +413,775 @@ fun SettingsScreen(
                 exportLauncher.launch(defaultBackupFileName())
             },
         )
+    }
+}
+
+@Composable
+private fun TeacherModeCard(
+    teacherName: String?,
+    onSwitchRole: () -> Unit,
+) {
+    SettingsCard(modifier = Modifier.testTag("teacher_mode_exit_card")) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SettingsIcon(Icons.Default.Badge)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Режим преподавателя",
+                        style =
+                        TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = ColorTextTitle,
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = teacherName ?: "Расписание преподавателя",
+                        style =
+                        TextStyle(
+                            fontSize = 12.sp,
+                            color = ColorTextMuted,
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            ActionChip(
+                text = "СМЕНИТЬ РОЛЬ",
+                filled = false,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("teacher_mode_exit_btn"),
+                onClick = onSwitchRole,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScheduleSettingsCard(
+    groupInfo: GroupInfo,
+    showSubgroup: Boolean,
+) {
+    val context = LocalContext.current
+    var compactSchedule by remember { mutableStateOf(ScheduleDisplayPrefs.isCompact(context)) }
+    var subgroupPref by remember { mutableStateOf(SubgroupSettings.get(context)) }
+
+    SettingsCard {
+        SettingsRow(
+            icon = Icons.Default.ViewAgenda,
+            title = "Компактное расписание",
+            trailing = {
+                SettingsSwitch(
+                    checked = compactSchedule,
+                    onCheckedChange = { enabled ->
+                        compactSchedule = enabled
+                        ScheduleDisplayPrefs.setCompact(context, enabled)
+                    },
+                    label = "Компактное расписание",
+                    modifier = Modifier.testTag("settings_compact_schedule_switch"),
+                )
+            },
+        )
+        if (showSubgroup) {
+            SettingsDivider()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("subgroup_pref_card")
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SettingsIcon(Icons.Default.Groups)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Подгруппа",
+                            style =
+                            TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = ColorTextTitle,
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "Группа ${groupInfo.canonicalName}",
+                            style =
+                            TextStyle(
+                                fontSize = 12.sp,
+                                color = ColorTextMuted,
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    SubgroupChip(
+                        title = "Нейтрально",
+                        isSelected = subgroupPref == SubgroupPref.NEUTRAL,
+                        tag = "subgroup_pref_neutral",
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        subgroupPref = SubgroupPref.NEUTRAL
+                        SubgroupSettings.set(context, SubgroupPref.NEUTRAL)
+                    }
+                    SubgroupChip(
+                        title = "1-я",
+                        isSelected = subgroupPref == SubgroupPref.FIRST,
+                        tag = "subgroup_pref_first",
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        subgroupPref = SubgroupPref.FIRST
+                        SubgroupSettings.set(context, SubgroupPref.FIRST)
+                    }
+                    SubgroupChip(
+                        title = "2-я",
+                        isSelected = subgroupPref == SubgroupPref.SECOND,
+                        tag = "subgroup_pref_second",
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        subgroupPref = SubgroupPref.SECOND
+                        SubgroupSettings.set(context, SubgroupPref.SECOND)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppearanceCard(
+    currentTheme: AppTheme,
+    onThemePicked: (AppTheme) -> Unit,
+) {
+    val context = LocalContext.current
+    var darkTheme by remember { mutableStateOf(AppThemeStore.isDark(context)) }
+
+    SettingsCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SettingsIcon(Icons.Default.Palette)
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = "Тема оформления",
+                style =
+                TextStyle(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = ColorTextTitle,
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("theme_swatches")
+                .padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AppTheme.entries.toList().chunked(4).forEach { rowThemes ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    rowThemes.forEach { theme ->
+                        ThemeSwatch(
+                            theme = theme,
+                            isSelected = currentTheme == theme,
+                            onClick = { onThemePicked(theme) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                        )
+                    }
+                    repeat(4 - rowThemes.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+        SettingsDivider()
+        SettingsRow(
+            icon = Icons.Default.DarkMode,
+            title = "Тёмная тема",
+            trailing = {
+                SettingsSwitch(
+                    checked = darkTheme,
+                    onCheckedChange = { enabled ->
+                        darkTheme = enabled
+                        AppThemeStore.setDark(context, enabled)
+                    },
+                    label = "Тёмная тема",
+                    modifier = Modifier.testTag("settings_dark_theme_switch"),
+                )
+            },
+        )
+    }
+}
+
+@Composable
+private fun ThemeSwatch(
+    theme: AppTheme,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val previewBorderColor =
+        if (isDarkThemeActive) {
+            ColorTextMuted.copy(alpha = 0.55f)
+        } else {
+            ColorBorderLight
+        }
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorBgMain,
+        border = BorderStroke(
+            if (isSelected) 2.dp else 1.dp,
+            if (isSelected) ColorBrandBlue else ColorBorderLight,
+        ),
+        modifier = modifier
+            .semantics {
+                role = Role.RadioButton
+                selected = isSelected
+            }
+            .bouncyClickable(onClick = onClick),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .background(theme.palette.topBar, RoundedCornerShape(2.dp))
+                    .border(1.dp, previewBorderColor, RoundedCornerShape(2.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 18.dp, height = 6.dp)
+                        .background(theme.palette.brandBlue, RoundedCornerShape(1.dp)),
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = theme.title,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style =
+                TextStyle(
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp,
+                    color = ColorTextTitle,
+                    textAlign = TextAlign.Center,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MapSettingsCard() {
+    val context = LocalContext.current
+    var routesEnabled by remember {
+        mutableStateOf(
+            WidgetUpdateHelper.getPrefs(context)
+                .getBoolean("map_routes_enabled", true),
+        )
+    }
+
+    SettingsCard(modifier = Modifier.testTag("map_routes_toggle")) {
+        SettingsRow(
+            icon = Icons.Default.Directions,
+            title = "Маршруты по карте",
+            subtitle = if (routesEnabled) null else "Кабинеты без маршрута",
+            trailing = {
+                SettingsSwitch(
+                    checked = routesEnabled,
+                    onCheckedChange = { enabled ->
+                        routesEnabled = enabled
+                        WidgetUpdateHelper.getPrefs(context)
+                            .edit()
+                            .putBoolean("map_routes_enabled", enabled)
+                            .apply()
+                    },
+                    label = "Маршруты по карте",
+                )
+            },
+        )
+    }
+}
+
+@Composable
+private fun ResetActionCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    tag: String,
+    buttonTag: String,
+    filled: Boolean,
+    onReset: () -> Unit,
+) {
+    SettingsCard(modifier = Modifier.testTag(tag)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SettingsIcon(icon)
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style =
+                    TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = ColorTextTitle,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = subtitle,
+                    style =
+                    TextStyle(
+                        fontSize = 12.sp,
+                        color = ColorTextMuted,
+                    ),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            ActionChip(
+                text = "СБРОСИТЬ",
+                filled = filled,
+                modifier = Modifier.testTag(buttonTag),
+                onClick = onReset,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AboutCard() {
+    val context = LocalContext.current
+
+    SettingsCard {
+        SettingsRow(
+            icon = Icons.Default.Language,
+            title = "Сайт колледжа",
+            subtitle = "guo-mpk.by",
+            onClick = { openLink(context, "https://guo-mpk.by/") },
+            showChevron = true,
+        )
+        SettingsDivider()
+        SettingsRow(
+            icon = Icons.Default.CalendarMonth,
+            title = "Портал расписания",
+            subtitle = "guo-mpk.by/raspisanie/",
+            onClick = { openLink(context, "https://guo-mpk.by/raspisanie/") },
+            showChevron = true,
+        )
+        SettingsDivider()
+        SettingsRow(
+            icon = Icons.Default.Send,
+            title = "Telegram",
+            subtitle = "@Betterthannothing12",
+        )
+        SettingsDivider()
+        SettingsRow(
+            icon = Icons.Default.Info,
+            title = "Версия",
+            trailing = {
+                Text(
+                    text = BuildConfig.VERSION_NAME,
+                    style =
+                    TextStyle(
+                        fontSize = 13.sp,
+                        color = ColorTextMuted,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+        )
+    }
+}
+
+@Composable
+private fun SettingsSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+) {
+    Switch(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        colors = SwitchDefaults.colors(
+            checkedThumbColor = Color.White,
+            checkedTrackColor = ColorBrandBlue,
+            uncheckedTrackColor = ColorBorderLight,
+            uncheckedThumbColor = ColorTextMuted,
+        ),
+        modifier = modifier.then(
+            if (label != null) {
+                val description = label
+                Modifier.semantics { contentDescription = description }
+            } else {
+                Modifier
+            },
+        ),
+    )
+}
+
+@Composable
+private fun BellCountdownSection() {
+    val context = LocalContext.current
+    var isOngoingEnabled by remember {
+        mutableStateOf(BellCountdownNotifier.isEnabled(context))
+    }
+    var selectedStyle by remember {
+        mutableStateOf(BellCountdownNotifier.getStyle(context))
+    }
+    var selectedTheme by remember {
+        mutableStateOf(BellCountdownNotifier.getTheme(context))
+    }
+    var selectedScope by remember {
+        mutableStateOf(BellCountdownNotifier.getScope(context))
+    }
+    var settingsExpanded by rememberSaveable { mutableStateOf(false) }
+    var exactAlarmAsked by rememberSaveable { mutableStateOf(false) }
+
+    var canExactAlarms by remember { mutableStateOf(ExactAlarmGate.canScheduleExactAlarms(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                canExactAlarms = ExactAlarmGate.canScheduleExactAlarms(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    fun requestExactAlarmIfNeeded() {
+        if (ExactAlarmGate.shouldRequest(Build.VERSION.SDK_INT, canExactAlarms, exactAlarmAsked)) {
+            exactAlarmAsked = true
+            ExactAlarmGate.openSettings(context)
+        }
+    }
+
+    fun enableLine() {
+        isOngoingEnabled = true
+        BellCountdownNotifier.setEnabled(context, true)
+        com.politex.widget.WidgetAlarm.scheduleNext(context)
+        requestExactAlarmIfNeeded()
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            enableLine()
+        } else {
+            isOngoingEnabled = false
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("bell_notification_card")
+                .heightIn(min = 56.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SettingsIcon(Icons.Default.Timer)
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Строка «до звонка»",
+                    style =
+                    TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = ColorTextTitle,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = if (isOngoingEnabled) "Показывается в шторке" else "Отключена",
+                    style =
+                    TextStyle(
+                        fontSize = 12.sp,
+                        color = ColorTextMuted,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(Tokens.HitTarget)
+                    .semantics {
+                        contentDescription =
+                            if (settingsExpanded) "Скрыть настройки строки" else "Настройки строки"
+                    }
+                    .bouncyClickable { settingsExpanded = !settingsExpanded }
+                    .testTag("bell_settings_toggle"),
+                contentAlignment = Alignment.Center,
+            ) {
+                SettingsIcon(
+                    icon = Icons.Default.Settings,
+                    modifier = Modifier.size(36.dp),
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            SettingsSwitch(
+                checked = isOngoingEnabled,
+                onCheckedChange = { enable ->
+                    if (enable) {
+                        val needsPermission =
+                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.POST_NOTIFICATIONS,
+                                ) != PackageManager.PERMISSION_GRANTED
+                        if (needsPermission) {
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            enableLine()
+                        }
+                    } else {
+                        isOngoingEnabled = false
+                        BellCountdownNotifier.setEnabled(context, false)
+                    }
+                },
+                label = "Строка «до звонка»",
+                modifier = Modifier.testTag("bell_notification_switch"),
+            )
+        }
+
+        if (isOngoingEnabled && ExactAlarmGate.hintNeeded(Build.VERSION.SDK_INT, canExactAlarms)) {
+            ExactAlarmHint(onAllow = { ExactAlarmGate.openSettings(context) })
+        }
+
+        AnimatedVisibility(
+            visible = settingsExpanded,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 62.dp, end = 14.dp, bottom = 14.dp),
+            ) {
+                BellSectionLabel("СТИЛЬ СТРОКИ")
+                BellCountdownNotifier.Style.entries
+                    .filter { it != BellCountdownNotifier.Style.WITH_APP_NAME }
+                    .forEach { style ->
+                        BellChoiceRow(
+                            isSelected = selectedStyle == style,
+                            title = bellStyleLabel(style),
+                            tag = "bell_style_${style.id}",
+                            onClick = {
+                                selectedStyle = style
+                                BellCountdownNotifier.setStyle(context, style)
+                                requestExactAlarmIfNeeded()
+                            },
+                        )
+                    }
+
+                BellSectionLabel("ЦВЕТОВАЯ ТЕМА")
+                BellCountdownNotifier.Theme.entries.forEach { theme ->
+                    val swatchColor =
+                        when {
+                            theme == BellCountdownNotifier.Theme.APP -> ColorBrandFill
+                            theme.accent != 0 -> Color(theme.accent)
+                            else -> ColorTextMuted
+                        }
+                    BellChoiceRow(
+                        isSelected = selectedTheme == theme,
+                        title = theme.title,
+                        tag = "bell_theme_${theme.id}",
+                        swatchColor = swatchColor,
+                        onClick = {
+                            selectedTheme = theme
+                            BellCountdownNotifier.setTheme(context, theme)
+                        },
+                    )
+                }
+
+                BellSectionLabel("СЧИТАТЬ ДО КОНЦА")
+                BellCountdownNotifier.Scope.entries.forEach { scope ->
+                    BellChoiceRow(
+                        isSelected = selectedScope == scope,
+                        title = scope.title,
+                        description = scope.description,
+                        tag = "bell_scope_${scope.id}",
+                        onClick = {
+                            selectedScope = scope
+                            BellCountdownNotifier.setScope(context, scope)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BellSectionLabel(text: String) {
+    Spacer(modifier = Modifier.height(12.dp))
+    Text(
+        text = text,
+        style =
+        TextStyle(
+            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp,
+            color = ColorBrandBlue,
+        ),
+    )
+    Spacer(modifier = Modifier.height(2.dp))
+}
+
+@Composable
+private fun BellChoiceRow(
+    isSelected: Boolean,
+    title: String,
+    tag: String,
+    onClick: () -> Unit,
+    description: String? = null,
+    swatchColor: Color? = null,
+) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = if (isSelected) ColorSurfaceHighlight else Color.Transparent,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = Tokens.HitTarget)
+            .semantics {
+                role = Role.RadioButton
+                selected = isSelected
+            }
+            .bouncyClickable(onClick = onClick)
+            .testTag(tag),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RadioButton(
+                selected = isSelected,
+                onClick = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            if (swatchColor != null) {
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .background(swatchColor, CircleShape),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style =
+                    TextStyle(
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        fontSize = 13.sp,
+                        color = if (isSelected) ColorTextTitle else ColorTextBody,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (description != null) {
+                    Text(
+                        text = description,
+                        style =
+                        TextStyle(
+                            fontSize = 11.sp,
+                            color = ColorTextMuted,
+                        ),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExactAlarmHint(onAllow: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = ColorSurfaceHighlight,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 62.dp, end = 14.dp, bottom = 10.dp)
+            .testTag("exact_alarm_warning"),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Default.AlarmOff,
+                contentDescription = null,
+                tint = ColorWarning,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Разрешите точные будильники",
+                style =
+                TextStyle(
+                    fontSize = 12.sp,
+                    color = ColorTextBody,
+                ),
+                modifier = Modifier.weight(1f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            ActionChip(
+                text = "РАЗРЕШИТЬ",
+                filled = true,
+                onClick = onAllow,
+            )
+        }
     }
 }
 
@@ -880,7 +1199,8 @@ private fun BackupSectionsDialog(
         title = {
             Text(
                 text = "Что сохранить",
-                style = androidx.compose.ui.text.TextStyle(
+                style =
+                TextStyle(
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     color = ColorTextTitle,
@@ -912,7 +1232,8 @@ private fun BackupSectionsDialog(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = backupSectionTitle(section),
-                            style = androidx.compose.ui.text.TextStyle(
+                            style =
+                            TextStyle(
                                 fontSize = 14.sp,
                                 color = ColorTextBody,
                             ),
@@ -941,9 +1262,10 @@ private fun BackupSectionsDialog(
                         softWrap = false,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = androidx.compose.ui.text.TextStyle(
+                        style =
+                        TextStyle(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            fontSize = Tokens.ButtonText,
                             color = if (selected.isEmpty()) ColorTextMuted else Color.White,
                         ),
                     )
@@ -969,9 +1291,10 @@ private fun BackupSectionsDialog(
                         softWrap = false,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = androidx.compose.ui.text.TextStyle(
+                        style =
+                        TextStyle(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            fontSize = Tokens.ButtonText,
                             color = ColorTextTitle,
                         ),
                     )
@@ -987,452 +1310,6 @@ private fun backupSectionTitle(section: BackupManager.BackupSection): String = w
     BackupManager.BackupSection.GRADES -> "Оценки"
     BackupManager.BackupSection.SUBJECT_NAMES -> "Названия предметов"
     BackupManager.BackupSection.SETTINGS -> "Настройки"
-}
-
-@Composable
-private fun LinkItem(
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .bouncyClickable(onClick = onClick)
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Default.Language,
-                contentDescription = null,
-                tint = ColorBrandBlue,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
-                Text(
-                    text = title,
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 13.sp,
-                        color = ColorTextTitle,
-                    ),
-                )
-                Text(
-                    text = subtitle,
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontSize = 11.sp,
-                        color = ColorActiveBlue,
-                    ),
-                )
-            }
-        }
-
-        Icon(
-            imageVector = Icons.Default.ChevronRight,
-            contentDescription = null,
-            tint = ColorTextMuted,
-            modifier = Modifier.size(18.dp),
-        )
-    }
-}
-
-@Composable
-private fun BellCountdownNotificationCard() {
-    val context = LocalContext.current
-    var isOngoingEnabled by remember {
-        mutableStateOf(BellCountdownNotifier.isEnabled(context))
-    }
-    var selectedStyle by remember {
-        mutableStateOf(BellCountdownNotifier.getStyle(context))
-    }
-    var selectedTheme by remember {
-        mutableStateOf(BellCountdownNotifier.getTheme(context))
-    }
-    var selectedScope by remember {
-        mutableStateOf(BellCountdownNotifier.getScope(context))
-    }
-    var settingsExpanded by rememberSaveable { mutableStateOf(false) }
-    var exactAlarmAsked by rememberSaveable { mutableStateOf(false) }
-
-    var canExactAlarms by remember { mutableStateOf(ExactAlarmGate.canScheduleExactAlarms(context)) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) canExactAlarms = ExactAlarmGate.canScheduleExactAlarms(context)
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    fun requestExactAlarmIfNeeded() {
-        if (ExactAlarmGate.shouldRequest(Build.VERSION.SDK_INT, canExactAlarms, exactAlarmAsked)) {
-            exactAlarmAsked = true
-            ExactAlarmGate.openSettings(context)
-        }
-    }
-
-    fun enableLine() {
-        isOngoingEnabled = true
-        BellCountdownNotifier.setEnabled(context, true)
-        com.politex.widget.WidgetAlarm.scheduleNext(context)
-        requestExactAlarmIfNeeded()
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        if (granted) {
-            enableLine()
-        } else {
-            isOngoingEnabled = false
-        }
-    }
-
-    AppCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("bell_notification_card"),
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.NotificationsActive,
-                            contentDescription = null,
-                            tint = ColorBrandBlue,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "Строка «до звонка»",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = ColorTextTitle,
-                            ),
-                        )
-                        Text(
-                            text = if (isOngoingEnabled) "Показывается в шторке" else "Отключена",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontSize = 11.sp,
-                                color = ColorTextMuted,
-                            ),
-                        )
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = if (settingsExpanded) ColorSurfaceHighlight else Color.Transparent,
-                    border = BorderStroke(1.dp, if (settingsExpanded) ColorTopBar else ColorBorderLight),
-                    modifier = Modifier
-                        .size(Tokens.HitTarget)
-                        .bouncyClickable { settingsExpanded = !settingsExpanded }
-                        .testTag("bell_settings_toggle"),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Настройки строки",
-                            tint = if (settingsExpanded) ColorBrandBlue else ColorTextMuted,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(6.dp))
-
-                Switch(
-                    checked = isOngoingEnabled,
-                    onCheckedChange = { enable ->
-                        if (enable) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-                                PackageManager.PERMISSION_GRANTED
-                            ) {
-                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            } else {
-                                enableLine()
-                            }
-                        } else {
-                            isOngoingEnabled = false
-                            BellCountdownNotifier.setEnabled(context, false)
-                        }
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = ColorBrandBlue,
-                        uncheckedTrackColor = ColorBorderLight,
-                        uncheckedThumbColor = ColorTextMuted,
-                    ),
-                    modifier = Modifier.testTag("bell_notification_switch"),
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Отсчёт до конца урока в строке уведомлений",
-                style = androidx.compose.ui.text.TextStyle(
-                    color = ColorTextMuted,
-                    fontSize = 11.sp,
-                ),
-            )
-
-            if (ExactAlarmGate.hintNeeded(Build.VERSION.SDK_INT, canExactAlarms)) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = ColorSurfaceHighlight,
-                    border = BorderStroke(1.dp, ColorWarning),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("exact_alarm_warning"),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Для точного отсчёта разрешите приложению точные будильники",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontSize = 12.sp,
-                                color = ColorTextBody,
-                            ),
-                            modifier = Modifier.weight(1f),
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            color = ColorBrandFill,
-                            modifier = Modifier
-                                .heightIn(min = 44.dp)
-                                .bouncyClickable { ExactAlarmGate.openSettings(context) },
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 12.dp),
-                            ) {
-                                Text(
-                                    text = "РАЗРЕШИТЬ",
-                                    softWrap = false,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = Color.White,
-                                    ),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            AnimatedVisibility(
-                visible = settingsExpanded,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "СТИЛЬ СТРОКИ",
-                        style = androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            color = ColorBrandBlue,
-                        ),
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    BellCountdownNotifier.Style.entries
-                        .filter { it != BellCountdownNotifier.Style.WITH_APP_NAME }
-                        .forEach { style ->
-                        val isSelected = selectedStyle == style
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
-                            color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp)
-
-                                .heightIn(min = Tokens.HitTarget)
-                                .bouncyClickable {
-                                    selectedStyle = style
-                                    BellCountdownNotifier.setStyle(context, style)
-                                    requestExactAlarmIfNeeded()
-                                }
-                                .testTag("bell_style_${style.id}"),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = {
-                                        selectedStyle = style
-                                        BellCountdownNotifier.setStyle(context, style)
-                                        requestExactAlarmIfNeeded()
-                                    },
-                                    modifier = Modifier.size(20.dp),
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = bellStyleLabel(style),
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = ColorTextTitle,
-                                    ),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "ЦВЕТОВАЯ ТЕМА",
-                        style = androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            color = ColorBrandBlue,
-                        ),
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        BellCountdownNotifier.Theme.entries.forEach { theme ->
-                            val isSelected = selectedTheme == theme
-                            val swatchColor =
-                                when {
-                                    theme == BellCountdownNotifier.Theme.APP -> ColorBrandFill
-                                    theme.accent != 0 -> Color(theme.accent)
-                                    else -> ColorSurfaceVariantLight
-                                }
-                            Surface(
-                                shape = RoundedCornerShape(2.dp),
-                                border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
-                                color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
-                                modifier = Modifier
-                                    .weight(1f)
-
-                                    .heightIn(min = Tokens.HitTarget)
-                                    .bouncyClickable {
-                                        selectedTheme = theme
-                                        BellCountdownNotifier.setTheme(context, theme)
-                                    }
-                                    .testTag("bell_theme_${theme.id}"),
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(18.dp)
-                                            .background(swatchColor, CircleShape),
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = theme.title,
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            fontSize = 12.sp,
-                                            color = ColorTextBody,
-                                        ),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "СЧИТАТЬ ДО КОНЦА КАКИХ УРОКОВ",
-                        style = androidx.compose.ui.text.TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            color = ColorBrandBlue,
-                        ),
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    BellCountdownNotifier.Scope.entries.forEach { scope ->
-                        val isSelected = selectedScope == scope
-                        Surface(
-                            shape = RoundedCornerShape(2.dp),
-                            border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
-                            color = if (isSelected) ColorSurfaceHighlight else ColorBgMain,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 3.dp)
-
-                                .heightIn(min = Tokens.HitTarget)
-                                .bouncyClickable {
-                                    selectedScope = scope
-                                    BellCountdownNotifier.setScope(context, scope)
-                                }
-                                .testTag("bell_scope_${scope.id}"),
-                        ) {
-                            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = {
-                                            selectedScope = scope
-                                            BellCountdownNotifier.setScope(context, scope)
-                                        },
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = scope.title,
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            color = ColorTextTitle,
-                                        ),
-                                    )
-                                }
-                                Text(
-                                    text = scope.description,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 11.sp,
-                                        color = ColorTextMuted,
-                                    ),
-                                    modifier = Modifier.padding(start = 28.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 private fun bellStyleLabel(style: BellCountdownNotifier.Style): String = when (style) {
@@ -1454,49 +1331,6 @@ private fun openLink(context: Context, url: String): Boolean =
     }
 
 @Composable
-private fun SettingsValueRow(
-    title: String,
-    value: String,
-    onClick: (() -> Unit)? = null,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-            .then(if (onClick != null) Modifier.bouncyClickable(onClick = onClick) else Modifier)
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = title,
-            style = androidx.compose.ui.text.TextStyle(
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = ColorTextTitle,
-            ),
-        )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = value,
-                style = androidx.compose.ui.text.TextStyle(
-                    fontSize = 14.sp,
-                    color = ColorTextMuted,
-                ),
-            )
-            if (onClick != null) {
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = ColorTextMuted,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun ActionChip(
     text: String,
     filled: Boolean,
@@ -1508,12 +1342,10 @@ private fun ActionChip(
         color = if (filled) ColorBrandFill else ColorBgMain,
         border = BorderStroke(1.dp, if (filled) ColorBrandFill else ColorBorderLight),
         modifier = modifier
-
             .heightIn(min = Tokens.ButtonHeight)
             .bouncyClickable(onClick = onClick),
     ) {
         Box(
-
             modifier = Modifier.padding(horizontal = 16.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -1522,9 +1354,10 @@ private fun ActionChip(
                 softWrap = false,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = androidx.compose.ui.text.TextStyle(
+                style =
+                TextStyle(
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
+                    fontSize = Tokens.ButtonText,
                     color = if (filled) Color.White else ColorTextTitle,
                 ),
             )
@@ -1535,18 +1368,21 @@ private fun ActionChip(
 @Composable
 private fun SubgroupChip(
     title: String,
-    selected: Boolean,
+    isSelected: Boolean,
     tag: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, if (selected) ColorTopBar else ColorBorderLight),
-        color = if (selected) ColorTopBar else ColorBgMain,
-        modifier =
-        modifier
-            .heightIn(min = Tokens.ChipScreen)
+        border = BorderStroke(1.dp, if (isSelected) ColorTopBar else ColorBorderLight),
+        color = if (isSelected) ColorTopBar else ColorBgMain,
+        modifier = modifier
+            .heightIn(min = Tokens.HitTarget)
+            .semantics {
+                role = Role.RadioButton
+                selected = isSelected
+            }
             .bouncyClickable(onClick = onClick)
             .testTag(tag),
     ) {
@@ -1556,10 +1392,11 @@ private fun SubgroupChip(
                 softWrap = false,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = androidx.compose.ui.text.TextStyle(
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    fontSize = 11.sp,
-                    color = if (selected) Color.White else ColorTextBody,
+                style =
+                TextStyle(
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 12.sp,
+                    color = if (isSelected) Color.White else ColorTextBody,
                 ),
             )
         }

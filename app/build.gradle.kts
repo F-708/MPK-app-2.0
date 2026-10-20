@@ -20,21 +20,21 @@ android {
         create("standard") {
             dimension = "version"
             isDefault = true
-            versionCode = 22001
+            versionCode = 22002
             versionName = "2.2"
         }
         create("admin") {
             dimension = "version"
             applicationIdSuffix = ".admin"
             versionNameSuffix = "-admin"
-            versionCode = 22001
+            versionCode = 22002
             versionName = "2.2"
         }
         create("teacher") {
             dimension = "version"
             applicationIdSuffix = ".teacher"
             versionNameSuffix = "-teacher"
-            versionCode = 22001
+            versionCode = 22002
             versionName = "2.2"
         }
     }

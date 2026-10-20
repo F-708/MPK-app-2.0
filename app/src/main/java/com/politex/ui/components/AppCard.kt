@@ -14,11 +14,12 @@ import com.politex.ui.theme.ColorBorderLight
 fun AppCard(
     modifier: Modifier = Modifier,
     color: Color = ColorBgMain,
+    borderColor: Color = ColorBorderLight,
     content: @Composable () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, ColorBorderLight),
+        border = BorderStroke(1.dp, borderColor),
         color = color,
         modifier = modifier,
     ) { content() }

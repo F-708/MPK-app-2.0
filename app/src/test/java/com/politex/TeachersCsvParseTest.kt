@@ -80,27 +80,58 @@ class TeachersCsvParseTest {
     }
 
     @Test
-    fun `синхронизация 2026-10-13 каталог 108 записей, ключевые строки корректны`() {
-
-        assertEquals(108, teachers.size)
+    fun `синхронизация 2026-10-21 каталог 106 записей, ключевые строки корректны`() {
+        assertEquals(106, teachers.size)
+        assertEquals(106, teachers.map { it.name }.toSet().size)
 
         val bachilo = teachers.first { it.name.startsWith("Бачило") }
         assertEquals("Преподаватель", bachilo.position)
         assertEquals("ЦК монтажа и эксплуатации электрооборудования", bachilo.department)
-        assertEquals("338", bachilo.room)
+        assertEquals("259", bachilo.room)
 
         val shatko = teachers.first { it.name.startsWith("Шатько") }
         assertEquals("229", shatko.room)
         assertEquals("338-33-42", shatko.phone)
+        assertEquals("Директор колледжа", shatko.position)
+
+        val dubrovsky = teachers.first { it.name.startsWith("Дубровский") }
+        assertEquals("Дубровский Дмитрий Викторович", dubrovsky.name)
+        assertEquals("Преподаватель физической культуры и здоровья", dubrovsky.position)
+
+        assertEquals(80, teachers.count { it.room.isNotBlank() })
+        assertEquals(12, teachers.count { it.phone.isNotBlank() })
+        assertEquals(9, teachers.count { it.email.isNotBlank() })
+        assertEquals(104, teachers.count { it.experience.isNotBlank() })
+        assertEquals(105, teachers.count { it.subjects.isNotBlank() })
     }
 
     @Test
-    fun `каждая непустая ссылка на фото разрешается файлом в ассетах`() {
+    fun `должности без просторечий и скобочных пометок`() {
+        val forbidden =
+            listOf(
+                "физрук", "физра", "трудовик", "завуч", "училка", "директрис",
+                "математичк", "историчк", "англичанк", "химичк", "биологичк",
+            )
+        for (t in teachers) {
+            assertTrue("пустая должность у ${t.name}", t.position.isNotBlank())
+            val lower = t.position.lowercase()
+            for (word in forbidden) {
+                assertFalse("просторечие «$word» в должности ${t.position} у ${t.name}", lower.contains(word))
+            }
+            assertFalse("скобочная пометка в должности ${t.position} у ${t.name}", t.position.contains("(") || t.position.contains(")"))
+        }
+    }
+
+    @Test
+    fun `каждая запись имеет фото, файлы в ассетах совпадают с CSV`() {
         val assets = RuntimeEnvironment.getApplication().assets
         val photos = assets.list("teachers_photos")!!.toSet()
-        for (t in teachers.filter { it.photo.isNotBlank() }) {
+        assertEquals(106, photos.size)
+        for (t in teachers) {
+            assertTrue("пустая ссылка на фото у ${t.name}", t.photo.isNotBlank())
             assertTrue("нет фото ${t.photo} у ${t.name}", t.photo in photos)
         }
+        assertEquals(photos, teachers.map { it.photo }.toSet())
     }
 
     @Test

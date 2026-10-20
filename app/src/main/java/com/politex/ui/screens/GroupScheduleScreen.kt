@@ -65,7 +65,6 @@ import com.politex.ui.components.AppCard
 import com.politex.ui.components.AppDivider
 import com.politex.ui.components.CenteredLoader
 import com.politex.ui.components.DaySlotCell
-import com.politex.ui.components.NoLessonCard
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
@@ -87,6 +86,7 @@ import com.politex.ui.util.rememberToday
 import com.politex.util.Dow
 import com.politex.util.GroupCatalog
 import com.politex.util.GroupParser
+import com.politex.util.HintFlags
 import com.politex.util.MpkCurriculum
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -227,6 +227,14 @@ fun GroupScheduleScreen(
 
     val realNow = rememberToday()
 
+    var scheduleHintDone by remember { mutableStateOf(HintFlags.isDone(context, HintFlags.KEY_SCHEDULE_TAPS)) }
+    fun markScheduleHintDone() {
+        if (!scheduleHintDone) {
+            HintFlags.markDone(context, HintFlags.KEY_SCHEDULE_TAPS)
+            scheduleHintDone = true
+        }
+    }
+
     val foreignLessonsFlow =
         remember(selectedGroupName) {
             scheduleRepository.getAllLessonsForGroup(selectedGroupName)
@@ -321,6 +329,11 @@ fun GroupScheduleScreen(
     val lessons =
         remember(allForeignLessons, activeDateString, activeDayOfWeek) {
             lessonsForDay(allForeignLessons ?: emptyList(), activeDateString, activeDayOfWeek)
+        }
+
+    val pulseLessonNumber =
+        remember(lessons) {
+            lessons.firstOrNull { it.roomFirst.isNotBlank() || it.teacherFirst.isNotBlank() }?.lessonNumber
         }
 
     Column(
@@ -660,43 +673,73 @@ fun GroupScheduleScreen(
                 }
             } else {
 
-                val slots = remember(lessons) { lessonSlots(lessons) }
-
-                LazyColumn(
+                GroupScheduleLessonList(
+                    lessons = lessons,
+                    currentLessonNumber = currentLessonNumber,
+                    pulseLessonNumber = pulseLessonNumber,
+                    showPulseHint = !scheduleHintDone,
+                    isTeacherKnown = isTeacherKnown,
+                    onTeacherClick = { name ->
+                        markScheduleHintDone()
+                        onTeacherClick(name)
+                    },
+                    onRoomClick = { room, fromRoom ->
+                        markScheduleHintDone()
+                        onRoomClick(room, fromRoom)
+                    },
                     modifier =
                     Modifier
                         .fillMaxWidth()
                         .weight(1f),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(slots, key = { it.first }) { (number, lesson) ->
-                        if (lesson != null) {
-                            LessonCard(
-                                lesson = lesson,
-                                isCurrent = lesson.lessonNumber == currentLessonNumber,
-                                onTeacherClick = onTeacherClick,
-                                isTeacherKnown = isTeacherKnown,
-
-                                onRoomClick = { room ->
-                                    onRoomClick(
-                                        room,
-                                        com.politex.ui.util.RouteStartResolver
-                                            .startForLesson(lessons, lesson),
-                                    )
-                                },
-                            )
-                        } else {
-                            NoLessonCard(number)
-                        }
-                    }
-                }
+                )
             }
         }
     }
 }
 
 private val groupDayNames = listOf("", "ПОНЕДЕЛЬНИК", "ВТОРНИК", "СРЕДА", "ЧЕТВЕРГ", "ПЯТНИЦА", "СУББОТА", "ВОСКРЕСЕНЬЕ")
+
+@Composable
+internal fun GroupScheduleLessonList(
+    lessons: List<LessonEntity>,
+    currentLessonNumber: Int?,
+    pulseLessonNumber: Int?,
+    showPulseHint: Boolean,
+    isTeacherKnown: (String) -> Boolean,
+    onTeacherClick: (String) -> Unit,
+    onRoomClick: (room: String, fromRoom: String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val slots =
+        remember(lessons) {
+            mergedLessonSlots(lessons, teacherMode = false)
+        }
+
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(slots, key = { it.key }) { slot ->
+            ScheduleLessonSlotCard(
+                slot = slot,
+                currentLessonNumber = currentLessonNumber,
+                teacherMode = false,
+                pulseLessonNumber = pulseLessonNumber,
+                showPulseHint = showPulseHint,
+                onTeacherClick = onTeacherClick,
+                isTeacherKnown = isTeacherKnown,
+                onRoomClick = { room, lesson ->
+                    onRoomClick(
+                        room,
+                        com.politex.ui.util.RouteStartResolver
+                            .startForLesson(lessons, lesson),
+                    )
+                },
+            )
+        }
+    }
+}
 
 private fun dayTitle(cal: Calendar): String = groupDayNames[groupScheduleDayOfWeek(cal)]
 
