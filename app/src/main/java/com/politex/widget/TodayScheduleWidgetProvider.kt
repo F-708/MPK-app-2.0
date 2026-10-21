@@ -43,7 +43,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             ids.forEach { id -> runCatching { manager.updateAppWidget(id, buildViews(context, id)) } }
         }
 
-        private fun buildViews(
+        internal fun buildViews(
             context: Context,
             appWidgetId: Int,
         ): RemoteViews {
@@ -55,20 +55,30 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.tv_today_header, style.subColor)
             views.setTextColor(R.id.tv_today_empty, style.subColor)
 
+            val teacherSnap = TeacherWidgetData.teacherModeSnapshot(context)
+            val teacherMode = teacherSnap != null
             val now = WidgetData.minuteOfDay(context)
-            val lessons = WidgetData.todayLessons(context)
+            val lessons = teacherSnap?.toEntities() ?: WidgetData.todayLessons(context)
             val group = WidgetUpdateHelper.getSelectedGroup(context)
             val pref = com.politex.util.SubgroupSettings.get(context)
 
             views.setTextViewText(
                 R.id.tv_today_header,
-                if (group.isBlank()) "РАСПИСАНИЕ" else "СЕГОДНЯ • $group",
+                TeacherWidgetLogic.widgetHeader(
+                    group = group,
+                    teacherName = if (teacherMode) com.politex.util.TeacherModeStore.teacherName(context) else null,
+                ),
             )
 
-            views.setTextViewText(
-                R.id.tv_today_empty,
-                if (group.isBlank()) "Выберите группу в приложении" else "На сегодня уроков нет",
-            )
+            val emptyText =
+                when {
+                    teacherMode && teacherSnap?.dow == 7 ->
+                        TeacherWidgetLogic.dayOffText(teacherSnap?.next)
+                    teacherMode -> TeacherWidgetLogic.emptyText("На сегодня уроков нет", teacherSnap?.next)
+                    group.isBlank() -> "Выберите группу в приложении"
+                    else -> "На сегодня уроков нет"
+                }
+            views.setTextViewText(R.id.tv_today_empty, emptyText)
 
             views.removeAllViews(R.id.today_rows)
 
@@ -86,6 +96,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                             context, lesson, now, style, showRoom, appWidgetId, pref,
 
                             com.politex.ui.util.RouteStartResolver.startRoomForLesson(lessons, lesson, pref),
+                            teacherMode,
                         ),
                     )
                 }
@@ -118,6 +129,7 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
             appWidgetId: Int,
             pref: com.politex.util.SubgroupPref,
             fromRoom: String,
+            teacherMode: Boolean = false,
         ): RemoteViews {
             val row = RemoteViews(context.packageName, R.layout.widget_row_list)
 
@@ -145,8 +157,16 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
 
             row.setTextViewText(
                 R.id.row_subject,
-                com.politex.util.SubjectFormatter
-                    .getShortName(lesson.subjectRaw),
+                TeacherWidgetLogic.lessonTitleText(
+                    if (teacherMode) {
+                        lesson.subjectRaw
+                    } else {
+                        com.politex.util.SubjectFormatter
+                            .getShortName(lesson.subjectRaw)
+                    },
+                    lesson.groupName,
+                    teacherMode,
+                ),
             )
             row.setTextColor(R.id.row_subject, textColor)
 

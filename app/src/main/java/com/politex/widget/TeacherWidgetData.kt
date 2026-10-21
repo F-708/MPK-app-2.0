@@ -14,12 +14,15 @@ import com.politex.data.repository.TeacherDayLoader
 import com.politex.data.repository.TeacherInsights
 import com.politex.data.repository.TeachersRepository
 import com.politex.data.repository.matchRowsForTeacher
+import com.politex.ui.teacher.TeacherProfile
 import com.politex.ui.teacher.TeacherProfileStore
 import com.politex.util.BellCountdownNotifier
 import com.politex.util.DateFormats
 import com.politex.util.Dow
 import com.politex.util.SubjectFormatter
+import com.politex.util.TeacherModeStore
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.util.Calendar
 
 data class TeacherWidgetSnapshot(
@@ -82,8 +85,24 @@ object TeacherWidgetData {
 
     @Volatile private var cache: TeacherWidgetSnapshot? = null
 
+    fun invalidate() {
+        cacheKey = ""
+        cache = null
+    }
+
+    fun resolveProfile(context: Context): TeacherProfile? =
+        TeacherProfileStore.get(context)
+            ?: TeacherModeStore.teacherName(context)?.let {
+                TeacherProfile(name = it, surnameKey = TeacherInsights.surnameOf(it))
+            }
+
+    fun teacherModeSnapshot(context: Context): TeacherWidgetSnapshot? {
+        if (!TeacherModeStore.isTeacher(context)) return null
+        return runCatching { runBlocking { snapshot(context) } }.getOrNull()
+    }
+
     suspend fun snapshot(context: Context): TeacherWidgetSnapshot? {
-        val profile = TeacherProfileStore.get(context) ?: return null
+        val profile = resolveProfile(context) ?: return null
         val cal = Calendar.getInstance()
         val today = DateFormats.dotDate(cal)
         val minute = WidgetData.minuteOfDay(cal)

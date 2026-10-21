@@ -1,6 +1,8 @@
 package com.politex.widget
 
+import com.politex.data.local.entity.LessonEntity
 import com.politex.data.repository.TeacherDayLogic
+import com.politex.data.repository.TeacherInsights
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -102,4 +104,50 @@ object TeacherWidgetLogic {
         val n = nextLessonText(next)
         return if (n.isBlank()) "Выходной.\nДо 1-й пары в пн" else "Выходной.\n$n"
     }
+
+    fun surnameLabel(name: String): String {
+        val surname = TeacherInsights.surnameOf(name)
+        if (surname.isBlank()) return name.trim()
+        return surname.replaceFirstChar { it.uppercase() }
+    }
+
+    fun widgetHeader(
+        group: String,
+        teacherName: String?,
+    ): String =
+        when {
+            !teacherName.isNullOrBlank() -> "СЕГОДНЯ • ${surnameLabel(teacherName)}"
+            group.isBlank() -> "РАСПИСАНИЕ"
+            else -> "СЕГОДНЯ • $group"
+        }
+
+    fun lessonTitleText(
+        subject: String,
+        groups: String,
+        teacherMode: Boolean,
+    ): String = if (teacherMode && groups.isNotBlank()) "$subject • $groups" else subject
+
+    fun nowNextEmptyText(
+        lessonsEmpty: Boolean,
+        next: NextLessonRef?,
+    ): String = emptyText(if (lessonsEmpty) "Сегодня уроков нет" else "Уроки закончились", next)
 }
+
+fun TeacherWidgetLesson.toEntity(
+    dateString: String,
+    dow: Int,
+): LessonEntity =
+    LessonEntity(
+        groupName = groups.joinToString(", "),
+        dayOfWeek = dow,
+        lessonNumber = lessonNumber,
+        timeStart = start,
+        timeEnd = end,
+        subjectRaw = subject,
+        roomFirst = room,
+        teacherFirst = "",
+        isSplit = false,
+        dateString = dateString,
+    )
+
+fun TeacherWidgetSnapshot.toEntities(): List<LessonEntity> = lessons.map { it.toEntity(dateString, dow) }

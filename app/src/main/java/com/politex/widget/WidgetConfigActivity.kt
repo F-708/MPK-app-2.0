@@ -258,11 +258,17 @@ class WidgetConfigActivity : ComponentActivity() {
                         if (kind == WidgetKind.COUNTDOWN) {
                             Spacer(modifier = Modifier.height(18.dp))
                             SectionTitle("До чего считать")
+                            val teacherModeOn = com.politex.util.TeacherModeStore.isTeacher(this@WidgetConfigActivity)
                             CountdownMode.entries.forEach { option ->
                                 OptionRow(
                                     selected = countdownMode == option,
                                     title = option.title,
-                                    description = option.description,
+                                    description =
+                                        if (teacherModeOn && option == CountdownMode.GROUP_LESSONS) {
+                                            "Отсчёт заканчивается на последнем уроке в вашем расписании"
+                                        } else {
+                                            option.description
+                                        },
                                     onClick = {
                                         countdownMode = option
                                         requestAlarmAccessOnce()

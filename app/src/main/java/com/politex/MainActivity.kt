@@ -77,6 +77,9 @@ class MainActivity : ComponentActivity() {
             MpkWorkManagerHelper.setupPeriodicScheduleCheck(this)
             MpkWorkManagerHelper.setupBellServiceWatchdog(this)
             MpkWorkManagerHelper.setupPeriodicReminderCheck(this)
+            if (TeacherModeStore.isTeacher(this)) {
+                MpkWorkManagerHelper.setupTeacherSync(this)
+            }
             com.politex.update.AppUpdateWorker.schedule(this)
         }
 

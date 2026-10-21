@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -177,21 +178,29 @@ class AppViewModel(
     init {
 
         viewModelScope.launch {
-            snapshotFlow { TeacherModeStore.revision.intValue }.collect {
-                val teacher = TeacherModeStore.isTeacher(getApplication())
-                _uiState.update {
-                    it.copy(
-                        isTeacherMode = teacher,
-                        teacherName = if (teacher) TeacherModeStore.teacherName(getApplication()) else null,
-                        showGroupSelection =
-                        if (teacher) {
-                            false
-                        } else {
-                            !WidgetUpdateHelper.hasSelectedGroup(getApplication())
-                        },
-                    )
+            snapshotFlow { TeacherModeStore.revision.intValue }
+                .drop(1)
+                .collect {
+                    val teacher = TeacherModeStore.isTeacher(getApplication())
+                    _uiState.update {
+                        it.copy(
+                            isTeacherMode = teacher,
+                            teacherName = if (teacher) TeacherModeStore.teacherName(getApplication()) else null,
+                            showGroupSelection =
+                            if (teacher) {
+                                false
+                            } else {
+                                !WidgetUpdateHelper.hasSelectedGroup(getApplication())
+                            },
+                        )
+                    }
+                    if (teacher) {
+                        com.politex.worker.MpkWorkManagerHelper.setupTeacherSync(getApplication())
+                    } else {
+                        com.politex.worker.MpkWorkManagerHelper.cancelTeacherSync(getApplication())
+                    }
+                    WidgetUpdateHelper.refreshAfterModeChange(getApplication())
                 }
-            }
         }
 
         if (!uiState.value.showGroupSelection) {

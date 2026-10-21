@@ -3,8 +3,11 @@ package com.politex.worker
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.politex.data.repository.TeacherInsights
 import com.politex.data.repository.nextDayCandidates
+import com.politex.ui.teacher.TeacherProfile
 import com.politex.ui.teacher.TeacherProfileStore
+import com.politex.util.TeacherModeStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Calendar
@@ -23,13 +26,19 @@ fun shouldTeacherSync(
     }
 }
 
+internal fun resolveWorkerProfile(context: Context): TeacherProfile? =
+    TeacherProfileStore.get(context)
+        ?: TeacherModeStore.teacherName(context)?.let {
+            TeacherProfile(name = it, surnameKey = TeacherInsights.surnameOf(it))
+        }
+
 class TeacherScheduleWorker(
     context: Context,
     workerParams: WorkerParameters,
 ) : CoroutineWorker(context, workerParams) {
     override suspend fun doWork(): Result =
         withContext(Dispatchers.IO) {
-            val profile = TeacherProfileStore.get(applicationContext) ?: return@withContext Result.success()
+            val profile = resolveWorkerProfile(applicationContext) ?: return@withContext Result.success()
 
             val now = Calendar.getInstance()
             val decision =
@@ -64,6 +73,12 @@ class TeacherScheduleWorker(
                     .apply()
 
                 com.politex.widget.TeacherWidgetUpdater.updateAll(applicationContext)
+
+                if (TeacherModeStore.isTeacher(applicationContext)) {
+                    com.politex.widget.TeacherWidgetData.invalidate()
+                    com.politex.widget.BellCountdownWidgetProvider.invalidateLastLessonCache()
+                    com.politex.widget.WidgetUpdateHelper.refreshScheduleWidgets(applicationContext)
+                }
             }
 
             if (anyFail) Result.retry() else Result.success()

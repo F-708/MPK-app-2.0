@@ -81,8 +81,10 @@ class NowNextWidgetProvider : AppWidgetProvider() {
 
             val pref = com.politex.util.SubgroupSettings.get(context)
 
+            val teacherSnap = TeacherWidgetData.teacherModeSnapshot(context)
+            val teacherMode = teacherSnap != null
             val now = WidgetData.minuteOfDay(context)
-            val lessons = WidgetData.todayLessons(context)
+            val lessons = teacherSnap?.toEntities() ?: WidgetData.todayLessons(context)
 
             val current = lessons.firstOrNull { now in it.startMinutes()..it.endMinutes() }
 
@@ -92,15 +94,32 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                     else -> lessons.firstOrNull { it.startMinutes() > now }
                 }
 
+            fun subjectOf(lesson: LessonEntity): String =
+                TeacherWidgetLogic.lessonTitleText(
+                    if (teacherMode) lesson.subjectRaw else SubjectFormatter.getShortName(lesson.subjectRaw),
+                    lesson.groupName,
+                    teacherMode,
+                )
+
             val nextFromRoom = next?.let { RouteStartResolver.startRoomForLesson(lessons, it, pref) }
             val nowFromRoom = current?.let { RouteStartResolver.startRoomForLesson(lessons, it, pref) }
 
-            val groupBlank = WidgetUpdateHelper.getSelectedGroup(context).isBlank()
+            val groupBlank = !teacherMode && WidgetUpdateHelper.getSelectedGroup(context).isBlank()
             val emptyText =
                 when {
                     groupBlank -> "Выберите группу в приложении"
-                    lessons.isEmpty() -> "Сегодня уроков нет"
-                    current == null && next == null -> "Уроки закончились"
+                    lessons.isEmpty() ->
+                        if (teacherMode) {
+                            TeacherWidgetLogic.nowNextEmptyText(lessonsEmpty = true, next = teacherSnap?.next)
+                        } else {
+                            "Сегодня уроков нет"
+                        }
+                    current == null && next == null ->
+                        if (teacherMode) {
+                            TeacherWidgetLogic.nowNextEmptyText(lessonsEmpty = false, next = teacherSnap?.next)
+                        } else {
+                            "Уроки закончились"
+                        }
                     else -> null
                 }
             if (emptyText != null) {
@@ -115,12 +134,12 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 WidgetUpdateHelper.showIdle(views)
             } else if (current != null) {
                 views.setTextViewText(R.id.tv_now_label, "СЕЙЧАС")
-                views.setTextViewText(R.id.tv_now_subject, SubjectFormatter.getShortName(current.subjectRaw))
+                views.setTextViewText(R.id.tv_now_subject, subjectOf(current))
                 views.setTextViewText(R.id.tv_now_details, detailsOf(current))
                 applyRoomChips(context, views, current, showRoom, appWidgetId, 1, pref, nowFromRoom, R.id.tv_now_room, R.id.tv_now_room2)
                 if (next != null) {
                     views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
-                    views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next.subjectRaw))
+                    views.setTextViewText(R.id.tv_next_subject, subjectOf(next))
                     views.setTextViewText(R.id.tv_next_details, detailsOf(next))
                     applyRoomChips(context, views, next, showRoom, appWidgetId, 2, pref, nextFromRoom, R.id.tv_next_room, R.id.tv_next_room2)
                 } else {
@@ -148,7 +167,7 @@ class NowNextWidgetProvider : AppWidgetProvider() {
                 views.setViewVisibility(R.id.tv_now_room2, android.view.View.GONE)
 
                 views.setTextViewText(R.id.tv_next_label, "ДАЛЬШЕ")
-                views.setTextViewText(R.id.tv_next_subject, SubjectFormatter.getShortName(next!!.subjectRaw))
+                views.setTextViewText(R.id.tv_next_subject, subjectOf(next!!))
                 views.setTextViewText(R.id.tv_next_details, detailsOf(next))
                 applyRoomChips(context, views, next, showRoom, appWidgetId, 2, pref, nextFromRoom, R.id.tv_next_room, R.id.tv_next_room2)
             }

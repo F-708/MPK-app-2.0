@@ -1042,11 +1042,17 @@ private fun BellCountdownSection() {
                 }
 
                 BellSectionLabel("СЧИТАТЬ ДО КОНЦА")
+                val teacherModeOn = TeacherModeStore.isTeacher(context)
                 BellCountdownNotifier.Scope.entries.forEach { scope ->
                     BellChoiceRow(
                         isSelected = selectedScope == scope,
                         title = scope.title,
-                        description = scope.description,
+                        description =
+                            if (teacherModeOn && scope == BellCountdownNotifier.Scope.MY_LESSONS) {
+                                "Счётчик заканчивается с последним уроком в вашем расписании"
+                            } else {
+                                scope.description
+                            },
                         tag = "bell_scope_${scope.id}",
                         onClick = {
                             selectedScope = scope

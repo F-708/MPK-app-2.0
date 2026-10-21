@@ -59,6 +59,10 @@ object MpkWorkManagerHelper {
         )
     }
 
+    fun cancelTeacherSync(context: Context) {
+        WorkManager.getInstance(context).cancelUniqueWork(TeacherScheduleWorker.WORK_NAME)
+    }
+
     fun setupBellServiceWatchdog(context: Context) {
         val request =
             PeriodicWorkRequestBuilder<BellServiceWatchdogWorker>(

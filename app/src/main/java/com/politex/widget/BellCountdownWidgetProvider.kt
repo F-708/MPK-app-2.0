@@ -194,7 +194,14 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
 
         @Volatile private var cacheLastLesson: Int? = null
 
+        internal fun invalidateLastLessonCache() {
+            cacheKey = null
+            cacheLastLesson = null
+        }
+
         fun lastGroupLessonForToday(context: Context, cal: Calendar): Int? {
+            val teacherName = com.politex.util.TeacherModeStore.teacherName(context)
+            if (teacherName != null) return lastTeacherLessonForToday(context, cal, teacherName)
             val group = WidgetUpdateHelper.getSelectedGroup(context)
             if (group.isBlank()) return null
             val dow = Dow.of(cal)
@@ -222,6 +229,21 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
                 return null
             }
 
+            cacheLastLesson = result
+            cacheKey = key
+            return result
+        }
+
+        private fun lastTeacherLessonForToday(context: Context, cal: Calendar, teacherName: String): Int? {
+            val dow = Dow.of(cal)
+            val todayString = WidgetData.todayDateString()
+            val key = "T|$teacherName|$dow|$todayString"
+            if (key == cacheKey) return cacheLastLesson
+            val result = try {
+                TeacherWidgetData.teacherModeSnapshot(context)?.lessons?.maxOfOrNull { it.lessonNumber }
+            } catch (_: Exception) {
+                return null
+            }
             cacheLastLesson = result
             cacheKey = key
             return result

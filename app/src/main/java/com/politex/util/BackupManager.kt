@@ -64,6 +64,7 @@ object BackupManager {
         if (BackupSection.SETTINGS in sections) {
             val settings = JSONObject()
             settings.put("group", WidgetUpdateHelper.getSelectedGroup(context))
+            settings.put("teacherMode", TeacherModeStore.teacherName(context) ?: "")
             settings.put("notificationsEnabled", WidgetUpdateHelper.isNotificationEnabled(context))
             settings.put("appTheme", AppThemeStore.load(context).id)
             settings.put("appDark", AppThemeStore.isDark(context))
@@ -180,6 +181,15 @@ object BackupManager {
         settings?.optString("group")?.takeIf { it.isNotBlank() }?.let { group ->
             WidgetUpdateHelper.setSelectedGroup(context, group)
             groupRestored = group
+        }
+        if (settings?.has("teacherMode") == true) {
+            val restoredName = settings.optString("teacherMode").trim()
+            val before = TeacherModeStore.teacherName(context)
+            if (restoredName.isNotBlank()) {
+                if (restoredName != before) TeacherModeStore.setTeacher(context, restoredName)
+            } else if (before != null) {
+                TeacherModeStore.clear(context)
+            }
         }
         settings?.optString("appTheme")?.takeIf { it.isNotBlank() }?.let { themeId ->
             val theme = AppTheme.from(themeId)

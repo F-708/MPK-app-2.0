@@ -36,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -71,8 +72,11 @@ import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.Dow
+import com.politex.util.TeacherModeStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.text.style.TextOverflow
 
 private val RAIL_BLUE: Color get() = ColorActiveBlue
@@ -135,6 +139,27 @@ fun BellsScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    val teacherModeRevision = TeacherModeStore.revision.intValue
+    val isTeacherMode =
+        remember(context, teacherModeRevision) {
+            TeacherModeStore.isTeacher(context)
+        }
+    val teacherLastLesson by produceState(initialValue = null as Int?, key1 = isTeacherMode) {
+        value =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    if (TeacherModeStore.isTeacher(context)) {
+                        com.politex.widget.TeacherWidgetData
+                            .snapshot(context)
+                            ?.lessons
+                            ?.maxOfOrNull { it.lessonNumber }
+                    } else {
+                        null
+                    }
+                }.getOrNull()
+            }
+    }
+
     val now =
         com.politex.ui.util
             .rememberToday()
@@ -147,8 +172,8 @@ fun BellsScreen(
         .getLessonsForDay(groupInfo.canonicalName, todayDow)
         .collectAsState(initial = emptyList<com.politex.data.local.entity.LessonEntity>())
     val lastLessonToday =
-        remember(todayLessons) {
-            todayLessons.maxOfOrNull { it.lessonNumber }
+        remember(todayLessons, isTeacherMode, teacherLastLesson) {
+            if (isTeacherMode) teacherLastLesson else todayLessons.maxOfOrNull { it.lessonNumber }
         }
 
     val todayType = remember(todayDow) { CollegeBellSchedule.getTypeForDay(todayDow) }

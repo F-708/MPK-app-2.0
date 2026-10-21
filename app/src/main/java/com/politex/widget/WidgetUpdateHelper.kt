@@ -93,6 +93,10 @@ object WidgetUpdateHelper {
     internal const val SYNC_BUDGET_MS = 6_000L
 
     suspend fun ensureTodaySchedule(context: Context) {
+        if (com.politex.util.TeacherModeStore.isTeacher(context)) {
+            ensureTeacherTodaySchedule(context)
+            return
+        }
         val group = getSelectedGroup(context)
         if (group.isBlank()) return
         val cal = java.util.Calendar.getInstance()
@@ -140,9 +144,67 @@ object WidgetUpdateHelper {
     private fun pruneTodaySyncKeys(prefs: SharedPreferences, today: String) {
         val ed = prefs.edit()
         prefs.all.keys
-            .filter { (it.startsWith("today_synced_") || it.startsWith("today_sync_attempt_")) && !it.endsWith(today) }
-            .forEach { ed.remove(it) }
+            .filter {
+                (
+                    it.startsWith("today_synced_") || it.startsWith("today_sync_attempt_") ||
+                        it.startsWith("teacher_today_synced_") || it.startsWith("teacher_today_sync_attempt_")
+                ) && !it.endsWith(today)
+            }.forEach { ed.remove(it) }
         ed.apply()
+    }
+
+    private suspend fun ensureTeacherTodaySchedule(context: Context) {
+        val name = com.politex.util.TeacherModeStore.teacherName(context) ?: return
+        val surnameKey = com.politex.data.repository.TeacherInsights.surnameOf(name)
+        if (surnameKey.isBlank()) return
+        val cal = java.util.Calendar.getInstance()
+        val dow = com.politex.util.Dow.of(cal)
+        if (dow == 7) return
+        val today = WidgetData.todayDateString()
+        val prefs = getPrefs(context)
+        val doneKey = "teacher_today_synced_${surnameKey}_$today"
+        if (prefs.getBoolean(doneKey, false)) return
+
+        val dao = com.politex.data.local.MpkDatabase.getInstance(context).teacherLessonDao()
+        val ready = runCatching {
+            dao.getForSurnameOnDate(surnameKey, today).isNotEmpty() ||
+                dao.getPresentDates(listOf(today)).isNotEmpty()
+        }.getOrDefault(false)
+        if (ready) {
+            prefs.edit().putBoolean(doneKey, true).apply()
+            pruneTodaySyncKeys(prefs, today)
+            return
+        }
+
+        val attemptKey = "teacher_today_sync_attempt_${surnameKey}_$today"
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong(attemptKey, 0L) < SYNC_RETRY_MS) return
+        prefs.edit().putLong(attemptKey, now).apply()
+
+        runCatching {
+            kotlinx.coroutines.withTimeoutOrNull(SYNC_BUDGET_MS) {
+                com.politex.AppGraph.scheduleRepository.syncTeacherScheduleForDate(cal)
+            }
+        }
+        val nowReady = runCatching { dao.getPresentDates(listOf(today)).isNotEmpty() }.getOrDefault(false)
+        if (nowReady) {
+            prefs.edit().putBoolean(doneKey, true).apply()
+            pruneTodaySyncKeys(prefs, today)
+            TeacherWidgetData.invalidate()
+            BellCountdownWidgetProvider.invalidateLastLessonCache()
+            updateAllWidgets(context)
+        }
+    }
+
+    fun refreshAfterModeChange(context: Context) {
+        WidgetData.invalidateCache()
+        TeacherWidgetData.invalidate()
+        BellCountdownWidgetProvider.invalidateLastLessonCache()
+        invalidateSecondsCache()
+        widgetScope.launch {
+            runCatching { ensureTodaySchedule(context) }
+            updateAllWidgets(context)
+        }
     }
 
     fun updateMinuteWidgets(context: Context) {
