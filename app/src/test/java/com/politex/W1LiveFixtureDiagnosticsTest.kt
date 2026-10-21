@@ -32,7 +32,11 @@ class W1LiveFixtureDiagnosticsTest {
             targetDate = "05.10.2026",
             candidateGroups = listOf("41О", "41Г", "21Д", "11О", "21М"),
         )
-        assertEquals(setOf("41О", "41Г", "21Д", "11О", "21М"), all.map { it.groupName }.toSet())
+        val groups = all.map { it.groupName }.toSet()
+        assertTrue(groups.containsAll(listOf("41О", "41Г", "21Д", "11О", "21М")))
         assertTrue(all.isNotEmpty())
+        assertTrue(groups.size > 5)
+        assertTrue("группы документа вне каталога должны разбираться", "23М" in groups)
+        assertTrue(groups.all { com.politex.util.GroupParser.isValid(it) })
     }
 }

@@ -127,4 +127,42 @@ class RoomScheduleLogicTest {
         val slot = CollegeBellSchedule.getCurrentSlot(8 * 60 + 45, 1)
         assertEquals(1, slot?.lessonNumber)
     }
+
+    @Test
+    fun `339 - split-урок где кабинет во второй подгруппе виден в диалоге`() {
+        val lessons =
+            listOf(
+                lesson(7, roomFirst = "340", roomSecond = "339", groupName = "23М", dateString = "21.10.2026", dayOfWeek = 3),
+                lesson(1, roomFirst = "101", groupName = "11А", dateString = "21.10.2026", dayOfWeek = 3),
+            )
+        val result = filterRoomLessonsForDate(lessons, "339", "21.10.2026")
+        assertEquals(listOf(7), result.map { it.lessonNumber })
+        assertEquals("23М", result.single().groupName)
+    }
+
+    @Test
+    fun `339 - две группы в одном кабинете на одну дату видны обе`() {
+        val lessons =
+            listOf(
+                lesson(3, roomFirst = "339", groupName = "41Н", dateString = "21.10.2026", dayOfWeek = 3, teacherFirst = "Мешалкина И.В."),
+                lesson(5, roomFirst = "339", groupName = "21М", dateString = "21.10.2026", dayOfWeek = 3, teacherFirst = "Мешалкина И.В."),
+            )
+        val result = filterRoomLessonsForDate(lessons, "339", "21.10.2026")
+        assertEquals(listOf(3, 5), result.map { it.lessonNumber })
+        assertEquals(listOf("41Н", "21М"), result.map { it.groupName })
+    }
+
+    @Test
+    fun `339 - кабинет записан как 339х340 сплитом - диалог возвращает все 4 урока`() {
+        val lessons =
+            listOf(
+                lesson(3, roomFirst = "339", groupName = "41Н", dateString = "21.10.2026", dayOfWeek = 3, teacherFirst = "Мешалкина И.В."),
+                lesson(4, roomFirst = "339", groupName = "41Н", dateString = "21.10.2026", dayOfWeek = 3, teacherFirst = "Мешалкина И.В."),
+                lesson(5, roomFirst = "339", groupName = "21М", dateString = "21.10.2026", dayOfWeek = 3, teacherFirst = "Мешалкина И.В."),
+                lesson(7, roomFirst = "339", roomSecond = "340", groupName = "23М", dateString = "21.10.2026", dayOfWeek = 3, teacherFirst = "Мешалкина И.В."),
+            )
+        val result = filterRoomLessonsForDate(lessons, "339", "21.10.2026")
+        assertEquals(listOf(3, 4, 5, 7), result.map { it.lessonNumber })
+        assertEquals(listOf("41Н", "41Н", "21М", "23М"), result.map { it.groupName })
+    }
 }

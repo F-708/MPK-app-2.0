@@ -223,8 +223,9 @@ object MpkScheduleParser {
         if (bytes.isEmpty() || candidateGroups.isEmpty()) return emptyList()
 
         val texts = runCatching { extractDocTexts(bytes) }.getOrNull()
+        val groups = (candidateGroups + discoverDocumentGroups(texts)).distinct()
         val out = LinkedHashMap<String, LessonEntity>()
-        for (group in candidateGroups) {
+        for (group in groups) {
             val lessons = runCatching {
                 if (texts != null) parseFileRawTexts(texts, group, targetDate) else parseFileRaw(bytes, group, targetDate)
             }.getOrDefault(emptyList())
@@ -236,6 +237,34 @@ object MpkScheduleParser {
             }
         }
         return applyHeaderDate(out.values.toList(), bytes, targetDate)
+    }
+
+    internal fun discoverDocumentGroups(texts: DocTexts?): List<String> {
+        if (texts == null || texts.wasHtml) return emptyList()
+        val text =
+            when {
+                texts.isZip && !texts.docxXml.isNullOrBlank() ->
+                    runCatching { TeacherScheduleParser.xmlToPseudoTable(texts.docxXml) }.getOrDefault("")
+                texts.utf16Text.isNotBlank() -> texts.utf16Text
+                texts.cp1251Text.isNotBlank() -> texts.cp1251Text
+                else -> ""
+            }
+        if (text.isBlank()) return emptyList()
+        val found = LinkedHashSet<String>()
+        for (line in text.lineSequence()) {
+            for (rawCell in line.split('│', '║', '|', '\t')) {
+                val cell = rawCell.trim()
+                if (cell.isEmpty()) continue
+                val bare =
+                    if (cell.startsWith("группа", ignoreCase = true)) {
+                        cell.substring("группа".length).trim()
+                    } else {
+                        cell
+                    }
+                if (GroupParser.isValid(bare)) found.add(GroupParser.cleanRawGroupName(bare))
+            }
+        }
+        return found.toList()
     }
 
     internal class DocTexts(
