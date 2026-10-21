@@ -43,11 +43,8 @@ android {
     versionCode = 21000
     versionName = "2.1"
 
-    buildConfigField(
-      "String",
-      "UPDATE_MANIFEST_URL",
-      "\"https://raw.githubusercontent.com/F-708/MPK-app-2.0/main/update.json\"",
-    )
+    buildConfigField("String", "GITHUB_OWNER", "\"OWNER_PLACEHOLDER\"")
+    buildConfigField("String", "GITHUB_REPO", "\"REPO_PLACEHOLDER\"")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

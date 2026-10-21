@@ -101,8 +101,37 @@ class TeachersCsvParseTest {
         assertEquals(80, teachers.count { it.room.isNotBlank() })
         assertEquals(12, teachers.count { it.phone.isNotBlank() })
         assertEquals(9, teachers.count { it.email.isNotBlank() })
-        assertEquals(104, teachers.count { it.experience.isNotBlank() })
+        assertEquals(100, teachers.count { it.experience.isNotBlank() })
+        assertEquals(96, teachers.count { it.category.isNotBlank() })
         assertEquals(105, teachers.count { it.subjects.isNotBlank() })
+    }
+
+    @Test
+    fun `стаж и категория не наследуются при молчании источника`() {
+        val noExperience =
+            setOf(
+                "Дубровский Дмитрий Викторович",
+                "Ефимчик Ольга Владимировна",
+                "Крамаренко Александр Андреевич",
+                "Лынько Андрей Сергеевич",
+                "Руммо Артём Дмитриевич",
+                "Якубецкая Елена Викторовна",
+            )
+        val noCategory =
+            setOf(
+                "Германович Елена Аркадьевна",
+                "Гуд Владимир Владимирович",
+                "Дубровский Дмитрий Викторович",
+                "Ефимчик Ольга Владимировна",
+                "Карпеев Николай Васильевич",
+                "Костюк Алексей Николаевич",
+                "Крамаренко Александр Андреевич",
+                "Лынько Андрей Сергеевич",
+                "Рослик Егор Дмитриевич",
+                "Руммо Артём Дмитриевич",
+            )
+        assertEquals(noExperience, teachers.filter { it.experience.isBlank() }.map { it.name }.toSet())
+        assertEquals(noCategory, teachers.filter { it.category.isBlank() }.map { it.name }.toSet())
     }
 
     @Test

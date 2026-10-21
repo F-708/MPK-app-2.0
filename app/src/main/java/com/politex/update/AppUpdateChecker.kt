@@ -1,17 +1,24 @@
 package com.politex.update
 
-import android.content.Context
 import com.politex.BuildConfig
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 
-data class UpdateInfo(
-    val versionCode: Int,
-    val versionName: String,
+data class UpdateAsset(
+    val name: String,
     val url: String,
+    val size: Long,
+)
+
+data class UpdateInfo(
+    val tagName: String,
+    val versionName: String,
     val notes: String,
+    val asset: UpdateAsset,
 )
 
 object AppUpdateChecker {
@@ -23,34 +30,107 @@ object AppUpdateChecker {
             .build()
     }
 
-    internal fun parse(
+    internal const val USER_AGENT = "MoyPolitech"
+    internal const val ACCEPT_HEADER = "application/vnd.github+json"
+    internal const val OWNER_PLACEHOLDER = "OWNER_PLACEHOLDER"
+    internal const val REPO_PLACEHOLDER = "REPO_PLACEHOLDER"
+
+    internal val UPDATE_ENABLED_FLAVORS = setOf("standard")
+
+    private val SKIP_ASSET_MARKERS = listOf("sha256", "sha512", "checksum", "source", "symbols")
+
+    internal fun latestReleaseUrl(
+        owner: String,
+        repo: String,
+    ): String = "https://api.github.com/repos/${owner.trim()}/${repo.trim()}/releases/latest"
+
+    internal fun isConfigured(
+        owner: String?,
+        repo: String?,
+    ): Boolean {
+        if (owner.isNullOrBlank() || repo.isNullOrBlank()) return false
+        return owner.trim() != OWNER_PLACEHOLDER && repo.trim() != REPO_PLACEHOLDER
+    }
+
+    internal fun parseLatestRelease(
         json: String?,
+        currentVersionName: String,
         flavor: String,
-        currentCode: Int,
     ): UpdateInfo? {
         if (json.isNullOrBlank()) return null
-        val entry = runCatching { JSONObject(json).optJSONObject(flavor) }.getOrNull() ?: return null
-        val code = entry.optInt("versionCode")
-        val url = entry.optString("url")
-        if (code <= currentCode || url.isBlank()) return null
+        val root = runCatching { JSONObject(json) }.getOrNull() ?: return null
+        if (root.has("message")) return null
+        if (root.optBoolean("draft") || root.optBoolean("prerelease")) return null
+        val tagName = root.optString("tag_name").trim()
+        val version = UpdateVersions.normalize(tagName) ?: return null
+        if (!UpdateVersions.isNewer(version, currentVersionName)) return null
+        val asset = selectApkAsset(root.optJSONArray("assets"), flavor) ?: return null
+        val notes = (root.opt("body") as? String)?.trim().orEmpty()
         return UpdateInfo(
-            versionCode = code,
-            versionName = entry.optString("versionName"),
-            url = url,
-            notes = entry.optString("notes"),
+            tagName = tagName,
+            versionName = version.substringBefore('+'),
+            notes = notes,
+            asset = asset,
         )
     }
 
-    fun check(context: Context): UpdateInfo? {
+    internal fun selectApkAsset(
+        assets: JSONArray?,
+        flavor: String,
+    ): UpdateAsset? {
+        if (assets == null) return null
+        val flavorMarker = flavor.lowercase(Locale.ROOT)
+        var fallback: UpdateAsset? = null
+        for (index in 0 until assets.length()) {
+            val entry = assets.optJSONObject(index) ?: continue
+            val name = entry.optString("name").trim()
+            val url = entry.optString("browser_download_url").trim()
+            val lower = name.lowercase(Locale.ROOT)
+            if (!lower.endsWith(".apk") || url.isBlank()) continue
+            if (SKIP_ASSET_MARKERS.any { lower.contains(it) }) continue
+            val candidate =
+                UpdateAsset(
+                    name = name,
+                    url = url,
+                    size = entry.optLong("size", 0L),
+                )
+            if (flavorMarker.isNotBlank() && lower.contains(flavorMarker)) return candidate
+            if (fallback == null) fallback = candidate
+        }
+        return fallback
+    }
+
+    internal fun parseResponse(
+        statusCode: Int,
+        json: String?,
+        currentVersionName: String,
+        flavor: String,
+    ): UpdateInfo? {
+        if (statusCode != HTTP_OK) return null
+        return parseLatestRelease(json, currentVersionName, flavor)
+    }
+
+    fun check(): UpdateInfo? {
         if (!UPDATE_ENABLED_FLAVORS.contains(BuildConfig.FLAVOR)) return null
+        if (!isConfigured(BuildConfig.GITHUB_OWNER, BuildConfig.GITHUB_REPO)) return null
         return runCatching {
-            val request = Request.Builder().url(BuildConfig.UPDATE_MANIFEST_URL).build()
+            val request =
+                Request
+                    .Builder()
+                    .url(latestReleaseUrl(BuildConfig.GITHUB_OWNER, BuildConfig.GITHUB_REPO))
+                    .header("Accept", ACCEPT_HEADER)
+                    .header("User-Agent", USER_AGENT)
+                    .build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
-                parse(response.body?.string(), BuildConfig.FLAVOR, BuildConfig.VERSION_CODE)
+                parseResponse(
+                    statusCode = response.code,
+                    json = response.body?.string(),
+                    currentVersionName = BuildConfig.VERSION_NAME,
+                    flavor = BuildConfig.FLAVOR,
+                )
             }
         }.getOrNull()
     }
 
-    internal val UPDATE_ENABLED_FLAVORS = setOf("standard")
+    private const val HTTP_OK = 200
 }

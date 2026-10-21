@@ -17,11 +17,14 @@ import java.io.File
 class UpdateInstallActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val path = intent.getStringExtra(EXTRA_APK_PATH)
-        val file = path?.let(::File)
-        if (file == null || !UpdateDownloader.apkIsValid(this, file)) {
-            Toast.makeText(this, "Файл обновления не найден", Toast.LENGTH_LONG).show()
-            finish()
+        val file = intent.getStringExtra(EXTRA_APK_PATH)?.let(::File)
+        if (file == null) {
+            reject(ApkRejection.UNREADABLE)
+            return
+        }
+        val rejection = UpdateDownloader.validate(this, file)
+        if (rejection != ApkRejection.NONE) {
+            reject(rejection)
             return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
@@ -40,6 +43,11 @@ class UpdateInstallActivity : Activity() {
         val file = pendingFile
         pendingFile = null
         if (file != null) launchInstaller(file) else finish()
+    }
+
+    private fun reject(rejection: ApkRejection) {
+        Toast.makeText(this, UpdateDownloader.rejectionMessage(rejection), Toast.LENGTH_LONG).show()
+        finish()
     }
 
     private fun launchInstaller(file: File) {

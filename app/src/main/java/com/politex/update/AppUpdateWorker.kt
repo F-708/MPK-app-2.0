@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -17,7 +18,9 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import com.politex.BuildConfig
 import com.politex.R
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 class AppUpdateWorker(
@@ -25,29 +28,48 @@ class AppUpdateWorker(
     params: WorkerParameters,
 ) : Worker(context, params) {
     override fun doWork(): Result {
-        val info = AppUpdateChecker.check(applicationContext) ?: return Result.success()
+        val info = AppUpdateChecker.check() ?: return Result.success()
         val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (prefs.getInt(KEY_NOTIFIED, 0) >= info.versionCode) return Result.success()
+        if (prefs.getString(KEY_NOTIFIED_VERSION, null) == info.versionName) return Result.success()
 
-        val file = UpdateDownloader.download(applicationContext, info.url, info.versionCode)
-        if (file == null || !UpdateDownloader.apkIsValid(applicationContext, file)) {
-            return Result.retry()
+        val file =
+            UpdateDownloader.download(applicationContext, info.asset, info.versionName)
+                ?: return Result.retry()
+
+        return when (val rejection = UpdateDownloader.validate(applicationContext, file)) {
+            ApkRejection.NONE -> {
+                notifyReady(applicationContext, info, file)
+                remember(prefs, info)
+                Result.success()
+            }
+            ApkRejection.UNREADABLE -> {
+                file.delete()
+                Result.retry()
+            }
+            ApkRejection.VERSION -> {
+                file.delete()
+                remember(prefs, info)
+                Result.success()
+            }
+            ApkRejection.PACKAGE, ApkRejection.SIGNATURE -> {
+                file.delete()
+                notifyRejected(applicationContext, rejection)
+                remember(prefs, info)
+                Result.success()
+            }
         }
-
-        notifyReady(applicationContext, info)
-        prefs.edit().putInt(KEY_NOTIFIED, info.versionCode).apply()
-        return Result.success()
     }
 
     companion object {
         const val WORK_NAME = "app_update_check"
         const val CHANNEL_ID = "mpk_app_updates"
         const val NOTIFICATION_ID = 2027
+        const val NOTIFICATION_REJECTED_ID = 2028
         private const val PREFS = "mpk_update_prefs"
-        private const val KEY_NOTIFIED = "notified_version_code"
+        private const val KEY_NOTIFIED_VERSION = "notified_version_name"
 
         fun schedule(context: Context) {
-            if (!AppUpdateChecker.UPDATE_ENABLED_FLAVORS.contains(com.politex.BuildConfig.FLAVOR)) return
+            if (!AppUpdateChecker.UPDATE_ENABLED_FLAVORS.contains(BuildConfig.FLAVOR)) return
             val request =
                 PeriodicWorkRequestBuilder<AppUpdateWorker>(12, TimeUnit.HOURS)
                     .setConstraints(
@@ -63,10 +85,62 @@ class AppUpdateWorker(
             )
         }
 
+        private fun remember(
+            prefs: SharedPreferences,
+            info: UpdateInfo,
+        ) {
+            prefs.edit().putString(KEY_NOTIFIED_VERSION, info.versionName).apply()
+        }
+
         private fun notifyReady(
             context: Context,
             info: UpdateInfo,
+            file: File,
         ) {
+            if (!ensureChannel(context)) return
+            val install =
+                Intent(context, UpdateInstallActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(UpdateInstallActivity.EXTRA_APK_PATH, file.absolutePath)
+            val pending =
+                PendingIntent.getActivity(
+                    context,
+                    NOTIFICATION_ID,
+                    install,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            val body = info.notes.ifBlank { "Обновление «Мой Политех» загружено. Нажмите, чтобы установить." }
+            val notification =
+                NotificationCompat
+                    .Builder(context, CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_mpk_emblem)
+                    .setContentTitle("Доступно обновление ${info.versionName}")
+                    .setContentText(body)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                    .setContentIntent(pending)
+                    .setAutoCancel(true)
+                    .build()
+            post(context, NOTIFICATION_ID, notification)
+        }
+
+        private fun notifyRejected(
+            context: Context,
+            rejection: ApkRejection,
+        ) {
+            if (!ensureChannel(context)) return
+            val notification =
+                NotificationCompat
+                    .Builder(context, CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_mpk_emblem)
+                    .setContentTitle("Обновление отклонено")
+                    .setContentText(UpdateDownloader.rejectionMessage(rejection))
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(UpdateDownloader.rejectionMessage(rejection)))
+                    .setAutoCancel(true)
+                    .build()
+            post(context, NOTIFICATION_REJECTED_ID, notification)
+        }
+
+        private fun ensureChannel(context: Context): Boolean {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel =
                     NotificationChannel(
@@ -81,43 +155,20 @@ class AppUpdateWorker(
                 context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
                 PackageManager.PERMISSION_GRANTED
             ) {
-                return
+                return false
             }
+            return true
+        }
 
-            val install =
-                Intent(context, UpdateInstallActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra(UpdateInstallActivity.EXTRA_APK_PATH, apkFile(context, info.versionCode).absolutePath)
-            val pending =
-                PendingIntent.getActivity(
-                    context,
-                    NOTIFICATION_ID,
-                    install,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
-
-            val title = "Доступна версия ${info.versionName.ifBlank { info.versionCode.toString() }}"
-            val body = info.notes.ifBlank { "Обновление «Мой Политех» загружено. Нажмите, чтобы установить." }
-            val notification =
-                NotificationCompat
-                    .Builder(context, CHANNEL_ID)
-                    .setSmallIcon(R.drawable.ic_mpk_emblem)
-                    .setContentTitle(title)
-                    .setContentText(body)
-                    .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-                    .setContentIntent(pending)
-                    .setAutoCancel(true)
-                    .build()
-
+        private fun post(
+            context: Context,
+            id: Int,
+            notification: android.app.Notification,
+        ) {
             try {
-                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+                NotificationManagerCompat.from(context).notify(id, notification)
             } catch (_: SecurityException) {
             }
         }
-
-        internal fun apkFile(
-            context: Context,
-            versionCode: Int,
-        ) = java.io.File(java.io.File(context.cacheDir, "updates"), "update-$versionCode.apk")
     }
 }
