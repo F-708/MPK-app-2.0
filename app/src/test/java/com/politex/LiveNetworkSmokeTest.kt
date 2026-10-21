@@ -10,6 +10,7 @@ import java.net.InetAddress
 class LiveNetworkSmokeTest {
     @Test
     fun fetchScheduleForGroup_41О_сЖивогоСайта() {
+        assumeTrue("живой сайт не проверяется в CI", System.getenv("CI").isNullOrBlank())
         assumeTrue("guo-mpk.by недоступен из этого окружения", hostReachable())
 
         val client = MpkNetworkClient()
