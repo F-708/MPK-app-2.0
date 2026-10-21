@@ -8,6 +8,52 @@ plugins {
   alias(libs.plugins.secrets)
 }
 
+val versionTagPattern = Regex("^v(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})(?:-preview\\.(\\d{1,3}))?$")
+
+fun computeVersionCode(
+  major: Int,
+  minor: Int,
+  patch: Int,
+  preview: Int?,
+): Int? {
+  val tail = preview ?: 999
+  if (major > 213 || minor > 99 || patch > 99 || tail < 1) return null
+  if (preview != null && preview > 998) return null
+  val code = major.toLong() * 10_000_000L + minor * 100_000L + patch * 1_000L + tail
+  if (code > Int.MAX_VALUE) return null
+  return code.toInt()
+}
+
+fun parseVersionTag(tag: String?): Pair<String, Int>? {
+  val match = tag?.trim()?.let { versionTagPattern.matchEntire(it) } ?: return null
+  val (majorText, minorText, patchText, previewText) = match.destructured
+  val major = majorText.toIntOrNull() ?: return null
+  val minor = minorText.toIntOrNull() ?: return null
+  val patch = patchText.toIntOrNull() ?: return null
+  val preview = previewText.toIntOrNull()
+  val code = computeVersionCode(major, minor, patch, preview) ?: return null
+  val name =
+    if (preview == null) "$major.$minor.$patch" else "$major.$minor.$patch-preview.$preview"
+  return name to code
+}
+
+fun readVersionTag(): String? =
+  runCatching {
+    providers
+      .exec {
+        commandLine("git", "describe", "--tags", "--match", "v[0-9]*.[0-9]*.[0-9]*", "--abbrev=0")
+        workingDir = rootProject.projectDir
+        isIgnoreExitValue = true
+      }.standardOutput
+      .asText
+      .get()
+      .trim()
+      .ifEmpty { null }
+  }.getOrNull()
+
+val (resolvedVersionName, resolvedVersionCode) =
+  parseVersionTag(readVersionTag()) ?: ("0.0.0-dev" to 1)
+
 android {
   namespace = "com.politex"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
@@ -20,31 +66,25 @@ android {
         create("standard") {
             dimension = "version"
             isDefault = true
-            versionCode = 22002
-            versionName = "2.2"
         }
         create("admin") {
             dimension = "version"
             applicationIdSuffix = ".admin"
             versionNameSuffix = "-admin"
-            versionCode = 22002
-            versionName = "2.2"
         }
         create("teacher") {
             dimension = "version"
             applicationIdSuffix = ".teacher"
             versionNameSuffix = "-teacher"
-            versionCode = 22002
-            versionName = "2.2"
         }
     }
     minSdk = 24
     targetSdk = 36
-    versionCode = 21000
-    versionName = "2.1"
+    versionCode = resolvedVersionCode
+    versionName = resolvedVersionName
 
-    buildConfigField("String", "GITHUB_OWNER", "\"OWNER_PLACEHOLDER\"")
-    buildConfigField("String", "GITHUB_REPO", "\"REPO_PLACEHOLDER\"")
+    buildConfigField("String", "GITHUB_OWNER", "\"F-708\"")
+    buildConfigField("String", "GITHUB_REPO", "\"moy-polytech\"")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

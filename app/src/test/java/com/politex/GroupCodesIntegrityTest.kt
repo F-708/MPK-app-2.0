@@ -8,6 +8,7 @@ import com.politex.ui.screens.groupPickerLetters
 import com.politex.ui.screens.groupPickerMaxNumber
 import com.politex.ui.screens.validateAgainstCatalog
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -49,8 +50,8 @@ class GroupCodesIntegrityTest {
     }
 
     @Test
-    fun `каталог содержит 64 группы - 43О и 43Э присутствуют`() {
-        assertEquals(64, packaged.size)
+    fun `каталог содержит 59 групп - 43О и 43Э присутствуют`() {
+        assertEquals(59, packaged.size)
         assertTrue("43О" in packaged)
         assertTrue("43Э" in packaged)
         val catalog = GroupCatalog.load(RuntimeEnvironment.getApplication())
@@ -104,5 +105,14 @@ class GroupCodesIntegrityTest {
             val subjects = MpkCurriculum.getSubjects(spec, 2)
             assertTrue("для специальности $spec курс 2 не должен быть пустым", subjects.isNotEmpty())
         }
+    }
+
+    @Test
+    fun `групп 13Д 13М 13О 13Э больше нет - 1 курс доходит только до номера 2`() {
+        assertTrue(packaged.none { it.startsWith("13") })
+        assertEquals(2, groupPickerMaxNumber(packaged, 1))
+        assertTrue(groupPickerLetters(packaged, 1, 3).isEmpty())
+        assertFalse(validateAgainstCatalog("13Д", packaged))
+        assertFalse(validateAgainstCatalog("13Э", packaged))
     }
 }

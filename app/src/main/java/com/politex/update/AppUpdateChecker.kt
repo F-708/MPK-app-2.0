@@ -1,10 +1,6 @@
 package com.politex.update
 
-import com.politex.BuildConfig
 import java.util.Locale
-import java.util.concurrent.TimeUnit
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -17,19 +13,13 @@ data class UpdateAsset(
 data class UpdateInfo(
     val tagName: String,
     val versionName: String,
+    val versionCode: Int,
     val notes: String,
     val asset: UpdateAsset,
+    val sha256: String? = null,
 )
 
 object AppUpdateChecker {
-    private val client by lazy {
-        OkHttpClient
-            .Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build()
-    }
-
     internal const val USER_AGENT = "MoyPolitech"
     internal const val ACCEPT_HEADER = "application/vnd.github+json"
     internal const val OWNER_PLACEHOLDER = "OWNER_PLACEHOLDER"
@@ -43,6 +33,17 @@ object AppUpdateChecker {
         owner: String,
         repo: String,
     ): String = "https://api.github.com/repos/${owner.trim()}/${repo.trim()}/releases/latest"
+
+    internal fun releasesUrl(
+        owner: String,
+        repo: String,
+        perPage: Int = 8,
+    ): String = "https://api.github.com/repos/${owner.trim()}/${repo.trim()}/releases?per_page=$perPage"
+
+    internal fun rawMetaUrl(
+        owner: String,
+        repo: String,
+    ): String = "https://raw.githubusercontent.com/${owner.trim()}/${repo.trim()}/main/update-meta.json"
 
     internal fun isConfigured(
         owner: String?,
@@ -64,11 +65,13 @@ object AppUpdateChecker {
         val tagName = root.optString("tag_name").trim()
         val version = UpdateVersions.normalize(tagName) ?: return null
         if (!UpdateVersions.isNewer(version, currentVersionName)) return null
+        val code = versionCodeOf(tagName) ?: return null
         val asset = selectApkAsset(root.optJSONArray("assets"), flavor) ?: return null
         val notes = (root.opt("body") as? String)?.trim().orEmpty()
         return UpdateInfo(
             tagName = tagName,
             versionName = version.substringBefore('+'),
+            versionCode = code,
             notes = notes,
             asset = asset,
         )
@@ -108,28 +111,6 @@ object AppUpdateChecker {
     ): UpdateInfo? {
         if (statusCode != HTTP_OK) return null
         return parseLatestRelease(json, currentVersionName, flavor)
-    }
-
-    fun check(): UpdateInfo? {
-        if (!UPDATE_ENABLED_FLAVORS.contains(BuildConfig.FLAVOR)) return null
-        if (!isConfigured(BuildConfig.GITHUB_OWNER, BuildConfig.GITHUB_REPO)) return null
-        return runCatching {
-            val request =
-                Request
-                    .Builder()
-                    .url(latestReleaseUrl(BuildConfig.GITHUB_OWNER, BuildConfig.GITHUB_REPO))
-                    .header("Accept", ACCEPT_HEADER)
-                    .header("User-Agent", USER_AGENT)
-                    .build()
-            client.newCall(request).execute().use { response ->
-                parseResponse(
-                    statusCode = response.code,
-                    json = response.body?.string(),
-                    currentVersionName = BuildConfig.VERSION_NAME,
-                    flavor = BuildConfig.FLAVOR,
-                )
-            }
-        }.getOrNull()
     }
 
     private const val HTTP_OK = 200

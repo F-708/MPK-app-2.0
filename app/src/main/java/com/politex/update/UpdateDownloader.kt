@@ -112,6 +112,17 @@ object UpdateDownloader {
         currentVersionCode: Int,
     ): Boolean = apkVersionCode != null && apkVersionCode > currentVersionCode
 
+    internal fun matchesChecksum(
+        file: File,
+        expectedSha256: String?,
+    ): Boolean {
+        val expected = expectedSha256?.trim().orEmpty()
+        if (expected.isEmpty()) return true
+        if (!file.exists() || file.length() <= 0L) return false
+        val actual = runCatching { sha256Hex(file.readBytes()) }.getOrNull() ?: return false
+        return actual.equals(expected, ignoreCase = true)
+    }
+
     internal fun downloadComplete(
         actualBytes: Long,
         expectedBytes: Long,

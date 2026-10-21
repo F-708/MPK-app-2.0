@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SettingsBackupRestore
+import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.AlertDialog
@@ -110,6 +111,14 @@ import com.politex.ui.theme.ColorWarning
 import com.politex.ui.theme.Tokens
 import com.politex.ui.theme.isDarkThemeActive
 import com.politex.ui.util.bouncyClickable
+import com.politex.update.AppUpdateChecker
+import com.politex.update.AppUpdateWorker
+import com.politex.update.UpdateCheckController
+import com.politex.update.channelChangeRequiresCheck
+import com.politex.update.defaultUpdateStatus
+import com.politex.update.manualResultIsError
+import com.politex.update.manualResultIsFound
+import com.politex.update.manualResultText
 import com.politex.util.AppThemeStore
 import com.politex.util.BackupManager
 import com.politex.util.BellCountdownNotifier
@@ -118,6 +127,8 @@ import com.politex.util.ScheduleDisplayPrefs
 import com.politex.util.SubgroupPref
 import com.politex.util.SubgroupSettings
 import com.politex.util.TeacherModeStore
+import com.politex.util.UpdateChannel
+import com.politex.util.UpdateChannelStore
 import com.politex.util.defaultBackupFileName
 import com.politex.widget.WidgetUpdateHelper
 import com.politex.worker.MpkWorkManagerHelper
@@ -401,6 +412,11 @@ fun SettingsScreen(
 
             item { SectionCaption("О ПРИЛОЖЕНИИ", Modifier.padding(top = 4.dp)) }
             item { AboutCard() }
+
+            if (showUpdateSection(BuildConfig.FLAVOR)) {
+                item { SectionCaption("ОБНОВЛЕНИЯ", Modifier.padding(top = 4.dp)) }
+                item { UpdatesCard() }
+            }
         }
     }
 
@@ -831,6 +847,127 @@ private fun AboutCard() {
                     overflow = TextOverflow.Ellipsis,
                 )
             },
+        )
+    }
+}
+
+@Composable
+private fun UpdatesCard() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val channelRevision = UpdateChannelStore.revision.intValue
+    var channel by remember(context, channelRevision) {
+        mutableStateOf(UpdateChannelStore.channel(context))
+    }
+    var statusText by remember(channel) {
+        mutableStateOf(defaultUpdateStatus(channel, BuildConfig.VERSION_NAME))
+    }
+    var statusColor by remember(channel) { mutableStateOf(ColorTextMuted) }
+    var checking by remember { mutableStateOf(false) }
+
+    fun pickChannel(next: UpdateChannel) {
+        val previous = channel
+        UpdateChannelStore.set(context, next)
+        channel = next
+        if (channelChangeRequiresCheck(previous, next)) {
+            AppUpdateWorker.checkOnce(context)
+        }
+    }
+
+    fun runCheck() {
+        if (checking) return
+        checking = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { UpdateCheckController.checkNow(context) }
+            statusText = manualResultText(result, channel, BuildConfig.VERSION_NAME)
+            statusColor =
+                when {
+                    manualResultIsError(result) -> ColorError
+                    manualResultIsFound(result) -> ColorSuccess
+                    else -> ColorTextMuted
+                }
+            checking = false
+        }
+    }
+
+    SettingsCard(modifier = Modifier.testTag("updates_card")) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("update_channel_card")
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SettingsIcon(Icons.Default.SystemUpdateAlt)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Канал обновлений",
+                        style =
+                        TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = ColorTextTitle,
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "Превью выходят раньше, но могут быть нестабильными",
+                        style =
+                        TextStyle(
+                            fontSize = 12.sp,
+                            color = ColorTextMuted,
+                        ),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                SubgroupChip(
+                    title = "Стабильные",
+                    isSelected = channel == UpdateChannel.STABLE,
+                    tag = "update_channel_stable",
+                    modifier = Modifier.weight(1f),
+                ) {
+                    pickChannel(UpdateChannel.STABLE)
+                }
+                SubgroupChip(
+                    title = "Превью",
+                    isSelected = channel == UpdateChannel.PREVIEW,
+                    tag = "update_channel_preview",
+                    modifier = Modifier.weight(1f),
+                ) {
+                    pickChannel(UpdateChannel.PREVIEW)
+                }
+            }
+        }
+        SettingsDivider()
+        SettingsRow(
+            icon = Icons.Default.SystemUpdateAlt,
+            title = if (checking) "Проверка обновлений…" else "Проверить обновления",
+            onClick = { runCheck() },
+            modifier = Modifier.testTag("update_check_btn"),
+        )
+        SettingsDivider()
+        Text(
+            text = statusText,
+            style =
+            TextStyle(
+                fontSize = 12.sp,
+                color = statusColor,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("update_status")
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -1412,3 +1549,5 @@ private fun SubgroupChip(
 internal fun showSubgroupCard(teacherMode: Boolean): Boolean = !teacherMode
 
 internal fun showTeacherModeExit(teacherMode: Boolean): Boolean = teacherMode
+
+internal fun showUpdateSection(flavor: String): Boolean = AppUpdateChecker.UPDATE_ENABLED_FLAVORS.contains(flavor)

@@ -32,11 +32,11 @@ class StudentsDatabaseTest {
     }
 
     @Test
-    fun `база содержит 1693 текущих учащихся в 61 группе`() {
+    fun `база содержит 1693 текущих учащихся в 59 группах`() {
         assumeTrue("students.csv есть только в admin-сборке", file != null)
 
         assertEquals(1693, students.size)
-        assertEquals(61, students.map { it.group }.distinct().size)
+        assertEquals(59, students.map { it.group }.distinct().size)
     }
 
     @Test
@@ -57,18 +57,36 @@ class StudentsDatabaseTest {
         assertEquals(30, g43e.size)
         assertTrue(g43o.all { it.course == "4" && it.specialtyCode == "5-04-0715-05" })
         assertTrue(g43e.all { it.course == "4" && it.specialtyCode == "5-04-0712-01" })
-        assertTrue(g43o.all { it.curator == "Березовская Наталья Викторовна" && it.room == "139" })
+        assertTrue(g43o.all { it.curator == "Березовская Нелли Викторовна" && it.room == "139" })
         assertTrue(g43e.all { it.curator == "Савицкая Ольга Владимировна" && it.room == "343" })
         assertTrue(g43o.any { it.fullName == "Автушко Дмитрий Владимирович" })
         assertTrue(g43e.any { it.fullName == "Агиевич Артём Владимирович" })
     }
 
     @Test
-    fun `выбывшие группы 33М 41Д 41М 42Д 42М отсутствуют в базе`() {
+    fun `выбывшие группы 12Т 13Д 13М 13О 13Э 33М 41Д 41М 42Д 42М отсутствуют в базе`() {
         assumeTrue("students.csv есть только в admin-сборке", file != null)
 
-        val gone = listOf("33М", "41Д", "41М", "42Д", "42М")
+        val gone = listOf("12Т", "13Д", "13М", "13О", "13Э", "33М", "41Д", "41М", "42Д", "42М")
         assertFalse(students.any { it.group in gone })
+    }
+
+    @Test
+    fun `переведённые на курс выше группы 23Д 23М 23О содержат по 26 учащихся`() {
+        assumeTrue("students.csv есть только в admin-сборке", file != null)
+
+        val counts = students.groupingBy { it.group }.eachCount()
+        assertEquals(26, counts["23Д"])
+        assertEquals(26, counts["23М"])
+        assertEquals(26, counts["23О"])
+        assertTrue(students.filter { it.group in listOf("23Д", "23М", "23О") }.all { it.course == "2" })
+    }
+
+    @Test
+    fun `курс каждой записи согласован с первой цифрой кода группы`() {
+        assumeTrue("students.csv есть только в admin-сборке", file != null)
+
+        assertTrue(students.all { it.course == it.group.first().toString() })
     }
 
     @Test
@@ -82,6 +100,9 @@ class StudentsDatabaseTest {
         assertEquals(30, counts["42О"])
         assertEquals(25, counts["42Н"])
         assertEquals(30, counts["42Т"])
+        assertEquals(26, counts["12Э"])
+        assertEquals(51, counts["22Т"])
+        assertEquals(51, counts["23Э"])
     }
 
     @Test

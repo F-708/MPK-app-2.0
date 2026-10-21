@@ -13,7 +13,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
@@ -28,13 +30,18 @@ class AppUpdateWorker(
     params: WorkerParameters,
 ) : Worker(context, params) {
     override fun doWork(): Result {
-        val info = AppUpdateChecker.check() ?: return Result.success()
+        val info = UpdateCheckController.checkForWorker(applicationContext) ?: return Result.success()
         val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getString(KEY_NOTIFIED_VERSION, null) == info.versionName) return Result.success()
 
         val file =
             UpdateDownloader.download(applicationContext, info.asset, info.versionName)
                 ?: return Result.retry()
+
+        if (!UpdateDownloader.matchesChecksum(file, info.sha256)) {
+            file.delete()
+            return Result.retry()
+        }
 
         return when (val rejection = UpdateDownloader.validate(applicationContext, file)) {
             ApkRejection.NONE -> {
@@ -62,6 +69,7 @@ class AppUpdateWorker(
 
     companion object {
         const val WORK_NAME = "app_update_check"
+        const val ONCE_WORK_NAME = "app_update_check_once"
         const val CHANNEL_ID = "mpk_app_updates"
         const val NOTIFICATION_ID = 2027
         const val NOTIFICATION_REJECTED_ID = 2028
@@ -83,6 +91,25 @@ class AppUpdateWorker(
                 ExistingPeriodicWorkPolicy.KEEP,
                 request,
             )
+        }
+
+        fun checkOnce(context: Context) {
+            if (!AppUpdateChecker.UPDATE_ENABLED_FLAVORS.contains(BuildConfig.FLAVOR)) return
+            runCatching {
+                val request =
+                    OneTimeWorkRequestBuilder<AppUpdateWorker>()
+                        .setConstraints(
+                            Constraints
+                                .Builder()
+                                .setRequiredNetworkType(NetworkType.CONNECTED)
+                                .build(),
+                        ).build()
+                WorkManager.getInstance(context).enqueueUniqueWork(
+                    ONCE_WORK_NAME,
+                    ExistingWorkPolicy.REPLACE,
+                    request,
+                )
+            }
         }
 
         private fun remember(
