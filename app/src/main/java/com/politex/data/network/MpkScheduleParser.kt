@@ -3,6 +3,7 @@ package com.politex.data.network
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.util.BinaryTextExtract
+import com.politex.util.CuratorStore
 import com.politex.util.DateFormats
 import com.politex.util.Docx
 import com.politex.util.Dow
@@ -232,7 +233,42 @@ object MpkScheduleParser {
                 out.putIfAbsent(key, lesson)
             }
         }
-        return applyHeaderDate(out.values.toList(), bytes, targetDate)
+        val allLessons = out.values.toList()
+        runCatching { CuratorStore.record(collectCuratorPairs(allLessons)) }
+        return applyHeaderDate(allLessons, bytes, targetDate)
+    }
+
+    internal const val CURATOR_HOUR = "Кураторский час"
+
+    private val CURATOR_HOUR_RAW_VARIANTS = setOf(
+        "КУРЧ",
+        "КУРЧАС",
+        "КУР.ЧАС",
+        "КУР. ЧАС",
+        "КУР ЧАС",
+        "КУРАТОРСКИЙ ЧАС",
+    )
+
+    internal fun collectCuratorPairs(lessons: Collection<LessonEntity>): Map<String, String> {
+        val pairs = LinkedHashMap<String, String>()
+        for (lesson in lessons) {
+            val group = lesson.groupName.trim()
+            if (group.isBlank()) continue
+            if (!isCuratorHour(lesson)) continue
+            val teacher = lesson.teacherFirst.trim().ifBlank { lesson.teacherSecond.trim() }
+            if (teacher.isBlank()) continue
+            pairs.putIfAbsent(group, teacher)
+        }
+        return pairs
+    }
+
+    private fun isCuratorHour(lesson: LessonEntity): Boolean {
+        if (lesson.officialSubjectName.equals(CURATOR_HOUR, ignoreCase = true)) return true
+        val raw = lesson.subjectRaw
+            .trim()
+            .replace(Regex("\\s+"), " ")
+            .uppercase(Locale.ROOT)
+        return raw in CURATOR_HOUR_RAW_VARIANTS
     }
 
     internal fun discoverDocumentGroups(texts: DocTexts?): List<String> {

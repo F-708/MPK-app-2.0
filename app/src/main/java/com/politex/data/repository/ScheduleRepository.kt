@@ -254,6 +254,10 @@ class ScheduleRepository(
 
     internal fun catalog(): List<String> = cachedCatalog ?: catalogProvider().takeIf { it.isNotEmpty() }?.also { cachedCatalog = it } ?: emptyList()
 
+    fun resetCatalog() {
+        cachedCatalog = null
+    }
+
     suspend fun syncDayAllGroupsCached(
         date: String,
         dow: Int,

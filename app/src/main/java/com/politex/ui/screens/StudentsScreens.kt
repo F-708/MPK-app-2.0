@@ -81,6 +81,7 @@ import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberNowMinutes
 import com.politex.ui.util.rememberToday
+import com.politex.util.CuratorStore
 import com.politex.util.Dow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
@@ -341,6 +342,11 @@ fun StudentCardScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    CuratorStore.attach(context)
+    val curatorRevision = CuratorStore.revision.intValue
+    val curatorName = remember(student.group, student.curator, curatorRevision) {
+        resolveCardCurator(student.group, student.curator)
+    }
 
     val today = rememberToday()
     val dow = remember(today) { Dow.of(today) }
@@ -501,7 +507,9 @@ fun StudentCardScreen(
                         }
                         if (student.funding.isNotBlank()) InfoLine("Основа обучения", student.funding)
                         if (student.dormitory.isNotBlank()) InfoLine("Общежитие", student.dormitory)
-                        if (student.curator.isNotBlank()) InfoLine("Куратор", student.curator)
+                        if (!curatorName.isNullOrBlank()) {
+                            InfoLine("Куратор", curatorName)
+                        }
 
                         if (student.courseMismatch) {
                             Spacer(modifier = Modifier.height(8.dp))
@@ -864,6 +872,11 @@ private enum class DayMode(val title: String) {
     TOMORROW("Завтра"),
     CALENDAR("Календарь"),
 }
+
+internal fun resolveCardCurator(
+    group: String,
+    csvCurator: String,
+): String? = CuratorStore.curatorFor(group) ?: csvCurator.trim().takeIf { it.isNotBlank() }
 
 @Composable
 private fun InfoLine(label: String, value: String) {

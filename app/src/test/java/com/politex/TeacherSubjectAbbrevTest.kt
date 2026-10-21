@@ -53,7 +53,7 @@ class TeacherSubjectAbbrevTest {
             "УПИн" to "Учебная практика по информационным технологиям",
             "УПСл" to "Механическая обработка",
             "КУРС" to "Курсовое проектирование",
-            "КУРЧ" to "Кураторский час",
+            "КУРЧ" to "Кур. час",
             "ЭкОр" to "Экон. организ.",
             "ОМен" to "Осн. менеджмента",
             "Стат" to "Статистика",
@@ -127,6 +127,15 @@ class TeacherSubjectAbbrevTest {
         for ((abbr, display) in teacherAbbrevToDisplay) {
             assertEquals("«$abbr»", display, SubjectFormatter.getShortName(abbr))
         }
+    }
+
+    @Test
+    fun `студенческое сокращение КУРЧАС раскрывается в кураторский час`() {
+        assertEquals("Кураторский час", SubjectFormatter.normalize("КУРЧАС"))
+        assertEquals("Кур. час", SubjectFormatter.getShortName("КУРЧАС"))
+        assertEquals("Кур. час", SubjectFormatter.getShortName("КУРЧ"))
+        assertEquals("Кур. час", SubjectFormatter.getShortName("Кураторский час"))
+        assertEquals("КУРЧ", SubjectFormatter.getAcronym("Кураторский час"))
     }
 
     @Test

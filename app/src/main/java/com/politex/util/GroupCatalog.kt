@@ -1,6 +1,7 @@
 package com.politex.util
 
 import android.content.Context
+import com.politex.content.ContentAssets
 
 class GroupCatalog(
     private val codes: List<String>,
@@ -17,8 +18,8 @@ class GroupCatalog(
         private const val ASSET = "group_codes.csv"
 
         fun load(context: Context): GroupCatalog = try {
-            context.assets
-                .open(ASSET)
+            ContentAssets
+                .open(context, ASSET)
                 .bufferedReader(Charsets.UTF_8)
                 .readLines()
                 .let(::parse)

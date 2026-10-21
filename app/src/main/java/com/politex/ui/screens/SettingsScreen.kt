@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.GroupRemove
 import androidx.compose.material.icons.filled.Groups
@@ -48,8 +49,9 @@ import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SettingsBackupRestore
-import androidx.compose.material.icons.filled.SystemUpdateAlt
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -89,6 +91,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.politex.BuildConfig
+import com.politex.content.ContentPackStore
+import com.politex.content.ContentPackWorker
+import com.politex.content.contentPackStatusText
 import com.politex.data.model.GroupInfo
 import com.politex.ui.components.SectionCaption
 import com.politex.ui.components.SettingsCard
@@ -203,6 +208,13 @@ fun SettingsScreen(
     var backupMessage by remember { mutableStateOf("") }
     var backupIsError by remember { mutableStateOf(false) }
     val backupScope = rememberCoroutineScope()
+
+    val contentRevision = ContentPackStore.revision.intValue
+    val contentStatusText =
+        remember(contentRevision) {
+            contentPackStatusText(ContentPackStore.activeVersion, ContentPackStore.generatedAt)
+        }
+    var contentMessage by remember { mutableStateOf("") }
 
     var showBackupDialog by remember { mutableStateOf(false) }
     var pendingBackupSections by remember { mutableStateOf(BackupManager.BackupSection.ALL) }
@@ -373,6 +385,34 @@ fun SettingsScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    SettingsDivider()
+                    SettingsRow(
+                        icon = Icons.Default.CloudDownload,
+                        title = "Обновить данные колледжа",
+                        subtitle = contentStatusText,
+                        onClick = {
+                            ContentPackWorker.checkOnce(context)
+                            contentMessage = "Проверка обновления данных запущена"
+                        },
+                        modifier = Modifier.testTag("content_pack_update_btn"),
+                    )
+                    if (contentMessage.isNotBlank()) {
+                        SettingsDivider()
+                        Text(
+                            text = contentMessage,
+                            style =
+                            TextStyle(
+                                fontSize = 12.sp,
+                                color = ColorTextMuted,
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp)
+                                .testTag("content_pack_message"),
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
 
@@ -410,13 +450,13 @@ fun SettingsScreen(
                 }
             }
 
-            item { SectionCaption("О ПРИЛОЖЕНИИ", Modifier.padding(top = 4.dp)) }
-            item { AboutCard() }
-
             if (showUpdateSection(BuildConfig.FLAVOR)) {
                 item { SectionCaption("ОБНОВЛЕНИЯ", Modifier.padding(top = 4.dp)) }
                 item { UpdatesCard() }
             }
+
+            item { SectionCaption("О ПРИЛОЖЕНИИ", Modifier.padding(top = 4.dp)) }
+            item { AboutCard() }
         }
     }
 
@@ -898,7 +938,7 @@ private fun UpdatesCard() {
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SettingsIcon(Icons.Default.SystemUpdateAlt)
+                SettingsIcon(Icons.Default.Tune)
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -949,7 +989,7 @@ private fun UpdatesCard() {
         }
         SettingsDivider()
         SettingsRow(
-            icon = Icons.Default.SystemUpdateAlt,
+            icon = Icons.Default.SystemUpdate,
             title = if (checking) "Проверка обновлений…" else "Проверить обновления",
             onClick = { runCheck() },
             modifier = Modifier.testTag("update_check_btn"),

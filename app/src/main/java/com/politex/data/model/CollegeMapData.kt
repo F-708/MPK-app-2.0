@@ -1,6 +1,7 @@
 package com.politex.data.model
 
 import android.content.Context
+import com.politex.content.ContentAssets
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -91,8 +92,8 @@ class CollegeMapData(
         private const val ASSET = "college_map.json"
 
         fun load(context: Context): CollegeMapData = try {
-            context.assets
-                .open(ASSET)
+            ContentAssets
+                .open(context, ASSET)
                 .bufferedReader(Charsets.UTF_8)
                 .use { it.readText() }
                 .let(::parse)

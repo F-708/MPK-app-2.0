@@ -1,6 +1,7 @@
 package com.politex
 
 import android.app.Application
+import com.politex.content.ContentPackStore
 import com.politex.data.local.MpkDatabase
 import com.politex.data.repository.ScheduleRepository
 import com.politex.data.repository.StudentsRepository
@@ -18,6 +19,7 @@ object AppGraph {
 
     fun init(context: Application) {
         val app = context.applicationContext
+        ContentPackStore.attach(app)
         val db = MpkDatabase.getInstance(app)
         scheduleRepository =
             ScheduleRepository(

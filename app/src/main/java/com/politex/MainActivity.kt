@@ -82,6 +82,7 @@ class MainActivity : ComponentActivity() {
             }
             com.politex.update.AppUpdateWorker.schedule(this)
         }
+        com.politex.content.ContentPackWorker.schedule(this)
 
         setContent {
             val appViewModel: AppViewModel = viewModel()

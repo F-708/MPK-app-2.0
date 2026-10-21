@@ -1,6 +1,7 @@
 package com.politex.data.repository
 
 import android.content.Context
+import com.politex.content.ContentAssets
 import com.politex.util.Csv
 import java.io.InputStream
 
@@ -23,8 +24,12 @@ class TeachersRepository(
 
     fun loadTeachers(): List<Teacher> = cached ?: parseTeachers().takeIf { it.isNotEmpty() }?.also { cached = it } ?: emptyList()
 
+    fun invalidateCache() {
+        cached = null
+    }
+
     private fun parseTeachers(): List<Teacher> = try {
-        parseCsv(context.assets.open("teachers.csv"))
+        parseCsv(ContentAssets.open(context, "teachers.csv"))
     } catch (_: Exception) {
         emptyList()
     }

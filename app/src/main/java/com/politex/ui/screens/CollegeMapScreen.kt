@@ -94,6 +94,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.politex.content.ContentPackStore
+
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.model.CollegeMap
@@ -151,7 +153,8 @@ fun CollegeMapScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val mapData = remember { CollegeMapData.load(context) }
+    val contentRevision = ContentPackStore.revision.intValue
+    val mapData = remember(context, contentRevision) { CollegeMapData.load(context) }
 
     val scheduleRepository = remember { com.politex.AppGraph.scheduleRepository }
 

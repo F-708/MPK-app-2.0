@@ -83,6 +83,7 @@ import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberNowMinutes
 import com.politex.ui.util.rememberToday
+import com.politex.util.CuratorStore
 import com.politex.util.Dow
 import com.politex.util.GroupCatalog
 import com.politex.util.GroupParser
@@ -209,6 +210,12 @@ fun GroupScheduleScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    CuratorStore.attach(context)
+    val curatorRevision = CuratorStore.revision.intValue
+    val curatorName =
+        remember(selectedGroupName, curatorRevision) {
+            CuratorStore.curatorFor(selectedGroupName)
+        }
 
     var selectedCourse by rememberSaveable {
         mutableIntStateOf(GroupParser.parse(ownGroupName)?.course ?: 1)
@@ -483,6 +490,21 @@ fun GroupScheduleScreen(
                                 ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+
+                        if (!curatorName.isNullOrBlank()) {
+                            Text(
+                                text = "Куратор: $curatorName",
+                                style =
+                                androidx.compose.ui.text.TextStyle(
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 11.sp,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.testTag("group_schedule_curator_line"),
                             )
                         }
                     }

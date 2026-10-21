@@ -55,6 +55,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.politex.content.ContentAssets
+import com.politex.content.ContentPackStore
 import com.politex.data.model.GroupInfo
 import com.politex.data.repository.ScheduleRepository
 import com.politex.data.repository.Student
@@ -1172,13 +1174,17 @@ private fun TeacherAvatar(
     highlight: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val contentRevision = ContentPackStore.revision.intValue
     val border = if (highlight) ColorActiveBlue else ColorBorderLight
-    if (teacher.photo.isNotBlank()) {
+    var photoFailed by remember(teacher.photo, contentRevision) { mutableStateOf(false) }
+    if (teacher.photo.isNotBlank() && !photoFailed) {
         coil.compose.AsyncImage(
-            model = "file:///android_asset/teachers_photos/" + teacher.photo,
+            model = ContentAssets.photoModel(context, teacher.photo),
             contentDescription = teacher.name,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             alignment = Alignment.TopCenter,
+            onState = { state -> if (state is coil.compose.AsyncImagePainter.State.Error) photoFailed = true },
             modifier =
             modifier
                 .size(size)
@@ -1194,11 +1200,7 @@ private fun TeacherAvatar(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text =
-                teacher.name
-                    .split(" ")
-                    .firstOrNull()
-                    ?.take(1) ?: "?",
+                text = teacherInitial(teacher.name),
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 fontSize = (size.value * 0.4f).sp,
@@ -1206,6 +1208,13 @@ private fun TeacherAvatar(
         }
     }
 }
+
+internal fun teacherInitial(name: String): String =
+    name
+        .trim()
+        .split(" ")
+        .firstOrNull { it.isNotBlank() }
+        ?.take(1) ?: "?"
 
 @Composable
 private fun TeacherCardPageWrapper(
@@ -1514,6 +1523,9 @@ private fun AboutTeacherTab(
 
     showLeads: Boolean = true,
 ) {
+    val context = LocalContext.current
+    val contentRevision = ContentPackStore.revision.intValue
+    var photoFailed by remember(teacher.photo, contentRevision) { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -1530,11 +1542,12 @@ private fun AboutTeacherTab(
                         .fillMaxWidth()
                         .padding(16.dp),
                 ) {
-                    if (teacher.photo.isNotBlank()) {
+                    if (teacher.photo.isNotBlank() && !photoFailed) {
                         coil.compose.AsyncImage(
-                            model = "file:///android_asset/teachers_photos/" + teacher.photo,
+                            model = ContentAssets.photoModel(context, teacher.photo),
                             contentDescription = teacher.name,
                             contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                            onState = { state -> if (state is coil.compose.AsyncImagePainter.State.Error) photoFailed = true },
                             modifier =
                             Modifier
                                 .width(180.dp)
@@ -1552,11 +1565,7 @@ private fun AboutTeacherTab(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text =
-                                teacher.name
-                                    .split(" ")
-                                    .firstOrNull()
-                                    ?.take(1) ?: "?",
+                                text = teacherInitial(teacher.name),
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 60.sp,
