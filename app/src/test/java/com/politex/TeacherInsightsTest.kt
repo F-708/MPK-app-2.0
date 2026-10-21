@@ -154,8 +154,6 @@ class TeacherInsightsTest {
             listOf(
                 lesson(teacherFirst = "Мешалкина И.В.", roomFirst = "339", date = "2026-09-15"),
             )
-        // nowMillis фиксирован (20.09.2026): с реальным «сейчас» тест протухает
-        // через 30 дней после даты урока (STALE_DAYS) — временная бомба.
         val ti = TeacherInsights(base, lessons, nowMillis = 1_789_862_400_000L)
         assertTrue(ti.isActive("Мешалкина Ирина Владимировна"))
         assertEquals(1, ti.lessonCount("Мешалкина Ирина Владимировна"))

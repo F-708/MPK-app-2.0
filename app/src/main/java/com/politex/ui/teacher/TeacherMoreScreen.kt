@@ -1,6 +1,5 @@
 package com.politex.ui.teacher
 
-import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,14 +28,12 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -53,7 +49,6 @@ import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
 import com.politex.ui.theme.ColorTextTitle
-import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.TextStylePageTitle
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.Dow
@@ -269,25 +264,6 @@ private fun dowTitle(dow: Int): String =
         6 -> "суббота"
         else -> "воскресенье"
     }
-
-@Composable
-private fun OemCard(
-    title: String,
-    steps: List<String>,
-) {
-    val metrics = LocalTeacherMetrics.current
-    AppCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(title, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = metrics.body, color = ColorTextTitle), modifier = Modifier.padding(bottom = 6.dp))
-            steps.forEachIndexed { i, step ->
-                Row(modifier = Modifier.padding(vertical = 3.dp)) {
-                    Text("${i + 1}.", style = TextStyle(fontSize = metrics.body, color = ColorBrandBlue, fontWeight = FontWeight.Bold), modifier = Modifier.width(22.dp))
-                    Text(step, style = TextStyle(fontSize = metrics.body, color = ColorTextBody), modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
 
 internal const val TEACHER_ABOUT_DISCLAIMER =
     "Неофициальное приложение. Данные из открытых источников guo-mpk.by. Может отставать от приказов о заменах."

@@ -17,8 +17,6 @@ import org.junit.Test
 
 class DocWebBridgeTest {
 
-    private val eps = 1e-6f
-
     @Test
     fun `page N OF разбирается, 1-based`() {
         assertEquals(PortMessage.Page(3, 10), parsePortMessage("page 3 10"))

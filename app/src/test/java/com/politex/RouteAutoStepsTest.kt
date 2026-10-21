@@ -13,11 +13,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Ловушка на «маршрут активен, но шагов и линии нет»: if «откуда» не найдено на
- * плане (спортзал, актовый зал, кабинет вне карты), маршрут обязан строиться от
- * главного входа, а не молча пропадать.
- */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w360dp-h780dp")

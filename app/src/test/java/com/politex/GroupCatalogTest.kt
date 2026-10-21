@@ -18,7 +18,7 @@ class GroupCatalogTest {
     fun `ассет group_codes_csv попадает в standard и содержит все группы колледжа`() {
         val all = catalog.all()
 
-        assertEquals(61, all.size)
+        assertEquals(64, all.size)
         assertEquals(all.distinct(), all)
         assertTrue(all.all { it.length == 3 })
     }

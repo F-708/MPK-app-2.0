@@ -67,10 +67,6 @@ object MpkScheduleParser {
         RegexOption.IGNORE_CASE,
     )
 
-    private val DOC_LINK_REGEX = Regex(
-        "(?i)href=[\"']([^\"']+\\.(?:docx|doc)(?:\\?[^\"']*)?)[\"']",
-    )
-
     private val IFRAME_SRC_REGEX = Regex(
         "(?i)<iframe[^>]+src=[\"']([^\"']+)[\"']",
     )

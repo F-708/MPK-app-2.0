@@ -247,19 +247,6 @@ class TeacherShotsTest {
         if (composeRule.mainClock.autoAdvance) composeRule.waitForIdle() else composeRule.mainClock.advanceTimeByFrame()
     }
 
-    private fun waitFor(
-        what: String,
-        timeoutMs: Long = 20_000,
-        ready: () -> Boolean,
-    ) {
-        val deadline = System.nanoTime() + timeoutMs * 1_000_000
-        while (System.nanoTime() < deadline) {
-            if (ready()) return
-            pump()
-        }
-        throw AssertionError("Условие «$what» не выполнено за ${timeoutMs}мс")
-    }
-
     private fun freezeAtTuesday1030() {
         val real = System.currentTimeMillis()
         val target =

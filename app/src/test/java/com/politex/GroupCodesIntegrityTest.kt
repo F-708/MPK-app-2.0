@@ -49,8 +49,8 @@ class GroupCodesIntegrityTest {
     }
 
     @Test
-    fun `каталог содержит 61 группу - 43О и 43Э присутствуют`() {
-        assertEquals(61, packaged.size)
+    fun `каталог содержит 64 группы - 43О и 43Э присутствуют`() {
+        assertEquals(64, packaged.size)
         assertTrue("43О" in packaged)
         assertTrue("43Э" in packaged)
         val catalog = GroupCatalog.load(RuntimeEnvironment.getApplication())
@@ -79,5 +79,30 @@ class GroupCodesIntegrityTest {
         assertEquals("43Э", buildGroupCode(4, 3, 'Э'))
         assertTrue(validateAgainstCatalog("43О", packaged))
         assertTrue(validateAgainstCatalog("43Э", packaged))
+    }
+
+    @Test
+    fun `группы 23Д 23М 23О присутствуют и доступны в пикере на 2 курсе номере 3`() {
+        listOf("23Д", "23М", "23О").forEach { g ->
+            assertTrue("$g должен быть в каталоге", g in packaged)
+        }
+
+        assertEquals(3, groupPickerMaxNumber(packaged, 2))
+        assertEquals(listOf('Д', 'М', 'О', 'Э'), groupPickerLetters(packaged, 2, 3))
+
+        assertEquals("23Д", buildGroupCode(2, 3, 'Д'))
+        assertEquals("23М", buildGroupCode(2, 3, 'М'))
+        assertEquals("23О", buildGroupCode(2, 3, 'О'))
+        assertTrue(validateAgainstCatalog("23Д", packaged))
+        assertTrue(validateAgainstCatalog("23М", packaged))
+        assertTrue(validateAgainstCatalog("23О", packaged))
+    }
+
+    @Test
+    fun `специальности Д М О известны куррикулуму на 2 курсе`() {
+        listOf('Д', 'М', 'О').forEach { spec ->
+            val subjects = MpkCurriculum.getSubjects(spec, 2)
+            assertTrue("для специальности $spec курс 2 не должен быть пустым", subjects.isNotEmpty())
+        }
     }
 }

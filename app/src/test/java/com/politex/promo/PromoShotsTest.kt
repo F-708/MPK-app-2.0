@@ -487,7 +487,6 @@ class PromoShotsTest {
             "shot_settings_bottom",
             tab = 3,
             interact = {
-                // standard flavor, student mode: 0..7 — расписание/уведомления/вид/карта, 8 — «ДАННЫЕ»
                 composeRule.onNodeWithTag("settings_list").performScrollToIndex(8)
                 composeRule.onNodeWithText("ДАННЫЕ").assertExists()
                 composeRule.onNodeWithText("О ПРИЛОЖЕНИИ").assertExists()
