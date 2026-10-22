@@ -1351,3 +1351,36 @@ testStandardDebugUnitTest → коммит. Room-схему трогает то�
   niepm-состояниях). Vision teacher-кадров — отдельная проверка.
 - Публикация: sync в public/moy-polytech → тег v2.0.1-preview.2 → пуш ЗАДЕРЖАН до подтверждения
   заказчиком preview.1. Секреты CI проверены: cert SHA-256 обоих опубликованных APK = my-upload-key.jks.
+## ВОЛНА TT (2026-10-22, preview.3 — обновления в «Другое» + честный секундомер)
+- **TT1 секундомер виджетов 1:1 без строки «до звонка»**. Root cause 5-секундного тика preview.2:
+  аларм-эстафета ACTION_SECOND_TICK деградирует в inexact setAndAllowWhileIdle (Android 14+:
+  SCHEDULE_EXACT_ALARM denied-by-default, UX выдачи права привязан к флоу строки) + системный
+  батчинг; ShadowAlarmManager это не эмулирует. Решение: widget-only режим BellTimerService —
+  тот же посекундный корутин-цикл в FGS, но с тихим уведомлением канала «Виджеты» (IMPORTANCE_MIN)
+  вместо строки. Предикаты tickDriverFor → TickDriver {LINE_FGS, WIDGET_FGS, LINE_FALLBACK_ALARM,
+  ALARM_RELAY, NONE}; окно 7:00–21:00 (inSchoolWindow); точки sync: BOOT/ACTION_TICK(self-heal ≤1мин)/
+  TimeChanged/провайдер/конфиг/setEnabled/MainActivity.onCreate. Эстафета оставлена фолбэком без FGS-права.
+  Тесты 55/55 (WidgetSecondsTickTest 23 — переписан: boot без строки + виджет → старт widget-only).
+- **TT2 обновления вокруг пользователя**: карточка «ДОСТУПНО ОБНОВЛЕНИЕ» (иконка загрузки, выделенная)
+  под «Настройками» в студенческом «Другое» (OtherMenu/CollegeScreen) и учительском «Ещё»
+  (TeacherMoreScreen) — общий UpdateAvailableCard (ui/components/UpdateInstallUi.kt, туда перенесены
+  UpdateInstallButton/UpdateProgressIcon из настроек); та же машина UpdateInstallController (синглтон,
+  состояния синхронны между экранами). Персист: util/UpdatePendingStore.kt (prefs mpk_update_prefs,
+  pending_*), restore() при старте без новой проверки, гейт versionCode > BuildConfig; кэш APK
+  cacheDir/updates/update-<version>.apk переживает перезапуск (checksum+validate → сразу Downloaded,
+  startDownload переиспользует без сети). foundUpdate: @Volatile → StateFlow.
+- **TT3 пульс вкладки «Другое»/«Ещё»** пока pending активен — pulseHalo/PulseActive (тот же механизм
+  обучения); теги main_tab_college / teacher_tab_more; гаснет при cancel/clear/установке.
+- **TT4 уведомление об обновлении**: воркер переведён на checkNow; UpdateFound → rememberFound →
+  processFoundUpdate: анти-спам по versionCode, guard «качает/уже скачал», adoptWorkerResult,
+  канал «Обновления приложения» (DEFAULT), POST_NOTIFICATIONS-гейт, tap → UpdateInstallActivity;
+  Latest → clearPending (отозванный релиз гасит кнопку/пульс), NetworkError — не гасит;
+  отклонение подписи → clearPending + notifyRejected.
+- **preview→stable гарантирован тестом**: metaMatchesChannel = PREVIEW-клиент принимает stable-мету;
+  selectFromMeta гейтит versionCode > current. UpdateChannelOfferTest: 20001999 > 20001002 → апдейт
+  предлагается; даунгрейдов нет. Продукт-правок не потребовалось.
+- Тесты SS2-зоны: 198/198 два прогона подряд (30 новых: WorkerNotify 10, ChannelOffer 8, PendingStore 5,
+  MoreButton 5, TabPulse 2). Полный гейт зелёный; promo/shots без изменений (карточка только при pending).
+- Публикация: sync → public → тег v2.0.1-preview.3 → пуш. Компромисс для заказчика: при выключенной
+  строке и живом секундном виджете в шторке тихая плашка «Виджеты обновляются» (требование Android к FGS),
+  скрывается настройками канала; тик только 7:00–21:00.
