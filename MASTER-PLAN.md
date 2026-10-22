@@ -1320,3 +1320,34 @@ testStandardDebugUnitTest → коммит. Room-схему трогает то�
   без изменений (43Э уже есть). НЕ полная замена базы.
 - Репо перед стартом: чистое по коду; promo/, docs/, _reports/, .claude/, .superpowers/,
   tools/reader/ — чужие зоны другой сессии, НЕ трогать и не коммитить.
+
+## ВОЛНА SS (2026-10-22, preview.2 — фиксы заказчика + установка обновления из приложения)
+- **P2-1 стабильность teacher-расписания** (пропадание/дубли/«завтра до публикации»). Root causes:
+  гонка дат в AppViewModel (combine эмитил старые уроки под новой датой), стирание кэша пустым
+  ответом в ScheduleRepository.replaceForDate, матчинг однофамильцев в TeacherInsights (выбранный
+  вне списка → все однофамильцы его), fallback на студенческое расписание в MainScreen, устаревшие
+  ответы TeacherDayViewModel без токена. Фиксы: flatMapLatest, эмит только при day.date==date
+  (иначе честное пустое состояние), пустой ответ → failure без стирания кэша, переписан
+  matchRowToTeacher (инициалы напрямую, однофамильцы только для AMBIGUOUS), loadToken.
+  Тесты: TeacherScheduleSyncChainTest 12/12, вся teacher-регрессия 119/119.
+- **P2-2 пульс + секундомер виджетов**. Пульс: GroupChipText больше не принимает pulse (группа не
+  кликабельна в teacher-режиме → не пульсирует); pulseTargetLesson(lessons, teacherMode) — цель
+  подсказки в teacher-режиме первый урок с кабинетом. Секундомер: второй драйвер тика —
+  ACTION_SECOND_TICK в WidgetAlarmReceiver (предикаты не зависят от BellCountdownNotifier.isEnabled,
+  только жив ли сервис); эстафета сервис↔аларм (onCreate→cancelSecond, onDestroy/setEnabled(false)→
+  scheduleNextSecond), BOOT/MY_PACKAGE_REPLACED планируют обе цепочки, окно 7:00–21:00.
+  Тесты: WidgetSecondsTickTest 14/14, TeacherPulseHintTest 4/4, HintFlagsTest 8/8 + соседи 43/43.
+- **P2-3 «Я ПРЕПОДАВАТЕЛЬ» в диалоге смены группы**: вынесены TeacherModeCard/TeacherSearchStep из
+  FirstRunGroupDialog (переиспользование без дублирования), шаг GROUP/TEACHER, карточка видна только
+  при !isTeacherMode, выбор преподавателя НЕ меняет группу, диалог закрывается. Тесты 5/5 + K4 17/17.
+- **UU установка обновления из приложения**: кнопка справа от «Найдено обновление» (update_install_btn);
+  UpdateInstallController — state-machine IdleFound→Downloading(progress)→Downloaded→InstallLaunched,
+  Error транзиентно в статус с ретраем; прогресс okhttp contentLength → чанки 8КБ → StateFlow →
+  иконка FileDownload заполняется ColorBrandFill снизу вверх (clipRect, animateFloatAsState 300ms);
+  после валидации (пакет+SHA-256 подписи+versionCode) тап → UpdateInstallActivity (без авто-запуска);
+  отмена при смене канала/новой проверке (AtomicBoolean+job.cancel+удаление файла). Тесты 44/44.
+- Гейты: полный testStandardDebugUnitTest зелёный (1510 тестов), Roborazzi record — promo/shots
+  побайтово без изменений (нет нежелательных визуальных регрессий; новые элементы только в
+  niepm-состояниях). Vision teacher-кадров — отдельная проверка.
+- Публикация: sync в public/moy-polytech → тег v2.0.1-preview.2 → пуш ЗАДЕРЖАН до подтверждения
+  заказчиком preview.1. Секреты CI проверены: cert SHA-256 обоих опубликованных APK = my-upload-key.jks.
