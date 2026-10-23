@@ -97,7 +97,6 @@ import java.util.TimeZone
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-
 @Config(sdk = [35], qualifiers = "w412dp-h915dp-xxxhdpi")
 class PromoShotsTest {
     @get:Rule
@@ -177,8 +176,7 @@ class PromoShotsTest {
         val g = group.canonicalName
         val now = Calendar.getInstance()
         val iso = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
-        fun dayIso(plusDays: Int): String =
-            iso.format((now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, plusDays) }.time)
+        fun dayIso(plusDays: Int): String = iso.format((now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, plusDays) }.time)
 
         val plan = listOf(
             Triple("Математика", "214", "Иванова И.И."),
@@ -191,9 +189,14 @@ class PromoShotsTest {
             plan.mapIndexed { i, (subject, room, teacher) ->
                 val (start, end) = CollegeBellSchedule.getTimeForLessonNumber(i + 1, dow)
                 LessonEntity(
-                    groupName = g, dayOfWeek = dow, lessonNumber = i + 1,
-                    timeStart = start, timeEnd = end,
-                    subjectRaw = subject, roomFirst = room, teacherFirst = teacher,
+                    groupName = g,
+                    dayOfWeek = dow,
+                    lessonNumber = i + 1,
+                    timeStart = start,
+                    timeEnd = end,
+                    subjectRaw = subject,
+                    roomFirst = room,
+                    teacherFirst = teacher,
                 )
             }
         }
@@ -206,15 +209,21 @@ class PromoShotsTest {
             clearTasksForGroup(g)
             insertTask(
                 StudentTaskEntity(
-                    groupName = g, course = group.course, subjectName = "Математика",
-                    taskType = TaskType.HOMEWORK.displayName, title = "Параграф 12, задачи 1-5",
+                    groupName = g,
+                    course = group.course,
+                    subjectName = "Математика",
+                    taskType = TaskType.HOMEWORK.displayName,
+                    title = "Параграф 12, задачи 1-5",
                     deadlineDate = dayIso(1),
                 ),
             )
             insertTask(
                 StudentTaskEntity(
-                    groupName = g, course = group.course, subjectName = "Физика",
-                    taskType = TaskType.LAB_WORK.displayName, title = "Отчёт по лаб. 3",
+                    groupName = g,
+                    course = group.course,
+                    subjectName = "Физика",
+                    taskType = TaskType.LAB_WORK.displayName,
+                    title = "Отчёт по лаб. 3",
                     deadlineDate = dayIso(3),
                 ),
             )
@@ -225,15 +234,19 @@ class PromoShotsTest {
             listOf(-12 to 5, -10 to 4, -7 to 5).forEach { (day, value) ->
                 insert(
                     GradeEntryEntity(
-                        subjectName = "Математика", category = GradeCategory.REGULAR.name,
-                        value = value, dateIso = dayIso(day),
+                        subjectName = "Математика",
+                        category = GradeCategory.REGULAR.name,
+                        value = value,
+                        dateIso = dayIso(day),
                     ),
                 )
             }
             insert(
                 GradeEntryEntity(
-                    subjectName = "Математика", category = GradeCategory.CONTROL.name,
-                    value = 4, dateIso = dayIso(-3),
+                    subjectName = "Математика",
+                    category = GradeCategory.CONTROL.name,
+                    value = 4,
+                    dateIso = dayIso(-3),
                 ),
             )
         }
@@ -242,16 +255,23 @@ class PromoShotsTest {
             getAllItems().first().forEach { deleteItemById(it.id) }
             insertItem(
                 MaterialItemEntity(
-                    kind = MaterialKind.TEXT.name, title = "Конспект: основы ТОЭ",
-                    subjectName = "Математика", textContent = TEXT_MATERIAL, sortOrder = 0,
+                    kind = MaterialKind.TEXT.name,
+                    title = "Конспект: основы ТОЭ",
+                    subjectName = "Математика",
+                    textContent = TEXT_MATERIAL,
+                    sortOrder = 0,
                 ),
             )
 
             insertItem(
                 MaterialItemEntity(
-                    kind = MaterialKind.FILE.name, title = "Презентация: основы ТОЭ",
-                    fileName = "toe_slides.pdf", ext = "pdf",
-                    subjectName = "Математика", archived = true, sortOrder = 0,
+                    kind = MaterialKind.FILE.name,
+                    title = "Презентация: основы ТОЭ",
+                    fileName = "toe_slides.pdf",
+                    ext = "pdf",
+                    subjectName = "Математика",
+                    archived = true,
+                    sortOrder = 0,
                 ),
             )
         }
@@ -326,8 +346,10 @@ class PromoShotsTest {
     @Test
     fun shotScheduleTomorrow() = shoot("shot_schedule_tomorrow", tab = 0, interact = { waitForText("Завтра") }) {
         ScheduleScreen(
-            groupInfo = group, scheduleRepository = AppGraph.scheduleRepository,
-            onSyncRequest = {}, selectedSlot = 1,
+            groupInfo = group,
+            scheduleRepository = AppGraph.scheduleRepository,
+            onSyncRequest = {},
+            selectedSlot = 1,
         )
     }
 

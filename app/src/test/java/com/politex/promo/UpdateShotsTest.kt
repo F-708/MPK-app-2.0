@@ -58,7 +58,6 @@ import com.politex.util.GroupParser
 import com.politex.util.TeacherModeStore
 import com.politex.util.UpdateChannel
 import com.politex.util.UpdateChannelStore
-import java.io.File
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -67,6 +66,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -213,21 +213,21 @@ class UpdateShotsTest {
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 style =
-                                    TextStyle(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 10.sp,
-                                        letterSpacing = 0.sp,
-                                    ),
+                                TextStyle(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 10.sp,
+                                    letterSpacing = 0.sp,
+                                ),
                             )
                         },
                         colors =
-                            NavigationBarItemDefaults.colors(
-                                selectedIconColor = ColorNavSelected,
-                                selectedTextColor = ColorNavSelected,
-                                indicatorColor = ColorSurfaceHighlight,
-                                unselectedIconColor = ColorTextMuted,
-                                unselectedTextColor = ColorTextMuted,
-                            ),
+                        NavigationBarItemDefaults.colors(
+                            selectedIconColor = ColorNavSelected,
+                            selectedTextColor = ColorNavSelected,
+                            indicatorColor = ColorSurfaceHighlight,
+                            unselectedIconColor = ColorTextMuted,
+                            unselectedTextColor = ColorTextMuted,
+                        ),
                     )
                 }
             }

@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Refresh
@@ -48,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.politex.data.model.CollegeBellSchedule
@@ -68,8 +68,6 @@ import com.politex.ui.theme.ColorAccentGoldSoft
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
-import com.politex.ui.theme.ColorBrandFill
-import com.politex.ui.theme.ColorDividerLight
 import com.politex.ui.theme.ColorErrorText
 import com.politex.ui.theme.ColorOnAccentGold
 import com.politex.ui.theme.ColorSurfaceVariantLight
@@ -87,7 +85,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.ui.text.style.TextOverflow
 
 @Composable
 fun StudentsDatabaseScreen(
@@ -283,7 +280,6 @@ private fun StudentRow(student: Student, onClick: () -> Unit) {
     AppCard(
         modifier = Modifier
             .fillMaxWidth()
-
             .heightIn(min = 48.dp)
             .bouncyClickable(onClick = onClick),
     ) {

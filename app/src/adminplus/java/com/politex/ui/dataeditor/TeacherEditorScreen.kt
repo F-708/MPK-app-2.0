@@ -1,0 +1,529 @@
+package com.politex.ui.dataeditor
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.politex.content.ContentAssets
+import com.politex.content.OwnerOverridesStore
+import com.politex.content.OwnerPhotoResizer
+import com.politex.data.repository.Teacher
+import com.politex.dataeditor.TeacherEditorForm
+import com.politex.dataeditor.TeacherEditorLogic
+import com.politex.dataeditor.TeacherEditorStatus
+import com.politex.ui.components.AppCard
+import com.politex.ui.components.SubPageHeader
+import com.politex.ui.theme.ColorBgMain
+import com.politex.ui.theme.ColorBorderLight
+import com.politex.ui.theme.ColorBrandBlue
+import com.politex.ui.theme.ColorBrandFill
+import com.politex.ui.theme.ColorDangerFill
+import com.politex.ui.theme.ColorErrorText
+import com.politex.ui.theme.ColorSuccessBg
+import com.politex.ui.theme.ColorSuccessText
+import com.politex.ui.theme.ColorSurfaceHighlight
+import com.politex.ui.theme.ColorSurfaceVariantLight
+import com.politex.ui.theme.ColorTextDisabled
+import com.politex.ui.theme.ColorTextMuted
+import com.politex.ui.theme.Tokens
+import com.politex.ui.util.bouncyClickable
+import com.politex.ui.util.rememberTeachers
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+
+@Composable
+fun TeacherEditorScreen(
+    teacherName: String,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val teachers = rememberTeachers()
+    val overridesRevision = OwnerOverridesStore.revision.intValue
+
+    val teacher =
+        remember(teachers, teacherName) {
+            val key = OwnerOverridesStore.keyOf(teacherName)
+            teachers.firstOrNull { OwnerOverridesStore.keyOf(it.name) == key }
+        }
+    val override =
+        remember(teacherName, overridesRevision) {
+            OwnerOverridesStore.findTeacher(context, teacherName)
+        }
+    val baseForm =
+        remember(teacher, override, teacherName) {
+            TeacherEditorLogic.formFor(teacherName, teacher, override)
+        }
+    var edit by remember { mutableStateOf<TeacherEditorForm?>(null) }
+    val form = edit ?: baseForm
+    var saving by remember { mutableStateOf(false) }
+    var photoBusy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf(TeacherEditorStatus.IDLE) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    LaunchedEffect(status) {
+        if (status != TeacherEditorStatus.IDLE) {
+            delay(2500)
+            status = TeacherEditorStatus.IDLE
+        }
+    }
+
+    val photoPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            photoBusy = true
+            scope.launch(Dispatchers.IO) {
+                val old = form.pendingPhoto
+                val tmp = File(context.cacheDir, "owner_photo_pending_${System.currentTimeMillis()}.jpg")
+                val ok =
+                    OwnerPhotoResizer.resizeJpeg(
+                        open = { runCatching { context.contentResolver.openInputStream(uri) }.getOrNull() },
+                        dest = tmp,
+                    )
+                old?.let { runCatching { it.delete() } }
+                withContext(Dispatchers.Main) {
+                    photoBusy = false
+                    if (ok) {
+                        edit = form.copy(pendingPhoto = tmp)
+                    } else {
+                        runCatching { tmp.delete() }
+                        status = TeacherEditorStatus.ERROR
+                    }
+                }
+            }
+        }
+
+    val dirty = TeacherEditorLogic.isDirty(form, baseForm)
+    val validationError = TeacherEditorLogic.validate(form)
+    val canSave = TeacherEditorLogic.canSave(form, baseForm, saving || photoBusy)
+
+    Column(
+        modifier =
+        Modifier
+            .fillMaxSize()
+            .background(ColorBgMain)
+            .testTag("teacher_editor_screen"),
+    ) {
+        SubPageHeader(
+            title = teacher?.name ?: teacherName,
+            subtitle =
+            when {
+                photoBusy -> "Обработка фото…"
+                saving -> "Сохранение…"
+                override != null -> "Есть правка • версия ${override.version}"
+                else -> null
+            },
+            onBack = onBack,
+        )
+
+        Column(
+            modifier =
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            EditorPhotoCard(
+                teacherName = teacherName,
+                teacher = teacher,
+                form = form,
+                photoBusy = photoBusy,
+                onPickPhoto = { photoPicker.launch(arrayOf("image/*")) },
+            )
+
+            EditorField(
+                label = "ФИО",
+                value = form.fio,
+                testTag = "teacher_editor_fio",
+                error = if (form.fio.isBlank()) validationError else null,
+                onValueChange = { edit = form.copy(fio = it) },
+            )
+            EditorField(
+                label = "Должность",
+                value = form.position,
+                testTag = "teacher_editor_position",
+                onValueChange = { edit = form.copy(position = it) },
+            )
+            EditorField(
+                label = "Телефон",
+                value = form.phone,
+                testTag = "teacher_editor_phone",
+                onValueChange = { edit = form.copy(phone = it) },
+            )
+            EditorField(
+                label = "Предметы",
+                value = form.subjects,
+                testTag = "teacher_editor_subjects",
+                singleLine = false,
+                onValueChange = { edit = form.copy(subjects = it) },
+            )
+            EditorField(
+                label = "Стаж",
+                value = form.experience,
+                testTag = "teacher_editor_experience",
+                onValueChange = { edit = form.copy(experience = it) },
+            )
+            EditorField(
+                label = "Категория",
+                value = form.category,
+                testTag = "teacher_editor_category",
+                onValueChange = { edit = form.copy(category = it) },
+            )
+
+            StatusBanner(status)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (override != null) {
+                    EditorButton(
+                        icon = Icons.Default.Delete,
+                        label = "Удалить правку",
+                        danger = true,
+                        enabled = !saving && !photoBusy,
+                        testTag = "teacher_editor_delete",
+                        modifier = Modifier.weight(1f),
+                        onClick = { showDeleteConfirm = true },
+                    )
+                }
+                EditorButton(
+                    icon = Icons.Default.Save,
+                    label = "Сохранить",
+                    enabled = canSave,
+                    testTag = "teacher_editor_save",
+                    modifier = Modifier.weight(1f),
+                ) {
+                    saving = true
+                    scope.launch(Dispatchers.IO) {
+                        val record =
+                            OwnerOverridesStore.upsertTeacher(
+                                context = context,
+                                key = form.key,
+                                fio = form.fio,
+                                position = form.position,
+                                phone = form.phone,
+                                subjects = form.subjects,
+                                experience = form.experience,
+                                category = form.category,
+                                photoSource = form.pendingPhoto,
+                            )
+                        if (record != null) OwnerOverridesStore.refreshDependentCaches(context)
+                        withContext(Dispatchers.Main) {
+                            saving = false
+                            if (record != null) {
+                                edit = null
+                                status = TeacherEditorStatus.SAVED
+                            } else {
+                                status = TeacherEditorStatus.ERROR
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Удалить правку?") },
+            text = { Text("Данные и фото вернутся к контент-пакету или встроенным значениям.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        saving = true
+                        scope.launch(Dispatchers.IO) {
+                            val ok = OwnerOverridesStore.deleteTeacher(context, form.key)
+                            if (ok) OwnerOverridesStore.refreshDependentCaches(context)
+                            withContext(Dispatchers.Main) {
+                                saving = false
+                                if (ok) {
+                                    edit = null
+                                    status = TeacherEditorStatus.DELETED
+                                } else {
+                                    status = TeacherEditorStatus.ERROR
+                                }
+                            }
+                        }
+                    },
+                ) {
+                    Text("Удалить", color = ColorDangerFill, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Отмена", color = ColorTextMuted)
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun EditorPhotoCard(
+    teacherName: String,
+    teacher: Teacher?,
+    form: TeacherEditorForm,
+    photoBusy: Boolean,
+    onPickPhoto: () -> Unit,
+) {
+    val context = LocalContext.current
+    val overridesRevision = OwnerOverridesStore.revision.intValue
+    val model =
+        remember(form.pendingPhoto, teacherName, teacher?.photo, overridesRevision) {
+            form.pendingPhoto
+                ?.let { "file://" + it.absolutePath }
+                ?: ContentAssets.teacherPhotoModel(context, teacherName, teacher?.photo ?: "")
+        }
+    AppCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (model != null) {
+                coil.compose.AsyncImage(
+                    model = model,
+                    contentDescription = teacherName,
+                    contentScale = ContentScale.Crop,
+                    modifier =
+                    Modifier
+                        .size(96.dp)
+                        .border(1.dp, ColorBorderLight, RoundedCornerShape(2.dp))
+                        .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
+                        .testTag("teacher_editor_photo"),
+                )
+            } else {
+                Box(
+                    modifier =
+                    Modifier
+                        .size(96.dp)
+                        .background(ColorBrandFill, RoundedCornerShape(2.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = teacherName.trim().take(1).uppercase(),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 36.sp,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            val overridePhoto = overridePhotoActive(teacherName)
+            Column(modifier = Modifier.weight(1f)) {
+                EditorButton(
+                    icon = Icons.Default.PhotoCamera,
+                    label = if (photoBusy) "Обработка…" else "Заменить фото",
+                    filled = false,
+                    enabled = !photoBusy,
+                    testTag = "teacher_editor_pick_photo",
+                    onClick = onPickPhoto,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text =
+                    when {
+                        form.pendingPhoto != null -> "Новое фото будет сохранено вместе с правкой"
+                        overridePhoto -> "Фото заменено вашей правкой"
+                        else -> "JPEG, будет сжато до 512 px"
+                    },
+                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun overridePhotoActive(teacherName: String): Boolean {
+    val context = LocalContext.current
+    val overridesRevision = OwnerOverridesStore.revision.intValue
+    return remember(teacherName, overridesRevision) {
+        OwnerOverridesStore.photoFileFor(context, teacherName) != null
+    }
+}
+
+@Composable
+private fun EditorField(
+    label: String,
+    value: String,
+    testTag: String,
+    singleLine: Boolean = true,
+    error: String? = null,
+    onValueChange: (String) -> Unit,
+) {
+    Column {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label) },
+            singleLine = singleLine,
+            isError = error != null,
+            shape = RoundedCornerShape(2.dp),
+            colors =
+            TextFieldDefaults.colors(
+                focusedContainerColor = ColorSurfaceVariantLight,
+                unfocusedContainerColor = ColorSurfaceVariantLight,
+                focusedIndicatorColor = ColorBrandBlue,
+                unfocusedIndicatorColor = ColorBorderLight,
+                errorIndicatorColor = ColorDangerFill,
+            ),
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = Tokens.HitTarget)
+                .testTag(testTag),
+        )
+        if (error != null) {
+            Text(
+                text = error,
+                style = TextStyle(fontSize = 11.sp, color = ColorErrorText),
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp).testTag("${testTag}_error"),
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusBanner(status: TeacherEditorStatus) {
+    val text = TeacherEditorLogic.statusText(status)
+    if (text.isBlank()) return
+    val isError = status == TeacherEditorStatus.ERROR
+    Row(
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .background(
+                if (isError) ColorSurfaceHighlight else ColorSuccessBg,
+                RoundedCornerShape(2.dp),
+            ).padding(horizontal = 12.dp, vertical = 10.dp)
+            .testTag("teacher_editor_status"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            style =
+            TextStyle(
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp,
+                color = if (isError) ColorErrorText else ColorSuccessText,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun EditorButton(
+    icon: ImageVector,
+    label: String,
+    testTag: String,
+    enabled: Boolean = true,
+    filled: Boolean = true,
+    danger: Boolean = false,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val contentColor =
+        when {
+            !enabled -> ColorTextDisabled
+            filled -> Color.White
+            danger -> ColorDangerFill
+            else -> ColorBrandBlue
+        }
+    val container =
+        when {
+            !enabled -> ColorSurfaceHighlight
+            filled && danger -> ColorDangerFill
+            filled -> ColorBrandFill
+            else -> ColorBgMain
+        }
+    androidx.compose.material3.Surface(
+        shape = RoundedCornerShape(2.dp),
+        color = container,
+        border =
+        androidx.compose.foundation.BorderStroke(
+            1.dp,
+            when {
+                !enabled -> ColorBorderLight
+                danger -> ColorDangerFill
+                else -> ColorBrandBlue
+            },
+        ),
+        modifier =
+        modifier
+            .heightIn(min = Tokens.ButtonHeight)
+            .bouncyClickable(enabled = enabled, onClick = onClick)
+            .testTag(testTag),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = contentColor,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = label.uppercase(),
+                maxLines = 1,
+                softWrap = false,
+                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = Tokens.ButtonText, color = contentColor),
+            )
+        }
+    }
+}

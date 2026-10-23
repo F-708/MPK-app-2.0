@@ -25,7 +25,6 @@ class StudentsCsvParseTest {
 
     @Test
     fun `заголовок не попадает в список студентов`() {
-
         assertEquals(4, students.size)
         assertFalse(students.any { it.fullName.contains("ФИО") })
     }
@@ -60,7 +59,6 @@ class StudentsCsvParseTest {
 
     @Test
     fun `группа из каталога не помечается как несоответствие курса`() {
-
         assertTrue(students.none { it.courseMismatch })
     }
 }

@@ -127,7 +127,6 @@ class TeacherShotsTest {
 
     @Test
     fun shotOnboardingPick() {
-
         setOnboarding()
         waitForText("Выберите себя")
         waitForTag("teacher_onboarding_search")
@@ -166,7 +165,6 @@ class TeacherShotsTest {
 
     @Test
     fun shotBells() {
-
         setNav()
         waitForTag("teacher_tab_bells")
         composeRule.onNodeWithTag("teacher_tab_bells").performClick()
@@ -178,7 +176,6 @@ class TeacherShotsTest {
 
     @Test
     fun shotMore() {
-
         setNav(autoAdvance = true)
         waitForTag("teacher_tab_more")
         composeRule.onNodeWithTag("teacher_tab_more").performClick()

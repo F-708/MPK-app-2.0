@@ -72,6 +72,11 @@ android {
             applicationIdSuffix = ".admin"
             versionNameSuffix = "-admin"
         }
+        create("adminplus") {
+            dimension = "version"
+            applicationIdSuffix = ".adminplus"
+            versionNameSuffix = "-adminplus"
+        }
         create("teacher") {
             dimension = "version"
             applicationIdSuffix = ".teacher"
@@ -137,6 +142,32 @@ android {
       signingConfig = signingConfigs.getByName("release")
     }
     debug { signingConfig = signingConfigs.getByName("debug") }
+  }
+
+  // Приватный sourceSet src/owner (AccessCode, gate, экран кода) — ТОЛЬКО для admin и
+  // adminplus: в main/standard/teacher эти исходники не попадают, секрет не утекает.
+  // adminplus дополнительно наследует исходники admin (база учащихся: assets/res/java).
+  sourceSets {
+    getByName("admin") {
+      java.srcDir("src/owner/java")
+      kotlin.srcDir("src/owner/java")
+    }
+    getByName("adminplus") {
+      java.srcDir("src/owner/java")
+      kotlin.srcDir("src/owner/java")
+      java.srcDir("src/admin/java")
+      kotlin.srcDir("src/admin/java")
+      assets.srcDir("src/admin/assets")
+      res.srcDir("src/admin/res")
+    }
+    getByName("testAdmin") {
+      java.srcDir("src/testOwner/java")
+      kotlin.srcDir("src/testOwner/java")
+    }
+    getByName("testAdminplus") {
+      java.srcDir("src/testOwner/java")
+      kotlin.srcDir("src/testOwner/java")
+    }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -238,4 +269,9 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   // O9: moshi-kotlin-codegen снят вместе с moshi (не используется)
   // "ksp"(libs.moshi.kotlin.codegen)
+}
+
+tasks.withType<Test> {
+  maxHeapSize = "2g"
+  maxParallelForks = 1
 }
