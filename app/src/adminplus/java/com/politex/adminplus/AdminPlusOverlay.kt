@@ -67,7 +67,6 @@ fun AdminPlusMenuExtras() {
         OwnerGoldMenuCard(
             icon = Icons.Default.Edit,
             title = "ИНСТРУМЕНТЫ ДАННЫХ",
-            subtitle = "Правка преподавателей и фото — только владелец",
             badge = "OWNER",
             testTag = "adminplus_data_tools_menu",
             onClick = { AdminPlusNav.openDataTools() },

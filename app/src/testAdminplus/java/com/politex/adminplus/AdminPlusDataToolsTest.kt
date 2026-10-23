@@ -80,7 +80,6 @@ class AdminPlusDataToolsTest {
         composeRule.onNodeWithTag("owner_access_code_menu").assertIsDisplayed()
         composeRule.onNodeWithTag("adminplus_data_tools_menu").assertIsDisplayed()
         composeRule.onNodeWithText("ИНСТРУМЕНТЫ ДАННЫХ").assertIsDisplayed()
-        composeRule.onNodeWithText("Правка преподавателей и фото — только владелец").assertIsDisplayed()
 
         composeRule.onNodeWithTag("adminplus_data_tools_menu").performClick()
 

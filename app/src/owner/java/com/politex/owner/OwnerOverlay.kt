@@ -4,10 +4,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -37,8 +37,8 @@ import com.politex.BuildConfig
 import com.politex.ui.theme.ColorAccentGold
 import com.politex.ui.theme.ColorAccentGoldBg
 import com.politex.ui.theme.ColorAccentGoldBright
-import com.politex.ui.theme.ColorAccentGoldMuted
 import com.politex.ui.theme.ColorOnAccentGold
+import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 
 object OwnerNav {
@@ -78,7 +78,6 @@ fun OwnerRoot(content: @Composable () -> Unit) {
 fun OwnerGoldMenuCard(
     icon: ImageVector,
     title: String,
-    subtitle: String,
     badge: String,
     testTag: String,
     onClick: () -> Unit,
@@ -94,7 +93,10 @@ fun OwnerGoldMenuCard(
             .testTag(testTag),
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier =
+            Modifier
+                .padding(14.dp)
+                .heightIn(min = Tokens.HitTarget),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
@@ -112,45 +114,38 @@ fun OwnerGoldMenuCard(
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = title,
-                        style =
-                        TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = ColorAccentGoldBright,
-                        ),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = ColorAccentGold,
-                    ) {
-                        Text(
-                            text = badge,
-                            style =
-                            TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 8.sp,
-                                color = ColorOnAccentGold,
-                            ),
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                        )
-                    }
-                }
+            Text(
+                text = title,
+                style =
+                TextStyle(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = ColorAccentGoldBright,
+                ),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorAccentGold,
+            ) {
                 Text(
-                    text = subtitle,
+                    text = badge,
                     style =
                     TextStyle(
-                        fontSize = 12.sp,
-                        color = ColorAccentGoldMuted,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 8.sp,
+                        color = ColorOnAccentGold,
                     ),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                 )
             }
+            Spacer(modifier = Modifier.width(6.dp))
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
@@ -166,7 +161,6 @@ fun OwnerMenuExtras() {
     OwnerGoldMenuCard(
         icon = Icons.Default.VpnKey,
         title = "КОД ДОСТУПА",
-        subtitle = "Показать код для входа в версию для администрации",
         badge = "OWNER",
         testTag = "owner_access_code_menu",
         onClick = { OwnerNav.showAccessCode.value = true },

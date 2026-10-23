@@ -13,14 +13,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,7 +31,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -42,16 +45,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.politex.ui.components.AppCard
-import com.politex.ui.components.BrandActionButton
 import com.politex.ui.components.SubPageHeader
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBrandBlue
-import com.politex.ui.theme.ColorSuccessText
+import com.politex.ui.theme.ColorBrandFill
 import com.politex.ui.theme.ColorSurfaceHighlight
-import com.politex.ui.theme.ColorTextMuted
+import com.politex.ui.theme.ColorSuccessText
 import com.politex.ui.theme.ColorTextTitle
+import com.politex.ui.theme.Tokens
+import com.politex.ui.util.bouncyClickable
 import kotlinx.coroutines.delay
 
 @Composable
@@ -89,24 +92,21 @@ fun AccessCodeScreen(
         modifier =
         modifier
             .fillMaxSize()
-            .background(ColorBgMain),
+            .background(ColorBgMain)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding(),
     ) {
         SubPageHeader(
             title = "Код доступа",
-            subtitle = "Вход в версию для администрации",
             onBack = onBack,
         )
 
         Column(
-            modifier =
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
-
             AnimatedContent(
                 targetState = code,
                 transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(220)) },
@@ -124,14 +124,7 @@ fun AccessCodeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Обновляется каждые 30 секунд",
-                style = TextStyle(fontSize = 13.sp, color = ColorTextMuted),
-                textAlign = TextAlign.Center,
-            )
-
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             Box(contentAlignment = Alignment.Center) {
                 Canvas(
@@ -142,7 +135,7 @@ fun AccessCodeScreen(
                 ) {
                     val strokeWidth = 8.dp.toPx()
                     val arcSize = Size(size.width - strokeWidth, size.height - strokeWidth)
-                    val topLeft = androidx.compose.ui.geometry.Offset(strokeWidth / 2f, strokeWidth / 2f)
+                    val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
                     drawArc(
                         color = ColorSurfaceHighlight,
                         startAngle = 0f,
@@ -173,42 +166,29 @@ fun AccessCodeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
-            AppCard(
-                modifier = Modifier.fillMaxWidth(),
-                color = ColorSurfaceHighlight,
+            Box(
+                modifier =
+                Modifier
+                    .size(Tokens.IconHit)
+                    .background(ColorBrandFill, RoundedCornerShape(2.dp))
+                    .bouncyClickable {
+                        clipboard.setText(AnnotatedString(code))
+                        copied = true
+                    }.testTag("access_code_copy_btn"),
+                contentAlignment = Alignment.Center,
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = "Код действителен ~30 секунд после смены",
-                        style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-                    )
-                    Text(
-                        text = "Основан на времени этого устройства",
-                        style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "Скопировать",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            BrandActionButton(
-                icon = Icons.Default.ContentCopy,
-                label = "Скопировать",
-                testTag = "access_code_copy_btn",
-                filled = true,
-                onClick = {
-                    clipboard.setText(AnnotatedString(code))
-                    copied = true
-                },
-            )
-
             if (copied) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Скопировано",
                     style =
@@ -220,8 +200,6 @@ fun AccessCodeScreen(
                     modifier = Modifier.testTag("access_code_copy_status"),
                 )
             }
-
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

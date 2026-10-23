@@ -49,15 +49,15 @@ class AccessCodeScreenTest {
     }
 
     @Test
-    fun `цифры кода и подписи видны`() {
+    fun `цифры кода и таймер видны, описаний нет`() {
         render()
 
         composeRule.onNodeWithTag("access_code_digits").assertIsDisplayed()
         composeRule.onAllNodesWithText(AccessCode.generateCode(epoch)).assertCountEquals(1)
-        composeRule.onNodeWithText("Обновляется каждые 30 секунд").assertIsDisplayed()
-        composeRule.onNodeWithText("Код действителен ~30 секунд после смены").assertIsDisplayed()
-        composeRule.onNodeWithText("Основан на времени этого устройства").assertIsDisplayed()
         composeRule.onNodeWithTag("access_code_ring").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Обновляется каждые 30 секунд").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Код действителен ~30 секунд после смены").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Основан на времени этого устройства").assertCountEquals(0)
     }
 
     @Test

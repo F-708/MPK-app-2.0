@@ -33,7 +33,6 @@ class OwnerMenuExtrasFlavorTest {
             composeRule.onNodeWithTag("owner_access_code_menu").assertIsDisplayed()
             composeRule.onNodeWithText("ИНСТРУМЕНТЫ ДАННЫХ").assertIsDisplayed()
             composeRule.onNodeWithTag("adminplus_data_tools_menu").assertIsDisplayed()
-            composeRule.onNodeWithText("Правка преподавателей и фото — только владелец").assertIsDisplayed()
         } else {
             assertNull("в admin инструменты данных недоступны — extras не регистрируется", extras)
         }
