@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,10 +22,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -47,6 +51,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.politex.adminplus.publish.AdminPlusPublishDeps
+import com.politex.adminplus.publish.GithubTokenStore
+import com.politex.adminplus.publish.PublishFailure
+import com.politex.adminplus.publish.PublishResult
 import com.politex.content.ContentAssets
 import com.politex.content.OwnerOverridesStore
 import com.politex.content.OwnerPhotoResizer
@@ -68,6 +76,7 @@ import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextDisabled
 import com.politex.ui.theme.ColorTextMuted
+import com.politex.ui.theme.ColorTextTitle
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.ui.util.rememberTeachers
@@ -77,10 +86,25 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+internal data class PublishErrorUi(
+    val message: String,
+    val needsToken: Boolean,
+)
+
+internal fun publishErrorUi(failure: PublishFailure): PublishErrorUi =
+    when (failure) {
+        PublishFailure.NO_TOKEN -> PublishErrorUi("Токен публикации не настроен", needsToken = true)
+        PublishFailure.AUTH -> PublishErrorUi("GitHub отклонил токен — обновите его в настройках токена", needsToken = true)
+        PublishFailure.NETWORK -> PublishErrorUi("Нет связи с GitHub — проверьте интернет и повторите", needsToken = false)
+        PublishFailure.CONFLICT, PublishFailure.SERVER -> PublishErrorUi("Сервер отклонил публикацию — повторите попытку", needsToken = false)
+        PublishFailure.PAYLOAD -> PublishErrorUi("Не удалось подготовить изменения — повторите", needsToken = false)
+    }
+
 @Composable
 fun TeacherEditorScreen(
     teacherName: String,
     onBack: () -> Unit,
+    onOpenTokenSetup: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -90,7 +114,7 @@ fun TeacherEditorScreen(
     val teacher =
         remember(teachers, teacherName) {
             val key = OwnerOverridesStore.keyOf(teacherName)
-            teachers.firstOrNull { OwnerOverridesStore.keyOf(it.name) == key }
+            teachers.firstOrNull { OwnerOverridesStore.keyOf(it.name) == key || OwnerOverridesStore.keyOf(it.matchName) == key }
         }
     val override =
         remember(teacherName, overridesRevision) {
@@ -106,11 +130,23 @@ fun TeacherEditorScreen(
     var photoBusy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf(TeacherEditorStatus.IDLE) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showApplyConfirm by remember { mutableStateOf(false) }
+    var showSubjectPicker by remember { mutableStateOf(false) }
+    var publishing by remember { mutableStateOf(false) }
+    var publishSent by remember { mutableStateOf(false) }
+    var publishError by remember { mutableStateOf<PublishErrorUi?>(null) }
 
     LaunchedEffect(status) {
         if (status != TeacherEditorStatus.IDLE) {
             delay(2500)
             status = TeacherEditorStatus.IDLE
+        }
+    }
+
+    LaunchedEffect(publishSent) {
+        if (publishSent) {
+            delay(4000)
+            publishSent = false
         }
     }
 
@@ -142,134 +178,207 @@ fun TeacherEditorScreen(
     val dirty = TeacherEditorLogic.isDirty(form, baseForm)
     val validationError = TeacherEditorLogic.validate(form)
     val canSave = TeacherEditorLogic.canSave(form, baseForm, saving || photoBusy)
+    val canApply = !saving && !photoBusy && !publishing && validationError == null && (dirty || override != null)
 
-    Column(
+    fun saveLocalBlocking(): Boolean {
+        val record =
+            OwnerOverridesStore.upsertTeacher(
+                context = context,
+                key = form.key,
+                fio = form.fio,
+                position = form.position,
+                phone = form.phone,
+                subjects = form.subjects,
+                experience = form.experience,
+                category = form.category,
+                photoSource = form.pendingPhoto,
+            )
+        if (record != null) OwnerOverridesStore.refreshDependentCaches(context)
+        return record != null
+    }
+
+    fun startApply() {
+        if (!GithubTokenStore.hasToken(context)) {
+            publishError = PublishErrorUi("Токен публикации не настроен", needsToken = true)
+            onOpenTokenSetup()
+            return
+        }
+        publishing = true
+        publishError = null
+        publishSent = false
+        scope.launch(Dispatchers.IO) {
+            var failure: PublishErrorUi? = null
+            if (TeacherEditorLogic.isDirty(form, baseForm) && !saveLocalBlocking()) {
+                failure = PublishErrorUi("Не удалось сохранить правку на устройстве — повторите", needsToken = false)
+            }
+            if (failure == null) {
+                val token = GithubTokenStore.load(context)
+                val payload = AdminPlusPublishDeps.payloadBuilder(context)
+                failure =
+                    when {
+                        token.isNullOrBlank() -> PublishErrorUi("Токен публикации не настроен", needsToken = true)
+                        payload == null -> PublishErrorUi("Не удалось подготовить изменения — повторите", needsToken = false)
+                        else ->
+                            when (val result = AdminPlusPublishDeps.publisherFactory(context).publish(token, payload)) {
+                                is PublishResult.Success -> null
+                                is PublishResult.Failed -> publishErrorUi(result.failure)
+                            }
+                    }
+            }
+            withContext(Dispatchers.Main) {
+                publishing = false
+                if (failure == null) {
+                    edit = null
+                    publishSent = true
+                } else {
+                    publishError = failure
+                }
+            }
+        }
+    }
+
+    Box(
         modifier =
         Modifier
             .fillMaxSize()
             .background(ColorBgMain)
             .testTag("teacher_editor_screen"),
     ) {
-        SubPageHeader(
-            title = teacher?.name ?: teacherName,
-            subtitle =
-            when {
-                photoBusy -> "Обработка фото…"
-                saving -> "Сохранение…"
-                override != null -> "Есть правка • версия ${override.version}"
-                else -> null
-            },
-            onBack = onBack,
-        )
-
-        Column(
-            modifier =
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            EditorPhotoCard(
-                teacherName = teacherName,
-                teacher = teacher,
-                form = form,
-                photoBusy = photoBusy,
-                onPickPhoto = { photoPicker.launch(arrayOf("image/*")) },
+        Column(modifier = Modifier.fillMaxSize()) {
+            SubPageHeader(
+                title = teacher?.name ?: teacherName,
+                subtitle =
+                when {
+                    publishing -> "Отправка всем пользователям…"
+                    photoBusy -> "Обработка фото…"
+                    saving -> "Сохранение…"
+                    override != null -> "Есть правка • версия ${override.version}"
+                    else -> null
+                },
+                onBack = onBack,
             )
 
-            EditorField(
-                label = "ФИО",
-                value = form.fio,
-                testTag = "teacher_editor_fio",
-                error = if (form.fio.isBlank()) validationError else null,
-                onValueChange = { edit = form.copy(fio = it) },
-            )
-            EditorField(
-                label = "Должность",
-                value = form.position,
-                testTag = "teacher_editor_position",
-                onValueChange = { edit = form.copy(position = it) },
-            )
-            EditorField(
-                label = "Телефон",
-                value = form.phone,
-                testTag = "teacher_editor_phone",
-                onValueChange = { edit = form.copy(phone = it) },
-            )
-            EditorField(
-                label = "Предметы",
-                value = form.subjects,
-                testTag = "teacher_editor_subjects",
-                singleLine = false,
-                onValueChange = { edit = form.copy(subjects = it) },
-            )
-            EditorField(
-                label = "Стаж",
-                value = form.experience,
-                testTag = "teacher_editor_experience",
-                onValueChange = { edit = form.copy(experience = it) },
-            )
-            EditorField(
-                label = "Категория",
-                value = form.category,
-                testTag = "teacher_editor_category",
-                onValueChange = { edit = form.copy(category = it) },
-            )
-
-            StatusBanner(status)
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Column(
+                modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (override != null) {
-                    EditorButton(
-                        icon = Icons.Default.Delete,
-                        label = "Удалить правку",
-                        danger = true,
-                        enabled = !saving && !photoBusy,
-                        testTag = "teacher_editor_delete",
-                        modifier = Modifier.weight(1f),
-                        onClick = { showDeleteConfirm = true },
-                    )
-                }
-                EditorButton(
-                    icon = Icons.Default.Save,
-                    label = "Сохранить",
-                    enabled = canSave,
-                    testTag = "teacher_editor_save",
-                    modifier = Modifier.weight(1f),
+                EditorPhotoCard(
+                    teacherName = teacherName,
+                    teacher = teacher,
+                    form = form,
+                    photoBusy = photoBusy,
+                    onPickPhoto = { photoPicker.launch(arrayOf("image/*")) },
+                )
+
+                EditorField(
+                    label = "ФИО",
+                    value = form.fio,
+                    testTag = "teacher_editor_fio",
+                    error = if (form.fio.isBlank()) validationError else null,
+                    onValueChange = { edit = form.copy(fio = it) },
+                )
+                EditorField(
+                    label = "Должность",
+                    value = form.position,
+                    testTag = "teacher_editor_position",
+                    onValueChange = { edit = form.copy(position = it) },
+                )
+                EditorField(
+                    label = "Телефон",
+                    value = form.phone,
+                    testTag = "teacher_editor_phone",
+                    onValueChange = { edit = form.copy(phone = it) },
+                )
+
+                SubjectsField(
+                    subjects = form.subjects,
+                    onPick = { showSubjectPicker = true },
+                )
+
+                EditorField(
+                    label = "Стаж",
+                    value = form.experience,
+                    testTag = "teacher_editor_experience",
+                    onValueChange = { edit = form.copy(experience = it) },
+                )
+                EditorField(
+                    label = "Категория",
+                    value = form.category,
+                    testTag = "teacher_editor_category",
+                    onValueChange = { edit = form.copy(category = it) },
+                )
+
+                StatusBanner(status)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    saving = true
-                    scope.launch(Dispatchers.IO) {
-                        val record =
-                            OwnerOverridesStore.upsertTeacher(
-                                context = context,
-                                key = form.key,
-                                fio = form.fio,
-                                position = form.position,
-                                phone = form.phone,
-                                subjects = form.subjects,
-                                experience = form.experience,
-                                category = form.category,
-                                photoSource = form.pendingPhoto,
-                            )
-                        if (record != null) OwnerOverridesStore.refreshDependentCaches(context)
-                        withContext(Dispatchers.Main) {
-                            saving = false
-                            if (record != null) {
-                                edit = null
-                                status = TeacherEditorStatus.SAVED
-                            } else {
-                                status = TeacherEditorStatus.ERROR
+                    if (override != null) {
+                        EditorButton(
+                            icon = Icons.Default.Delete,
+                            label = "Удалить правку",
+                            danger = true,
+                            enabled = !saving && !photoBusy && !publishing,
+                            testTag = "teacher_editor_delete",
+                            modifier = Modifier.weight(1f),
+                            onClick = { showDeleteConfirm = true },
+                        )
+                    }
+                    EditorButton(
+                        icon = Icons.Default.Save,
+                        label = "Сохранить",
+                        enabled = canSave,
+                        testTag = "teacher_editor_save",
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        saving = true
+                        scope.launch(Dispatchers.IO) {
+                            val ok = saveLocalBlocking()
+                            withContext(Dispatchers.Main) {
+                                saving = false
+                                if (ok) {
+                                    edit = null
+                                    status = TeacherEditorStatus.SAVED
+                                } else {
+                                    status = TeacherEditorStatus.ERROR
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(120.dp))
+            }
+        }
+
+        PublishBottomBar(
+            modifier = Modifier.align(Alignment.BottomCenter),
+            publishing = publishing,
+            publishSent = publishSent,
+            publishError = publishError,
+            canApply = canApply,
+            onApply = { showApplyConfirm = true },
+            onSetupToken = {
+                publishError = null
+                onOpenTokenSetup()
+            },
+            onDismissError = { publishError = null },
+        )
+
+        if (showSubjectPicker) {
+            SubjectPickerSheet(
+                initial = form.subjects,
+                onDismiss = { showSubjectPicker = false },
+                onConfirm = { joined ->
+                    showSubjectPicker = false
+                    edit = form.copy(subjects = joined)
+                },
+            )
         }
     }
 
@@ -307,6 +416,203 @@ fun TeacherEditorScreen(
                 }
             },
         )
+    }
+
+    if (showApplyConfirm) {
+        AlertDialog(
+            onDismissRequest = { showApplyConfirm = false },
+            title = { Text("Действительно применить изменения?") },
+            text = {
+                Text(
+                    "Правка уйдёт в контент-пакет и после пересборки появится у всех пользователей. " +
+                        "На этом устройстве изменения видны сразу.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showApplyConfirm = false
+                        startApply()
+                    },
+                    modifier = Modifier.testTag("teacher_editor_apply_confirm"),
+                ) {
+                    Text("Да", color = ColorBrandBlue, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showApplyConfirm = false },
+                    modifier = Modifier.testTag("teacher_editor_apply_cancel"),
+                ) {
+                    Text("Отмена", color = ColorTextMuted)
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SubjectsField(
+    subjects: String,
+    onPick: () -> Unit,
+) {
+    Column {
+        Text(
+            text = "Предметы",
+            style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = Tokens.SectionHeader, color = ColorTextMuted),
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = Tokens.HitTarget)
+                .background(ColorSurfaceVariantLight, RoundedCornerShape(2.dp))
+                .border(1.dp, ColorBorderLight, RoundedCornerShape(2.dp))
+                .bouncyClickable(onClick = onPick)
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .testTag("teacher_editor_pick_subjects"),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = subjects.ifBlank { "Выберите предметы из справочника" },
+                style =
+                TextStyle(
+                    fontSize = 13.sp,
+                    color = if (subjects.isBlank()) ColorTextDisabled else ColorTextTitle,
+                ),
+                modifier = Modifier.weight(1f).testTag("teacher_editor_subjects"),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "ИЗМЕНИТЬ",
+                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 10.sp, color = ColorBrandBlue),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PublishBottomBar(
+    modifier: Modifier = Modifier,
+    publishing: Boolean,
+    publishSent: Boolean,
+    publishError: PublishErrorUi?,
+    canApply: Boolean,
+    onApply: () -> Unit,
+    onSetupToken: () -> Unit,
+    onDismissError: () -> Unit,
+) {
+    Column(
+        modifier =
+        modifier
+            .fillMaxWidth()
+            .background(ColorBgMain)
+            .border(1.dp, ColorBorderLight, RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
+            .navigationBarsPadding()
+            .imePadding()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (publishSent) {
+            Row(
+                modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(ColorSuccessBg, RoundedCornerShape(2.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .testTag("teacher_editor_publish_status"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Изменения отправлены всем пользователям",
+                        style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = ColorSuccessText),
+                    )
+                    Text(
+                        text = "На этом устройстве правка уже видна сразу",
+                        style = TextStyle(fontSize = 11.sp, color = ColorSuccessText),
+                    )
+                }
+            }
+        }
+        val error = publishError
+        if (error != null) {
+            Row(
+                modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .testTag("teacher_editor_publish_status"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = error.message,
+                    style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = ColorErrorText),
+                    modifier = Modifier.weight(1f),
+                )
+                if (error.needsToken) {
+                    TextButton(
+                        onClick = onSetupToken,
+                        modifier = Modifier.testTag("teacher_editor_token_setup"),
+                    ) {
+                        Text("Настроить", color = ColorBrandBlue, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                } else {
+                    TextButton(onClick = onDismissError) {
+                        Text("Скрыть", color = ColorTextMuted, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+        androidx.compose.material3.Surface(
+            shape = RoundedCornerShape(2.dp),
+            color = if (canApply || publishing) ColorBrandFill else ColorSurfaceHighlight,
+            border = androidx.compose.foundation.BorderStroke(1.dp, if (canApply || publishing) ColorBrandBlue else ColorBorderLight),
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = Tokens.ButtonHeight)
+                .bouncyClickable(enabled = canApply && !publishing, onClick = onApply)
+                .testTag("teacher_editor_apply"),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                if (publishing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp).testTag("teacher_editor_apply_progress"),
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "ОТПРАВКА…",
+                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = Tokens.ButtonText, color = Color.White),
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.CloudUpload,
+                        contentDescription = null,
+                        tint = if (canApply) Color.White else ColorTextDisabled,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "ПРИМЕНИТЬ ИЗМЕНЕНИЯ",
+                        style =
+                        TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = Tokens.ButtonText,
+                            color = if (canApply) Color.White else ColorTextDisabled,
+                        ),
+                    )
+                }
+            }
+        }
     }
 }
 

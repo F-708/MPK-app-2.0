@@ -24,18 +24,19 @@ class AdminPlusMenuNarrowTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun `обе карточки владельца на узком экране - заголовки и бейджи в одну строку`() {
+    fun `все карточки владельца на узком экране - заголовки и бейджи в одну строку`() {
         composeRule.setContent {
             MyApplicationTheme { AdminPlusMenuExtras() }
         }
 
         composeRule.onNodeWithText("КОД ДОСТУПА").assertIsDisplayed()
         composeRule.onNodeWithText("ИНСТРУМЕНТЫ ДАННЫХ").assertIsDisplayed()
+        composeRule.onNodeWithText("ТОКЕН ПУБЛИКАЦИИ").assertIsDisplayed()
 
         val badges = composeRule.onAllNodesWithText("OWNER", useUnmergedTree = true)
-        badges.assertCountEquals(2)
+        badges.assertCountEquals(3)
         val scaledDensity = ApplicationProvider.getApplicationContext<Context>().resources.displayMetrics.scaledDensity
-        for (index in 0..1) {
+        for (index in 0..2) {
             val bounds = badges[index].fetchSemanticsNode().boundsInRoot
             assertTrue(
                 "бейдж $index переносится на следующую строку: height=${bounds.height}px",

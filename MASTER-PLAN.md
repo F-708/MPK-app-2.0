@@ -1430,3 +1430,23 @@ testStandardDebugUnitTest → коммит. Room-схему трогает то�
 - Приёмка: гейты standard ×2 (ночная механика — тесты), robo (standard-шоты не должны меняться),
   adminplus-компиляция + owner-тесты; коммит main; sync standard-дельты в public + workflow;
   pub-гейт; тег v2.0.1-preview.5; пуш; локальная пересборка admin+adminplus (и standard) в releases\.
+## ВОЛНА XX (2026-10-23, preview.6 — совместимость виджетов + публикация правок Admin+ на GitHub + тихие пакеты и «Что нового»)
+- **XX1** (агент, bug-hunter): виджеты не отображаются на Xiaomi 11T; аудит совместимости со всеми версиями
+  Android: RemoteViews-теги/атрибуты по API, флаги PendingIntent (IMMUTABLE на S+), widget-info xml,
+  try-catch + фалбэк минимального layout в onUpdate (один сбой inflation не должен оставлять пустой виджет),
+  мульти-sdk тесты (30/31/33/35), одноразовая MIUI-подсказка про автозапуск в WidgetConfigActivity.
+- **XX2** (агент, главная фича): Admin+ — публикация правок преподавателей на GitHub для ВСЕХ пользователей:
+  редактирование (имя, должность, телефон, предметы-МУЛЬТИСЕЛЕКТ из каталога, стаж, категория, фото),
+  bottom-bar кнопка «ПРИМЕНИТЬ ИЗМЕНЕНИЯ» (всегда внизу экрана) → диалог подтверждения → атомарный коммит
+  через Git Data API (trees: content/owner_overrides.json + фото base64 ≤512px q80) с Fine-grained PAT владельца
+  (хранение только в приватном хранилище adminplus/owner). ИНВАРИАНТ: изменения только визуальные — ключ
+  расписания остаётся исходным ФИО из teachers.csv. Потребление: OwnerOverridesStore local→pack-owner_overrides
+  →pack→assets (main public-safe dormant), ContentPackValidator обновлён (файл опционален). Сброс-к-дефолту СОХРАНЁН.
+- **XX3** (агент): (A) полная тишина обновлений контент-пакета (никаких уведомлений/сообщений пользователю;
+  APK-update-уведомления НЕ трогать); (B) окно «Что нового» при первом запуске после обновления (lastSeenVersionCode,
+  fresh install — не показывать, bundled-контент на русском, 4–6 кратких пунктов про 2.0.1, кнопка «Продолжить»).
+- Приёмка: точечные ×2 каждого + полный forced ×2; robo (standard-шоты — возможен дифф от «Что нового»? диалог
+  только при versionCode-бампе, шоты пишутся на текущей версии — не должен влиять); коммит main; sync standard-дельты
+  в public (owner_overrides-потребление + WhatsNew + тишина пакетов — public-safe); pub-гейт; тег v2.0.1-preview.6;
+  пуш; локальное трио в ногу. Долг заказчика: создать Fine-grained PAT (Contents R/W на F-708/moy-polytech) и ввести
+  в Admin+ (экран настройки токена с инструкцией).

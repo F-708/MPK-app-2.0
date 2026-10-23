@@ -4,11 +4,13 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.unit.dp
+import com.politex.adminplus.publish.PatSetupScreen
 import com.politex.owner.OwnerGoldMenuCard
 import com.politex.owner.OwnerMenuExtras
 import com.politex.owner.OwnerRoot
@@ -18,22 +20,28 @@ import com.politex.ui.dataeditor.TeacherEditorScreen
 object AdminPlusNav {
     val showDataTools = mutableStateOf(false)
     val editingTeacher = mutableStateOf<String?>(null)
+    val showPatSetup = mutableStateOf(false)
 
     fun openDataTools() {
         showDataTools.value = true
     }
 
+    fun openPatSetup() {
+        showPatSetup.value = true
+    }
+
     fun back() {
-        if (editingTeacher.value != null) {
-            editingTeacher.value = null
-        } else {
-            showDataTools.value = false
+        when {
+            showPatSetup.value -> showPatSetup.value = false
+            editingTeacher.value != null -> editingTeacher.value = null
+            else -> showDataTools.value = false
         }
     }
 
     fun reset() {
         showDataTools.value = false
         editingTeacher.value = null
+        showPatSetup.value = false
     }
 }
 
@@ -41,14 +49,20 @@ object AdminPlusNav {
 fun AdminPlusRoot(content: @Composable () -> Unit) {
     val showDataTools by AdminPlusNav.showDataTools
     val editingTeacher by AdminPlusNav.editingTeacher
-    BackHandler(enabled = showDataTools) { AdminPlusNav.back() }
+    val showPatSetup by AdminPlusNav.showPatSetup
+    BackHandler(enabled = showDataTools || showPatSetup) { AdminPlusNav.back() }
     OwnerRoot {
         val teacher = editingTeacher
         when {
+            showPatSetup ->
+                PatSetupScreen(
+                    onBack = { AdminPlusNav.showPatSetup.value = false },
+                )
             showDataTools && teacher != null ->
                 TeacherEditorScreen(
                     teacherName = teacher,
                     onBack = { AdminPlusNav.editingTeacher.value = null },
+                    onOpenTokenSetup = { AdminPlusNav.openPatSetup() },
                 )
             showDataTools ->
                 TeacherEditorListScreen(
@@ -70,6 +84,13 @@ fun AdminPlusMenuExtras() {
             badge = "OWNER",
             testTag = "adminplus_data_tools_menu",
             onClick = { AdminPlusNav.openDataTools() },
+        )
+        OwnerGoldMenuCard(
+            icon = Icons.Default.CloudUpload,
+            title = "ТОКЕН ПУБЛИКАЦИИ",
+            badge = "OWNER",
+            testTag = "adminplus_pat_menu",
+            onClick = { AdminPlusNav.openPatSetup() },
         )
     }
 }
