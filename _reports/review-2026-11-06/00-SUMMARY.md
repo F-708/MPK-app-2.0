@@ -109,6 +109,29 @@
 | Пустой экран «Задания» без empty-state, обрез последней строки навбаром | в бэклог UX; обрез — артефакт шот-харнесса (реальный экран внутри `Scaffold` с `innerPadding`) |
 | Раскрытое состояние «Тон оформления» не покрыто шотами | добавить кадр в следующей волне |
 
+## 4.2. Размер APK (release)
+
+Release-сборка уже шла с R8, `isShrinkResources` и `isCrunchPngs`, debug 24 МБ против release 6,7 МБ.
+Разбор готового APK показал, где ещё лежит жир: `classes.dex` 4,0 МБ, `assets/viewer` 2,2 МБ,
+**`assets/viewer/lib/cmaps` 1,1 МБ** (135 файлов), `res` 0,65 МБ, wasm 0,37 МБ.
+
+CJK-карты глифов pdf.js (`UniCNS*/UniGB*/UniJIS*/UniKS*/Adobe-CNS1*/Adobe-GB1*/Adobe-Japan1*/Adobe-Korea1*`)
+не нужны приложению колледжа с русскими документами. Исключены через
+`androidResources.ignoreAssetsPatterns` в `app/build.gradle.kts`; `Identity-*` и `Adobe-Identity-UCS`
+остались — на них держится кириллица и латиница.
+
+| Флейвор | До | После | Δ |
+|---|---|---|---|
+| standard | 6,68 МБ | **5,87 МБ** | −12 % |
+| admin | 6,71 МБ | **5,90 МБ** | −12 % |
+| adminplus | 6,76 МБ | **5,95 МБ** | −12 % |
+
+Компромисс зафиксирован осознанно: PDF с **не**встроенным CJK-шрифтом отрисует такой текст запасным
+шрифтом, остальной документ читается; встроенные (Identity) шрифты не затронуты. Проверка артефактов:
+`aapt2 dump badging` → `versionCode=20200999`/`2.2.0` (следствие сломанного тега, см. [release.md](release.md)),
+`students.csv` в standard = 0, в admin/adminplus = 1 (по замыслу), подпись всех трёх — загрузочный ключ
+`SHA-256 1496ea2e…3aac`.
+
 ## 5. Что осталось (бэклоги следующей волны)
 
 - **Данные:** убрать `fallbackToDestructiveMigration` (вариант A+B/C из [data-fixes-backlog.md](data-fixes-backlog.md)),
