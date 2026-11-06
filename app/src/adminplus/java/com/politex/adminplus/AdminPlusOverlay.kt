@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.unit.dp
 import com.politex.adminplus.publish.PatSetupScreen
+import com.politex.owner.AccessGateWrapper
 import com.politex.owner.OwnerGoldMenuCard
 import com.politex.owner.OwnerMenuExtras
 import com.politex.owner.OwnerRoot
@@ -47,29 +48,34 @@ object AdminPlusNav {
 
 @Composable
 fun AdminPlusRoot(content: @Composable () -> Unit) {
-    val showDataTools by AdminPlusNav.showDataTools
-    val editingTeacher by AdminPlusNav.editingTeacher
-    val showPatSetup by AdminPlusNav.showPatSetup
-    BackHandler(enabled = showDataTools || showPatSetup) { AdminPlusNav.back() }
-    OwnerRoot {
-        val teacher = editingTeacher
-        when {
-            showPatSetup ->
-                PatSetupScreen(
-                    onBack = { AdminPlusNav.showPatSetup.value = false },
-                )
-            showDataTools && teacher != null ->
-                TeacherEditorScreen(
-                    teacherName = teacher,
-                    onBack = { AdminPlusNav.editingTeacher.value = null },
-                    onOpenTokenSetup = { AdminPlusNav.openPatSetup() },
-                )
-            showDataTools ->
-                TeacherEditorListScreen(
-                    onBack = { AdminPlusNav.showDataTools.value = false },
-                    onEditTeacher = { name -> AdminPlusNav.editingTeacher.value = name },
-                )
-            else -> content()
+    // P1-fix: adminplus несёт редактор данных и PAT публикации, поэтому код доступа
+    // требуется всегда, а не только в admin (owner-код проверяет FLAVOR == "admin").
+    // Гейт стоит снаружи OwnerRoot: закрывает и меню, и редактор, и экран кода владельца.
+    AccessGateWrapper(gateRequired = AdminPlusAccess.GATE_REQUIRED) {
+        val showDataTools by AdminPlusNav.showDataTools
+        val editingTeacher by AdminPlusNav.editingTeacher
+        val showPatSetup by AdminPlusNav.showPatSetup
+        BackHandler(enabled = showDataTools || showPatSetup) { AdminPlusNav.back() }
+        OwnerRoot {
+            val teacher = editingTeacher
+            when {
+                showPatSetup ->
+                    PatSetupScreen(
+                        onBack = { AdminPlusNav.showPatSetup.value = false },
+                    )
+                showDataTools && teacher != null ->
+                    TeacherEditorScreen(
+                        teacherName = teacher,
+                        onBack = { AdminPlusNav.editingTeacher.value = null },
+                        onOpenTokenSetup = { AdminPlusNav.openPatSetup() },
+                    )
+                showDataTools ->
+                    TeacherEditorListScreen(
+                        onBack = { AdminPlusNav.showDataTools.value = false },
+                        onEditTeacher = { name -> AdminPlusNav.editingTeacher.value = name },
+                    )
+                else -> content()
+            }
         }
     }
 }

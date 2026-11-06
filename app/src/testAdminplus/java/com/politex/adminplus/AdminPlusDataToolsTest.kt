@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import com.politex.AppGraph
 import com.politex.content.OwnerOverridesStore
+import com.politex.owner.AccessUnlockStore
 import com.politex.owner.OwnerNav
 import com.politex.ui.theme.MyApplicationTheme
 import org.junit.After
@@ -46,6 +47,9 @@ class AdminPlusDataToolsTest {
     fun setUp() {
         AdminPlusNav.reset()
         OwnerNav.showAccessCode.value = false
+        // adminplus теперь закрыт кодом доступа (AdminPlusAccess.GATE_REQUIRED):
+        // тесты навигации по инструментам данных работают «из разблокированного» состояния.
+        AccessUnlockStore.unlock(context)
         OwnerOverridesStore.clearAll(context)
         AppGraph.teachersRepository.invalidateCache()
         com.politex.ui.util.TeachersCache.invalidate()
@@ -55,6 +59,7 @@ class AdminPlusDataToolsTest {
     fun tearDown() {
         AdminPlusNav.reset()
         OwnerNav.showAccessCode.value = false
+        AccessUnlockStore.reset(context)
         OwnerOverridesStore.clearAll(context)
         AppGraph.teachersRepository.invalidateCache()
         com.politex.ui.util.TeachersCache.invalidate()
