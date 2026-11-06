@@ -1449,4 +1449,56 @@ testStandardDebugUnitTest → коммит. Room-схему трогает то�
   только при versionCode-бампе, шоты пишутся на текущей версии — не должен влиять); коммит main; sync standard-дельты
   в public (owner_overrides-потребление + WhatsNew + тишина пакетов — public-safe); pub-гейт; тег v2.0.1-preview.6;
   пуш; локальное трио в ногу. Долг заказчика: создать Fine-grained PAT (Contents R/W на F-708/moy-polytech) и ввести
-  в Admin+ (экран настройки токена с инструкцией).
+  в Admin+ (экран настройки токена с инструкцией).- **ДОСТАВЛЕНО** (2026-10-23): main 0795477+415be8c; public b3284d3, тег v2.0.1-preview.6 (meta code 20001006, sig 1496ea…3aac = ключ, sha 410ca1…de0a = meta). Гейты: standard forced ×2 зелёные (1641+), robo без диффа, pub-гейт зелёный (стрип teacher-манифеста в WidgetRegistrationTest — новая конвенция sync), трио 22:22 (students.csv 0/1/1; publish-маркеры fine-grained/api.github.com×2 только в adminplus; owner_overrides dormant во всех — by design). CI-патч: content-pack.yml+content-pack-build.yml знают owner_overrides.json. Долг: одноразовый PAT заказчика (Fine-grained, Contents R/W, moy-polytech) → «ДРУГОЕ» → «ТОКЕН ПУБЛИКАЦИИ». Вопросы MIUI-памятки отправлены заказчику (перезагрузка 11T после установки preview.6).
+## ПРАВИЛА ЗАКАЗЧИКА (2026-10-23, действуют постоянно)
+1. **Окно «Что нового» — ТОЛЬКО на релизах (stable)**. На превью-сборках список изменений не показывать.
+   Реализация: гейт в WhatsNewStore.onLaunch — показывать только если versionCode оканчивается на 999
+   (stable-формула N=999); на preview (N=1..998) — молча записывать версию без диалога.
+2. **Пуш превью — ТОЛЬКО по прямой команде заказчика**. Никогда не пушить tag/preview автоматически
+   «в составе волны». Волна готовится локально (гейты, коммит main), затем ЖДАТЬ команду «пушь превью».
+   Ставить очередь пушей на паузу до явного подтверждения.
+
+## ЗАПЛАНИРОВАНО НА СЛЕДУЮЩУЮ ВОЛНУ (preview.7 — по команде заказчика)
+- **YY1 (баг, Admin+)**: замена фото преподавателю не работает — при выборе ЛЮБОГО файла (png/jpg/jpeg)
+  «Ошибка сохранения», фото не меняется. Диапазон: SAF-получение URI → OwnerPhotoResizer (декод/resize
+  ≤512px q80) → запись в owner_overrides/файл → сохранение TeacherEditorScreen. Вероятные кандидаты:
+  takePersistableUriPermission/чтение input stream на content-URI, OOM/формат декода, путь записи,
+  обработка исключений глушит реальную причину. Нужен repro-тест (Robolectric shadow SAF-потока) и
+  внятное сообщение об ошибке с причиной вместо-generic. Проверить на реальном устройстве заказчика.
+- **YY2**: «Что нового» только stable (правило 1 выше) + тест-матрица: preview не показывает, stable показывает.
+- Порядок: YY1+YY2 одной волной, гейты, коммит main, сборка локального трио — и СТОП, ждать команду на пуш.
+
+## ПОЛНОЕ РЕВЬЮ 2026-11-06 (12 доменов, волна исправлений) — ДОСТАВЛЕНО
+
+Отчёты и бэклоги: `_reports/review-2026-11-06/` (сводка — `00-SUMMARY.md`).
+Гейт: `:app:testStandardDebugUnitTest` — 1970 тестов, 0 падений. Коммиты 505f6b4…f572498.
+
+**Исправлено в волне:**
+1. **Жалоба «принимает любые файлы»** — манифест объявлял приём любого `content://` (scheme отдельным
+   `<data>` + `*/*`), runtime блокировал только APK. Теперь единый вайтлист `util/MaterialFormats.kt`
+   (pdf, docx, текст, изображения), scheme+mimeType в одном `<data>`, отказ с текстом причины,
+   снятие защёлки intake, пикер по вайтлисту. `ExternalMaterialIntakeTest`, `MaterialFormatsTest`,
+   `ManifestFileViewAliasTest` инвертирован.
+2. **Жалоба «домашка видна один раз»** — `resolveNextOccurrenceIso` возвращал единственный день.
+   Введено окно активности (`firstActiveDayIso` + `isHomeworkActiveOn`): бейдж горит на всех уроках
+   предмета, не гаснет после звонка, прошедшие дни считаются календарно. `HomeworkMarkersWindowTest`
+   (18 кейсов) + `ScheduleHomeworkBadgeRenderTest` (Compose-рендер merged-пар).
+3. **Жалоба «расписание бывает старым»** — кэш не имел TTL, «группы нет» гасило сеть навсегда,
+   дата документа проверялась fail-open. Введены штампы фетча (`ScheduleFreshness`), порог полноты дня,
+   отбраковка документа не от той даты с переходом к следующему кандидату.
+4. **Темы** — режим `SYSTEM/LIGHT/DARK` (системный по умолчанию) и тон `NATIVE/SOFT/DEEP` (SOFT — мягче,
+   DEEP — AMOLED) как производные функции с гейтом контраста; контраст активной вкладки исправлен.
+5. **Попутно:** PDF открывается без фриза (IO + закрытие дескриптора), ripple и роли TalkBack в общем
+   модификаторе нажатия, тач-таргеты 48dp, гейт доступа в Admin+, CI на `v*-stable` и PR.
+
+**Требует решения заказчика (P0, не исправлено кодом):**
+- **База ФИО в истории публичного репозитория** `F-708/MPK-app-2.0` (коммит `0d1d389`, 1703 строки).
+  Плейбук: `_reports/review-2026-11-06/SECURITY-INCIDENT-pii-history.md`. Первый шаг — сделать репо private.
+- **TOTP-секрет владельца в коде и в dex** — вынести и ротировать.
+- **`fallbackToDestructiveMigration`** при полной цепочке миграций — вариант A+B/C в
+  `data-fixes-backlog.md`; там же облачный бэкап, индексы `student_tasks`, миграция 11→12.
+- **Версия из git-тега** сломана (`git describe` → v2.2.0): нужен трёхкомпонентный тег на HEAD.
+
+**Бэклоги следующей волны:** `data-fixes-backlog.md`, `perf-fixes-backlog.md`, `ux-fixes-backlog.md`
+плюс `release.md` (раздельные `update-meta.json` для каналов, `min_version_code`, тест-гейт destruct-fallback,
+гейт `students.csv` в CI) и `tests-ci.md` (инъекция часов вместо `Calendar.getInstance()`).
