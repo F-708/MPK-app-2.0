@@ -104,6 +104,9 @@ import com.politex.ui.theme.ColorTopBar
 import com.politex.ui.theme.Tokens
 import com.politex.ui.util.bouncyClickable
 import com.politex.util.FuzzySearch
+import com.politex.util.IntakeDecision
+import com.politex.util.MaterialFormatKind
+import com.politex.util.MaterialFormats
 import com.politex.util.MaterialImporter
 import com.politex.util.MpkCurriculum
 import com.politex.util.PendingMaterial
@@ -232,6 +235,13 @@ fun MaterialBaseScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val externalConsumed by rememberUpdatedState(onExternalMaterialConsumed)
 
+    // Экран — владелец «активного» материала: если его закрыли (ушли с вкладки, сменили
+    // экран), захват нужно снять, иначе ExternalMaterialIntake залипнет и следующий
+    // шаринг молча не дойдёт.
+    DisposableEffect(Unit) {
+        onDispose { ExternalMaterialIntake.releaseActive() }
+    }
+
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             snapshotFlow { ExternalMaterialIntake.active }
@@ -282,14 +292,22 @@ fun MaterialBaseScreen(
     val filePicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
-            val mime = context.contentResolver.getType(uri) ?: ""
-            if (mime.startsWith("image/")) {
-                showErr("Картинки загружайте через «Набор изображений»: так лекция из 12 фото останется одним материалом")
-                return@rememberLauncherForActivityResult
+            // Провайдеры врут о типе и пропускают чужие файлы — проверяем выбранное
+            // ещё раз, уже по имени и типу от провайдера.
+            val name = MaterialImporter.queryDisplayName(context, uri)
+            val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull()
+            when (val decision = MaterialFormats.decide(name, mime)) {
+                is IntakeDecision.Reject -> showErr(decision.message)
+
+                is IntakeDecision.Accept ->
+                    if (decision.kind == MaterialFormatKind.IMAGE) {
+                        showErr("Картинки загружайте через «Набор изображений»: так лекция из 12 фото останется одним материалом")
+                    } else {
+                        pending = PendingMaterial.SingleFile(uri)
+                        pendingFromExternal = false
+                        showSubject = true
+                    }
             }
-            pending = PendingMaterial.SingleFile(uri)
-            pendingFromExternal = false
-            showSubject = true
         }
     val imagesPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -539,7 +557,7 @@ fun MaterialBaseScreen(
             onDismiss = { showImportType = false },
             onPickFile = {
                 showImportType = false
-                runCatching { filePicker.launch(arrayOf("*/*")) }
+                runCatching { filePicker.launch(MaterialFormats.SUPPORTED_FILE_MIME_TYPES) }
                     .onFailure { showErr("Не удалось открыть выбор файлов") }
             },
             onPickImages = {

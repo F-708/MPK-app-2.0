@@ -77,7 +77,7 @@ fun MaterialImportTypeDialog(
                 DialogActionRow(
                     icon = Icons.Default.Description,
                     title = "Файл",
-                    subtitle = "PDF, DOCX, XLS и другие документы",
+                    subtitle = "PDF, DOCX, TXT, MD, CSV, JSON, XML и изображения",
                     testTag = "import_type_file",
                     onClick = onPickFile,
                 )

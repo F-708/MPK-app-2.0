@@ -169,8 +169,10 @@ class MainActivity : ComponentActivity() {
             if (external != null) {
                 val key = intakeFingerprint(external)
                 if (key != handledIntakeKey) {
-                    handledIntakeKey = key
+                    // Ключ «этот файл уже обработан» ставим только когда материал реально
+                    // принят: в режиме преподавателя шаринг не должен съедаться навсегда.
                     if (acceptIntake(BuildConfig.FLAVOR, TeacherModeStore.isTeacher(this))) {
+                        handledIntakeKey = key
                         ExternalMaterialIntake.offer(external)
                         if (shouldNavigateToLessons(navController.currentDestination?.route)) {
                             navController.navigateToTab(ROUTE_LESSONS)
@@ -180,6 +182,11 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 return
+            }
+            // Файл пришёл, но формат не поддерживается: молчать нельзя — пользователь
+            // решит, что приложение сломалось.
+            ExternalMaterialIntake.consumeRejection()?.let { message ->
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
             }
         }
         val scrollTarget = intent?.getStringExtra("EXTRA_SCROLL_TARGET")
