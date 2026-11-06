@@ -40,6 +40,7 @@ class ThemeContrastTest {
         val brandFill: Color,
         val navSelected: Color,
         val successText: Color,
+        val success: Color,
         val successBg: Color,
         val errorText: Color,
         val mapDeadText: Color,
@@ -47,6 +48,10 @@ class ThemeContrastTest {
         val accentGold: Color,
         val annotationDanger: Color,
         val onAccent: Color,
+        val brandBlue: Color,
+        val activeBlue: Color,
+        val onLightAccent: Color,
+        val onSuccess: Color,
         val onAccentMuted: Color,
     )
 
@@ -67,6 +72,7 @@ class ThemeContrastTest {
             brandFill = p.brandFill,
             navSelected = p.navSelected,
             successText = p.successText,
+            success = p.success,
             successBg = p.successBg,
             errorText = p.errorText,
             mapDeadText = p.mapDeadText,
@@ -74,6 +80,10 @@ class ThemeContrastTest {
             accentGold = p.accentGold,
             annotationDanger = p.annotationDanger,
             onAccent = p.onAccent,
+            brandBlue = p.brandBlue,
+            activeBlue = p.activeBlue,
+            onLightAccent = p.onLightAccent,
+            onSuccess = p.onSuccess,
             onAccentMuted = p.onAccentMuted,
         )
     }
@@ -91,7 +101,10 @@ class ThemeContrastTest {
             Pair("navSelected/surfaceHighlight", { it.navSelected }, { it.surfaceHighlight }, AA_TEXT_CONTRAST),
             Pair("navSelected/bgMain", { it.navSelected }, { it.bgMain }, AA_TEXT_CONTRAST),
             Pair("onAccent/brandFill", { it.onAccent }, { it.brandFill }, AA_TEXT_CONTRAST),
+            Pair("onLightAccent/brandBlue", { it.onLightAccent }, { it.brandBlue }, AA_TEXT_CONTRAST),
+            Pair("onLightAccent/activeBlue", { it.onLightAccent }, { it.activeBlue }, AA_TEXT_CONTRAST),
             Pair("onAccentMuted/brandFill", { it.onAccentMuted }, { it.brandFill }, AA_TEXT_CONTRAST),
+            Pair("onSuccess/success", { it.onSuccess }, { it.success }, AA_TEXT_CONTRAST),
             Pair("successText/successBg", { it.successText }, { it.successBg }, AA_TEXT_CONTRAST),
             Pair("errorText/bgMain", { it.errorText }, { it.bgMain }, AA_TEXT_CONTRAST),
             Pair("mapDeadText/mapDeadBg", { it.mapDeadText }, { it.mapDeadBg }, AA_TEXT_CONTRAST),

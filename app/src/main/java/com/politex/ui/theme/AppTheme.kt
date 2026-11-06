@@ -25,7 +25,7 @@ enum class AppTheme(
         paletteWithAccents(
             topBar = Color(0xFF03291A),
             brand = Color(0xFF0B5D3B),
-            active = Color(0xFF0E8A55),
+            active = Color(0xFF0A7447),
         ),
         darkPaletteWithAccents(
             topBar = Color(0xFF26473A),

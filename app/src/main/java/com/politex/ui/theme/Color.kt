@@ -59,15 +59,21 @@ data class MpkPalette(
     // чтобы 8 пресетов проходили AA без изменений значений в палитрах.
     val onAccent: Color = Color.White,
     val onAccentMuted: Color = Color(0xFFD6E2F0),
+
+    /** Содержимое на светлых акцентных заливках (brandBlue/activeBlue/success). */
+    val onLightAccent: Color = Color.White,
+
+    /** Содержимое на зелёной заливке успеха. */
+    val onSuccess: Color = Color.White,
 )
 
 val LightPalette =
     MpkPalette(
         topBar = Color(0xFF001737),
         brandBlue = Color(0xFF0B3564),
-        activeBlue = Color(0xFF0072CE),
+        activeBlue = Color(0xFF0067BB),
         brandFill = Color(0xFF0B3564),
-        activeFill = Color(0xFF0072CE),
+        activeFill = Color(0xFF0067BB),
         menuBg = Color(0xFF232527),
         menuSubBg = Color(0xFF1C1E20),
         menuBorder = Color(0xFF35393D),
@@ -84,7 +90,7 @@ val LightPalette =
         textDisabled = Color(0xFFCBD5E1),
         borderLight = Color(0xFFE2E8F0),
         dividerLight = Color(0xFFE5E7EB),
-        success = Color(0xFF16A34A),
+        success = Color(0xFF15803D),
         successBg = Color(0xFFF0FDF4),
         successBorder = Color(0xFFBBF7D0),
         successText = Color(0xFF166534),
@@ -168,6 +174,11 @@ val DarkPalette =
         // Причина: подпись вкладки рисуется на фоне nav-бара (bgMain), и светлый
         // акцент даёт 5.66–7.36:1 вместо 2.7–3.8:1 у прежнего варианта.
         navSelected = Color(0xFF6FA3D8),
+        // Светлые акценты тёмной темы (brandBlue/activeBlue) несут тёмное содержимое:
+        // белый текст на #6FA3D8 давал 2.66:1, тёмный — 6.8:1. onAccent остаётся
+        // белым — он для тёмных заливок brandFill.
+        onLightAccent = Color(0xFF0F1720),
+        onSuccess = Color(0xFF0F1720),
     )
 
 internal var paletteState by mutableStateOf(LightPalette)
@@ -232,4 +243,6 @@ val ColorAnnotationDanger: Color get() = paletteState.annotationDanger
 val ColorNavSelected: Color get() = paletteState.navSelected
 
 val ColorOnAccent: Color get() = paletteState.onAccent
+val ColorOnLightAccent: Color get() = paletteState.onLightAccent
+val ColorOnSuccess: Color get() = paletteState.onSuccess
 val ColorOnAccentMuted: Color get() = paletteState.onAccentMuted

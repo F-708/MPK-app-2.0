@@ -1,4 +1,4 @@
-package com.politex.ui.screens
+﻿package com.politex.ui.screens
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -62,6 +62,10 @@ import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
 import com.politex.ui.theme.ColorBrandBlue
+import com.politex.ui.theme.ColorBrandFill
+import com.politex.ui.theme.ColorOnAccent
+import com.politex.ui.theme.ColorOnLightAccent
+import com.politex.ui.theme.ColorOnSuccess
 import com.politex.ui.theme.ColorSuccess
 import com.politex.ui.theme.ColorSurfaceHighlight
 import com.politex.ui.theme.ColorSurfaceVariantLight
@@ -305,7 +309,7 @@ fun BellsScreen(
                         modifier =
                         Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 44.dp)
+                            .heightIn(min = 48.dp)
                             .bouncyClickable { selectedScheduleType = type }
                             .testTag("bells_type_${type.name.lowercase()}"),
                     ) {
@@ -476,7 +480,7 @@ private fun NowContextCard(context: NowContext) {
                         else -> Icons.Default.AccessTime
                     },
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = if (isActive) ColorOnLightAccent else ColorTextBody,
                     modifier = Modifier.size(16.dp),
                 )
             }
@@ -620,9 +624,16 @@ private fun LessonBellCard(
                     when {
                         item.isInfoHour -> ColorSuccess
                         isActive -> ColorActiveBlue
-                        else -> ColorBrandBlue
+                        // Неактивные пары намеренно тихие: заливка бренда тёмная,
+                        // иначе восемь ярких плашек перетягивают взгляд с текущего урока.
+                        else -> ColorBrandFill
                     },
-                    contentColor = Color.White,
+                    contentColor =
+                    when {
+                        item.isInfoHour -> ColorOnSuccess
+                        isActive -> ColorOnLightAccent
+                        else -> ColorOnAccent
+                    },
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -632,7 +643,7 @@ private fun LessonBellCard(
                             Icon(
                                 imageVector = Icons.Default.Campaign,
                                 contentDescription = null,
-                                tint = Color.White,
+                                tint = ColorOnSuccess,
                                 modifier = Modifier.size(13.dp),
                             )
                             Spacer(modifier = Modifier.width(4.dp))
