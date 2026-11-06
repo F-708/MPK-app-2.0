@@ -55,6 +55,10 @@ data class MpkPalette(
     val accentGoldMuted: Color,
     val annotationDanger: Color,
     val navSelected: Color,
+    // Цвет текста/иконок на акцентной заливке (brandFill/activeFill). Дефолты подобраны так,
+    // чтобы 8 пресетов проходили AA без изменений значений в палитрах.
+    val onAccent: Color = Color.White,
+    val onAccentMuted: Color = Color(0xFFD6E2F0),
 )
 
 val LightPalette =
@@ -160,7 +164,10 @@ val DarkPalette =
         accentGoldSoft = Color(0xFFD9CBA8),
         accentGoldMuted = Color(0xFFB8A87F),
         annotationDanger = Color(0xFFFF8A80),
-        navSelected = Color(0xFF3D94DA),
+        // Выбранная вкладка нижней навигации: цвет бренда, а не activeBlue.
+        // Причина: подпись вкладки рисуется на фоне nav-бара (bgMain), и светлый
+        // акцент даёт 5.66–7.36:1 вместо 2.7–3.8:1 у прежнего варианта.
+        navSelected = Color(0xFF6FA3D8),
     )
 
 internal var paletteState by mutableStateOf(LightPalette)
@@ -223,3 +230,6 @@ val ColorAccentGoldMuted: Color get() = paletteState.accentGoldMuted
 val ColorAnnotationDanger: Color get() = paletteState.annotationDanger
 
 val ColorNavSelected: Color get() = paletteState.navSelected
+
+val ColorOnAccent: Color get() = paletteState.onAccent
+val ColorOnAccentMuted: Color get() = paletteState.onAccentMuted

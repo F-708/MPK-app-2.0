@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.politex.ui.components.AppCard
+import com.politex.ui.components.AppearanceSection
 import com.politex.ui.components.SectionCaption
 import com.politex.ui.components.SubPageHeader
 import com.politex.ui.theme.ColorBgMain
@@ -131,7 +132,8 @@ fun TeacherSettingsScreen(
 
             item { SectionCaption("ВНЕШНИЙ ВИД") }
             item { ScaleCard() }
-            item { ThemeSwatchesCard() }
+            // Тот же компонент, что в стандартных настройках: пресеты + режим + тон.
+            item { AppearanceSection() }
 
             item { SectionCaption("О ПРОГРАММЕ") }
             item {

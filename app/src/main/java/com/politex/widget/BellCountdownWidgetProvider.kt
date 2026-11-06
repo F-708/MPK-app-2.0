@@ -449,13 +449,16 @@ enum class WidgetStyle(
             systemColors(night)
         }
         APP -> {
-            val p = com.politex.util.AppThemeStore.load(context).palette
+            // Эффективная палитра: пресет × режим × тон. Раньше бралась светлая палитра пресета
+            // всегда — виджет «Как в приложении» не темнел вместе с приложением.
+            val p = com.politex.util.AppThemeStore.effectivePalette(context)
+            val dark = com.politex.util.AppThemeStore.isDark(context)
             WidgetColors(
                 backgroundColor = p.brandFill.toArgb(),
-                mainColor = 0xFFFFFFFF.toInt(),
-                subColor = 0xFFD6E2F0.toInt(),
+                mainColor = p.onAccent.toArgb(),
+                subColor = p.onAccentMuted.toArgb(),
                 highlightColor = p.topBar.toArgb(),
-                pastColor = 0xFF9FB0C4.toInt(),
+                pastColor = if (dark) 0xFFB9C6D8.toInt() else 0xFF9FB0C4.toInt(),
             )
         }
     }
