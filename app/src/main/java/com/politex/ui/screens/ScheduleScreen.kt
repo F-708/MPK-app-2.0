@@ -309,7 +309,7 @@ fun ScheduleScreen(
 
     val homeworkByLesson: Map<Int, List<TaskType>> =
 
-        remember(lessons, pendingTasks, activeDayOfWeek, selectedDateString, nowMinutes) {
+        remember(lessons, pendingTasks, activeDayOfWeek, selectedDateString, activeCal, realNow) {
             val now = System.currentTimeMillis()
             val dayIso =
                 com.politex.util.HomeworkMarkers
@@ -318,9 +318,8 @@ fun ScheduleScreen(
                 com.politex.util.HomeworkMarkers
                     .dayIsoOf(realNow) == dayIso
             val isPast =
-                com.politex.util.HomeworkMarkers.dayIsoOf(
-                    (realNow.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) },
-                ) > dayIso
+                com.politex.util.HomeworkMarkers
+                    .isPastDay(dayIso, now)
             com.politex.util.HomeworkMarkers.markerLessonTypes(
                 dayLessons = lessons,
                 day =
