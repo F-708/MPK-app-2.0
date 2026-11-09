@@ -11,7 +11,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -74,11 +73,9 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -101,6 +98,7 @@ import com.politex.data.model.CollegeRouteFinder
 import com.politex.data.model.FloorMap
 import com.politex.data.model.MapPoint
 import com.politex.data.model.MapRoom
+import com.politex.data.model.MapWallsData
 import com.politex.ui.components.AppCard
 import com.politex.ui.components.RoomScheduleDialog
 import com.politex.ui.components.currentRoomLessonNumber
@@ -116,6 +114,8 @@ import com.politex.ui.theme.ColorMapDeadText
 import com.politex.ui.theme.ColorMapRoomBorder
 import com.politex.ui.theme.ColorMapRoomFill
 import com.politex.ui.theme.ColorMapRouteCore
+import com.politex.ui.theme.ColorMapStair
+import com.politex.ui.theme.ColorMapWall
 import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
@@ -147,6 +147,7 @@ fun CollegeMapScreen(
     val context = LocalContext.current
     val contentRevision = ContentPackStore.revision.intValue
     val mapData = remember(context, contentRevision) { CollegeMapData.load(context) }
+    val mapWalls = remember(context, contentRevision) { MapWallsData.load(context) }
 
     val scheduleRepository = remember { com.politex.AppGraph.scheduleRepository }
 
@@ -497,7 +498,7 @@ fun CollegeMapScreen(
             floorId = floorId,
             floor = floor,
             targetRoom = targetRoom,
-
+            walls = mapWalls,
             onRoomTap = { room ->
                 searchFailed = false
 
@@ -955,6 +956,7 @@ private fun MapCanvas(
     floorId: String,
     floor: FloorMap,
     targetRoom: MapRoom?,
+    walls: MapWallsData,
     onRoomTap: (MapRoom) -> Unit = {},
     routePoints: List<List<MapPoint>>? = null,
     routeFinishHere: Boolean = false,
@@ -973,11 +975,8 @@ private fun MapCanvas(
     val offsetX = remember { Animatable(0f) }
     val offsetY = remember { Animatable(0f) }
 
-    val painter = painterResource(id = mapRes(floorId))
-    val aspect =
-        painter.intrinsicSize.let { s ->
-            if (s.height > 0f && s.width > 0f) s.width / s.height else 1.7917f
-        }
+    // Растровая подложка убрана: пропорция холста равна холсту трассировки (1376x768).
+    val aspect = CollegeRouteFinder.PLAN_ASPECT
 
     val pulse by rememberInfiniteTransition(label = "подсветка").animateFloat(
         initialValue = 0.35f,
@@ -1149,10 +1148,14 @@ private fun MapCanvas(
                         transformOrigin = TransformOrigin(0f, 0f)
                     },
             ) {
-                Image(
-                    painter = painter,
-                    contentDescription = "План этажа",
-                    contentScale = ContentScale.Fit,
+                MapWallsLayer(
+                    floorId = floorId,
+                    walls = walls,
+                    imgW = imgW,
+                    imgH = imgH,
+                    wallColor = ColorMapWall,
+                    stairColor = ColorMapStair,
+                    unit = 1f / scale.value,
                     modifier =
                     Modifier
                         .width(with(density) { imgW.toDp() })
@@ -1601,9 +1604,3 @@ private fun DrawScope.drawDirectionChevron(
 internal fun dedupeStages(list: List<String>): List<String> = list.filterIndexed { i, id -> i == 0 || id != list[i - 1] }
 
 internal fun stepLabels(stages: List<String>): List<String> = stages.mapIndexed { i, _ -> "Шаг ${i + 1}" }
-
-private fun mapRes(floorId: String): Int = when (floorId) {
-    "2" -> com.politex.R.drawable.map_floor2
-    "3-4" -> com.politex.R.drawable.map_floor34
-    else -> com.politex.R.drawable.map_floor1
-}
