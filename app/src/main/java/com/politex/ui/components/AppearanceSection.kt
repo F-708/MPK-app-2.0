@@ -136,34 +136,10 @@ fun AppearanceSection(modifier: Modifier = Modifier) {
                         config = AppThemeStore.readPrefs(context)
                     },
                 )
-                Text(
-                    text = toneHint(config.tone, isDarkThemeActive),
-                    style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
-                    modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
-                )
             }
         }
-    }
-}
 
-/** Подпись под чипами тона: одна и та же ось читается по-разному в светлой и тёмной теме. */
-internal fun toneHint(
-    tone: SurfaceTone,
-    dark: Boolean,
-): String = when (tone) {
-    SurfaceTone.NATIVE -> "Как сейчас — привычный вид"
-    SurfaceTone.SOFT ->
-        if (dark) {
-            "Светло-тёмная: фон приподнят, меньше черноты"
-        } else {
-            "Фон чуть тонированный, границы спокойнее"
-        }
-    SurfaceTone.DEEP ->
-        if (dark) {
-            "Чёрный фон (AMOLED), экономит батарею на OLED"
-        } else {
-            "Белый фон, границы и текст контрастнее"
-        }
+    }
 }
 
 @Composable
@@ -240,7 +216,7 @@ private fun ThemeSwatch(
             Box(
                 modifier =
                 Modifier
-                    .size(30.dp)
+                    .size(26.dp)
                     .background(theme.palette.topBar, RoundedCornerShape(2.dp))
                     .border(1.dp, previewBorder, RoundedCornerShape(2.dp)),
                 contentAlignment = Alignment.Center,
@@ -248,20 +224,24 @@ private fun ThemeSwatch(
                 Box(
                     modifier =
                     Modifier
-                        .size(width = 18.dp, height = 6.dp)
+                        .size(width = 16.dp, height = 5.dp)
                         .background(theme.palette.brandBlue, RoundedCornerShape(1.dp)),
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = theme.title,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+                // Названия длинные («Графитовая», «Изумрудная»): одна строка без переноса,
+                // без многоточия и с плотным трекингом — плитка не «прыгает» по высоте.
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Visible,
                 style =
                 TextStyle(
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                    fontSize = 11.sp,
-                    lineHeight = 13.sp,
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    letterSpacing = (-0.3).sp,
                     color = ColorTextTitle,
                     textAlign = TextAlign.Center,
                 ),
