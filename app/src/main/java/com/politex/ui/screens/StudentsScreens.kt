@@ -56,6 +56,7 @@ import com.politex.data.repository.Student
 import com.politex.data.repository.Teacher
 import com.politex.data.repository.TeacherInsights
 import com.politex.ui.components.AppCard
+import com.politex.ui.effects.weatherScene
 import com.politex.ui.components.AppDivider
 import com.politex.ui.components.BackButton
 import com.politex.ui.components.SearchEmptyState
@@ -121,7 +122,7 @@ fun StudentsDatabaseScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ColorBgMain),
+            .weatherScene(),
     ) {
         Row(
             modifier = Modifier
@@ -393,10 +394,10 @@ fun StudentCardScreen(
                     if (count > 0) {
                         "Загружено уроков: $count"
                     } else {
-                        "Группы ${student.group} нет в опубликованном расписании на эту дату"
+                        "Группы ${student.group} нет в расписании на эту дату"
                     }
                 },
-                onFailure = { "Не удалось загрузить (проверьте интернет)" },
+                onFailure = { "Не удалось загрузить. Проверьте интернет." },
             )
             isLoading = false
         }
@@ -432,7 +433,7 @@ fun StudentCardScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ColorBgMain),
+            .weatherScene(),
     ) {
         SubPageHeader(
             title = student.fullName,
@@ -510,9 +511,8 @@ fun StudentCardScreen(
                         if (student.courseMismatch) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "В базе указан ${student.course} курс, но у этой специальности " +
-                                    "меньше курсов обучения. Группы ${student.group} в расписании " +
-                                    "не будет — проверьте группу и курс.",
+                                text = "В базе указан ${student.course} курс, а у специальности их меньше. " +
+                                    "Проверьте группу и курс.",
                                 style = androidx.compose.ui.text.TextStyle(
                                     fontSize = 12.sp,
                                     color = ColorErrorText,
@@ -763,7 +763,7 @@ fun StudentCardScreen(
                             color = ColorSurfaceVariantLight,
                         ) {
                             Text(
-                                text = "Архив расписания группы пуст — нажмите «Обновить» справа сверху",
+                                text = "Архив пуст. Нажмите «Обновить».",
                                 style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ColorTextMuted),
                                 modifier = Modifier.padding(12.dp),
                             )

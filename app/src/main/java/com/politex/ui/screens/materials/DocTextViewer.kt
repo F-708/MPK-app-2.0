@@ -297,7 +297,7 @@ fun MaterialDocTextViewer(
                         modifier = Modifier.padding(24.dp),
                     ) {
                         Text(
-                            text = "Текст не найден: документ пустой или не читается встроенным просмотрщиком.",
+                            text = "Текст не читается: файл пустой или в незнакомом формате.",
                             style = TextStyle(fontSize = 13.sp),
                             textAlign = TextAlign.Center,
                         )

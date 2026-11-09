@@ -155,8 +155,7 @@ private fun CorruptedPdfPlaque(
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text =
-                    "Документ повреждён или защищён паролем. Встроенный просмотрщик читает PDF — " +
-                        "попробуйте скачать файл заново или открыть его в другом приложении.",
+                    "Файл повреждён или защищён паролем. Скачайте заново или откройте в другом приложении.",
                     style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                 )
                 Spacer(modifier = Modifier.height(10.dp))
@@ -1091,7 +1090,7 @@ internal fun BookmarkPanel(
     ) {
         if (bookmarks.isEmpty()) {
             Text(
-                text = "Закладок нет. Нажмите значок закладки на нужной странице.",
+                text = "Закладок нет. Отметьте страницу значком закладки.",
                 style = TextStyle(fontSize = 12.sp, color = ColorTextMuted),
                 modifier = Modifier.padding(12.dp),
             )

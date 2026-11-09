@@ -80,6 +80,9 @@ class MainActivity : ComponentActivity() {
             if (TeacherModeStore.isTeacher(this)) {
                 MpkWorkManagerHelper.setupTeacherSync(this)
             }
+            // Прогноз погоды: один вход, без WorkManager и новых разрешений.
+            // Внутри — гейт «не чаще раза в час» и тихий кэш-фолбэк при ошибке сети.
+            com.politex.weather.WeatherHub.ensureFresh(this)
             com.politex.update.AppUpdateWorker.schedule(this)
             com.politex.update.AppUpdateWorker.checkOnStartup(this)
             whatsNewEntries = com.politex.ui.changelog.WhatsNewStore.onLaunch(this, BuildConfig.VERSION_CODE)

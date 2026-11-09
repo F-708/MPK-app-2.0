@@ -262,6 +262,9 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
             WidgetUpdateHelper.applyWidgetBackground(views, context, appWidgetId, style.backgroundColor)
             views.setViewVisibility(R.id.iv_idle, android.view.View.GONE)
 
+            // Погода на виджете обратного отсчёта: статичная картинка + строка.
+            WidgetWeather.applyBackdrop(views, context, appWidgetId, colors = style)
+
             views.setViewVisibility(R.id.tv_countdown_value, android.view.View.VISIBLE)
             views.setTextColor(R.id.tv_countdown_label, style.subColor)
             views.setTextColor(R.id.tv_countdown_value, style.mainColor)
@@ -373,7 +376,7 @@ class BellCountdownWidgetProvider : AppWidgetProvider() {
 enum class CountdownMode(val title: String, val description: String) {
     GROUP_LESSONS(
         "До конца моих уроков",
-        "Отсчёт заканчивается на последнем уроке вашей группы",
+        "Отсчёт до последнего урока группы",
     ),
     ALL_BELLS(
         "До конца всех звонков",

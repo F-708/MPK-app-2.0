@@ -1,8 +1,0 @@
-{
-  "standard": {
-    "versionCode": 21000,
-    "versionName": "2.1",
-    "url": "https://github.com/F-708/MPK-app-2.0/releases/latest/download/app-standard-release.apk",
-    "notes": "Исправлено залипание виджетов, кружок темы уведомлений, автообновление."
-  }
-}

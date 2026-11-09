@@ -253,7 +253,7 @@ class AppViewModel(
             )
         }
         viewModelScope.launch {
-            _toastEvent.emit("Выбрана группа: ${parsed.canonicalName}")
+            _toastEvent.emit("Группа: ${parsed.canonicalName}")
 
             if (!scheduleRepository.hasSchedule(parsed.canonicalName)) {
                 syncSchedule(isAutoSync = false)
@@ -297,7 +297,7 @@ class AppViewModel(
                 onFailure = {
                     _uiState.update { it.copy(isSyncing = false, hasSyncError = true) }
                     if (force) {
-                        _toastEvent.emit("Не удалось загрузить расписание преподавателя (проверьте интернет)")
+                        _toastEvent.emit("Не удалось загрузить. Проверьте интернет.")
                     }
                 },
             )
@@ -347,7 +347,7 @@ class AppViewModel(
                 onFailure = {
                     _uiState.update { it.copy(isSyncing = false, hasSyncError = !isAutoSync || !hasCache) }
                     if (!isAutoSync) {
-                        _toastEvent.emit("Сбой обновления: проверьте интернет (сайт guo-mpk.by недоступен)")
+                        _toastEvent.emit("Нет связи с сайтом. Проверьте интернет.")
                     }
                 },
             )

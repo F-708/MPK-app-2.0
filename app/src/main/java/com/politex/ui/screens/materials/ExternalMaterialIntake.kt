@@ -160,7 +160,7 @@ object ExternalMaterialIntake {
         val limited = uris.take(MAX_FILES_PER_SHARE)
         val notes = ArrayList<String>(2)
         if (uris.size > limited.size) {
-            notes += "Можно добавить не больше $MAX_FILES_PER_SHARE файлов за раз — лишние отброшены"
+            notes += "Не больше $MAX_FILES_PER_SHARE файлов за раз"
         }
 
         var firstRejection: String? = null
@@ -182,7 +182,7 @@ object ExternalMaterialIntake {
             return null
         }
         if (accepted.size < limited.size) {
-            notes += "Часть файлов не поддерживается — добавлены только подходящие"
+            notes += "Часть файлов не поддерживается"
         }
 
         val images = accepted.filter { it.second == MaterialFormatKind.IMAGE }

@@ -1,4 +1,4 @@
-﻿package com.politex.ui.screens
+package com.politex.ui.screens
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -57,6 +57,7 @@ import com.politex.data.model.BellItem
 import com.politex.data.model.BellScheduleType
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.ui.components.AppCard
+import com.politex.ui.effects.weatherScene
 import com.politex.ui.components.AppDivider
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
@@ -277,7 +278,7 @@ fun BellsScreen(
         modifier =
         modifier
             .fillMaxSize()
-            .background(ColorBgMain),
+            .weatherScene(),
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text(

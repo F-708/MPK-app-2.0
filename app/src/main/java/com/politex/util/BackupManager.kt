@@ -173,8 +173,7 @@ object BackupManager {
 
         val version = root.optInt(KEY_VERSION, 0)
         if (version > FORMAT_VERSION) {
-            warnings += "Файл сохранён более новой версией приложения. " +
-                "Что удалось — восстановлено, остальное пропущено."
+            warnings += "Файл из более новой версии приложения: восстановлено не всё."
         }
 
         val db = MpkDatabase.getInstance(context)

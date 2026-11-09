@@ -74,7 +74,7 @@ fun TeacherSettingsScreen(
     Column(modifier = modifier.fillMaxSize().background(ColorBgMain)) {
         SubPageHeader(
             title = "Настройки",
-            subtitle = "Профиль, «до звонка», масштаб и тема",
+            subtitle = "Оформление и «до звонка»",
             onBack = onBack,
         )
 
@@ -104,7 +104,7 @@ fun TeacherSettingsScreen(
                                 modifier = Modifier.testTag("teacher_settings_profile_name"),
                             )
                             Text(
-                                text = "Смена преподавателя вернёт к поиску себя в списке",
+                                text = "Вернёт к выбору из списка",
                                 style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                             )
                         }
@@ -257,7 +257,7 @@ private fun BellCountdownCard(context: Context) {
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Постоянная строка со временем до звонка — обновляется каждую минуту (в стиле «с секундами» — каждую секунду).",
+                    text = "Строка обновляется каждую минуту, со стилем «в секундах» — каждую секунду.",
                     style = TextStyle(fontSize = 11.sp, color = ColorTextMuted),
                 )
             }
