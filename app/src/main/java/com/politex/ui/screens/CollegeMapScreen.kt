@@ -1160,7 +1160,7 @@ private fun MapCanvas(
                     imgH = imgH,
                     wallColor = ColorMapWall,
                     stairColor = ColorMapStair,
-                    unit = 1f / scale.value,
+                    unit = { 1f / scale.value },
                     modifier =
                     Modifier
                         .width(with(density) { imgW.toDp() })

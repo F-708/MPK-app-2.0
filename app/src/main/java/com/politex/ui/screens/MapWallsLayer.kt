@@ -59,7 +59,7 @@ fun MapWallsLayer(
     imgH: Float,
     wallColor: Color,
     stairColor: Color,
-    unit: Float,
+    unit: () -> Float,
     modifier: Modifier = Modifier,
 ) {
     val floor = walls.floor(floorId)
@@ -67,9 +67,11 @@ fun MapWallsLayer(
 
     Canvas(modifier) {
         if (floor.isEmpty || path.isEmpty) return@Canvas
+        // unit() читается здесь, в фазе отрисовки — слой не рекомпозируется на pinch-zoom.
+        val u = unit()
         drawPath(path, color = wallColor, style = Fill)
-        floor.stairs.forEach { drawStair(it, imgW, imgH, stairColor, unit) }
-        floor.doors.forEach { drawDoor(it, imgW, imgH, wallColor, unit) }
+        floor.stairs.forEach { drawStair(it, imgW, imgH, stairColor, u) }
+        floor.doors.forEach { drawDoor(it, imgW, imgH, wallColor, u) }
     }
 }
 

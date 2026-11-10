@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +23,7 @@ object AdminPlusNav {
     val showDataTools = mutableStateOf(false)
     val editingTeacher = mutableStateOf<String?>(null)
     val showPatSetup = mutableStateOf(false)
+    val showDevControls = mutableStateOf(false)
 
     fun openDataTools() {
         showDataTools.value = true
@@ -31,8 +33,13 @@ object AdminPlusNav {
         showPatSetup.value = true
     }
 
+    fun openDevControls() {
+        showDevControls.value = true
+    }
+
     fun back() {
         when {
+            showDevControls.value -> showDevControls.value = false
             showPatSetup.value -> showPatSetup.value = false
             editingTeacher.value != null -> editingTeacher.value = null
             else -> showDataTools.value = false
@@ -43,6 +50,7 @@ object AdminPlusNav {
         showDataTools.value = false
         editingTeacher.value = null
         showPatSetup.value = false
+        showDevControls.value = false
     }
 }
 
@@ -55,10 +63,15 @@ fun AdminPlusRoot(content: @Composable () -> Unit) {
         val showDataTools by AdminPlusNav.showDataTools
         val editingTeacher by AdminPlusNav.editingTeacher
         val showPatSetup by AdminPlusNav.showPatSetup
-        BackHandler(enabled = showDataTools || showPatSetup) { AdminPlusNav.back() }
+        val showDevControls by AdminPlusNav.showDevControls
+        BackHandler(enabled = showDataTools || showPatSetup || showDevControls) { AdminPlusNav.back() }
         OwnerRoot {
             val teacher = editingTeacher
             when {
+                showDevControls ->
+                    DevControlsScreen(
+                        onBack = { AdminPlusNav.showDevControls.value = false },
+                    )
                 showPatSetup ->
                     PatSetupScreen(
                         onBack = { AdminPlusNav.showPatSetup.value = false },
@@ -97,6 +110,13 @@ fun AdminPlusMenuExtras() {
             badge = "OWNER",
             testTag = "adminplus_pat_menu",
             onClick = { AdminPlusNav.openPatSetup() },
+        )
+        OwnerGoldMenuCard(
+            icon = Icons.Default.Tune,
+            title = "ОФОРМЛЕНИЕ И ПОГОДА",
+            badge = "OWNER",
+            testTag = "adminplus_dev_controls_menu",
+            onClick = { AdminPlusNav.openDevControls() },
         )
     }
 }
