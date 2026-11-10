@@ -256,7 +256,8 @@ object AmbientParticles {
             Pumpkin(
                 // Держим отступы от краёв, чтобы тыква не упиралась в борт экрана.
                 x = 0.08f + random.nextFloat() * 0.84f,
-                y = 0.90f + random.nextFloat() * 0.07f,
+                // У нижней кромки, но не в самом низу пустоты — на уровне контента.
+                y = 0.84f + random.nextFloat() * 0.10f,
                 radiusDp = random.range(AmbientSpec.PUMPKIN_RADIUS_DP),
                 flickerSec = 1.6f + random.nextFloat() * 1.8f,
                 phase = random.nextFloat(),

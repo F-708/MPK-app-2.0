@@ -12,6 +12,10 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import com.politex.data.model.CampusData
 import com.politex.data.model.MapWallsData
 
+/** Затемнение цвета для «боковой грани» экструзии. */
+private fun Color.darker(factor: Float): Color =
+    Color(red * factor, green * factor, blue * factor, alpha)
+
 /**
  * Слой окружения колледжа под векторным планом: газон, дороги, деревья, здания.
  *
@@ -26,11 +30,12 @@ fun CampusLayer(
     imgH: Float,
     dark: Boolean,
     modifier: Modifier = Modifier,
+    extrude3d: Boolean = false,
 ) {
     if (campus.isEmpty) return
     Canvas(modifier) {
         val scale = imgW / MapWallsData.PLAN_WIDTH
-        drawCampus(campus, scale, dark)
+        drawCampus(campus, scale, dark, extrude3d)
     }
 }
 
@@ -38,6 +43,7 @@ private fun DrawScope.drawCampus(
     campus: CampusData,
     scale: Float,
     dark: Boolean,
+    extrude3d: Boolean,
 ) {
     fun colorFor(kind: String, roofTone: String): Color = when (kind) {
         "lawn" -> if (dark) Color(0xFF14231A) else Color(0xFFE3EDDD)
@@ -60,15 +66,34 @@ private fun DrawScope.drawCampus(
     campus.shapes.forEach { shape ->
         val p = shape.points
         if (p.size < 6) return@forEach
-        val path = Path()
-        path.moveTo(p[0] * scale, p[1] * scale)
+        val base = Path()
+        base.moveTo(p[0] * scale, p[1] * scale)
         var i = 2
         while (i + 1 < p.size) {
-            path.lineTo(p[i] * scale, p[i + 1] * scale)
+            base.lineTo(p[i] * scale, p[i + 1] * scale)
             i += 2
         }
-        path.close()
-        drawPath(path, color = colorFor(shape.kind, shape.roofTone), style = Fill)
+        base.close()
+
+        val color = colorFor(shape.kind, shape.roofTone)
+        // Экструзия зданий в 3D: тёмный «юбочный» контур со сдвигом вниз-вправо
+        // даёт ощущение объёма без настоящего 3D-движка.
+        if (extrude3d && (shape.kind == "building" || shape.kind == "garage" || shape.kind == "workshop")) {
+            val lift = 10f * scale
+            val side = Path()
+            side.moveTo(p[0] * scale, p[1] * scale)
+            var j = 2
+            while (j + 1 < p.size) {
+                side.lineTo(p[j] * scale, p[j + 1] * scale)
+                j += 2
+            }
+            side.close()
+            val shadow = Path()
+            shadow.addPath(base)
+            shadow.translate(Offset(0f, lift))
+            drawPath(shadow, color = color.copy(alpha = color.alpha * 0.55f).darker(0.7f), style = Fill)
+        }
+        drawPath(base, color = color, style = Fill)
     }
 
     campus.stadiumOuter?.let { e ->

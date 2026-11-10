@@ -1213,6 +1213,7 @@ private fun MapCanvas(
                         imgW = imgW,
                         imgH = imgH,
                         dark = darkThemeState.value,
+                        extrude3d = tilt3d,
                         modifier =
                         Modifier
                             .width(with(density) { imgW.toDp() })
@@ -1525,7 +1526,7 @@ internal fun mainEntranceRoom(mapData: CollegeMapData): MapRoom? = mapData
         )
     }
 
-private const val TILT_3D_DEG = 32f
+private const val TILT_3D_DEG = 45f
 private const val ROUTE_TICK_STEP_PX = 56f
 private const val ROUTE_TICK_SPEED_PX_PER_SEC = 12f
 private const val ROUTE_TICK_SIZE_DP = 13f

@@ -302,7 +302,7 @@ fun ScheduleScreen(
                 .getInstance(context)
                 .let { db ->
                     com.politex.data.repository
-                        .TaskRepository(db.taskDao(), db.taskReminderDao())
+                        .TaskRepository(db.taskDao(), db.taskReminderDao(), db)
                 }.getPendingTasksForGroup(groupInfo.canonicalName)
         }.collectAsState(initial = emptyList()).value
 

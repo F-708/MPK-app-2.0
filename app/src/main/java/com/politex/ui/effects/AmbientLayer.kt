@@ -267,9 +267,9 @@ private fun DrawScope.drawGarland(
     garland.forEach { g ->
         val twinkle = AmbientParticles.twinkleFactor(seconds, g.twinkleSec, g.phase)
         val base = palette[g.colorIndex % palette.size]
-        val alpha = (0.45f + 0.55f * twinkle) * a
+        val alpha = (0.55f + 0.45f * twinkle) * a
         val center = Offset(g.x * widthPx, g.y * heightPx)
-        val r = 2.6f.dp.toPx()
+        val r = 3.2f.dp.toPx()
         // Ореол + яркое ядро.
         drawCircle(color = base.copy(alpha = 0.30f * alpha), radius = r * 2.1f, center = center)
         drawCircle(color = base.copy(alpha = alpha), radius = r, center = center)
