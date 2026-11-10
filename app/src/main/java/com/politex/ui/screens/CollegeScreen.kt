@@ -40,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -1197,20 +1198,57 @@ private fun TeacherAvatar(
                 .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp)),
         )
     } else {
-        Box(
-            modifier =
-            modifier
-                .size(size)
-                .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = teacherInitial(teacher.name),
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = (size.value * 0.4f).sp,
+        TeacherAvatarPlaceholder(name = teacher.name, size = size, border = border, modifier = modifier)
+    }
+}
+
+/**
+ * Заглушка фото преподавателя: мягкий силуэт + инициалы на приглушённом фоне.
+ *
+ * Раньше была одна буква на яркой акцентной заливке — выглядело грубо.
+ * Силуэт сразу читается как «нет фото», инициалы остаются для узнаваемости.
+ */
+@Composable
+private fun TeacherAvatarPlaceholder(
+    name: String,
+    size: androidx.compose.ui.unit.Dp,
+    border: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier =
+        modifier
+            .size(size)
+            .border(1.dp, border, RoundedCornerShape(2.dp))
+            .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
+            .testTag("teacher_avatar_placeholder"),
+        contentAlignment = Alignment.Center,
+    ) {
+        val iconTint = ColorTextMuted
+        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = this.size.width
+            val h = this.size.height
+            val headR = w * 0.17f
+            val headCx = w / 2f
+            val headCy = h * 0.34f
+            drawCircle(color = iconTint.copy(alpha = 0.6f), radius = headR, center = Offset(headCx, headCy))
+            // Плечи: дуга-полукруг под головой.
+            drawArc(
+                color = iconTint.copy(alpha = 0.6f),
+                startAngle = 180f,
+                sweepAngle = 180f,
+                useCenter = true,
+                topLeft = Offset(w * 0.22f, h * 0.52f),
+                size = androidx.compose.ui.geometry.Size(w * 0.56f, h * 0.72f),
             )
         }
+        Text(
+            text = teacherInitials(name),
+            color = ColorTextTitle,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = (size.value * 0.30f).sp,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = size * 0.08f),
+        )
     }
 }
 
@@ -1219,6 +1257,14 @@ internal fun teacherInitial(name: String): String = name
     .split(" ")
     .firstOrNull { it.isNotBlank() }
     ?.take(1) ?: "?"
+
+/** Две буквы: фамилия + имя («Иванова Анна» → «ИА»). Читается лучше одной. */
+internal fun teacherInitials(name: String): String {
+    val parts = name.trim().split(" ").filter { it.isNotBlank() }
+    val first = parts.getOrNull(0)?.take(1) ?: "?"
+    val second = parts.getOrNull(1)?.take(1) ?: ""
+    return (first + second).uppercase()
+}
 
 @Composable
 private fun TeacherCardPageWrapper(
