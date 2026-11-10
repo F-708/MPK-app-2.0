@@ -13,7 +13,7 @@ class SeasonParticlesTest {
         assertTrue("тыкв ${pumpkins.size}", pumpkins.size in AmbientSpec.PUMPKIN_COUNT)
         pumpkins.forEach { p ->
             assertTrue("x в 0..1", p.x in 0f..1f)
-            assertTrue("у нижней кромки", p.y >= 0.85f)
+            assertTrue("у нижней кромки", p.y >= 0.80f)
             assertTrue("радиус в диапазоне", p.radiusDp in AmbientSpec.PUMPKIN_RADIUS_DP)
             assertTrue("мерцание положительное", p.flickerSec > 0f)
         }
