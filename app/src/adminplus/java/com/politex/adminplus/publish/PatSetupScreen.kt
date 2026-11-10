@@ -143,6 +143,29 @@ fun PatSetupScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // Статус токена крупно: видно сразу, настроен ли он.
+            Row(
+                modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(
+                        if (hasToken) ColorSuccessBg else ColorSurfaceHighlight,
+                        RoundedCornerShape(2.dp),
+                    ).padding(horizontal = 14.dp, vertical = 12.dp)
+                    .testTag("pat_status_card"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (hasToken) "Токен сохранён на этом устройстве" else "Токен не настроен",
+                    style =
+                    TextStyle(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        color = if (hasToken) ColorSuccessText else ColorErrorText,
+                    ),
+                )
+            }
+
             AppCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
