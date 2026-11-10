@@ -1,6 +1,7 @@
 package com.politex
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -56,6 +57,28 @@ class MapScreenShotTest {
     @Test
     fun `карта из меню — без маршрута`() {
         shoot("map-menu", null, null)
+    }
+
+    @Test
+    fun `кампус вокруг плана`() {
+        shoot("map-campus", null, null)
+    }
+
+    @Test
+    fun `весь кампус по кнопке`() {
+        applyDarkMode(false)
+        composeRule.mainClock.autoAdvance = false
+        composeRule.setContent {
+            MyApplicationTheme {
+                CollegeMapScreen(initialRoom = null, fromRoom = null, onBack = {})
+            }
+        }
+        composeRule.mainClock.advanceTimeBy(3_000)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("map_fit_world").performClick()
+        composeRule.mainClock.advanceTimeBy(1_500)
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage("build/screenshots/map-campus-fit.png")
     }
 
     @Test

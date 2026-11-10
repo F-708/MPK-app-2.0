@@ -93,6 +93,7 @@ import com.politex.content.ContentPackStore
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.model.CollegeMap
+import com.politex.data.model.CampusData
 import com.politex.data.model.CollegeMapData
 import com.politex.data.model.CollegeRouteFinder
 import com.politex.data.model.FloorMap
@@ -150,6 +151,7 @@ fun CollegeMapScreen(
     val contentRevision = ContentPackStore.revision.intValue
     val mapData = remember(context, contentRevision) { CollegeMapData.load(context) }
     val mapWalls = remember(context, contentRevision) { MapWallsData.load(context) }
+    val campus = remember(context, contentRevision) { CampusData.load(context) }
 
     val scheduleRepository = remember { com.politex.AppGraph.scheduleRepository }
 
@@ -501,6 +503,7 @@ fun CollegeMapScreen(
             floor = floor,
             targetRoom = targetRoom,
             walls = mapWalls,
+            campus = campus,
             onRoomTap = { room ->
                 searchFailed = false
 
@@ -959,6 +962,7 @@ private fun MapCanvas(
     floor: FloorMap,
     targetRoom: MapRoom?,
     walls: MapWallsData,
+    campus: CampusData,
     onRoomTap: (MapRoom) -> Unit = {},
     routePoints: List<List<MapPoint>>? = null,
     routeFinishHere: Boolean = false,
@@ -1158,6 +1162,33 @@ private fun MapCanvas(
                         transformOrigin = TransformOrigin(0f, 0f)
                     },
             ) {
+                // Окружение колледжа под планом: газон, дороги, деревья, здания.
+                // Рисуется в мировых координатах (тот же масштаб, что и план), видно
+                // вокруг здания при отдалении и по краям.
+                if (!campus.isEmpty) {
+                    CampusLayer(
+                        campus = campus,
+                        imgW = imgW,
+                        imgH = imgH,
+                        dark = darkThemeState.value,
+                        modifier =
+                        Modifier
+                            .width(with(density) { imgW.toDp() })
+                            .height(with(density) { imgH.toDp() }),
+                    )
+                }
+
+                // «Матрас» под зданием: непрозрачная подложка плана, чтобы кампус
+                // не просвечивал сквозь комнаты, а план читался на газоне.
+                Canvas(
+                    modifier =
+                    Modifier
+                        .width(with(density) { imgW.toDp() })
+                        .height(with(density) { imgH.toDp() }),
+                ) {
+                    drawRect(color = ColorBgMain)
+                }
+
                 MapWallsLayer(
                     floorId = floorId,
                     walls = walls,
@@ -1204,6 +1235,41 @@ private fun MapCanvas(
                         )
                     }
                 }
+            }
+        }
+
+        // Кнопка «весь кампус»: вписывает мир (здание + окружение) целиком.
+        if (!campus.isEmpty) {
+            Surface(
+                shape = RoundedCornerShape(2.dp),
+                color = ColorBgMain,
+                border = BorderStroke(1.dp, ColorBorderLight),
+                modifier =
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(10.dp)
+                    .testTag("map_fit_world"),
+            ) {
+                Text(
+                    text = "Весь кампус",
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = ColorTextBody),
+                    modifier =
+                    Modifier
+                        .bouncyClickable {
+                            val wl = campus.worldLeft
+                            val wt = campus.worldTop
+                            val worldW = campus.worldRight - wl
+                            val worldH = campus.worldBottom - wt
+                            val s = (minOf(viewWState.value / (worldW * (imgW / MapWallsData.PLAN_WIDTH)), viewHState.value / (worldH * (imgW / MapWallsData.PLAN_WIDTH))) * 0.96f)
+                            val sc = s.coerceIn(0.2f, 8f)
+                            scope.launch {
+                                scale.animateTo(sc, tween(420, easing = LinearOutSlowInEasing))
+                                offsetX.animateTo(clampX(viewWState.value / 2f - (wl + worldW / 2f) * (imgW / MapWallsData.PLAN_WIDTH) * sc, sc), tween(420))
+                                offsetY.animateTo(clampY(viewHState.value / 2f - (wt + worldH / 2f) * (imgW / MapWallsData.PLAN_WIDTH) * sc, sc), tween(420))
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
             }
         }
 
