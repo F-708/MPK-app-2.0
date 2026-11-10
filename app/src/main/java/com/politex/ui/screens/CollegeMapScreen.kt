@@ -60,6 +60,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
@@ -1221,15 +1222,44 @@ private fun MapCanvas(
                     )
                 }
 
-                // «Матрас» под зданием: непрозрачная подложка плана, чтобы кампус
-                // не просвечивал сквозь комнаты, а план читался на газоне.
+                // «Матрас» под зданием: подложка плана с мягким краем, чтобы кампус
+                // не просвечивал сквозь комнаты, а план не выглядел сырым белым блоком.
                 Canvas(
                     modifier =
                     Modifier
                         .width(with(density) { imgW.toDp() })
                         .height(with(density) { imgH.toDp() }),
                 ) {
-                    drawRect(color = ColorBgMain)
+                    val base = ColorBgMain
+                    val pad = imgW * 0.035f
+                    // Ядро плана — непрозрачное.
+                    drawRect(
+                        color = base,
+                        topLeft = Offset(pad, pad),
+                        size = Size(imgW - pad * 2f, imgH - pad * 2f),
+                    )
+                    // Мягкая кромка к газону: 4 градиентные полосы по периметру.
+                    val fade = pad
+                    drawRect(
+                        brush = Brush.verticalGradient(listOf(base.copy(alpha = 0f), base)),
+                        topLeft = Offset(0f, 0f),
+                        size = Size(imgW, fade),
+                    )
+                    drawRect(
+                        brush = Brush.verticalGradient(listOf(base, base.copy(alpha = 0f))),
+                        topLeft = Offset(0f, imgH - fade),
+                        size = Size(imgW, fade),
+                    )
+                    drawRect(
+                        brush = Brush.horizontalGradient(listOf(base.copy(alpha = 0f), base)),
+                        topLeft = Offset(0f, 0f),
+                        size = Size(fade, imgH),
+                    )
+                    drawRect(
+                        brush = Brush.horizontalGradient(listOf(base, base.copy(alpha = 0f))),
+                        topLeft = Offset(imgW - fade, 0f),
+                        size = Size(fade, imgH),
+                    )
                 }
 
                 MapWallsLayer(
