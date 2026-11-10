@@ -89,11 +89,17 @@ object GithubTokenStore {
         return true
     }
 
-    fun load(context: Context): String? =
-        prefs(context)
-            .getString(KEY_TOKEN, null)
-            ?.let { cipher.decrypt(it) }
-            ?.takeIf { it.isNotBlank() }
+    fun load(context: Context): String? {
+        val encoded = prefs(context).getString(KEY_TOKEN, null) ?: return null
+        val decoded = cipher.decrypt(encoded)?.takeIf { it.isNotBlank() }
+        if (decoded == null) {
+            // Ключ Keystore недоступен/сброшен (смена блокировки, restore) — шифротекст
+            // на месте, но расшифровать нельзя. Логируем факт, чтобы отличить «токен
+            // потерян» от «токена не было». Сам токен в лог не попадает.
+            android.util.Log.w("GithubTokenStore", "PAT не расшифровался: ключ Keystore недоступен")
+        }
+        return decoded
+    }
 
     fun clear(context: Context) {
         prefs(context)
