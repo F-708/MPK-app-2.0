@@ -65,6 +65,25 @@ class MapScreenShotTest {
     }
 
     @Test
+    fun `3D вид кампуса`() {
+        applyDarkMode(false)
+        composeRule.mainClock.autoAdvance = false
+        composeRule.setContent {
+            MyApplicationTheme {
+                CollegeMapScreen(initialRoom = null, fromRoom = null, onBack = {})
+            }
+        }
+        composeRule.mainClock.advanceTimeBy(3_000)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("map_tilt_toggle").performClick()
+        composeRule.mainClock.advanceTimeBy(300)
+        composeRule.onNodeWithTag("map_fit_world").performClick()
+        composeRule.mainClock.advanceTimeBy(2_500)
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage("build/screenshots/map-campus-3d.png")
+    }
+
+    @Test
     fun `весь кампус по кнопке`() {
         applyDarkMode(false)
         composeRule.mainClock.autoAdvance = false

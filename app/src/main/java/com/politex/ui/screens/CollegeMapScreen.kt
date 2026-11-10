@@ -183,6 +183,8 @@ fun CollegeMapScreen(
 
     var stageIndex by rememberSaveable { mutableIntStateOf(0) }
 
+    var tilt3d by rememberSaveable { mutableStateOf(false) }
+
     var roomScheduleFor by remember { mutableStateOf<String?>(null) }
 
     var roomDialogTomorrow by remember { mutableStateOf(false) }
@@ -484,6 +486,38 @@ fun CollegeMapScreen(
             modifier = Modifier.padding(horizontal = 12.dp),
         )
 
+        // Переключатель 3D: наклон плана (вид сверху под углом). Не меняет маршруты/жесты.
+        if (!campus.isEmpty) {
+            Row(
+                modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = if (tilt3d) ColorTopBar else ColorBgMain,
+                    border = BorderStroke(1.dp, if (tilt3d) ColorTopBar else ColorBorderLight),
+                    modifier =
+                    Modifier
+                        .testTag("map_tilt_toggle")
+                        .bouncyClickable { tilt3d = !tilt3d },
+                ) {
+                    Text(
+                        text = "3D",
+                        style =
+                        TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = if (tilt3d) Color.White else ColorTextBody,
+                        ),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
 
         if (builderActive) {
@@ -504,6 +538,7 @@ fun CollegeMapScreen(
             targetRoom = targetRoom,
             walls = mapWalls,
             campus = campus,
+            tilt3d = tilt3d,
             onRoomTap = { room ->
                 searchFailed = false
 
@@ -963,6 +998,7 @@ private fun MapCanvas(
     targetRoom: MapRoom?,
     walls: MapWallsData,
     campus: CampusData,
+    tilt3d: Boolean = false,
     onRoomTap: (MapRoom) -> Unit = {},
     routePoints: List<List<MapPoint>>? = null,
     routeFinishHere: Boolean = false,
@@ -1160,6 +1196,12 @@ private fun MapCanvas(
                         translationX = offsetX.value
                         translationY = offsetY.value
                         transformOrigin = TransformOrigin(0f, 0f)
+                        if (tilt3d) {
+                            // Вид сверху под углом: наклон вокруг центра с перспективой.
+                            transformOrigin = TransformOrigin(0.5f, 0.5f)
+                            rotationX = -TILT_3D_DEG
+                            cameraDistance = 14f
+                        }
                     },
             ) {
                 // Окружение колледжа под планом: газон, дороги, деревья, здания.
@@ -1483,6 +1525,7 @@ internal fun mainEntranceRoom(mapData: CollegeMapData): MapRoom? = mapData
         )
     }
 
+private const val TILT_3D_DEG = 32f
 private const val ROUTE_TICK_STEP_PX = 56f
 private const val ROUTE_TICK_SPEED_PX_PER_SEC = 12f
 private const val ROUTE_TICK_SIZE_DP = 13f
