@@ -1045,6 +1045,11 @@ private fun MapCanvas(
                 }
             }
 
+        val numberScales =
+            remember(floorId, floor, imgW, imgH, numberLayouts) {
+                computeRoomNumberScales(floor, imgW, imgH, numberLayouts)
+            }
+
         fun clampX(
             v: Float,
             s: Float,
@@ -1177,6 +1182,7 @@ private fun MapCanvas(
                         pulse = pulse,
                         zoom = k,
                         numberLayouts = numberLayouts,
+                        numberScales = numberScales,
                         minScreenPxPerDp = with(density) { 1.dp.toPx() },
                         baseFontPx = baseFontPx,
                     )
@@ -1248,6 +1254,45 @@ private fun MapCanvas(
     }
 }
 
+/**
+ * Предвычисленные масштабы номеров кабинетов. Зависят только от раскладки
+ * (floor/imgW/imgH/шрифт), а не от pulse/zoom — поэтому считаются один раз в
+ * remember, а не на каждый кадр в drawMap (иначе HashMap + сортировка на кадр).
+ */
+internal class RoomNumberScaleCache(
+    val rawFits: Map<String, Float>,
+    val medianFit: Float,
+)
+
+internal fun computeRoomNumberScales(
+    floor: FloorMap,
+    imgW: Float,
+    imgH: Float,
+    numberLayouts: Map<String, TextLayoutResult>,
+): RoomNumberScaleCache {
+    val rawFits = HashMap<String, Float>(floor.rooms.size)
+    floor.rooms.forEach { r ->
+        val layout = numberLayouts[r.id] ?: return@forEach
+        if (r.number.isBlank()) return@forEach
+        val wPx = r.w * imgW
+        val hPx = r.h * imgH
+        val vertical = r.h > r.w * 1.6f
+        val fit =
+            if (vertical) {
+                (wPx * 0.62f) / layout.size.height.toFloat()
+            } else {
+                minOf(
+                    (hPx * 0.52f) / layout.size.height.toFloat(),
+                    (wPx * 0.88f) / layout.size.width.toFloat(),
+                )
+            }
+        if (fit > 0f) rawFits[r.id] = fit
+    }
+    val sortedFits = rawFits.values.toFloatArray().also { it.sort() }
+    val medianFit = if (sortedFits.isEmpty()) 1f else sortedFits[sortedFits.size / 2]
+    return RoomNumberScaleCache(rawFits, medianFit)
+}
+
 private fun DrawScope.drawMap(
     floor: FloorMap,
     imgW: Float,
@@ -1256,6 +1301,7 @@ private fun DrawScope.drawMap(
     pulse: Float,
     zoom: Float,
     numberLayouts: Map<String, TextLayoutResult>,
+    numberScales: RoomNumberScaleCache,
     minScreenPxPerDp: Float,
     baseFontPx: Float,
 ) {
@@ -1295,26 +1341,8 @@ private fun DrawScope.drawMap(
         )
     }
 
-    val rawFits = HashMap<String, Float>()
-    floor.rooms.forEach { r ->
-        val layout = numberLayouts[r.id] ?: return@forEach
-        if (r.number.isBlank()) return@forEach
-        val wPx = r.w * imgW
-        val hPx = r.h * imgH
-        val vertical = r.h > r.w * 1.6f
-        val fit =
-            if (vertical) {
-                (wPx * 0.62f) / layout.size.height.toFloat()
-            } else {
-                minOf(
-                    (hPx * 0.52f) / layout.size.height.toFloat(),
-                    (wPx * 0.88f) / layout.size.width.toFloat(),
-                )
-            }
-        if (fit > 0f) rawFits[r.id] = fit
-    }
-    val sortedFits = rawFits.values.toFloatArray().also { it.sort() }
-    val medianFit = if (sortedFits.isEmpty()) 1f else sortedFits[sortedFits.size / 2]
+    val rawFits = numberScales.rawFits
+    val medianFit = numberScales.medianFit
 
     val minNumberPx = minScreenPxPerDp * 10f
 
