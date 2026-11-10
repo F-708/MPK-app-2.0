@@ -48,10 +48,11 @@ data class WeatherScene(
     val night: Boolean,
     val stars: Boolean,
     val animated: Boolean,
+    val season: Season = Season.NONE,
 ) {
     /** Нужно ли вообще что-то рисовать поверх фона. */
     val hasEffects: Boolean
-        get() = precipitation != Precipitation.NONE || stars || night
+        get() = precipitation != Precipitation.NONE || stars || night || season != Season.NONE
 }
 
 /**
@@ -115,6 +116,7 @@ fun resolveWeatherScene(
     snapshot: WeatherSnapshot?,
     darkTheme: Boolean,
     animationsAllowed: Boolean,
+    season: Season = currentSeason(),
 ): WeatherScene {
     val precipitation = resolvePrecipitation(effects, snapshot)
     val night = resolveNight(sky, snapshot)
@@ -123,5 +125,7 @@ fun resolveWeatherScene(
         night = night,
         stars = resolveStars(night, darkTheme, precipitation),
         animated = animationsAllowed,
+        // Декор не рисуется при выключенных эффектах: OFF гасит и погоду, и сезон.
+        season = if (effects == EffectsMode.OFF) Season.NONE else season,
     )
 }

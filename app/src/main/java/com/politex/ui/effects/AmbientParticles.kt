@@ -38,6 +38,12 @@ object AmbientSpec {
 
     /** Фиксированное зерно: рисунок одинаков между кадрами и перезапусками. */
     const val SEED = 20261108L
+
+    val PUMPKIN_COUNT = 5..7
+    val PUMPKIN_RADIUS_DP = 7f..11f
+
+    /** Точки гирлянды вдоль верхней кромки. */
+    const val GARLAND_COUNT = 16
 }
 
 /** Одна капля: позиция по X (0..1), фаза, период падения, длина штриха, прозрачность. */
@@ -73,6 +79,24 @@ data class Star(
     val lifeSec: Float,
     val phase: Float,
     val alpha: Float,
+)
+
+/** Тыква на Хэллоуин: позиция у нижней кромки, радиус, фаза покачивания «свечи». */
+data class Pumpkin(
+    val x: Float,
+    val y: Float,
+    val radiusDp: Float,
+    val flickerSec: Float,
+    val phase: Float,
+)
+
+/** Точка новогодней гирлянды: позиция вдоль верхней кромки, цвет (индекс), фаза мерцания. */
+data class GarlandLight(
+    val x: Float,
+    val y: Float,
+    val colorIndex: Int,
+    val twinkleSec: Float,
+    val phase: Float,
 )
 
 /** Отрезок капли в пикселях: X начала и конца обязан совпадать. */
@@ -218,6 +242,44 @@ object AmbientParticles {
         val y = progress * (heightPx + lengthPx) - lengthPx
         val x = drop.x * widthPx
         return RainSegment(startX = x, startY = y, endX = x, endY = y + lengthPx)
+    }
+
+    /**
+     * Тыквы у нижней кромки: стоят на «полу» экрана, вразнобой по ширине.
+     * Мерцание «свечи» внутри — по [Pumpkin.flickerSec]/[Pumpkin.phase].
+     */
+    fun pumpkins(
+        random: Random = Random(AmbientSpec.SEED + 3),
+    ): List<Pumpkin> {
+        val count = random.nextInt(AmbientSpec.PUMPKIN_COUNT.first, AmbientSpec.PUMPKIN_COUNT.last + 1)
+        return List(count) {
+            Pumpkin(
+                // Держим отступы от краёв, чтобы тыква не упиралась в борт экрана.
+                x = 0.08f + random.nextFloat() * 0.84f,
+                y = 0.90f + random.nextFloat() * 0.07f,
+                radiusDp = random.range(AmbientSpec.PUMPKIN_RADIUS_DP),
+                flickerSec = 1.6f + random.nextFloat() * 1.8f,
+                phase = random.nextFloat(),
+            )
+        }
+    }
+
+    /**
+     * Гирлянда вдоль верхней кромки: равномерная сетка точек с лёгким «провисанием».
+     * Цвета чередуются тёплые/холодные — см. [AmbientLayer] палитру по colorIndex.
+     */
+    fun garland(
+        random: Random = Random(AmbientSpec.SEED + 4),
+    ): List<GarlandLight> = List(AmbientSpec.GARLAND_COUNT) { i ->
+        val t = i / (AmbientSpec.GARLAND_COUNT - 1).toFloat()
+        GarlandLight(
+            x = t,
+            // Провисание цепи: середина ниже краёв.
+            y = 0.012f + 0.03f * (1f - (2f * t - 1f) * (2f * t - 1f)),
+            colorIndex = i % 4,
+            twinkleSec = 1.4f + random.nextFloat() * 2.2f,
+            phase = random.nextFloat(),
+        )
     }
 
     private fun Random.range(range: ClosedFloatingPointRange<Float>): Float {

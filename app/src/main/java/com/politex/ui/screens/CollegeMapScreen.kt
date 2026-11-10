@@ -103,6 +103,8 @@ import com.politex.ui.components.AppCard
 import com.politex.ui.components.RoomScheduleDialog
 import com.politex.ui.components.currentRoomLessonNumber
 import com.politex.ui.components.filterRoomLessonsForDate
+import com.politex.ui.effects.rememberWeatherScene
+import com.politex.ui.effects.weatherParticles
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
@@ -1003,11 +1005,14 @@ private fun MapCanvas(
         label = "stairsPulseRadius",
     )
 
+    val weatherScene = rememberWeatherScene()
+
     BoxWithConstraints(
         modifier =
         modifier
             .clipToBounds()
-            .background(ColorBgMain),
+            .background(ColorBgMain)
+            .weatherParticles(weatherScene),
     ) {
         val viewW = with(density) { maxWidth.toPx() }
         val viewH = with(density) { maxHeight.toPx() }
@@ -1386,9 +1391,9 @@ internal fun mainEntranceRoom(mapData: CollegeMapData): MapRoom? = mapData
 
 private const val ROUTE_TICK_STEP_PX = 56f
 private const val ROUTE_TICK_SPEED_PX_PER_SEC = 12f
-private const val ROUTE_TICK_SIZE_DP = 10f
-private const val ROUTE_TICK_STROKE_DP = 2f
-private const val ROUTE_LINE_WIDTH_DP = 2.5f
+private const val ROUTE_TICK_SIZE_DP = 13f
+private const val ROUTE_TICK_STROKE_DP = 2.6f
+private const val ROUTE_LINE_WIDTH_DP = 3f
 
 private fun DrawScope.drawRoutePath(
     polylines: List<List<MapPoint>>,
@@ -1595,6 +1600,9 @@ private fun DrawScope.drawDirectionChevron(
     val e1 = rot(backX, spread)
     val e2 = rot(backX, -spread)
 
+    // Контрастное обрамление в цвет фона: шеврон читается и на светлом, и на тёмном плане.
+    drawLine(ColorMapRouteCore, apex, e1, strokeWidth = stroke * 3.1f, cap = StrokeCap.Round)
+    drawLine(ColorMapRouteCore, apex, e2, strokeWidth = stroke * 3.1f, cap = StrokeCap.Round)
     drawLine(outline, apex, e1, strokeWidth = stroke * 1.9f, cap = StrokeCap.Round)
     drawLine(outline, apex, e2, strokeWidth = stroke * 1.9f, cap = StrokeCap.Round)
     drawLine(ColorMapRouteCore, apex, e1, strokeWidth = stroke, cap = StrokeCap.Round)

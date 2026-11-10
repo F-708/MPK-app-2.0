@@ -142,4 +142,32 @@ class WeatherEffectsShotTest {
 
     @Test
     fun `ясный день тёмная тема`() = clearDay(true)
+
+    private fun seasonal(
+        name: String,
+        dark: Boolean,
+        season: com.politex.weather.Season,
+    ) = shoot(
+        name,
+        dark,
+        WeatherScene(
+            Precipitation.NONE,
+            night = dark,
+            stars = false,
+            animated = true,
+            season = season,
+        ),
+    )
+
+    @Test
+    fun `Хэллоуин светлая тема`() = seasonal("halloween-light", false, com.politex.weather.Season.HALLOWEEN)
+
+    @Test
+    fun `Хэллоуин тёмная тема`() = seasonal("halloween-dark", true, com.politex.weather.Season.HALLOWEEN)
+
+    @Test
+    fun `Новый год светлая тема`() = seasonal("newyear-light", false, com.politex.weather.Season.NEW_YEAR)
+
+    @Test
+    fun `Новый год тёмная тема`() = seasonal("newyear-dark", true, com.politex.weather.Season.NEW_YEAR)
 }
