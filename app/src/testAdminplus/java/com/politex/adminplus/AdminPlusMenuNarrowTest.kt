@@ -29,9 +29,11 @@ class AdminPlusMenuNarrowTest {
             MyApplicationTheme { AdminPlusMenuExtras() }
         }
 
-        composeRule.onNodeWithText("КОД ДОСТУПА").assertIsDisplayed()
+        // Гейт в adminplus отключён (2026-11-12): карточки кода доступа нет.
+        composeRule.onAllNodesWithText("КОД ДОСТУПА").assertCountEquals(0)
         composeRule.onNodeWithText("ИНСТРУМЕНТЫ ДАННЫХ").assertIsDisplayed()
         composeRule.onNodeWithText("ТОКЕН ПУБЛИКАЦИИ").assertIsDisplayed()
+        composeRule.onNodeWithText("ОФОРМЛЕНИЕ И ПОГОДА").assertIsDisplayed()
 
         val badges = composeRule.onAllNodesWithText("OWNER", useUnmergedTree = true)
         badges.assertCountEquals(3)

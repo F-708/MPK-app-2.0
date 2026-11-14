@@ -35,6 +35,9 @@ object OwnerPublishPayloadBuilder {
                 val b = base[record.key]
                 val photoName =
                     record.photoName?.let { name ->
+                        // Sentinel «фото убрано» едет в пакет как есть: приёмник
+                        // покажет заглушку вместо исходного фото.
+                        if (name == OwnerOverridesStore.PHOTO_REMOVED) return@let name
                         val file = File(OwnerOverridesStore.photosDir(context), name)
                         if (file.isFile && file.length() > 0L) {
                             photos += PublishPhoto(photoRepoPath(record.key), file.readBytes())

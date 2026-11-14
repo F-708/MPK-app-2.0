@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.politex.R
 import com.politex.content.ContentAssets
 import com.politex.content.ContentPackStore
 import com.politex.content.OwnerOverridesStore
@@ -1203,10 +1204,10 @@ private fun TeacherAvatar(
 }
 
 /**
- * Заглушка фото преподавателя: мягкий силуэт + инициалы на приглушённом фоне.
+ * Заглушка фото преподавателя: готовая картинка «нет фото» из drawable.
  *
- * Раньше была одна буква на яркой акцентной заливке — выглядело грубо.
- * Силуэт сразу читается как «нет фото», инициалы остаются для узнаваемости.
+ * Раньше был силуэт с инициалами — заказчик счёл буквы некрасивыми.
+ * Та же картинка показывается в редакторе AdminPlus при убранном фото.
  */
 @Composable
 private fun TeacherAvatarPlaceholder(
@@ -1215,55 +1216,17 @@ private fun TeacherAvatarPlaceholder(
     border: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier,
 ) {
-    Box(
+    androidx.compose.foundation.Image(
+        painter = androidx.compose.ui.res.painterResource(id = R.drawable.teacher_no_photo),
+        contentDescription = name,
+        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
         modifier =
         modifier
             .size(size)
             .border(1.dp, border, RoundedCornerShape(2.dp))
             .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
             .testTag("teacher_avatar_placeholder"),
-        contentAlignment = Alignment.Center,
-    ) {
-        val iconTint = ColorTextMuted
-        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = this.size.width
-            val h = this.size.height
-            val headR = w * 0.17f
-            val headCx = w / 2f
-            val headCy = h * 0.34f
-            drawCircle(color = iconTint.copy(alpha = 0.6f), radius = headR, center = Offset(headCx, headCy))
-            // Плечи: дуга-полукруг под головой.
-            drawArc(
-                color = iconTint.copy(alpha = 0.6f),
-                startAngle = 180f,
-                sweepAngle = 180f,
-                useCenter = true,
-                topLeft = Offset(w * 0.22f, h * 0.52f),
-                size = androidx.compose.ui.geometry.Size(w * 0.56f, h * 0.72f),
-            )
-        }
-        Text(
-            text = teacherInitials(name),
-            color = ColorTextTitle,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = (size.value * 0.30f).sp,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = size * 0.08f),
-        )
-    }
-}
-
-internal fun teacherInitial(name: String): String = name
-    .trim()
-    .split(" ")
-    .firstOrNull { it.isNotBlank() }
-    ?.take(1) ?: "?"
-
-/** Две буквы: фамилия + имя («Иванова Анна» → «ИА»). Читается лучше одной. */
-internal fun teacherInitials(name: String): String {
-    val parts = name.trim().split(" ").filter { it.isNotBlank() }
-    val first = parts.getOrNull(0)?.take(1) ?: "?"
-    val second = parts.getOrNull(1)?.take(1) ?: ""
-    return (first + second).uppercase()
+    )
 }
 
 @Composable
@@ -1603,21 +1566,17 @@ private fun AboutTeacherTab(
                                 .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp)),
                         )
                     } else {
-                        Box(
+                        androidx.compose.foundation.Image(
+                            painter = androidx.compose.ui.res.painterResource(id = R.drawable.teacher_no_photo),
+                            contentDescription = teacher.name,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                             modifier =
                             Modifier
                                 .width(180.dp)
                                 .height(230.dp)
-                                .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = teacherInitial(teacher.name),
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 60.sp,
-                            )
-                        }
+                                .border(1.dp, ColorBorderLight, RoundedCornerShape(2.dp))
+                                .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp)),
+                        )
                     }
                 }
             }

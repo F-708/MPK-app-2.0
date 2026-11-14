@@ -11,6 +11,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -60,7 +61,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
@@ -74,9 +74,11 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -94,19 +96,15 @@ import com.politex.content.ContentPackStore
 import com.politex.data.local.entity.LessonEntity
 import com.politex.data.model.CollegeBellSchedule
 import com.politex.data.model.CollegeMap
-import com.politex.data.model.CampusData
 import com.politex.data.model.CollegeMapData
 import com.politex.data.model.CollegeRouteFinder
 import com.politex.data.model.FloorMap
 import com.politex.data.model.MapPoint
 import com.politex.data.model.MapRoom
-import com.politex.data.model.MapWallsData
 import com.politex.ui.components.AppCard
 import com.politex.ui.components.RoomScheduleDialog
 import com.politex.ui.components.currentRoomLessonNumber
 import com.politex.ui.components.filterRoomLessonsForDate
-import com.politex.ui.effects.rememberWeatherScene
-import com.politex.ui.effects.weatherParticles
 import com.politex.ui.theme.ColorActiveBlue
 import com.politex.ui.theme.ColorBgMain
 import com.politex.ui.theme.ColorBorderLight
@@ -118,8 +116,6 @@ import com.politex.ui.theme.ColorMapDeadText
 import com.politex.ui.theme.ColorMapRoomBorder
 import com.politex.ui.theme.ColorMapRoomFill
 import com.politex.ui.theme.ColorMapRouteCore
-import com.politex.ui.theme.ColorMapStair
-import com.politex.ui.theme.ColorMapWall
 import com.politex.ui.theme.ColorSurfaceVariantLight
 import com.politex.ui.theme.ColorTextBody
 import com.politex.ui.theme.ColorTextMuted
@@ -151,8 +147,6 @@ fun CollegeMapScreen(
     val context = LocalContext.current
     val contentRevision = ContentPackStore.revision.intValue
     val mapData = remember(context, contentRevision) { CollegeMapData.load(context) }
-    val mapWalls = remember(context, contentRevision) { MapWallsData.load(context) }
-    val campus = remember(context, contentRevision) { CampusData.load(context) }
 
     val scheduleRepository = remember { com.politex.AppGraph.scheduleRepository }
 
@@ -183,8 +177,6 @@ fun CollegeMapScreen(
     var stageFocus by rememberSaveable { mutableIntStateOf(0) }
 
     var stageIndex by rememberSaveable { mutableIntStateOf(0) }
-
-    var tilt3d by rememberSaveable { mutableStateOf(false) }
 
     var roomScheduleFor by remember { mutableStateOf<String?>(null) }
 
@@ -487,38 +479,6 @@ fun CollegeMapScreen(
             modifier = Modifier.padding(horizontal = 12.dp),
         )
 
-        // Переключатель 3D: наклон плана (вид сверху под углом). Не меняет маршруты/жесты.
-        if (!campus.isEmpty) {
-            Row(
-                modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(2.dp),
-                    color = if (tilt3d) ColorTopBar else ColorBgMain,
-                    border = BorderStroke(1.dp, if (tilt3d) ColorTopBar else ColorBorderLight),
-                    modifier =
-                    Modifier
-                        .testTag("map_tilt_toggle")
-                        .bouncyClickable { tilt3d = !tilt3d },
-                ) {
-                    Text(
-                        text = "3D",
-                        style =
-                        TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            color = if (tilt3d) Color.White else ColorTextBody,
-                        ),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    )
-                }
-            }
-        }
-
         Spacer(modifier = Modifier.height(8.dp))
 
         if (builderActive) {
@@ -537,9 +497,7 @@ fun CollegeMapScreen(
             floorId = floorId,
             floor = floor,
             targetRoom = targetRoom,
-            walls = mapWalls,
-            campus = campus,
-            tilt3d = tilt3d,
+
             onRoomTap = { room ->
                 searchFailed = false
 
@@ -997,9 +955,6 @@ private fun MapCanvas(
     floorId: String,
     floor: FloorMap,
     targetRoom: MapRoom?,
-    walls: MapWallsData,
-    campus: CampusData,
-    tilt3d: Boolean = false,
     onRoomTap: (MapRoom) -> Unit = {},
     routePoints: List<List<MapPoint>>? = null,
     routeFinishHere: Boolean = false,
@@ -1018,8 +973,11 @@ private fun MapCanvas(
     val offsetX = remember { Animatable(0f) }
     val offsetY = remember { Animatable(0f) }
 
-    // Растровая подложка убрана: пропорция холста равна холсту трассировки (1376x768).
-    val aspect = CollegeRouteFinder.PLAN_ASPECT
+    val painter = painterResource(id = mapRes(floorId))
+    val aspect =
+        painter.intrinsicSize.let { s ->
+            if (s.height > 0f && s.width > 0f) s.width / s.height else 1.7917f
+        }
 
     val pulse by rememberInfiniteTransition(label = "подсветка").animateFloat(
         initialValue = 0.35f,
@@ -1046,14 +1004,11 @@ private fun MapCanvas(
         label = "stairsPulseRadius",
     )
 
-    val weatherScene = rememberWeatherScene()
-
     BoxWithConstraints(
         modifier =
         modifier
             .clipToBounds()
-            .background(ColorBgMain)
-            .weatherParticles(weatherScene),
+            .background(ColorBgMain),
     ) {
         val viewW = with(density) { maxWidth.toPx() }
         val viewH = with(density) { maxHeight.toPx() }
@@ -1084,11 +1039,6 @@ private fun MapCanvas(
                             overflow = TextOverflow.Ellipsis,
                         )
                 }
-            }
-
-        val numberScales =
-            remember(floorId, floor, imgW, imgH, numberLayouts) {
-                computeRoomNumberScales(floor, imgW, imgH, numberLayouts)
             }
 
         fun clampX(
@@ -1197,79 +1147,12 @@ private fun MapCanvas(
                         translationX = offsetX.value
                         translationY = offsetY.value
                         transformOrigin = TransformOrigin(0f, 0f)
-                        if (tilt3d) {
-                            // Вид сверху под углом: наклон вокруг центра с перспективой.
-                            transformOrigin = TransformOrigin(0.5f, 0.5f)
-                            rotationX = -TILT_3D_DEG
-                            cameraDistance = 14f
-                        }
                     },
             ) {
-                // Окружение колледжа под планом: газон, дороги, деревья, здания.
-                // Рисуется в мировых координатах (тот же масштаб, что и план), видно
-                // вокруг здания при отдалении и по краям.
-                if (!campus.isEmpty) {
-                    CampusLayer(
-                        campus = campus,
-                        imgW = imgW,
-                        imgH = imgH,
-                        dark = darkThemeState.value,
-                        extrude3d = tilt3d,
-                        modifier =
-                        Modifier
-                            .width(with(density) { imgW.toDp() })
-                            .height(with(density) { imgH.toDp() }),
-                    )
-                }
-
-                // «Матрас» под зданием: подложка плана с мягким краем, чтобы кампус
-                // не просвечивал сквозь комнаты, а план не выглядел сырым белым блоком.
-                Canvas(
-                    modifier =
-                    Modifier
-                        .width(with(density) { imgW.toDp() })
-                        .height(with(density) { imgH.toDp() }),
-                ) {
-                    val base = ColorBgMain
-                    val pad = imgW * 0.035f
-                    // Ядро плана — непрозрачное.
-                    drawRect(
-                        color = base,
-                        topLeft = Offset(pad, pad),
-                        size = Size(imgW - pad * 2f, imgH - pad * 2f),
-                    )
-                    // Мягкая кромка к газону: 4 градиентные полосы по периметру.
-                    val fade = pad
-                    drawRect(
-                        brush = Brush.verticalGradient(listOf(base.copy(alpha = 0f), base)),
-                        topLeft = Offset(0f, 0f),
-                        size = Size(imgW, fade),
-                    )
-                    drawRect(
-                        brush = Brush.verticalGradient(listOf(base, base.copy(alpha = 0f))),
-                        topLeft = Offset(0f, imgH - fade),
-                        size = Size(imgW, fade),
-                    )
-                    drawRect(
-                        brush = Brush.horizontalGradient(listOf(base.copy(alpha = 0f), base)),
-                        topLeft = Offset(0f, 0f),
-                        size = Size(fade, imgH),
-                    )
-                    drawRect(
-                        brush = Brush.horizontalGradient(listOf(base, base.copy(alpha = 0f))),
-                        topLeft = Offset(imgW - fade, 0f),
-                        size = Size(fade, imgH),
-                    )
-                }
-
-                MapWallsLayer(
-                    floorId = floorId,
-                    walls = walls,
-                    imgW = imgW,
-                    imgH = imgH,
-                    wallColor = ColorMapWall,
-                    stairColor = ColorMapStair,
-                    unit = { 1f / scale.value },
+                Image(
+                    painter = painter,
+                    contentDescription = "План этажа",
+                    contentScale = ContentScale.Fit,
                     modifier =
                     Modifier
                         .width(with(density) { imgW.toDp() })
@@ -1286,7 +1169,6 @@ private fun MapCanvas(
                         pulse = pulse,
                         zoom = k,
                         numberLayouts = numberLayouts,
-                        numberScales = numberScales,
                         minScreenPxPerDp = with(density) { 1.dp.toPx() },
                         baseFontPx = baseFontPx,
                     )
@@ -1308,41 +1190,6 @@ private fun MapCanvas(
                         )
                     }
                 }
-            }
-        }
-
-        // Кнопка «весь кампус»: вписывает мир (здание + окружение) целиком.
-        if (!campus.isEmpty) {
-            Surface(
-                shape = RoundedCornerShape(2.dp),
-                color = ColorBgMain,
-                border = BorderStroke(1.dp, ColorBorderLight),
-                modifier =
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(10.dp)
-                    .testTag("map_fit_world"),
-            ) {
-                Text(
-                    text = "Весь кампус",
-                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = ColorTextBody),
-                    modifier =
-                    Modifier
-                        .bouncyClickable {
-                            val wl = campus.worldLeft
-                            val wt = campus.worldTop
-                            val worldW = campus.worldRight - wl
-                            val worldH = campus.worldBottom - wt
-                            val s = (minOf(viewWState.value / (worldW * (imgW / MapWallsData.PLAN_WIDTH)), viewHState.value / (worldH * (imgW / MapWallsData.PLAN_WIDTH))) * 0.96f)
-                            val sc = s.coerceIn(0.2f, 8f)
-                            scope.launch {
-                                scale.animateTo(sc, tween(420, easing = LinearOutSlowInEasing))
-                                offsetX.animateTo(clampX(viewWState.value / 2f - (wl + worldW / 2f) * (imgW / MapWallsData.PLAN_WIDTH) * sc, sc), tween(420))
-                                offsetY.animateTo(clampY(viewHState.value / 2f - (wt + worldH / 2f) * (imgW / MapWallsData.PLAN_WIDTH) * sc, sc), tween(420))
-                            }
-                        }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                )
             }
         }
 
@@ -1393,45 +1240,6 @@ private fun MapCanvas(
     }
 }
 
-/**
- * Предвычисленные масштабы номеров кабинетов. Зависят только от раскладки
- * (floor/imgW/imgH/шрифт), а не от pulse/zoom — поэтому считаются один раз в
- * remember, а не на каждый кадр в drawMap (иначе HashMap + сортировка на кадр).
- */
-internal class RoomNumberScaleCache(
-    val rawFits: Map<String, Float>,
-    val medianFit: Float,
-)
-
-internal fun computeRoomNumberScales(
-    floor: FloorMap,
-    imgW: Float,
-    imgH: Float,
-    numberLayouts: Map<String, TextLayoutResult>,
-): RoomNumberScaleCache {
-    val rawFits = HashMap<String, Float>(floor.rooms.size)
-    floor.rooms.forEach { r ->
-        val layout = numberLayouts[r.id] ?: return@forEach
-        if (r.number.isBlank()) return@forEach
-        val wPx = r.w * imgW
-        val hPx = r.h * imgH
-        val vertical = r.h > r.w * 1.6f
-        val fit =
-            if (vertical) {
-                (wPx * 0.62f) / layout.size.height.toFloat()
-            } else {
-                minOf(
-                    (hPx * 0.52f) / layout.size.height.toFloat(),
-                    (wPx * 0.88f) / layout.size.width.toFloat(),
-                )
-            }
-        if (fit > 0f) rawFits[r.id] = fit
-    }
-    val sortedFits = rawFits.values.toFloatArray().also { it.sort() }
-    val medianFit = if (sortedFits.isEmpty()) 1f else sortedFits[sortedFits.size / 2]
-    return RoomNumberScaleCache(rawFits, medianFit)
-}
-
 private fun DrawScope.drawMap(
     floor: FloorMap,
     imgW: Float,
@@ -1440,7 +1248,6 @@ private fun DrawScope.drawMap(
     pulse: Float,
     zoom: Float,
     numberLayouts: Map<String, TextLayoutResult>,
-    numberScales: RoomNumberScaleCache,
     minScreenPxPerDp: Float,
     baseFontPx: Float,
 ) {
@@ -1480,8 +1287,26 @@ private fun DrawScope.drawMap(
         )
     }
 
-    val rawFits = numberScales.rawFits
-    val medianFit = numberScales.medianFit
+    val rawFits = HashMap<String, Float>()
+    floor.rooms.forEach { r ->
+        val layout = numberLayouts[r.id] ?: return@forEach
+        if (r.number.isBlank()) return@forEach
+        val wPx = r.w * imgW
+        val hPx = r.h * imgH
+        val vertical = r.h > r.w * 1.6f
+        val fit =
+            if (vertical) {
+                (wPx * 0.62f) / layout.size.height.toFloat()
+            } else {
+                minOf(
+                    (hPx * 0.52f) / layout.size.height.toFloat(),
+                    (wPx * 0.88f) / layout.size.width.toFloat(),
+                )
+            }
+        if (fit > 0f) rawFits[r.id] = fit
+    }
+    val sortedFits = rawFits.values.toFloatArray().also { it.sort() }
+    val medianFit = if (sortedFits.isEmpty()) 1f else sortedFits[sortedFits.size / 2]
 
     val minNumberPx = minScreenPxPerDp * 10f
 
@@ -1556,12 +1381,11 @@ internal fun mainEntranceRoom(mapData: CollegeMapData): MapRoom? = mapData
         )
     }
 
-private const val TILT_3D_DEG = 45f
 private const val ROUTE_TICK_STEP_PX = 56f
 private const val ROUTE_TICK_SPEED_PX_PER_SEC = 12f
-private const val ROUTE_TICK_SIZE_DP = 13f
-private const val ROUTE_TICK_STROKE_DP = 2.6f
-private const val ROUTE_LINE_WIDTH_DP = 3f
+private const val ROUTE_TICK_SIZE_DP = 10f
+private const val ROUTE_TICK_STROKE_DP = 2f
+private const val ROUTE_LINE_WIDTH_DP = 2.5f
 
 private fun DrawScope.drawRoutePath(
     polylines: List<List<MapPoint>>,
@@ -1768,9 +1592,6 @@ private fun DrawScope.drawDirectionChevron(
     val e1 = rot(backX, spread)
     val e2 = rot(backX, -spread)
 
-    // Контрастное обрамление в цвет фона: шеврон читается и на светлом, и на тёмном плане.
-    drawLine(ColorMapRouteCore, apex, e1, strokeWidth = stroke * 3.1f, cap = StrokeCap.Round)
-    drawLine(ColorMapRouteCore, apex, e2, strokeWidth = stroke * 3.1f, cap = StrokeCap.Round)
     drawLine(outline, apex, e1, strokeWidth = stroke * 1.9f, cap = StrokeCap.Round)
     drawLine(outline, apex, e2, strokeWidth = stroke * 1.9f, cap = StrokeCap.Round)
     drawLine(ColorMapRouteCore, apex, e1, strokeWidth = stroke, cap = StrokeCap.Round)
@@ -1780,3 +1601,9 @@ private fun DrawScope.drawDirectionChevron(
 internal fun dedupeStages(list: List<String>): List<String> = list.filterIndexed { i, id -> i == 0 || id != list[i - 1] }
 
 internal fun stepLabels(stages: List<String>): List<String> = stages.mapIndexed { i, _ -> "Шаг ${i + 1}" }
+
+private fun mapRes(floorId: String): Int = when (floorId) {
+    "2" -> com.politex.R.drawable.map_floor2
+    "3-4" -> com.politex.R.drawable.map_floor34
+    else -> com.politex.R.drawable.map_floor1
+}

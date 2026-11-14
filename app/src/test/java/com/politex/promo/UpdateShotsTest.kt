@@ -100,6 +100,7 @@ class UpdateShotsTest {
 
     @Before
     fun setUp() {
+        com.politex.assumeUpdatesFlavor()
         UpdateChannelStore.set(context, UpdateChannel.STABLE)
         TeacherModeStore.clear(context)
         resetController()

@@ -124,7 +124,6 @@ fun DevControlsScreen(onBack: () -> Unit) {
 
 private fun Season.title(): String = when (this) {
     Season.NONE -> "Нет"
-    Season.HALLOWEEN -> "Хэллоуин"
     Season.NEW_YEAR -> "Новый год"
 }
 

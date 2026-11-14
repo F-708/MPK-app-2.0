@@ -53,6 +53,7 @@ class WeatherEffectsShotTest {
         name: String,
         dark: Boolean,
         scene: WeatherScene,
+        advanceMs: Long = 3_000,
     ) {
         applyAppearance(
             AppTheme.COLLEGE,
@@ -68,7 +69,7 @@ class WeatherEffectsShotTest {
                 }
             }
         }
-        composeRule.mainClock.advanceTimeBy(3_000)
+        composeRule.mainClock.advanceTimeBy(advanceMs)
         composeRule.waitForIdle()
         composeRule.onRoot().captureRoboImage("build/screenshots/$prefix-$name.png")
     }
@@ -114,7 +115,13 @@ class WeatherEffectsShotTest {
         shoot("snow-${if (dark) "dark" else "light"}", dark, WeatherScene(Precipitation.SNOW, night = false, stars = false, animated = true))
 
     private fun clearNight(dark: Boolean) =
-        shoot("night-${if (dark) "dark" else "light"}", dark, WeatherScene(Precipitation.NONE, night = true, stars = true, animated = true))
+        shoot(
+            "night-${if (dark) "dark" else "light"}",
+            dark,
+            // Заказчик (2026-11-13): звёзды только в тёмной теме, поэтому в светлой
+            // ночи слой пустой — политика resolveStars гейтит их темой.
+            WeatherScene(Precipitation.NONE, night = true, stars = dark, animated = true),
+        )
 
     private fun clearDay(dark: Boolean) =
         shoot("day-${if (dark) "dark" else "light"}", dark, WeatherScene(Precipitation.NONE, night = false, stars = false, animated = false))
@@ -138,6 +145,23 @@ class WeatherEffectsShotTest {
     fun `ясная ночь тёмная тема`() = clearNight(true)
 
     @Test
+    fun `падающая звезда в окне прохода`() {
+        // Кадр ловим в середине окна первой падающей звезды: часы теста
+        // двигаются детерминированно, а генератор — с фиксированным зерном.
+        val shot = AmbientParticles.shootingStars().first()
+        // Середина пролёта: elapsed = flightSec/2 от старта цикла.
+        val cycle = shot.flightSec / 2f / shot.periodSec
+        val phaseFrac = ((cycle - shot.phase % 1f) % 1f + 1f) % 1f
+        val seconds = phaseFrac * shot.periodSec
+        shoot(
+            "night-shooting",
+            true,
+            WeatherScene(Precipitation.NONE, night = true, stars = true, animated = true),
+            advanceMs = (seconds * 1000).toLong().coerceAtLeast(1L),
+        )
+    }
+
+    @Test
     fun `ясный день светлая тема`() = clearDay(false)
 
     @Test
@@ -158,12 +182,6 @@ class WeatherEffectsShotTest {
             season = season,
         ),
     )
-
-    @Test
-    fun `Хэллоуин светлая тема`() = seasonal("halloween-light", false, com.politex.weather.Season.HALLOWEEN)
-
-    @Test
-    fun `Хэллоуин тёмная тема`() = seasonal("halloween-dark", true, com.politex.weather.Season.HALLOWEEN)
 
     @Test
     fun `Новый год светлая тема`() = seasonal("newyear-light", false, com.politex.weather.Season.NEW_YEAR)

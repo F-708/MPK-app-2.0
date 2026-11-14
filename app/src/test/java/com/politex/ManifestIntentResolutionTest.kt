@@ -19,7 +19,10 @@ class ManifestIntentResolutionTest {
     private fun resolveNames(intent: Intent): List<String> {
         @Suppress("DEPRECATION")
         val infos = context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-        return infos.map { it.activityInfo.name }.filter { it.startsWith(context.packageName) }
+        // Имена компонентов резолвятся от namespace (com.politex), а packageName
+        // во флейворах несёт суффикс (.admin/.adminplus) — фильтр по packageName
+        // выбрасывал бы все свои же активности.
+        return infos.map { it.activityInfo.name }.filter { it.startsWith("com.politex") }
     }
 
     @Test

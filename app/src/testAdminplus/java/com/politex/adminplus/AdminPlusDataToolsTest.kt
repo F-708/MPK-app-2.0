@@ -82,7 +82,8 @@ class AdminPlusDataToolsTest {
     fun `пункт инструменты данных виден и открывает список правки`() {
         renderRootWithMenuProbe()
 
-        composeRule.onNodeWithTag("owner_access_code_menu").assertIsDisplayed()
+        // Гейт в adminplus отключён (2026-11-12): карточки кода доступа нет.
+        composeRule.onAllNodesWithTag("owner_access_code_menu").assertCountEquals(0)
         composeRule.onNodeWithTag("adminplus_data_tools_menu").assertIsDisplayed()
         composeRule.onNodeWithText("ИНСТРУМЕНТЫ ДАННЫХ").assertIsDisplayed()
 

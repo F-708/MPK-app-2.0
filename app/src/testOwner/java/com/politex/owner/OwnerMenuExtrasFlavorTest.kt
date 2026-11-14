@@ -1,7 +1,9 @@
 package com.politex.owner
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import com.politex.BuildConfig
@@ -29,8 +31,8 @@ class OwnerMenuExtrasFlavorTest {
             composeRule.setContent {
                 MyApplicationTheme { extras!!() }
             }
-            composeRule.onNodeWithText("КОД ДОСТУПА").assertIsDisplayed()
-            composeRule.onNodeWithTag("owner_access_code_menu").assertIsDisplayed()
+            // Гейт в adminplus отключён (2026-11-12): карточки кода доступа нет.
+            composeRule.onAllNodesWithText("КОД ДОСТУПА").assertCountEquals(0)
             composeRule.onNodeWithText("ИНСТРУМЕНТЫ ДАННЫХ").assertIsDisplayed()
             composeRule.onNodeWithTag("adminplus_data_tools_menu").assertIsDisplayed()
         } else {

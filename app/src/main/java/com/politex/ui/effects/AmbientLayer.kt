@@ -22,11 +22,12 @@ data class AmbientField(
     val rain: List<RainDrop>,
     val snow: List<SnowFlake>,
     val stars: List<Star>,
-    val pumpkins: List<Pumpkin> = emptyList(),
+    val shooting: List<ShootingStar> = emptyList(),
     val garland: List<GarlandLight> = emptyList(),
 ) {
     val isEmpty: Boolean
-        get() = rain.isEmpty() && snow.isEmpty() && stars.isEmpty() && pumpkins.isEmpty() && garland.isEmpty()
+        get() = rain.isEmpty() && snow.isEmpty() && stars.isEmpty() &&
+            shooting.isEmpty() && garland.isEmpty()
 }
 
 /** Детерминированный набор частиц для [scene] (без обращения к Android). */
@@ -42,7 +43,7 @@ fun rememberAmbientField(scene: WeatherScene): AmbientField {
             rain = if (hasRain) AmbientParticles.rain() else emptyList(),
             snow = if (hasSnow) AmbientParticles.snow() else emptyList(),
             stars = if (hasStars) AmbientParticles.stars() else emptyList(),
-            pumpkins = if (season == Season.HALLOWEEN) AmbientParticles.pumpkins() else emptyList(),
+            shooting = if (hasStars) AmbientParticles.shootingStars() else emptyList(),
             garland = if (season == Season.NEW_YEAR) AmbientParticles.garland() else emptyList(),
         )
     }
@@ -172,24 +173,69 @@ internal fun DrawScope.drawAmbientParticles(
     }
 
     if (field.stars.isNotEmpty()) {
-        // На светлом небе белые точки не читаются — рисуем тёмно-синие и тише.
-        val starColor = if (dark) Color(0xFFFFF6E0) else Color(0xFF44506B)
-        val themeScale = if (dark) 1f else 0.6f
+        // Звёзды рисуются только в тёмной теме (политика resolveStars), поэтому
+        // один цвет — тёплый белый; светлой ветки больше нет.
+        val starColor = Color(0xFFFFF6E0)
         field.stars.forEach { star ->
             val life = AmbientParticles.starAlpha(seconds, star.lifeSec, star.twinkleSec, star.phase)
             val y = star.y * heightPx
-            val alpha = (star.alpha * life * themeScale * alphaScale * fadeAt(y)).coerceIn(0f, 1f)
+            val alpha = (star.alpha * life * alphaScale * fadeAt(y)).coerceIn(0f, 1f)
             if (alpha <= 0.01f) return@forEach
-            drawCircle(
-                color = starColor.copy(alpha = alpha),
-                radius = star.radiusDp.dp.toPx(),
-                center = Offset(star.x * widthPx, y),
-            )
+            val cx = star.x * widthPx
+            val r = star.radiusDp.dp.toPx()
+            drawCircle(color = starColor.copy(alpha = alpha), radius = r, center = Offset(cx, y))
+            // Блик-крестик: лучи короче ядра и тоньше его, поэтому звезда читается
+            // ОДНОЙ фигурой с мягким бликом, а не «плюс рядом с точкой».
+            // Заказчик (2026-11-12): крестик и точка выглядели как две разные формы.
+            if (star.glint) {
+                val arm = r * AmbientSpec.STAR_GLINT_ARM
+                val glintAlpha = (alpha * 0.5f).coerceIn(0f, 1f)
+                val thin = (r * AmbientSpec.STAR_GLINT_STROKE).coerceAtLeast(1f)
+                drawLine(
+                    color = starColor.copy(alpha = glintAlpha),
+                    start = Offset(cx - arm, y),
+                    end = Offset(cx + arm, y),
+                    strokeWidth = thin,
+                )
+                drawLine(
+                    color = starColor.copy(alpha = glintAlpha),
+                    start = Offset(cx, y - arm),
+                    end = Offset(cx, y + arm),
+                    strokeWidth = thin,
+                )
+            }
         }
     }
 
-    if (field.pumpkins.isNotEmpty()) {
-        drawPumpkins(field.pumpkins, seconds, widthPx, heightPx, dark, alphaScale)
+    if (field.shooting.isNotEmpty()) {
+        val headColor = Color(0xFFFFFBEA)
+        field.shooting.forEach { shot ->
+            val progress = AmbientParticles.shootingProgress(seconds, shot) ?: return@forEach
+            // Проявление в начале пролёта и растворение хвоста в конце: звезда
+            // не вспыхивает на полную яркость и не обрывается (заказчик 2026-11-12).
+            val fade = AmbientParticles.shootingFade(progress)
+            val angle = Math.toRadians(shot.angleDeg.toDouble()).toFloat()
+            val dx = kotlin.math.cos(angle)
+            val dy = kotlin.math.sin(angle)
+            val lengthPx = shot.lengthDp.dp.toPx()
+            val headX = (shot.x * widthPx) + dx * lengthPx * progress
+            val headY = (shot.y * heightPx) + dy * lengthPx * progress
+            // Хвост вытягивается вместе со звездой, а не появляется готовым.
+            val tail = lengthPx * 0.6f * AmbientParticles.shootingTailFactor(progress)
+            val tailX = headX - dx * tail
+            val tailY = headY - dy * tail
+            drawLine(
+                color = headColor.copy(alpha = (0.45f * fade * alphaScale).coerceIn(0f, 1f)),
+                start = Offset(tailX, tailY),
+                end = Offset(headX, headY),
+                strokeWidth = 1.2f.dp.toPx(),
+            )
+            drawCircle(
+                color = headColor.copy(alpha = (0.85f * fade * alphaScale).coerceIn(0f, 1f)),
+                radius = 1.6f.dp.toPx(),
+                center = Offset(headX, headY),
+            )
+        }
     }
 
     if (field.garland.isNotEmpty()) {
@@ -197,47 +243,7 @@ internal fun DrawScope.drawAmbientParticles(
     }
 }
 
-/** Тыква-светильник: оранжевое тело, тёмный «фасонный» срез и мерцающее тёплое свечение. */
-private fun DrawScope.drawPumpkins(
-    pumpkins: List<Pumpkin>,
-    seconds: Float,
-    widthPx: Float,
-    heightPx: Float,
-    dark: Boolean,
-    alphaScale: Float,
-) {
-    val body = if (dark) Color(0xFFC96A1B) else Color(0xFFB85C14)
-    val glow = if (dark) Color(0xFFFFC36B) else Color(0xFFFFD9A0)
-    pumpkins.forEach { p ->
-        val r = p.radiusDp.dp.toPx()
-        val cx = p.x * widthPx
-        val cy = p.y * heightPx
-        // Мерцание свечи: мягкая синусоида 0.35..1.
-        val flicker = 0.675f + 0.325f * AmbientParticles.twinkleFactor(seconds, p.flickerSec, p.phase)
-        val a = alphaScale.coerceIn(0f, 1f)
-        // Тело: чуть приплюснутый овал.
-        drawOval(
-            color = body.copy(alpha = 0.9f * a),
-            topLeft = Offset(cx - r, cy - r * 0.82f),
-            size = androidx.compose.ui.geometry.Size(r * 2f, r * 1.64f),
-        )
-        // Свечение изнутри (глаза/рот условно): тёплое пятно.
-        drawCircle(
-            color = glow.copy(alpha = 0.55f * flicker * a),
-            radius = r * 0.62f,
-            center = Offset(cx, cy - r * 0.08f),
-        )
-        // Хвостик.
-        drawLine(
-            color = body.copy(alpha = 0.9f * a),
-            start = Offset(cx, cy - r * 0.8f),
-            end = Offset(cx, cy - r * 1.14f),
-            strokeWidth = r * 0.18f,
-        )
-    }
-}
-
-/** Новогодняя гирлянда: цепь разноцветных огоньков вдоль верхней кромки с мерцанием. */
+/** Новогодняя гирлянда: тонкий провод и лампочки, подвешенные под ним. */
 private fun DrawScope.drawGarland(
     garland: List<GarlandLight>,
     seconds: Float,
@@ -246,15 +252,18 @@ private fun DrawScope.drawGarland(
     dark: Boolean,
     alphaScale: Float,
 ) {
+    // Переделано с нуля (2026-11-12): вместо четырёхцветной «ёлки» — два
+    // приглушённых тона (тёплое золото и лёд), лампочки висят НА проводе,
+    // а не лежат на нём: декор не спорит с контентом экрана.
     val palette = if (dark) {
-        listOf(Color(0xFFFF5F57), Color(0xFFFFD166), Color(0xFF6BCB77), Color(0xFF4D96FF))
+        listOf(Color(0xFFFFD98A), Color(0xFFBFE3FF))
     } else {
-        listOf(Color(0xFFD64541), Color(0xFFD9A400), Color(0xFF3E9E5B), Color(0xFF2F6FBF))
+        listOf(Color(0xFFD9A400), Color(0xFF7FA8D9))
     }
     val a = alphaScale.coerceIn(0f, 1f)
+    val wire = (if (dark) Color(0xFF8A94A6) else Color(0xFF9AA5B1)).copy(alpha = 0.35f * a)
     // Цепь-провод: тонкая полупрозрачная линия через все точки.
     if (garland.size > 1) {
-        val wire = (if (dark) Color(0xFF8A94A6) else Color(0xFF9AA5B1)).copy(alpha = 0.35f * a)
         for (i in 1 until garland.size) {
             drawLine(
                 color = wire,
@@ -264,14 +273,24 @@ private fun DrawScope.drawGarland(
             )
         }
     }
+    val drop = 3.5f.dp.toPx()
+    val bulbR = 2.4f.dp.toPx()
     garland.forEach { g ->
         val twinkle = AmbientParticles.twinkleFactor(seconds, g.twinkleSec, g.phase)
         val base = palette[g.colorIndex % palette.size]
         val alpha = (0.55f + 0.45f * twinkle) * a
-        val center = Offset(g.x * widthPx, g.y * heightPx)
-        val r = 3.2f.dp.toPx()
-        // Ореол + яркое ядро.
-        drawCircle(color = base.copy(alpha = 0.30f * alpha), radius = r * 2.1f, center = center)
-        drawCircle(color = base.copy(alpha = alpha), radius = r, center = center)
+        val topX = g.x * widthPx
+        val topY = g.y * heightPx
+        val center = Offset(topX, topY + drop + bulbR)
+        // Подвес: короткий штрих от провода к лампочке.
+        drawLine(
+            color = wire,
+            start = Offset(topX, topY),
+            end = Offset(topX, topY + drop),
+            strokeWidth = 1.dp.toPx() * 0.7f,
+        )
+        // Ореол + ядро лампочки.
+        drawCircle(color = base.copy(alpha = 0.25f * alpha), radius = bulbR * 2.2f, center = center)
+        drawCircle(color = base.copy(alpha = alpha), radius = bulbR, center = center)
     }
 }

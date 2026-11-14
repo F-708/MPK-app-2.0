@@ -2,6 +2,7 @@ package com.politex.ui.dataeditor
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -47,10 +49,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.politex.R
 import com.politex.adminplus.publish.AdminPlusPublishDeps
 import com.politex.adminplus.publish.GithubTokenStore
 import com.politex.adminplus.publish.PublishFailure
@@ -166,7 +170,7 @@ fun TeacherEditorScreen(
                 withContext(Dispatchers.Main) {
                     photoBusy = false
                     if (ok) {
-                        edit = form.copy(pendingPhoto = tmp)
+                        edit = form.copy(pendingPhoto = tmp, photoRemoved = false)
                     } else {
                         runCatching { tmp.delete() }
                         status = TeacherEditorStatus.ERROR
@@ -192,6 +196,7 @@ fun TeacherEditorScreen(
                 experience = form.experience,
                 category = form.category,
                 photoSource = form.pendingPhoto,
+                photoRemoved = form.photoRemoved,
             )
         if (record != null) OwnerOverridesStore.refreshDependentCaches(context)
         return record != null
@@ -272,6 +277,10 @@ fun TeacherEditorScreen(
                     form = form,
                     photoBusy = photoBusy,
                     onPickPhoto = { photoPicker.launch(arrayOf("image/*")) },
+                    onTogglePhotoRemoved = { removed ->
+                        form.pendingPhoto?.let { runCatching { it.delete() } }
+                        edit = form.copy(photoRemoved = removed, pendingPhoto = null)
+                    },
                 )
 
                 EditorField(
@@ -623,14 +632,18 @@ private fun EditorPhotoCard(
     form: TeacherEditorForm,
     photoBusy: Boolean,
     onPickPhoto: () -> Unit,
+    onTogglePhotoRemoved: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val overridesRevision = OwnerOverridesStore.revision.intValue
+    val removed = form.photoRemoved
     val model =
-        remember(form.pendingPhoto, teacherName, teacher?.photo, overridesRevision) {
-            form.pendingPhoto
-                ?.let { "file://" + it.absolutePath }
-                ?: ContentAssets.teacherPhotoModel(context, teacherName, teacher?.photo ?: "")
+        remember(form.pendingPhoto, teacherName, teacher?.photo, overridesRevision, removed) {
+            when {
+                form.pendingPhoto != null -> "file://" + form.pendingPhoto.absolutePath
+                removed -> null
+                else -> ContentAssets.teacherPhotoModel(context, teacherName, teacher?.photo ?: "")
+            }
         }
     AppCard(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -650,20 +663,18 @@ private fun EditorPhotoCard(
                         .testTag("teacher_editor_photo"),
                 )
             } else {
-                Box(
+                // Заглушка «нет фото» — та же картинка, что видят пользователи.
+                Image(
+                    painter = painterResource(id = R.drawable.teacher_no_photo),
+                    contentDescription = teacherName,
+                    contentScale = ContentScale.Crop,
                     modifier =
                     Modifier
                         .size(96.dp)
-                        .background(ColorBrandFill, RoundedCornerShape(2.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = teacherName.trim().take(1).uppercase(),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 36.sp,
-                    )
-                }
+                        .border(1.dp, ColorBorderLight, RoundedCornerShape(2.dp))
+                        .background(ColorSurfaceHighlight, RoundedCornerShape(2.dp))
+                        .testTag("teacher_editor_photo"),
+                )
             }
             Spacer(modifier = Modifier.width(14.dp))
             val overridePhoto = overridePhotoActive(teacherName)
@@ -677,10 +688,20 @@ private fun EditorPhotoCard(
                     onClick = onPickPhoto,
                 )
                 Spacer(modifier = Modifier.height(6.dp))
+                EditorButton(
+                    icon = if (removed) Icons.Default.Restore else Icons.Default.Delete,
+                    label = if (removed) "Вернуть фото" else "Убрать фото",
+                    filled = false,
+                    enabled = !photoBusy,
+                    testTag = "teacher_editor_toggle_photo_removed",
+                    onClick = { onTogglePhotoRemoved(!removed) },
+                )
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text =
                     when {
                         form.pendingPhoto != null -> "Новое фото будет сохранено вместе с правкой"
+                        removed -> "Фото убрано: пользователи увидят заглушку «нет фото»"
                         overridePhoto -> "Фото заменено вашей правкой"
                         else -> "JPEG, будет сжато до 512 px"
                     },
